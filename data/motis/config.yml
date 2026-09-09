@@ -1,0 +1,10 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+
+osm: /input/switzerland-transport.osm.pbf
+
+timetable:
+  datasets:
+    ch:
+      path: /input/gtfs-rail.zip

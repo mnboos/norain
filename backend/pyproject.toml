@@ -1,0 +1,44 @@
+[project]
+name = "norain"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "async-lru==2.3.0",
+    "croniter==6.2.4",
+    "daphne==4.2.3",
+    "django==6.1.1",
+    "django-click==2.5.0",
+    "django-cors-headers==4.9.0",
+    "django-ninja==1.7.0",
+    "django-tasks-db==0.13.0",
+    "httpx==0.28.1",
+    "loguru==0.7.3",
+    "plotly==7.0.0",
+    "psycopg[binary,pool]==3.3.5",
+    "python-dotenv==1.2.3",
+    "rasterio==1.5.1",
+    "shapely==2.1.2",
+]
+
+[dependency-groups]
+dev = [
+    "openapi-generator-cli==7.25.0",
+    "ruff==0.16.6",
+    "taskipy==1.14.1",
+]
+
+[tool.taskipy.tasks]
+export_openapi_schema = "python manage.py export_openapi_schema --indent 4 --sorted --output api_schema.json"
+
+[tool.ruff]
+extend-include = ["ALL", "I"]
+target-version = "py313"
+show-fixes = true
+line-length = 120
+indent-width = 4
+fix = true
+
+[tool.ruff.lint]
+dummy-variable-rgx = "^request$"

@@ -1,0 +1,984 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "NinjaAPI",
+        "version": "1.0.0",
+        "description": ""
+    },
+    "paths": {
+        "/api/search": {
+            "get": {
+                "operationId": "core_api_search",
+                "summary": "Search",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "query",
+                        "schema": {
+                            "title": "Query",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "zoom",
+                        "schema": {
+                            "title": "Zoom",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "lat",
+                        "schema": {
+                            "title": "Lat",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "lon",
+                        "schema": {
+                            "title": "Lon",
+                            "type": "number"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/PlacesSearchResult"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/route_weather": {
+            "get": {
+                "operationId": "core_weather_route_weather",
+                "summary": "Route Weather",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "start_lat",
+                        "schema": {
+                            "title": "Start Lat",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "start_lon",
+                        "schema": {
+                            "title": "Start Lon",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "dest_lat",
+                        "schema": {
+                            "title": "Dest Lat",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "dest_lon",
+                        "schema": {
+                            "title": "Dest Lon",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "profile",
+                        "schema": {
+                            "title": "Profile",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "departure_time",
+                        "schema": {
+                            "title": "Departure Time",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "interval_seconds",
+                        "schema": {
+                            "default": 300,
+                            "title": "Interval Seconds",
+                            "type": "integer"
+                        },
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RouteWeatherOut"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/routes": {
+            "get": {
+                "operationId": "core_routes_api_list_routes",
+                "summary": "List Routes",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/RecurringRouteOut"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "List all active recurring routes, sorted by next departure (soonest first)."
+            },
+            "post": {
+                "operationId": "core_routes_api_create_route",
+                "summary": "Create Route",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecurringRouteOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Create a new recurring route. Enqueues a background task to fetch route geometry.",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RecurringRouteIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/routes/{route_id}": {
+            "get": {
+                "operationId": "core_routes_api_get_route",
+                "summary": "Get Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecurringRouteOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Get a single recurring route by ID."
+            },
+            "put": {
+                "operationId": "core_routes_api_update_route",
+                "summary": "Update Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecurringRouteOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Update a recurring route. Re-fetches geometry if start, destination, or profile changed.",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RecurringRouteIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "core_routes_api_delete_route",
+                "summary": "Delete Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                },
+                "description": "Delete a recurring route."
+            }
+        },
+        "/api/routes/{route_id}/forecast": {
+            "get": {
+                "operationId": "core_routes_api_route_forecast",
+                "summary": "Route Forecast",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "date",
+                        "schema": {
+                            "title": "Date",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "time",
+                        "schema": {
+                            "title": "Time",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RouteForecastOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Get weather forecast + Plotly figures for a specific departure of a saved route.\n\nAssembles the forecast from cached grid cells (ForecastCell + EnsembleCell).\nIf cells are missing, they are fetched on-the-fly and stored."
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "GeometrySchema": {
+                "description": "Defines the geographical point of the feature.",
+                "properties": {
+                    "type": {
+                        "default": "Point",
+                        "title": "Type",
+                        "type": "string"
+                    },
+                    "coordinates": {
+                        "items": {
+                            "type": "number"
+                        },
+                        "title": "Coordinates",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "coordinates"
+                ],
+                "title": "GeometrySchema",
+                "type": "object"
+            },
+            "PlacesSearchResult": {
+                "description": "Represents a single, augmented search result feature.",
+                "properties": {
+                    "type": {
+                        "default": "Feature",
+                        "title": "Type",
+                        "type": "string"
+                    },
+                    "properties": {
+                        "$ref": "#/components/schemas/PropertiesSchema"
+                    },
+                    "geometry": {
+                        "$ref": "#/components/schemas/GeometrySchema"
+                    }
+                },
+                "required": [
+                    "properties",
+                    "geometry"
+                ],
+                "title": "PlacesSearchResult",
+                "type": "object"
+            },
+            "PropertiesSchema": {
+                "description": "Defines the descriptive properties of a feature.",
+                "properties": {
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "city": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "City"
+                    },
+                    "state": {
+                        "title": "State",
+                        "type": "string"
+                    },
+                    "countrycode": {
+                        "title": "Countrycode",
+                        "type": "string"
+                    },
+                    "show_canton": {
+                        "title": "Show Canton",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "name",
+                    "show_canton"
+                ],
+                "title": "PropertiesSchema",
+                "type": "object"
+            },
+            "RouteWeatherOut": {
+                "properties": {
+                    "line": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Line",
+                        "type": "array"
+                    },
+                    "total_seconds": {
+                        "title": "Total Seconds",
+                        "type": "integer"
+                    },
+                    "total_distance_m": {
+                        "title": "Total Distance M",
+                        "type": "number"
+                    },
+                    "samples": {
+                        "items": {
+                            "$ref": "#/components/schemas/WeatherSample"
+                        },
+                        "title": "Samples",
+                        "type": "array"
+                    },
+                    "summary": {
+                        "$ref": "#/components/schemas/RouteWeatherSummary"
+                    }
+                },
+                "required": [
+                    "line",
+                    "total_seconds",
+                    "total_distance_m",
+                    "samples",
+                    "summary"
+                ],
+                "title": "RouteWeatherOut",
+                "type": "object"
+            },
+            "RouteWeatherSummary": {
+                "properties": {
+                    "will_rain": {
+                        "title": "Will Rain",
+                        "type": "boolean"
+                    },
+                    "first_rain_eta": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "First Rain Eta"
+                    },
+                    "first_rain_place": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "First Rain Place"
+                    },
+                    "max_rain_mm": {
+                        "title": "Max Rain Mm",
+                        "type": "number"
+                    },
+                    "rain_probability": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain Probability"
+                    },
+                    "rain_amount": {
+                        "title": "Rain Amount",
+                        "type": "number"
+                    },
+                    "max_headwind": {
+                        "title": "Max Headwind",
+                        "type": "number"
+                    },
+                    "source": {
+                        "title": "Source",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "will_rain",
+                    "max_rain_mm",
+                    "rain_amount",
+                    "max_headwind",
+                    "source"
+                ],
+                "title": "RouteWeatherSummary",
+                "type": "object"
+            },
+            "WeatherSample": {
+                "description": "Weather at one point along the route, at the clock time you'll be there.",
+                "properties": {
+                    "lat": {
+                        "title": "Lat",
+                        "type": "number"
+                    },
+                    "lon": {
+                        "title": "Lon",
+                        "type": "number"
+                    },
+                    "elapsed_s": {
+                        "title": "Elapsed S",
+                        "type": "integer"
+                    },
+                    "eta": {
+                        "title": "Eta",
+                        "type": "string"
+                    },
+                    "rain_mm": {
+                        "title": "Rain Mm",
+                        "type": "number"
+                    },
+                    "pop": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Pop"
+                    },
+                    "rain_if_wet": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain If Wet"
+                    },
+                    "temp": {
+                        "title": "Temp",
+                        "type": "number"
+                    },
+                    "wind_speed": {
+                        "title": "Wind Speed",
+                        "type": "number"
+                    },
+                    "wind_gust": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Gust"
+                    },
+                    "wind_dir": {
+                        "title": "Wind Dir",
+                        "type": "number"
+                    },
+                    "headwind": {
+                        "title": "Headwind",
+                        "type": "number"
+                    },
+                    "crosswind": {
+                        "title": "Crosswind",
+                        "type": "number"
+                    },
+                    "weather_code": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Weather Code"
+                    },
+                    "weather_desc": {
+                        "title": "Weather Desc",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "lat",
+                    "lon",
+                    "elapsed_s",
+                    "eta",
+                    "rain_mm",
+                    "temp",
+                    "wind_speed",
+                    "wind_dir",
+                    "headwind",
+                    "crosswind",
+                    "weather_desc"
+                ],
+                "title": "WeatherSample",
+                "type": "object"
+            },
+            "RecurringRouteOut": {
+                "description": "A recurring route with computed schedule fields.",
+                "properties": {
+                    "id": {
+                        "format": "uuid",
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "description": {
+                        "title": "Description",
+                        "type": "string"
+                    },
+                    "start_lat": {
+                        "title": "Start Lat",
+                        "type": "number"
+                    },
+                    "start_lon": {
+                        "title": "Start Lon",
+                        "type": "number"
+                    },
+                    "start_name": {
+                        "title": "Start Name",
+                        "type": "string"
+                    },
+                    "dest_lat": {
+                        "title": "Dest Lat",
+                        "type": "number"
+                    },
+                    "dest_lon": {
+                        "title": "Dest Lon",
+                        "type": "number"
+                    },
+                    "dest_name": {
+                        "title": "Dest Name",
+                        "type": "string"
+                    },
+                    "profile": {
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "schedule_cron": {
+                        "title": "Schedule Cron",
+                        "type": "string"
+                    },
+                    "schedule_description": {
+                        "title": "Schedule Description",
+                        "type": "string"
+                    },
+                    "active": {
+                        "title": "Active",
+                        "type": "boolean"
+                    },
+                    "total_seconds": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Total Seconds"
+                    },
+                    "total_distance_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Total Distance M"
+                    },
+                    "has_geometry": {
+                        "default": false,
+                        "title": "Has Geometry",
+                        "type": "boolean"
+                    },
+                    "next_departure": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Next Departure"
+                    },
+                    "forecast_available": {
+                        "default": false,
+                        "title": "Forecast Available",
+                        "type": "boolean"
+                    },
+                    "created_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Created At"
+                    },
+                    "updated_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Updated At"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "description",
+                    "start_lat",
+                    "start_lon",
+                    "start_name",
+                    "dest_lat",
+                    "dest_lon",
+                    "dest_name",
+                    "profile",
+                    "schedule_cron",
+                    "schedule_description",
+                    "active"
+                ],
+                "title": "RecurringRouteOut",
+                "type": "object"
+            },
+            "RecurringRouteIn": {
+                "description": "Input for creating or updating a recurring route.",
+                "properties": {
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "description": {
+                        "default": "",
+                        "title": "Description",
+                        "type": "string"
+                    },
+                    "startLat": {
+                        "title": "Startlat",
+                        "type": "number"
+                    },
+                    "startLon": {
+                        "title": "Startlon",
+                        "type": "number"
+                    },
+                    "startName": {
+                        "title": "Startname",
+                        "type": "string"
+                    },
+                    "destLat": {
+                        "title": "Destlat",
+                        "type": "number"
+                    },
+                    "destLon": {
+                        "title": "Destlon",
+                        "type": "number"
+                    },
+                    "destName": {
+                        "title": "Destname",
+                        "type": "string"
+                    },
+                    "profile": {
+                        "default": "bike",
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "scheduleCron": {
+                        "title": "Schedulecron",
+                        "type": "string"
+                    },
+                    "scheduleDescription": {
+                        "title": "Scheduledescription",
+                        "type": "string"
+                    },
+                    "active": {
+                        "default": true,
+                        "title": "Active",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "name",
+                    "startLat",
+                    "startLon",
+                    "startName",
+                    "destLat",
+                    "destLon",
+                    "destName",
+                    "scheduleCron",
+                    "scheduleDescription"
+                ],
+                "title": "RecurringRouteIn",
+                "type": "object"
+            },
+            "RouteForecastOut": {
+                "description": "Weather forecast for a specific departure of a saved route, with Plotly figures.",
+                "properties": {
+                    "line": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Line",
+                        "type": "array"
+                    },
+                    "total_seconds": {
+                        "title": "Total Seconds",
+                        "type": "integer"
+                    },
+                    "total_distance_m": {
+                        "title": "Total Distance M",
+                        "type": "number"
+                    },
+                    "samples": {
+                        "items": {
+                            "$ref": "#/components/schemas/WeatherSample"
+                        },
+                        "title": "Samples",
+                        "type": "array"
+                    },
+                    "summary": {
+                        "$ref": "#/components/schemas/RouteWeatherSummary"
+                    },
+                    "route_id": {
+                        "format": "uuid",
+                        "title": "Route Id",
+                        "type": "string"
+                    },
+                    "departure_time": {
+                        "title": "Departure Time",
+                        "type": "string"
+                    },
+                    "figures": {
+                        "default": [],
+                        "items": {
+                            "additionalProperties": true,
+                            "type": "object"
+                        },
+                        "title": "Figures",
+                        "type": "array"
+                    },
+                    "sections": {
+                        "default": [],
+                        "items": {
+                            "$ref": "#/components/schemas/RouteSection"
+                        },
+                        "title": "Sections",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "line",
+                    "total_seconds",
+                    "total_distance_m",
+                    "samples",
+                    "summary",
+                    "route_id",
+                    "departure_time"
+                ],
+                "title": "RouteForecastOut",
+                "type": "object"
+            },
+            "RouteSection": {
+                "description": "A contiguous segment of the route with uniform weather conditions.",
+                "properties": {
+                    "start_km": {
+                        "title": "Start Km",
+                        "type": "number"
+                    },
+                    "end_km": {
+                        "title": "End Km",
+                        "type": "number"
+                    },
+                    "start_time": {
+                        "title": "Start Time",
+                        "type": "string"
+                    },
+                    "end_time": {
+                        "title": "End Time",
+                        "type": "string"
+                    },
+                    "condition": {
+                        "title": "Condition",
+                        "type": "string"
+                    },
+                    "max_rain_mm": {
+                        "title": "Max Rain Mm",
+                        "type": "number"
+                    },
+                    "max_headwind": {
+                        "title": "Max Headwind",
+                        "type": "number"
+                    },
+                    "temp_min": {
+                        "title": "Temp Min",
+                        "type": "number"
+                    },
+                    "temp_max": {
+                        "title": "Temp Max",
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "start_km",
+                    "end_km",
+                    "start_time",
+                    "end_time",
+                    "condition",
+                    "max_rain_mm",
+                    "max_headwind",
+                    "temp_min",
+                    "temp_max"
+                ],
+                "title": "RouteSection",
+                "type": "object"
+            }
+        }
+    },
+    "servers": []
+}

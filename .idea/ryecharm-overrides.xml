@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="insyncwithfoo.ryecharm.configurations.ruff.Override">
+    <option name="names">
+      <map>
+        <entry key="crossPlatformExecutableResolution" value="true" />
+        <entry key="executable" value="true" />
+        <entry key="fixAll" value="true" />
+        <entry key="fixOnSave" value="true" />
+        <entry key="formatOnReformat" value="true" />
+        <entry key="formatOnSave" value="true" />
+        <entry key="formatting" value="true" />
+        <entry key="organizeImports" value="true" />
+        <entry key="quickFixes" value="true" />
+        <entry key="runningMode" value="true" />
+        <entry key="showSyntaxErrors" value="true" />
+      </map>
+    </option>
+  </component>
+</project>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="insyncwithfoo.ryecharm.configurations.ruff.Local">
+    <option name="executable" value="ruff" />
+    <option name="fixOnSave" value="true" />
+    <option name="formatOnSave" value="true" />
+    <option name="runningMode" value="LSP" />
+    <option name="showSyntaxErrors" value="true" />
+  </component>
+</project>

@@ -1,0 +1,29 @@
+@import "./base.css";
+
+#app {
+    font-weight: normal;
+}
+
+a,
+.green {
+    text-decoration: none;
+    color: hsla(160, 100%, 37%, 1);
+    transition: 0.4s;
+    padding: 3px;
+}
+
+@media (hover: hover) {
+    a:hover {
+        background-color: hsla(160, 100%, 37%, 0.2);
+    }
+}
+
+/* Forecast tiles (charts + map): square cards laid out in a grid so the whole
+   forecast fits on one screen. The vh cap keeps two rows inside the viewport. */
+.square-tile {
+    width: 100%;
+    max-width: min(100%, 40vh);
+    aspect-ratio: 1 / 1;
+    margin-inline: auto;
+    overflow: hidden;
+}

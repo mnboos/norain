@@ -1,0 +1,9 @@
+{
+    "disallowAdditionalPropertiesIfNotPresent": false,
+    "sortParamsByRequiredFlag": true,
+    "supportsES6": true,
+    "useSingleRequestParameter": true,
+    "prefixParameterInterfaces": true,
+    "snapshot": false,
+    "stringEnums": true
+}

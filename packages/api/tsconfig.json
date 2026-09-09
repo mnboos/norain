@@ -1,0 +1,17 @@
+{
+    "include": ["./**/*.ts"],
+    "compilerOptions": {
+        "composite": true,
+        "outDir": "./node_modules/.tmp/out-api",
+        "emitDeclarationOnly": true,
+        "declarationDir": "./node_modules/.tmp/declarations-api",
+        "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.api.tsbuildinfo",
+        "module": "ESNext",
+        "target": "ESNext",
+        "moduleResolution": "Bundler",
+        "strict": true,
+        "strictNullChecks": true,
+        "skipLibCheck": true
+    },
+    "exclude": ["node_modules"]
+}

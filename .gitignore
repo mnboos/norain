@@ -1,0 +1,14 @@
+data/photon
+data/graphhopper/cache
+data/graphhopper/osm
+.venv
+node_modules
+.env
+.env.*
+db
+
+photon-dump-*.zst
+backend/db.sqlite3
+# large artifacts that must never be committed
+data/otp/*.obj
+*.sqlite3

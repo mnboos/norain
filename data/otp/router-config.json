@@ -1,0 +1,11 @@
+{
+  "transit": {
+    "transferCacheMaxSize": 12
+  },
+  "flex" : {
+    "maxTransferDuration" : "5m",
+    "maxFlexTripDuration" : "45m",
+    "maxAccessWalkDuration" : "15m",
+    "maxEgressWalkDuration" : "15m"
+  }
+}

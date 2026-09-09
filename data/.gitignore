@@ -1,0 +1,9 @@
+*.pbf
+*gtfs*.zip
+motis/data/
+graphhopper/cache
+graphhopper/osm
+otp/graph.obj
+otp/*.pbf
+otp/*.zip
+photon/

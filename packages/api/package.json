@@ -1,0 +1,15 @@
+{
+    "name": "@norain/api",
+    "private": true,
+    "type": "module",
+    "version": "1.0.0",
+    "main": "./index.ts",
+    "exports": {
+        ".": "./index.ts",
+        "./apis/*": "./apis/*",
+        "./apis": "./apis/index.ts",
+        "./models/*": "./models/*",
+        "./models": "./models/index.ts",
+        "./runtime": "./runtime.ts"
+    }
+}

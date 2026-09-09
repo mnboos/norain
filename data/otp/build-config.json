@@ -1,0 +1,13 @@
+{
+  "osmDefaults": {
+    "osmTagMapping": "default"
+  },
+  "transitServiceStart": "2026-04-01",
+  "transitServiceEnd": "2026-05-01",
+  "maxTransferDuration": "1m",
+  "maxTransferWalkDistance": 50.0,
+  "islandPruning": {
+    "adaptivePruningDistance": 500,
+    "islandWithoutStopsMaxSize": 5
+  }
+}
