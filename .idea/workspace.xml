@@ -5,9 +5,10 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="feat(plots): add map with route">
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/runConfigurations/db_worker.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/runConfigurations/db_worker.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/data/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/tsconfig.vitest.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/tsconfig.vitest.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -50,61 +51,61 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.918050193056988E-5" />
-      <entry key="MS500" value="0.11391266007964271" />
-      <entry key="S2" value="0.5809556749707213" />
-      <entry key="S5" value="0.80474298455464" />
-      <entry key="S10" value="0.8970747046522225" />
-      <entry key="S30" value="0.9742506021373016" />
-      <entry key="S60" value="1.2547064797309402" />
-      <entry key="M2" value="2.6771863153586906" />
-      <entry key="M5" value="7.775102526264241" />
-      <entry key="M10" value="13.016467085022311" />
-      <entry key="M15" value="16.23486514997398" />
-      <entry key="M30" value="26.511807715639375" />
-      <entry key="H1" value="56.22640472861745" />
-      <entry key="H2" value="106.57050321296383" />
-      <entry key="H4" value="157.62546551946463" />
-      <entry key="D1" value="228.69879356719264" />
-      <entry key="W1" value="245.8958911171906" />
+      <entry key="MS100" value="1.6898714217404516" />
+      <entry key="MS500" value="3.6555639129361985" />
+      <entry key="S2" value="4.599144803444995" />
+      <entry key="S5" value="5.11160766759871" />
+      <entry key="S10" value="7.1020075734751815" />
+      <entry key="S30" value="14.698218571450596" />
+      <entry key="S60" value="20.59818342193394" />
+      <entry key="M2" value="26.552642880697856" />
+      <entry key="M5" value="35.37139472791507" />
+      <entry key="M10" value="42.69023216277684" />
+      <entry key="M15" value="46.89962474732393" />
+      <entry key="M30" value="58.177945618357334" />
+      <entry key="H1" value="88.12948233534944" />
+      <entry key="H2" value="138.73418583755682" />
+      <entry key="H4" value="190.30670405042565" />
+      <entry key="D1" value="262.38585756562406" />
+      <entry key="W1" value="279.84796423807614" />
     </decayedCancelled>
     <decayedSelected>
-      <entry key="MS100" value="1.0" />
-      <entry key="MS500" value="1.0" />
-      <entry key="S2" value="1.0" />
-      <entry key="S5" value="1.0" />
-      <entry key="S10" value="1.0000000029504823" />
-      <entry key="S30" value="1.001964434701732" />
-      <entry key="S60" value="1.0704929475887464" />
-      <entry key="M2" value="1.4500401634273656" />
-      <entry key="M5" value="2.3989405429955912" />
-      <entry key="M10" value="3.0993097504325053" />
-      <entry key="M15" value="3.533782746912895" />
-      <entry key="M30" value="4.935062286304175" />
-      <entry key="H1" value="9.01270330436194" />
-      <entry key="H2" value="16.770769748926412" />
-      <entry key="H4" value="25.385865721353834" />
-      <entry key="D1" value="37.69562219696403" />
-      <entry key="W1" value="40.50691365448302" />
+      <entry key="MS100" value="1.9585728855417984E-114" />
+      <entry key="MS500" value="1.8129588535412084E-23" />
+      <entry key="S2" value="2.063464429917193E-6" />
+      <entry key="S5" value="0.005319111622162976" />
+      <entry key="S10" value="0.07300543513614345" />
+      <entry key="S30" value="0.4805870328463145" />
+      <entry key="S60" value="1.0086152229009693" />
+      <entry key="M2" value="1.8169500402401326" />
+      <entry key="M5" value="3.2887315077404886" />
+      <entry key="M10" value="4.377379614318167" />
+      <entry key="M15" value="4.987682801809421" />
+      <entry key="M30" value="6.569180906597674" />
+      <entry key="H1" value="10.701643106041104" />
+      <entry key="H2" value="18.49383265804349" />
+      <entry key="H4" value="27.17984993839113" />
+      <entry key="D1" value="39.64516439323917" />
+      <entry key="W1" value="42.49917873748108" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="0.0041578152344979875" />
-      <entry key="MS500" value="0.37525314180917785" />
-      <entry key="S2" value="1.2108510880594454" />
-      <entry key="S5" value="1.6231287178942757" />
-      <entry key="S10" value="1.799282929008276" />
-      <entry key="S30" value="1.941747982719563" />
-      <entry key="S60" value="2.305413557479214" />
-      <entry key="M2" value="4.111567586839857" />
-      <entry key="M5" value="10.162377747702548" />
-      <entry key="M10" value="16.10666581436354" />
-      <entry key="M15" value="19.759491623225138" />
-      <entry key="M30" value="31.43637127104105" />
-      <entry key="H1" value="65.22721529421551" />
-      <entry key="H2" value="123.3300847158009" />
-      <entry key="H4" value="183.00308464552296" />
-      <entry key="D1" value="266.39242736304743" />
-      <entry key="W1" value="286.40249985072353" />
+      <entry key="MS100" value="1.5696916439970177" />
+      <entry key="MS500" value="3.603945958882216" />
+      <entry key="S2" value="4.582898415106385" />
+      <entry key="S5" value="5.108714838223943" />
+      <entry key="S10" value="7.163269796356392" />
+      <entry key="S30" value="15.16059007130369" />
+      <entry key="S60" value="21.58878475236078" />
+      <entry key="M2" value="28.35285551194702" />
+      <entry key="M5" value="38.646694129069445" />
+      <entry key="M10" value="47.05710203559843" />
+      <entry key="M15" value="51.877195903084996" />
+      <entry key="M30" value="64.73621673056083" />
+      <entry key="H1" value="98.81906687865619" />
+      <entry key="H2" value="157.2167357821762" />
+      <entry key="H4" value="217.4782370949822" />
+      <entry key="D1" value="302.0290136634463" />
+      <entry key="W1" value="322.3468348979956" />
     </decayedShown>
   </component>
   <component name="ProjectColorInfo">{
@@ -290,7 +291,7 @@
       <workItem from="1788973081268" duration="68000" />
       <workItem from="1788973172066" duration="459000" />
       <workItem from="1788973691504" duration="20000" />
-      <workItem from="1788973736950" duration="5043000" />
+      <workItem from="1788973736950" duration="9005000" />
     </task>
     <task id="LOCAL-00001" summary="chore(ide): update settings">
       <option name="closed" value="true" />
@@ -324,7 +325,15 @@
       <option name="project" value="LOCAL" />
       <updated>1788982501558</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="feat(plots): add map with route">
+      <option name="closed" value="true" />
+      <created>1788982778546</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1788982778546</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -347,6 +356,6 @@
     <option name="LAST_COMMIT_MESSAGE" value="feat(plots): add map with route" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1788975769620" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\src\norain\backend" />
+    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1789016443949" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="C:\src\norain\backend" />
   </component>
 </project>
