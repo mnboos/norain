@@ -1,68 +1,39 @@
-# NoRain – Wetterprognose entlang deiner Velo-Route
+# NoRain — weather along your bike route
 
-NoRain beantwortet die Frage, die eine punktuelle Wettervorhersage nicht kann: **Wird es
-unterwegs regnen?** Für eine gegebene Route (z. B. Zihlschlacht → Frauenfeld, ~1 h) und eine
-Abfahrtszeit berechnet die App, **wo du zu welcher Uhrzeit bist**, und schlägt für jeden Punkt
-der Strecke die feingranulare Vorhersage nach – inklusive Niederschlag und **Wind (Stärke,
-Richtung sowie Gegen-/Rückenwind relativ zur Fahrtrichtung)**.
+NoRain forecasts the weather where you will be during a ride. It combines a route
+and departure time with precipitation, temperature, and wind forecasts, including
+headwind and crosswind relative to your direction of travel.
 
-## Funktionsweise
+Save recurring routes with departure schedules, then view their weather summaries,
+route sections, maps, and charts. The interface uses Swiss German labels.
 
-1. **Routing & Timing:** Eine selbst gehostete **GraphHopper**-Instanz routet Start → Ziel und
-   liefert Geometrie *und* die Fahrzeit pro Segment. Daraus ergibt sich die Ankunftszeit an jedem
-   Punkt der Strecke (`clock_time = Abfahrt + verstrichene Fahrzeit`).
-2. **Sampling:** Die Route wird in festen Zeitabständen (Standard: alle 5 min) abgetastet – jeder
-   Messpunkt hat damit Ort **und** Uhrzeit.
-3. **Vorhersage:** Für jeden Messpunkt wird die Vorhersage nachgeschlagen – primär über
-   **Open-Meteo `minutely_15`** (15-Minuten-Auflösung, Niederschlag *und* Wind, mehrere Tage,
-   kostenlos und ohne Key), mit **OpenWeatherMap One Call 3.0** als Fallback/Gegencheck.
-4. **Wind:** Aus der lokalen Fahrtrichtung und der Windrichtung werden Gegen-, Rücken- und
-   Seitenwind berechnet.
+The application uses Django and django-ninja, Vue 3 and Quasar, self-hosted
+GraphHopper routing and Photon geocoding, and Open-Meteo weather with an optional
+OpenWeatherMap fallback. SQLite stores routes, forecast caches, and background jobs.
+The default geographic data covers Switzerland (Photon includes Liechtenstein).
 
-## Architektur
+## Documentation
 
-```mermaid
-graph TB
-    A[Vue.js Frontend<br/>MapLibre + Quasar] -->|REST API| B[Django Backend<br/>django-ninja Gateway]
-    B --> D[GraphHopper Routing]
-    B --> E[Photon Geocoding]
-    B --> F[Open-Meteo / OpenWeatherMap]
-```
+Start at the [documentation index](docs/README.md), organized using Diátaxis:
 
-- **Backend:** Django + **django-ninja** (async ASGI). Endpunkte: `/api/search` (Geocoding via
-  Photon), `/api/route_weather` (Routing + Wetter). Keine Datenbank-Modelle – Django nutzt nur
-  lokales SQLite für die eingebauten Apps.
-- **Frontend:** Vue 3 SPA, **MapLibre GL** für die Karte, **Quasar** für UI, **TanStack Query**.
-  Der TypeScript-Client wird aus dem OpenAPI-Schema des Backends generiert.
-- **Geodienste:** Selbst gehostetes **GraphHopper** (Routing) und **Photon** (Geocoding).
+| Your goal | Read |
+| --- | --- |
+| Run NoRain and create your first route | [First forecast tutorial](docs/tutorials/first-forecast.md) |
+| Operate the worker and pre-warm forecasts | [Background jobs](docs/how-to/background-jobs.md) |
+| Change routing and search coverage | [Change region](docs/how-to/change-region.md) |
+| Run checks or regenerate the API client | [Development workflow](docs/how-to/development.md) |
+| Diagnose a failed setup or forecast | [Troubleshooting](docs/how-to/troubleshooting.md) |
+| Look up settings and API fields | [Configuration](docs/reference/configuration.md) · [HTTP API](docs/reference/api.md) |
+| Understand the implementation | [Architecture](docs/explanation/architecture.md) · [Forecast interpretation](docs/explanation/forecasts.md) |
 
-## Abdeckung / OSM-Extrakt
+## Repository
 
-Die Abdeckung entspricht dem geladenen **OSM-Extrakt**. Standard ist die Schweiz; für eine andere
-Region in `.env` setzen:
+- `backend/`: Django ASGI application, models, migrations, and tests.
+- `frontend/`: Vue application with MapLibre maps and Plotly charts.
+- `packages/api/`: TypeScript API client imported by the frontend.
+- `docker/`: GraphHopper and Photon images and startup scripts.
+- `data/graphhopper/`: routing configuration, custom models, and local data mounts.
+- `docs/`: project documentation in Markdown.
 
-- `OSM_DATA_URL` – beliebiges Geofabrik-`.osm.pbf` (Land / Kontinent / Planet) für GraphHopper.
-- `PHOTON_INDEX_URL` – passende Photon-Daten von https://download1.graphhopper.com/public/
-  (Versions-Token muss `1.0` sein, passend zum `photon-1.0.1.jar`). Zwei Varianten:
-  - Land/Region: `…/photon-dump-<region>-1.0-latest.jsonl.zst` – wird beim ersten Start importiert
-    (dauert wenige Minuten); Standard ist Schweiz+Liechtenstein (~248 MB).
-  - Kontinent/Planet: `…/photon-db-<region>-1.0-latest.tar.bz2` – vorgefertigter Index (nur entpackt).
-- `PHOTON_IMPORT_HEAP` – JVM-Heap für den Import-Schritt (Standard `4g`; für grössere Regionen erhöhen).
-- `GRAPHHOPPER_HEAP` – JVM-Heap; für grössere Extrakte erhöhen (z. B. `16g`).
-
-Punkte ausserhalb des geladenen Extrakts können nicht geroutet/geocodiert werden.
-
-## Setup
-
-```bash
-cp .env.template .env   # OPENWEATHERMAP_API_KEY (optional) und ggf. OSM_DATA_URL / PHOTON_INDEX_URL setzen
-docker compose up -d    # GraphHopper + Photon (erster Start lädt den OSM-Extrakt/Index)
-
-# Backend
-cd backend && uv sync && .venv/Scripts/python manage.py migrate && .venv/Scripts/python manage.py runserver
-
-# Frontend
-cd frontend && npm install && npm run dev   # http://localhost:3000
-```
-
-Nach Backend-Schema-Änderungen den API-Client neu generieren: `cd frontend && npm run update:api`.
+The checked-in settings and Compose files support local development. See the
+[configuration reference](docs/reference/configuration.md) for their deployment limitations.

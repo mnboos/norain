@@ -1,0 +1,71 @@
+# Develop, test, and regenerate the API client
+
+Use the [tutorial](../tutorials/first-forecast.md) to install dependencies and create
+`.env` first. Run each command group from its stated directory.
+
+## Check backend changes
+
+From `backend/`:
+
+```bash
+uv run python manage.py check
+uv run python manage.py test core
+```
+
+Pure-function tests use `SimpleTestCase`; database-dependent tests use `TestCase`
+and Django's test database. When changing models, create and apply migrations:
+
+```bash
+uv run python manage.py makemigrations core
+uv run python manage.py migrate
+```
+
+## Check frontend changes
+
+From `frontend/`:
+
+```bash
+npm run test:unit -- --run
+npm run build
+```
+
+The build includes TypeScript checking and a Vite production build. `npm run lint`
+runs ESLint with automatic fixes; `npm run format` rewrites formatting under `src/`.
+Review their diffs before committing.
+
+Playwright is configured in `frontend/playwright.config.ts`. Before using
+`npm run test:e2e`, align its local `baseURL` and `webServer.port` with Vite's port
+3000: they currently refer to 5173. Install browsers with `npx playwright install`.
+The CI branch uses preview on 4173 and requires `npm run build` first. Start the
+backend, worker, and geographic services for tests that exercise real forecasts.
+
+## Regenerate the client used by the frontend
+
+The application imports `@norain/api` from `packages/api/`. The existing
+`npm run update:api` script activates a Windows virtual environment and generates
+into `frontend/src/api/`; it does not update that shared package.
+
+For the shared package, export the schema from `backend/`:
+
+```bash
+uv run python manage.py export_openapi_schema --indent 4 --sorted --output openapi.json
+```
+
+Then, still in `backend/`, use the generator supplied by the development dependencies
+(with a Java runtime available):
+
+```bash
+uv run openapi-generator-cli generate   -g typescript-fetch   -i openapi.json   -o ../packages/api   -c api-generator.typescript-fetch.additionalProperties.json
+```
+
+Review the generated diff, preserving the package's `@norain/api` name and exports.
+Run the frontend checks above. Verify an actual API response as well as its schema,
+especially when changing field aliases. Keep generated types and their consumers
+consistent; avoid manually patching generated files as the source of an API change.
+
+## Update documentation
+
+Update [HTTP reference](../reference/api.md) for endpoint changes,
+[configuration reference](../reference/configuration.md) for settings, and the
+relevant tutorial or how-to guide for workflow changes. Follow the page-type guidance
+in the [documentation index](../README.md).
