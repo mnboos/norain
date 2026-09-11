@@ -120,6 +120,19 @@ Temperatures are °C, wind speeds are km/h, probabilities are 0–1, and wind di
 is degrees clockwise from north, indicating where the wind comes from.
 Precipitation retains its provider time interval; it is not a journey total.
 
+Samples additionally expose optional `precipitation_interval_s` (seconds),
+`rain_rate_mm_h` (normalized intensity), `probability_source`, and `uncertainty`.
+The generated TypeScript client presents these as camelCase properties.
+
+`uncertainty` contains `metrics`, per-model `models`, `requested_models`,
+`forecast_time`, `fetched_at`, `source`, `precipitation_interval_s`, `pop`, and
+`rain_if_wet`. Metric dictionary keys are `precipitation`, `temperature`,
+`windSpeed`, `windGust`, `headwind`, and `crosswind`. Each metric has
+`member_count` and nullable `p10`, `median`, and `p90`; fewer than two members
+produces null percentiles. Model entries carry `model`, `metrics`, `pop`, and
+`rain_if_wet`. Precipitation statistics use the preceding hour's mm, equivalent
+to its average mm/h intensity. Retrieval time is not model initialization time.
+
 Summary fields are `will_rain`, nullable `first_rain_eta` and `first_rain_place`
 (the latter is a `lat,lon` string), `max_rain_mm`, nullable `rain_probability`,
 `rain_amount`, `max_headwind`, and `source`. The source records the last successfully

@@ -1,15 +1,17 @@
 <route lang="json5">
 {
-  name: "map",
-  meta: { title: "Karte" }
+    name: "map",
+    meta: { title: "Karte" },
 }
 </route>
 
 <script setup lang="ts">
+import WeatherSummaryCard from "@/components/WeatherSummaryCard.vue";
+import ForecastDetails from "@/components/ForecastDetails.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
 import { QSelect } from "quasar";
-import { computed, ref, watchEffect } from "vue";
+import { computed, ref, watchEffect, watch } from "vue";
 import {
     symSharpDirectionsWalk,
     symSharpElectricBike,
@@ -137,29 +139,10 @@ const {
     staleTime: 5 * 60 * 1000,
 });
 
-const summary = computed(() => routeWeather.value?.summary);
-
-function summaryHeadline(): string {
-    const s = summary.value;
-    if (!s) return "";
-    if (!s.willRain) return "Kein Regen erwartet 🎉";
-    const t = s.firstRainEta
-        ? new Date(s.firstRainEta).toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" })
-        : "";
-    return `Regen wahrscheinlich ab ca. ${t} Uhr 🌧️`;
-}
-
-// Risk + "if it rains" amount. When the ensemble is unavailable rainProbability is null, so we drop the
-// percentage and show the deterministic amount instead (never a phantom "0%" next to "Regen wahrscheinlich").
-function precipText(): string {
-    const s = summary.value;
-    if (!s) return "";
-    if (s.rainProbability == null) {
-        return s.rainAmount > 0 ? `bis zu ${s.rainAmount.toFixed(1)} mm Regen` : "trocken";
-    }
-    const amount = s.rainAmount > 0 ? `bei Regen ~${s.rainAmount.toFixed(1)} mm` : "trocken";
-    return `${Math.round(s.rainProbability * 100)}% Regenrisiko · ${amount}`;
-}
+const selectedSample = ref(0);
+watch(routeWeather, () => {
+    selectedSample.value = 0;
+});
 
 function makeOnFilter(filter: ReturnType<typeof ref<string>>) {
     return (val: string, doneFn: (cb: () => void, after?: (ref: QSelect) => void) => void) => {
@@ -186,10 +169,20 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
 
 <template>
     <q-page class="fit flex justify-center">
-        <NiceMap :route-weather="routeWeather" :abfahrtsort="abfahrtsort" :zielort="zielort" @map-view="onMapView">
+        <NiceMap
+            :route-weather="routeWeather"
+            :abfahrtsort="abfahrtsort"
+            :zielort="zielort"
+            :selected-sample="selectedSample"
+            @select-sample="selectedSample = $event"
+            @map-view="onMapView"
+        >
             <template #search>
-                <div class="absolute" style="z-index: 999; width: min(92vw, 420px)">
-                    <q-card class="q-pa-md q-mt-md column q-gutter-sm">
+                <div
+                    class="absolute"
+                    style="z-index: 999; width: min(92vw, 420px); max-height: calc(100dvh - 60px); overflow-y: auto"
+                >
+                    <q-card class="q-pa-md q-mt-md q-gutter-y-sm">
                         <q-select
                             v-model="abfahrtsort"
                             label="Abfahrtsort"
@@ -300,28 +293,17 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             class="q-mt-xs"
                         />
 
-                        <q-banner v-if="weatherError" dense class="bg-orange-2 text-orange-10 rounded-borders">
+                        <q-banner v-if="weatherError" dense class="bg-tint-warn rounded-borders">
                             Route oder Wetter konnte nicht geladen werden. Liegen Start und Ziel innerhalb der geladenen
                             OSM-Region?
                         </q-banner>
 
-                        <q-card-section
-                            v-else-if="summary"
-                            class="q-pa-sm rounded-borders"
-                            :class="summary.willRain ? 'bg-blue-1' : 'bg-green-1'"
-                        >
-                            <div class="text-subtitle2">{{ summaryHeadline() }}</div>
-                            <div class="text-caption">
-                                {{ precipText() }} · max. {{ Math.round(summary.maxHeadwind) }} km/h Gegenwind
-                                <template v-if="routeWeather">
-                                    · {{ Math.round(routeWeather.totalSeconds / 60) }} min ·
-                                    {{ (routeWeather.totalDistanceM / 1000).toFixed(1) }} km
-                                </template>
-                            </div>
-                            <div class="text-caption text-grey-7">Quelle: {{ summary.source }}</div>
-                        </q-card-section>
+                        <template v-else-if="routeWeather">
+                            <WeatherSummaryCard :forecast="routeWeather" />
+                            <ForecastDetails :forecast="routeWeather" v-model:selected-sample="selectedSample" />
+                        </template>
 
-                        <div v-else-if="!ready" class="text-caption text-grey-7">
+                        <div v-else-if="!ready" class="text-caption text-muted">
                             Ziel wählen für die Wetterprognose entlang der Route.
                         </div>
                     </q-card>

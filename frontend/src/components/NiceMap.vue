@@ -8,12 +8,22 @@ import type { ExpressionSpecification } from "maplibre-gl";
 // Point maplibre at the worker the bundler emits for us instead.
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { computed, onBeforeUnmount, onMounted, type Ref, ref, useTemplateRef, watch, toRefs } from "vue";
+import { useQuasar } from "quasar";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { PlacesSearchResult, RouteWeatherOut, WeatherSample } from "@norain/api";
 import { isNightEta, pickVisibleSamples, weatherIconSvg } from "@/utils/weatherIcons";
+import { swissTime } from "@/utils/forecastDetails";
 
 maplibreConfig.WORKER_URL = maplibreWorkerUrl;
+
+const $q = useQuasar();
+
+// Pale, low-ink vector basemaps (CARTO, no API key) so the route line and the weather chips
+// carry the map instead of competing with OSM's POIs and landuse fills. Both styles ship
+// their own OSM/CARTO attribution.
+const LIGHT_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+const DARK_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 
 const props = defineProps<{
     routeWeather: RouteWeatherOut | undefined;
@@ -21,11 +31,15 @@ const props = defineProps<{
     zielort?: PlacesSearchResult;
     /** CSS height of the map canvas. Defaults to the full viewport. */
     height?: string;
+    selectedSample?: number;
 }>();
 
 const { routeWeather, abfahrtsort, zielort } = toRefs(props);
 
-const emit = defineEmits<(e: "mapView", view: { zoom: number; lat: number; lng: number }) => void>();
+const emit = defineEmits<{
+    mapView: [view: { zoom: number; lat: number; lng: number }];
+    selectSample: [index: number];
+}>();
 
 const mapContainer = useTemplateRef<HTMLDivElement>("map");
 const mymap: Ref<MapLibreMap | undefined> = ref(undefined);
@@ -41,6 +55,26 @@ function emitMapView(map: MapLibreMap) {
 // --- start / destination markers ---
 let startMarker: Marker | undefined;
 let destMarker: Marker | undefined;
+let selectedMarker: Marker | undefined;
+
+function highlightSample() {
+    const map = mymap.value;
+    const sample = props.routeWeather?.samples[props.selectedSample ?? -1];
+    if (!map || !sample) {
+        selectedMarker?.remove();
+        return;
+    }
+    if (!selectedMarker) {
+        const element = document.createElement("div");
+        element.className = "wx-selected";
+        element.dataset.testid = "selected-map-sample";
+        element.setAttribute("role", "img");
+        selectedMarker = new Marker({ element });
+    }
+    selectedMarker.getElement().setAttribute("aria-label", `Ausgewählter Punkt: ${swissTime(sample.eta)} Uhr`);
+    selectedMarker.setLngLat([sample.lon, sample.lat]).addTo(map);
+}
+watch([() => props.selectedSample, routeWeather, hasMap], highlightSample);
 
 function placeMarker(
     existing: Marker | undefined,
@@ -56,19 +90,19 @@ function placeMarker(
 }
 
 watch([abfahrtsort, hasMap], () => {
-    startMarker = placeMarker(startMarker, abfahrtsort.value, "#1565c0");
+    startMarker = placeMarker(startMarker, abfahrtsort.value, "#2b6cb0");
 });
 watch([zielort, hasMap], () => {
-    destMarker = placeMarker(destMarker, zielort.value, "#2e7d32");
+    destMarker = placeMarker(destMarker, zielort.value, "#d24d78");
 });
 
-// --- rain color helper: 0mm green -> yellow -> red ---
+// --- rain color helper: dry = teal, then light -> deep blue -> violet as rain gets heavier ---
 function rainColor(mm: number): string {
-    if (mm < 0.1) return "#2ecc71"; // dry
-    if (mm < 0.5) return "#a3d977";
-    if (mm < 1.5) return "#f1c40f";
-    if (mm < 4) return "#e67e22";
-    return "#e74c3c"; // heavy
+    if (mm < 0.1) return "#1a9e8f"; // dry
+    if (mm < 0.5) return "#5aa6e6";
+    if (mm < 1.5) return "#2b6cb0";
+    if (mm < 4) return "#4a4fc4";
+    return "#7a3fc4"; // heavy
 }
 
 // --- sample marker: weather chip (condition glyph + temperature) with the wind arrow
@@ -87,7 +121,7 @@ function sampleMarkerEl(sample: WeatherSample): HTMLDivElement {
         <svg class="wx-wind" width="16" height="16" viewBox="0 0 24 24"
              style="transform:rotate(${sample.windDir + 180}deg)">
             <path d="M12 2 L17 13 L12 10.5 L7 13 Z"
-                  fill="${strong ? "#c0392b" : "#2c3e50"}" stroke="white" stroke-width="1.5"/>
+                  fill="${strong ? "#d24d78" : "#2c3e50"}" stroke="white" stroke-width="1.5"/>
         </svg>
         <div class="wx-chip" style="border-color:${rainColor(sample.rainMm)}">
             <svg width="20" height="20" viewBox="0 0 24 24">${glyph}</svg>
@@ -122,8 +156,7 @@ function applyMarkerThinning() {
 }
 
 function fmtTime(iso: string): string {
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? iso : d.toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit" });
+    return swissTime(iso);
 }
 
 function windText(s: WeatherSample): string {
@@ -193,13 +226,14 @@ async function renderRoute(rw: RouteWeatherOut) {
 
     // 2) Weather chips + wind arrows at each sample.
     clearSampleMarkers();
-    rw.samples.forEach(s => {
+    rw.samples.forEach((s, index) => {
         const popup = new Popup({ offset: 16, closeButton: false }).setHTML(
             `<div style="font:13px/1.4 sans-serif;min-width:160px">
                 <b>${fmtTime(s.eta)} Uhr</b> · ${s.weatherDesc || ""}<br>
-                🌧️ ${s.rainMm.toFixed(1)} mm &nbsp; 🌡️ ${s.temp.toFixed(0)}°C<br>
+                🌧️ ${s.rainRateMmH == null ? "—" : s.rainRateMmH.toFixed(1)} mm/h &nbsp; 🌡️ ${s.temp.toFixed(0)}°C<br>
+                Regenrisiko: ${s.pop == null ? "Nicht verfügbar" : Math.round(s.pop * 100) + "%"}<br>
                 💨 ${s.windSpeed.toFixed(0)} km/h${s.windGust ? ` (Böen ${s.windGust.toFixed(0)})` : ""}<br>
-                <span style="color:${s.headwind > 8 ? "#c0392b" : "#2c3e50"}">↳ ${windText(s)}</span>
+                <span class="${s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span>
             </div>`,
         );
         const marker = new Marker({ element: sampleMarkerEl(s), anchor: "bottom" })
@@ -207,6 +241,16 @@ async function renderRoute(rw: RouteWeatherOut) {
             .setPopup(popup)
             .addTo(map);
         const el = marker.getElement();
+        el.tabIndex = 0;
+        el.setAttribute("role", "button");
+        el.setAttribute("aria-label", `Wetter um ${fmtTime(s.eta)} Uhr auswählen`);
+        el.addEventListener("click", () => emit("selectSample", index));
+        el.addEventListener("keydown", event => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                emit("selectSample", index);
+            }
+        });
         el.addEventListener("mouseenter", () => marker.togglePopup());
         el.addEventListener("mouseleave", () => marker.togglePopup());
         sampleMarkers.push({ marker, popup, sample: s });
@@ -218,6 +262,7 @@ async function renderRoute(rw: RouteWeatherOut) {
     rw.line.forEach(c => bounds.extend([c[0] ?? 0, c[1] ?? 0]));
     if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60 });
     map.once("idle", applyMarkerThinning);
+    highlightSample();
 }
 
 watch(
@@ -230,15 +275,26 @@ watch(
     { immediate: true },
 );
 
+// setStyle() replaces the whole style, which wipes our custom source/layers (but not the
+// DOM-based markers/popups, those survive) - re-add the route once the new style is ready.
+watch(
+    () => $q.dark.isActive,
+    dark => {
+        const map = mymap.value;
+        if (!map) return;
+        map.setStyle(dark ? DARK_STYLE : LIGHT_STYLE);
+        map.once("style.load", () => {
+            if (routeWeather.value) void renderRoute(routeWeather.value);
+        });
+    },
+);
+
 onMounted(() => {
     if (!mapContainer.value) return;
     try {
         const map = new MapLibreMap({
-            // Pale, low-ink vector basemap (CARTO Positron, no API key) so the route line and
-            // the weather chips carry the map instead of competing with OSM's POIs and
-            // landuse fills. The style ships its own OSM/CARTO attribution.
             container: mapContainer.value,
-            style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+            style: $q.dark.isActive ? DARK_STYLE : LIGHT_STYLE,
             center: [9.252317, 47.521889],
             zoom: 12,
         });
@@ -265,6 +321,7 @@ onBeforeUnmount(() => {
     clearSampleMarkers();
     startMarker?.remove();
     destMarker?.remove();
+    selectedMarker?.remove();
     mymap.value?.remove();
     mymap.value = undefined;
 });
@@ -298,11 +355,48 @@ onBeforeUnmount(() => {
     padding: 8px 10px;
 }
 
+.wx-strong {
+    color: var(--q-negative);
+}
+
+/* Popup text inherits the body color, which Quasar makes white in dark mode - so the popup
+   (and its pointer tip, drawn with borders) switches to Quasar's dark surface there too. */
+body.body--dark .maplibregl-popup-content {
+    background: var(--q-dark);
+    color: #fff;
+}
+body.body--dark .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+body.body--dark .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+body.body--dark .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+    border-bottom-color: var(--q-dark);
+}
+body.body--dark .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+body.body--dark .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+body.body--dark .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+    border-top-color: var(--q-dark);
+}
+body.body--dark .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+    border-right-color: var(--q-dark);
+}
+body.body--dark .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+    border-left-color: var(--q-dark);
+}
+
 .wx-marker {
     display: flex;
     align-items: center;
     gap: 2px;
     cursor: pointer;
+}
+
+.wx-selected {
+    width: 24px;
+    height: 24px;
+    border: 3px solid #2b6cb0;
+    border-radius: 50%;
+    background: rgb(43 108 176 / 15%);
+    box-shadow: 0 0 0 3px white;
+    pointer-events: none;
 }
 
 .wx-marker--hidden {

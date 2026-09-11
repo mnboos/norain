@@ -36,18 +36,33 @@
     --section-gap: 160px;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --color-background: var(--vt-c-black);
-        --color-background-soft: var(--vt-c-black-soft);
-        --color-background-mute: var(--vt-c-black-mute);
-
-        --color-border: var(--vt-c-divider-dark-2);
-        --color-border-hover: var(--vt-c-divider-dark-1);
-
-        --color-heading: var(--vt-c-text-dark-1);
-        --color-text: var(--vt-c-text-dark-2);
-    }
+/*
+ * Theme-aware status tints and muted text. The --q-* values are set per light/dark mode by
+ * src/utils/theme.ts (Quasar's setCssVar), so these follow $q.dark like Quasar's own
+ * bg-primary - unlike fixed palette classes such as bg-green-1, which stay pale in dark mode
+ * and leave the (then white) text unreadable. Dark mode itself (body--dark, page and card
+ * backgrounds) is left entirely to Quasar's Dark plugin.
+ */
+.bg-tint-dry {
+    background: var(--q-tint-dry) !important;
+}
+.bg-tint-wet {
+    background: var(--q-tint-wet) !important;
+}
+.bg-tint-heavy {
+    background: var(--q-tint-heavy) !important;
+}
+.bg-tint-warn {
+    background: var(--q-tint-warn) !important;
+}
+.bg-tint-neutral {
+    background: var(--q-tint-neutral) !important;
+}
+.bg-tint-error {
+    background: var(--q-tint-error) !important;
+}
+.text-muted {
+    color: var(--q-text-muted) !important;
 }
 
 *,

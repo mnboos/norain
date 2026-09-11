@@ -1,220 +1,224 @@
-"""Plotly figure generation for route weather forecasts.
-
-Generates Plotly figure JSON dicts that can be rendered client-side via plotly.js
-or server-side via kaleido (e.g., for email). Each figure uses distance along the
-route as the x-axis so the charts show weather progression along the journey.
-"""
-
-from .weather_schemas import RouteWeatherOut
+"""Compact Plotly forecasts with ensemble spread and elapsed ride time."""
 
 import plotly.graph_objects as go
 
+from .weather_schemas import RouteWeatherOut
+
+# Visual-only smoothing: the curve still passes through every real sample (the markers), but a
+# spline can slightly over/undershoot between two points at abrupt changes. Moderate smoothing
+# keeps that small; use {"shape": "linear"} for straight segments only.
+SMOOTH = {"shape": "spline", "smoothing": 0.7}
+
+# Cool, orange-free series hues at mid lightness, so one hex reads on both the light (#ffffff) and
+# the dark (#1c2533) card. Validated for color-blind separation in the wind chart's order
+# (teal, violet, rose, blue): blue next to violet, or rose next to teal, would not pass. The map
+# markers and the light theme (frontend/src/utils/theme.ts) reuse these hues.
+TEAL = "#1a9e8f"
+VIOLET = "#7b5fd6"
+ROSE = "#d24d78"
+BLUE = "#2f7fd8"
+
+
+def _fill(color: str, alpha: float) -> str:
+    r, g, b = (int(color[i : i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def _ensemble_traces(fig, forecast, metric, name, label, color, unit, visible=True) -> bool:
+    """Band + median for one metric; False when there is no ensemble data to draw."""
+    ranges = [s.uncertainty.metrics.get(metric) if s.uncertainty else None for s in forecast.samples]
+    if not any(r and r.median is not None for r in ranges):
+        return False
+    x = [s.elapsed_s / 60 for s in forecast.samples]
+    custom = [[i, s.eta[11:16]] for i, s in enumerate(forecast.samples)]
+    common = {"x": x, "customdata": custom, "legendgroup": metric, "visible": visible, "connectgaps": False}
+    # Separate each contiguous run: Plotly's filled polygons must not bridge missing data.
+    run = []
+    runs = []
+    for i, value in enumerate(ranges):
+        if value and value.median is not None:
+            run.append(i)
+        elif run:
+            runs.append(run)
+            run = []
+    if run:
+        runs.append(run)
+    for indices in runs:
+        for bound, fill_mode in (("p10", None), ("p90", "tonexty")):
+            fig.add_trace(
+                go.Scatter(
+                    x=[x[i] for i in indices],
+                    y=[getattr(ranges[i], bound) for i in indices],
+                    mode="lines",
+                    line={"width": 0, **SMOOTH},
+                    fill=fill_mode,
+                    fillcolor=_fill(color, 0.16),
+                    legendgroup=metric,
+                    visible=visible,
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
+            )
+    # The legend names only the metric: the caption above the charts explains band/median/dotted,
+    # and one entry per metric toggles its whole group (band, median and single forecast).
+    fig.add_trace(
+        go.Scatter(
+            **common,
+            y=[r.median if r else None for r in ranges],
+            mode="lines+markers",
+            marker={"size": 4},
+            line={"color": color, "width": 2, **SMOOTH},
+            name=name,
+            hovertemplate=f"%{{customdata[1]}} Uhr · %{{y:.1f}} {unit}<extra>{label}: Median</extra>",
+        )
+    )
+    return True
+
 
 def generate_forecast_figures(forecast: RouteWeatherOut) -> list[dict]:
-    """Return Plotly figure JSONs for a route weather forecast.
-
-    Returns 3 figures:
-      1. Temperature along the route (line + fill)
-      2. Precipitation: rain_mm (bar) + probability % (line on secondary axis)
-      3. Wind: speed, gusts, and headwind (multi-line)
-
-    The route itself is drawn client-side by the MapLibre ``NiceMap`` component,
-    not as a Plotly figure.
-
-    When ``forecast.samples`` is empty (no weather data available), returns three
-    placeholder figures so the front-end always receives valid Plotly JSON.
-    """
-    if not forecast.samples:
-        return _empty_figures()
-
-    # Compute cumulative distance for each sample
-    total_km = forecast.total_distance_m / 1000.0
-    total_s = max(forecast.total_seconds, 1)
-
-    distances_km = []
-    for s in forecast.samples:
-        frac = s.elapsed_s / total_s
-        distances_km.append(round(frac * total_km, 2))
-
-    figures = [
-        _temperature_figure(distances_km, forecast),
-        _precipitation_figure(distances_km, forecast),
-        _wind_figure(distances_km, forecast),
+    """Three figures; customdata carries the sample index for map/detail selection."""
+    figures = []
+    x = [s.elapsed_s / 60 for s in forecast.samples]
+    custom = [[i, s.eta[11:16]] for i, s in enumerate(forecast.samples)]
+    # (metric, legend name, hover label, color): legend names stay short so the wind legend fits
+    # one row; the hover label can be more precise.
+    definitions = [
+        ("Temperatur", "°C", [("temperature", "Temperatur", "Temperatur", ROSE)]),
+        ("Niederschlag", "mm/h", [("precipitation", "Niederschlag", "Niederschlag", BLUE)]),
+        (
+            "Wind",
+            "km/h",
+            [
+                ("windSpeed", "Wind", "Wind", TEAL),
+                ("windGust", "Böen", "Böen", VIOLET),
+                ("headwind", "Gegenwind", "Gegen-(+)/Rückenwind(−)", ROSE),
+                ("crosswind", "Seitenwind", "Seitenwind", BLUE),
+            ],
+        ),
     ]
-    return figures
-
-
-def _empty_figures() -> list[dict]:
-    """Return three placeholder figures indicating no data is available."""
-    import plotly.graph_objects as go
-
-    msg = "Keine Wetterdaten für diese Strecke verfügbar"
-    figures: list[dict] = []
-    for _ in range(3):
+    for number, (title, unit, metrics) in enumerate(definitions):
         fig = go.Figure()
-        fig.add_annotation(
-            text=msg,
-            xref="paper",
-            yref="paper",
-            x=0.5,
-            y=0.5,
-            showarrow=False,
-            font=dict(size=14, color="gray"),
-        )
+        show_legend = False
+        if not forecast.samples:
+            fig.add_annotation(
+                text="Keine Wetterdaten für diese Strecke verfügbar",
+                xref="paper",
+                yref="paper",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+            )
+        else:
+            with_ensemble = {
+                metric
+                for index, (metric, name, label, color) in enumerate(metrics)
+                if _ensemble_traces(
+                    fig, forecast, metric, name, label, color, unit, True if index == 0 else "legendonly"
+                )
+            }
+            if number == 0:
+                series = [("temperature", [s.temp for s in forecast.samples])]
+            elif number == 1:
+                series = [("precipitation", [s.rain_rate_mm_h for s in forecast.samples])]
+            else:
+                series = [
+                    ("windSpeed", [s.wind_speed for s in forecast.samples]),
+                    ("windGust", [s.wind_gust for s in forecast.samples]),
+                    ("headwind", [s.headwind for s in forecast.samples]),
+                ]
+            # The dotted single forecast joins its metric's legend group and color; it only gets
+            # its own legend entry when there is no ensemble median to carry the group.
+            lookup = {metric: (index, name, label, color) for index, (metric, name, label, color) in enumerate(metrics)}
+            for metric, values in series:
+                index, name, label, color = lookup[metric]
+                fig.add_trace(
+                    go.Scatter(
+                        x=x,
+                        y=values,
+                        customdata=custom,
+                        mode="lines+markers",
+                        marker={"size": 3},
+                        line={"dash": "dot", "width": 1.5, "color": color, **SMOOTH},
+                        connectgaps=False,
+                        name=name,
+                        legendgroup=metric,
+                        showlegend=metric not in with_ensemble,
+                        visible=True if index == 0 else "legendonly",
+                        hovertemplate=f"%{{customdata[1]}} Uhr · %{{y:.1f}} {unit}<extra>{label}: Einzelprognose</extra>",
+                    )
+                )
+            # A lone series needs no legend - the chart title already names it.
+            show_legend = len(metrics) > 1
+            if number == 1 and any(s.pop is not None for s in forecast.samples):
+                show_legend = True
+                fig.add_trace(
+                    go.Scatter(
+                        x=x,
+                        y=[s.pop * 100 if s.pop is not None else None for s in forecast.samples],
+                        customdata=custom,
+                        name="Regenrisiko (%)",
+                        legendgroup="pop",
+                        mode="lines+markers",
+                        marker={"size": 3},
+                        connectgaps=False,
+                        line={"color": TEAL, "dash": "dot", "width": 1.5, **SMOOTH},
+                        yaxis="y2",
+                        hovertemplate="%{customdata[1]} Uhr · %{y:.0f}%<extra>Regenrisiko am Punkt</extra>",
+                    )
+                )
+                # Plotly otherwise syncs an overlaying axis's ticks to the primary axis, giving
+                # labels like 23.7 / 71.3 %; round percentage steps read better without gridlines.
+                fig.update_layout(
+                    yaxis2={
+                        "overlaying": "y",
+                        "side": "right",
+                        "range": [0, 100],
+                        "title": "%",
+                        "tickmode": "linear",
+                        "dtick": 25,
+                    }
+                )
         fig.update_layout(
+            # Title pinned top-left; the legend (if any) sits as one compact row between title and
+            # plot, so it never competes with the x axis for space. Both align with the plot's left
+            # edge (a container-anchored horizontal legend makes Plotly stack it vertically).
+            title={
+                "text": title,
+                "font": {"size": 14},
+                "x": 0,
+                "xref": "paper",
+                "xanchor": "left",
+                "y": 1,
+                "yref": "container",
+                "yanchor": "top",
+                "pad": {"t": 10},
+            },
             template="plotly_white",
-            margin=dict(l=12, r=12, t=40, b=12),
             autosize=True,
-            xaxis=dict(visible=False),
-            yaxis=dict(visible=False),
+            hovermode="closest",
+            showlegend=show_legend,
+            # The legend is anchored to the plot's top and grows upward: leave room for two rows (the
+            # wind grid always, precipitation on narrow tiles) so it never runs into the title.
+            margin={"l": 45, "r": 40 if number == 1 else 12, "t": 82 if show_legend else 38, "b": 42},
+            xaxis={"title": {"text": "Fahrzeit (min)", "standoff": 4}, "zeroline": False},
+            # Rain rate can't be negative: without this, an all-dry route autoranges to -1..1 mm/h
+            # (and a spline dipping below 0 near a rain onset would be drawn as negative rain).
+            yaxis={"title": unit, "zeroline": True, **({"rangemode": "nonnegative"} if number == 1 else {})},
+            legend={
+                "orientation": "h",
+                "x": 0,
+                "xanchor": "left",
+                "y": 1.02,
+                "yanchor": "bottom",
+                "font": {"size": 11},
+                "itemwidth": 30,
+                "tracegroupgap": 0,
+                "bgcolor": "rgba(0,0,0,0)",
+                # Plotly wraps a horizontal legend at the plot width, which left the wind chart's
+                # fourth entry alone on a second row; a fixed 2x2 grid stays tidy at any width
+                # (0.5 overflows the row and stacks all four, so leave some slack).
+                **({"entrywidth": 0.4, "entrywidthmode": "fraction"} if len(metrics) > 2 else {}),
+            },
         )
         figures.append(fig.to_plotly_json())
     return figures
-
-
-def _temperature_figure(distances_km: list[float], forecast: RouteWeatherOut) -> dict:
-    import plotly.graph_objects as go
-
-    temps = [s.temp for s in forecast.samples]
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Scatter(
-            x=distances_km,
-            y=temps,
-            # mode="lines+markers",
-            mode="lines",
-            name="Temperatur",
-            line=dict(color="#e74c3c", width=2, shape="spline"),
-            # marker=dict(size=0),
-            # fill="tozeroy",
-            # fillcolor="rgba(231, 76, 60, 0.1)",
-        )
-    )
-
-    # Add reference lines at 5°C and 25°C
-    y_min = min(temps) - 2
-    y_max = max(temps) + 2
-    # fig.add_hline(y=5, line_dash="dash", line_color="lightblue", opacity=0.5, annotation_text="5°C")
-    # fig.add_hline(y=25, line_dash="dash", line_color="orange", opacity=0.5, annotation_text="25°C")
-
-    fig.update_layout(
-        title="Temperatur entlang der Strecke",
-        yaxis_range=[min(y_min, 0), max(y_max, 30)],
-        template="plotly_white",
-        margin=dict(l=12, r=12, t=40, b=12),
-        autosize=True,
-        # Axes are hidden: the cards are small squares and the values are shown on hover.
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-    )
-    return fig.to_plotly_json()
-
-
-def _precipitation_figure(distances_km: list[float], forecast: RouteWeatherOut) -> dict:
-
-    fig = go.Figure()
-
-    # Rain bars
-    rain_mm = [s.rain_mm for s in forecast.samples]
-    fig.add_trace(
-        go.Bar(
-            x=distances_km,
-            y=rain_mm,
-            name="Niederschlag",
-            marker_color="rgba(52, 152, 219, 0.7)",
-            marker_line=dict(width=0),
-        )
-    )
-
-    # POP line on secondary axis
-    pops = [s.pop for s in forecast.samples]
-    if any(p is not None for p in pops):
-        # Fill None values with 0 for plotting
-        pop_values = [(p or 0) * 100 for p in pops]
-        fig.add_trace(
-            go.Scatter(
-                x=distances_km,
-                y=pop_values,
-                mode="lines",
-                name="Regenwahrsch.",
-                line=dict(color="#e67e22", width=2, dash="dot"),
-                yaxis="y2",
-            )
-        )
-
-    fig.update_layout(
-        title="Niederschlag entlang der Strecke",
-        yaxis2=dict(
-            overlaying="y",
-            side="right",
-            range=[0, 100],
-            visible=False,
-        ),
-        template="plotly_white",
-        margin=dict(l=12, r=12, t=40, b=12),
-        autosize=True,
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
-    )
-    return fig.to_plotly_json()
-
-
-def _wind_figure(distances_km: list[float], forecast: RouteWeatherOut) -> dict:
-    import plotly.graph_objects as go
-
-    fig = go.Figure()
-
-    # Wind speed
-    wind_speeds = [s.wind_speed for s in forecast.samples]
-    fig.add_trace(
-        go.Scatter(
-            x=distances_km,
-            y=wind_speeds,
-            mode="lines",
-            name="Wind",
-            line=dict(color="#2ecc71", width=2),
-        )
-    )
-
-    # Wind gusts (if available)
-    gusts = [s.wind_gust for s in forecast.samples]
-    if any(g is not None for g in gusts):
-        gust_values = [g or 0 for g in gusts]
-        fig.add_trace(
-            go.Scatter(
-                x=distances_km,
-                y=gust_values,
-                mode="lines",
-                name="Böen",
-                line=dict(color="#2ecc71", width=1, dash="dash"),
-            )
-        )
-
-    # Headwind (only show when > 0)
-    headwinds = [s.headwind for s in forecast.samples]
-    fig.add_trace(
-        go.Scatter(
-            x=distances_km,
-            y=headwinds,
-            mode="lines",
-            name="Gegenwind",
-            line=dict(color="#e74c3c", width=1.5),
-            fill="tozeroy",
-            fillcolor="rgba(231, 76, 60, 0.1)",
-        )
-    )
-
-    fig.add_hline(y=0, line_dash="solid", line_color="gray", opacity=0.3)
-
-    fig.update_layout(
-        title="Wind entlang der Strecke",
-        template="plotly_white",
-        margin=dict(l=12, r=12, t=40, b=12),
-        autosize=True,
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
-    )
-    return fig.to_plotly_json()

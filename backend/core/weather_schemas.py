@@ -1,6 +1,32 @@
 from .schemas import CamelSchema
 
 
+class EnsembleRange(CamelSchema):
+    member_count: int
+    p10: float | None = None
+    median: float | None = None
+    p90: float | None = None
+
+
+class EnsembleStatistics(CamelSchema):
+    metrics: dict[str, EnsembleRange]
+    pop: float | None = None
+    rain_if_wet: float | None = None  # mm in preceding forecast hour
+
+
+class EnsembleModelStatistics(EnsembleStatistics):
+    model: str
+
+
+class ForecastUncertainty(EnsembleStatistics):
+    models: list[EnsembleModelStatistics]
+    requested_models: list[str]
+    forecast_time: str
+    fetched_at: str
+    source: str = "open-meteo-ensemble"
+    precipitation_interval_s: int = 3600
+
+
 class WeatherSample(CamelSchema):
     """Weather at one point along the route, at the clock time you'll be there."""
 
@@ -9,7 +35,11 @@ class WeatherSample(CamelSchema):
     elapsed_s: int  # seconds of riding from the start until this point
     eta: str  # ISO 8601 local clock time you arrive at this point
 
-    rain_mm: float  # precipitation in the surrounding 15-min step (mm), deterministic forecast
+    rain_mm: float  # provider precipitation accumulation; interval specified below
+    precipitation_interval_s: int | None = None
+    rain_rate_mm_h: float | None = None
+    probability_source: str | None = None
+    uncertainty: ForecastUncertainty | None = None
     pop: float | None = None  # probability of precipitation 0..1 (ensemble members; OWM as fallback)
     rain_if_wet: float | None = None  # mean precip (mm) of just the ensemble members forecasting rain
     temp: float  # °C

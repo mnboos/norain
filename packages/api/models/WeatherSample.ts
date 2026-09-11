@@ -14,6 +14,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { ForecastUncertainty } from './ForecastUncertainty';
+import {
+    ForecastUncertaintyFromJSON,
+    ForecastUncertaintyFromJSONTyped,
+    ForecastUncertaintyToJSON,
+    ForecastUncertaintyToJSONTyped,
+} from './ForecastUncertainty';
+
 /**
  * Weather at one point along the route, at the clock time you'll be there.
  * @export
@@ -40,6 +48,22 @@ export interface WeatherSample {
      * 
      */
     rainMm: number;
+    /**
+     * 
+     */
+    precipitationIntervalS?: number | null;
+    /**
+     * 
+     */
+    rainRateMmH?: number | null;
+    /**
+     * 
+     */
+    probabilitySource?: string | null;
+    /**
+     * 
+     */
+    uncertainty?: ForecastUncertainty | null;
     /**
      * 
      */
@@ -115,6 +139,10 @@ export function WeatherSampleFromJSONTyped(json: any, ignoreDiscriminator: boole
         'elapsedS': json['elapsed_s'],
         'eta': json['eta'],
         'rainMm': json['rain_mm'],
+        'precipitationIntervalS': json['precipitation_interval_s'] === undefined ? undefined : json['precipitation_interval_s'] === null ? null : json['precipitation_interval_s'],
+        'rainRateMmH': json['rain_rate_mm_h'] === undefined ? undefined : json['rain_rate_mm_h'] === null ? null : json['rain_rate_mm_h'],
+        'probabilitySource': json['probability_source'] === undefined ? undefined : json['probability_source'] === null ? null : json['probability_source'],
+        'uncertainty': json['uncertainty'] === undefined ? undefined : json['uncertainty'] === null ? null : ForecastUncertaintyFromJSON(json['uncertainty']),
         'pop': json['pop'] === undefined ? undefined : json['pop'] === null ? null : json['pop'],
         'rainIfWet': json['rain_if_wet'] === undefined ? undefined : json['rain_if_wet'] === null ? null : json['rain_if_wet'],
         'temp': json['temp'],
@@ -144,6 +172,10 @@ export function WeatherSampleToJSONTyped(value?: WeatherSample | null, ignoreDis
         'elapsed_s': value['elapsedS'],
         'eta': value['eta'],
         'rain_mm': value['rainMm'],
+        'precipitation_interval_s': value['precipitationIntervalS'],
+        'rain_rate_mm_h': value['rainRateMmH'],
+        'probability_source': value['probabilitySource'],
+        'uncertainty': ForecastUncertaintyToJSON(value['uncertainty']),
         'pop': value['pop'],
         'rain_if_wet': value['rainIfWet'],
         'temp': value['temp'],

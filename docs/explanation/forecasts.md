@@ -20,13 +20,15 @@ can represent a different time from the requested arrival.
 
 Forecast requests are capped at 16 days. The scheduled-route availability indicator
 checks whether the departure date falls between today and today + 15 days; it does
-not verify each provider's returned coverage. Ensemble extraction declines timestamps
-more than one hour outside its returned range.
+not verify each provider's returned coverage. Ensemble uncertainty declines timestamps outside its returned range; unavailable
+regional-model values are excluded rather than extrapolated.
 
 ## Probability and precipitation amount
 
 For the nearest ensemble hour, each available precipitation series contributes one
-value. A member is wet at 0.1 mm or more. `pop` is the fraction of wet members;
+value, with control members counted once. A member is wet at 0.1 mm or more
+in the preceding forecast hour. At least two valid members are required for an
+ensemble probability. `pop` is the fraction of wet members;
 `rain_if_wet` is their mean precipitation, or zero when none are wet. Ensemble
 probability is preferred; OWM probability is a fallback when available. The current
 Open-Meteo deterministic parser does not expose its precipitation-probability field.
@@ -44,7 +46,37 @@ an asserted 0% chance.
 to its deterministic amount. Without probability it is the maximum deterministic
 sample amount. It is **not accumulated rainfall over the ride**. `rain_mm` preserves
 the selected provider block's amount: 15-minute and hourly amounts are not normalized
-to a common interval. Adding samples would also double-count repeated time steps.
+in that legacy field. New samples also include `precipitation_interval_s` and
+`rain_rate_mm_h`; charts and point details use the normalized mm/h intensity.
+Adding samples would double-count repeated time steps.
+
+## Ensemble ranges and model comparison
+
+The three charts use elapsed riding time, with arrival time in the tooltip. A solid
+line shows the ensemble median and shading shows its 10th–90th percentile range;
+a dotted line distinguishes the deterministic forecast. Missing ranges remain gaps.
+Wind's legend can reveal gust, headwind and crosswind ranges.
+
+Open **Vorhersage-Details** to choose a route sample using the slider, or select a
+chart point or map marker. The map highlights that sample. The panel shows metric
+ranges, valid member counts, probability source, matched ensemble hour and retrieval
+age, plus a model comparison table. On narrow screens the table scrolls horizontally.
+
+Statistics pool all available members with equal weight, so models with more members
+contribute more weight. Precipitation ranges include dry members. Temperature and wind
+use their available members independently; headwind and crosswind require matching
+speed/direction from the same model and member. Metrics with fewer than two valid
+members have no reported range. The per-model table exposes differing coverage.
+
+These ranges describe model spread, not calibrated confidence intervals or guaranteed
+bounds. The summary labels the peak point probability explicitly and uses **Regen
+möglich** rather than claiming that a 25% probability means rain is likely. Zero wet
+members and unavailable probability are separate states.
+
+The existing model selection is retained. Ensemble coverage can end before the
+16-day deterministic forecast window. Older precipitation-only cache payloads refresh
+once; subsequent reuse follows the existing two-hour database expiry. Unsupported
+variables do not trigger repeated refetches. Retrieval age is not the model-run age.
 
 ## Sections and summary can disagree
 

@@ -1,6 +1,9 @@
 apis/DefaultApi.ts
 apis/index.ts
 index.ts
+models/EnsembleModelStatistics.ts
+models/EnsembleRange.ts
+models/ForecastUncertainty.ts
 models/GeometrySchema.ts
 models/PlacesSearchResult.ts
 models/PropertiesSchema.ts

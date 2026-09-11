@@ -13,5 +13,6 @@ RUN update-ca-certificates
 RUN keytool -import -noprompt -alias zscaler-corp-cert -trustcacerts -keystore ${JAVA_HOME}/lib/security/cacerts -storepass changeit -file /usr/local/share/ca-certificates/zscaler-root.pem.crt
 
 COPY docker/graphhopper-entrypoint.sh entrypoint.sh
+RUN chmod +x /graphhopper/entrypoint.sh
 
-ENTRYPOINT /graphhopper/entrypoint.sh
+ENTRYPOINT ["/graphhopper/entrypoint.sh"]

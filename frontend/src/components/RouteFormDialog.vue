@@ -243,7 +243,7 @@ function onClose() {
                     </template>
                 </q-input>
 
-                <div v-if="scheduleDescription" class="text-body2 text-grey-7">
+                <div v-if="scheduleDescription" class="text-body2 text-muted">
                     {{ scheduleDescription }}
                 </div>
 

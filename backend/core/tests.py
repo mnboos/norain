@@ -589,7 +589,7 @@ class CellCacheTests(TestCase):
             lon_r=self.lon_r,
             day_key=self.day_key,
             forecast_days=forecast_days,
-            data={"hourly": {"time": [], "precipitation": []}},
+            data={"_norain_request_version": 2, "hourly": {"time": [], "precipitation": []}},
         )
 
     def test_rejects_insufficient_forecast_days(self):

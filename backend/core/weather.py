@@ -22,11 +22,12 @@ from loguru import logger
 from ninja import Router
 
 from .grid import (
-    extract_ensemble,
+    ENSEMBLE_MODELS,
     extract_sample,
     get_or_fetch_ensemble_cell,
     get_or_fetch_forecast_cell,
 )
+from .uncertainty import extract_uncertainty
 from .weather_schemas import RouteWeatherOut, RouteWeatherSummary, WeatherSample
 
 router = Router()
@@ -289,17 +290,6 @@ async def compute_route_weather(
             continue
         forecast_source = forecast["source"]
 
-        # Look up ensemble POP from grid
-        pop = None
-        rain_if_wet = None
-        ens_cell = await get_or_fetch_ensemble_cell(lat_r, lon_r, day_key_str, days)
-        if ens_cell is not None:
-            res = extract_ensemble(ens_cell.data, eta)
-            if res is not None:
-                pop, rain_if_wet = res
-        if pop is None:
-            pop = forecast.get("pop")
-
         # Wind bearing: use vertex index if available, else neighboring sample points
         if "idx" in sp and sp["idx"] > 0 and sp["idx"] < len(coords) - 1:
             a_idx = max(0, idx - 1)
@@ -313,6 +303,20 @@ async def compute_route_weather(
             b = sample_points[b_i]
             bearing = _bearing_deg(a["lon"], a["lat"], b["lon"], b["lat"]) if a_i != b_i else 0.0
 
+        uncertainty = None
+        ens_cell = await get_or_fetch_ensemble_cell(lat_r, lon_r, day_key_str, days)
+        if ens_cell is not None:
+            uncertainty = extract_uncertainty(
+                ens_cell.data, eta, bearing, ens_cell.fetched_at, ENSEMBLE_MODELS.split(","),
+            )
+        pop = uncertainty.pop if uncertainty is not None else None
+        rain_if_wet = uncertainty.rain_if_wet if uncertainty is not None else None
+        probability_source = "open-meteo-ensemble" if pop is not None else None
+        if pop is None:
+            pop = forecast.get("pop")
+            probability_source = forecast_source if pop is not None else None
+        interval = forecast.get("precipitation_interval_s", 3600)
+
         headwind, crosswind = _wind_components(forecast["wind_speed"], forecast["wind_dir"], bearing)
 
         samples.append(
@@ -322,6 +326,10 @@ async def compute_route_weather(
                 elapsed_s=int(elapsed),
                 eta=eta.isoformat(),
                 rain_mm=round(forecast["rain_mm"], 2),
+                precipitation_interval_s=interval,
+                rain_rate_mm_h=round(forecast["rain_mm"] * 3600 / interval, 3),
+                uncertainty=uncertainty,
+                probability_source=probability_source,
                 pop=round(pop, 2) if pop is not None else None,
                 rain_if_wet=round(rain_if_wet, 2) if rain_if_wet is not None else None,
                 temp=round(forecast["temp"], 1),

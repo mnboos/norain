@@ -1,8 +1,11 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from "@playwright/test";
 
-// See here how to get started:
-// https://playwright.dev/docs/intro
-test('visits the app root url', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.locator('h1')).toHaveText('You did it!');
-})
+test("shows the empty route dashboard", async ({ page }) => {
+    await page.route(
+        url => url.pathname === "/api/routes",
+        route => route.fulfill({ json: [] }),
+    );
+    await page.goto("/");
+    await expect(page.getByText("NoRain", { exact: true })).toBeVisible();
+    await expect(page.getByText("Noch keine Routen — leg los!")).toBeVisible();
+});

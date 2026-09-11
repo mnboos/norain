@@ -11,11 +11,11 @@ import os
 from datetime import date, datetime, timedelta, timezone
 
 import httpx
-from async_lru import alru_cache
 from asgiref.sync import sync_to_async
 from loguru import logger
 
 from .models import EnsembleCell, ForecastCell
+from .uncertainty import ENSEMBLE_VARIABLES
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 OWM_ONECALL_URL = "https://api.openweathermap.org/data/3.0/onecall"
@@ -39,6 +39,7 @@ MAX_CELL_AGE = timedelta(hours=2)
 
 ENSEMBLE_MODELS = "icon_seamless_eps,meteoswiss_icon_ch1_ensemble,meteoswiss_icon_ch2_ensemble"
 POP_MEMBER_MM = 0.1
+ENSEMBLE_REQUEST_VERSION = 2
 
 
 # =============================================================================
@@ -46,13 +47,13 @@ POP_MEMBER_MM = 0.1
 # =============================================================================
 
 
-@alru_cache(maxsize=256)
 async def _fetch_ensemble(lat_r: float, lon_r: float, forecast_days: int, day_key: str) -> dict:
-    """Open-Meteo ensemble: many members across several models, hourly precipitation only."""
+    """Open-Meteo ensemble: many members across several models, hourly weather variables."""
     params = {
         "latitude": lat_r,
         "longitude": lon_r,
-        "hourly": "precipitation",
+        "hourly": ",".join(ENSEMBLE_VARIABLES),
+        "wind_speed_unit": "kmh",
         "models": ENSEMBLE_MODELS,
         "timezone": "Europe/Zurich",
         "forecast_days": forecast_days,
@@ -60,7 +61,9 @@ async def _fetch_ensemble(lat_r: float, lon_r: float, forecast_days: int, day_ke
     async with httpx.AsyncClient() as client:
         resp = await client.get(ENSEMBLE_URL, params=params, timeout=30)
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        data["_norain_request_version"] = ENSEMBLE_REQUEST_VERSION
+        return data
 
 
 async def _fetch_open_meteo(lat_r: float, lon_r: float, forecast_days: int, day_key: str) -> dict:
@@ -159,7 +162,10 @@ def _from_open_meteo(data: dict, eta: datetime) -> dict | None:
             "rain_mm": float(rain[i]) if i < len(rain) and rain[i] is not None else 0.0,
             "temp": _at(b, "temperature_2m", i),
             "wind_speed": _at(b, "wind_speed_10m", i),
-            "wind_gust": _at(b, "wind_gusts_10m", i),
+            "wind_gust": (float(b["wind_gusts_10m"][i])
+                          if i < len(b.get("wind_gusts_10m") or []) and b["wind_gusts_10m"][i] is not None
+                          else None),
+            "precipitation_interval_s": 900 if block == "minutely_15" else 3600,
             "wind_dir": _at(b, "wind_direction_10m", i),
             "weather_code": int(code) if code is not None else None,
             "pop": None,
@@ -197,6 +203,7 @@ def _from_owm(data: dict, eta: datetime) -> dict | None:
         rain = 0.0
     return {
         "rain_mm": rain,
+        "precipitation_interval_s": 3600,
         "temp": float(entry.get("temp", 0.0)),
         "wind_speed": float(entry.get("wind_speed", 0.0)) * 3.6,
         "wind_gust": float(entry["wind_gust"]) * 3.6 if entry.get("wind_gust") is not None else None,
@@ -272,6 +279,8 @@ def _get_ensemble_cell_sync(
     try:
         cell = EnsembleCell.objects.get(lat_r=lat_r, lon_r=lon_r, day_key=day_key)
     except EnsembleCell.DoesNotExist:
+        return None
+    if cell.data.get("_norain_request_version") != ENSEMBLE_REQUEST_VERSION:
         return None
     if datetime.now(tz=timezone.utc) - cell.fetched_at > MAX_CELL_AGE:
         return None

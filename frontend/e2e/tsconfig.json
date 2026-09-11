@@ -1,4 +1,18 @@
 {
-  "extends": "@tsconfig/node22/tsconfig.json",
-  "include": ["./**/*"]
+  "extends": "../tsconfig.node.json",
+  "include": [
+    "./**/*.ts",
+    "./**/*.json"
+  ],
+  "compilerOptions": {
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "types": [
+      "node"
+    ],
+    "resolveJsonModule": true,
+    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.e2e.tsbuildinfo"
+  }
 }

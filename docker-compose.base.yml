@@ -17,39 +17,31 @@ services:
       - TZ=${TZ}
     container_name: db
     volumes:
-      - ./postgresql.conf:/etc/postgresql/postgresql.conf
-      - ${APP_STORAGE_PATH:?err}/db/app/data:/var/lib/postgresql/data
-  motis:
-    image: ghcr.io/motis-project/motis:master
-    container_name: motis
-    command: ["./motis", "server"]
-    volumes:
-      - ./data/motis/config.yml:/config.yml:ro
-      - ./data/motis/data:/data
-    restart: unless-stopped
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf:z
+      - ${APP_STORAGE_PATH:?err}/db/app/data:/var/lib/postgresql/data:z
 
   graphhopper:
     build:
-        context: .
-        dockerfile: docker/graphhopper.Dockerfile
+      context: .
+      dockerfile: docker/graphhopper.Dockerfile
     container_name: graphhopper
     deploy:
-        resources:
-            limits:
-                memory: 8g
+      resources:
+        limits:
+          memory: 8g
     memswap_limit: 8g
 
     volumes:
-        - ./data/graphhopper/osm:/osm_data
-        - ./data/graphhopper/cache:/graph-cache
-        - ./data/graphhopper/graphhopper-config.yaml:/config.yaml:ro
-        - ./data/graphhopper/models:/custom_models
+      - ./data/graphhopper/osm:/osm_data:z
+      - ./data/graphhopper/cache:/graph-cache:z
+      - ./data/graphhopper/graphhopper-config.yaml:/config.yaml:ro,z
+      - ./data/graphhopper/models:/custom_models:z
     environment:
-        - OSM_DATA_DIR=/osm_data
-        # Coverage area: any Geofabrik .osm.pbf (country/continent/planet). See .env.
-        - OSM_DATA_URL=${OSM_DATA_URL:-https://download.geofabrik.de/europe/switzerland-latest.osm.pbf}
-        # JVM heap; raise for larger extracts (e.g. 16g for a continent, more for planet).
-        - GRAPHHOPPER_HEAP=${GRAPHHOPPER_HEAP:-6g}
+      - OSM_DATA_DIR=/osm_data
+      # Coverage area: any Geofabrik .osm.pbf (country/continent/planet). See .env.
+      - OSM_DATA_URL=${OSM_DATA_URL:-https://download.geofabrik.de/europe/switzerland-latest.osm.pbf}
+      # JVM heap; raise for larger extracts (e.g. 16g for a continent, more for planet).
+      - GRAPHHOPPER_HEAP=${GRAPHHOPPER_HEAP:-6g}
     restart: unless-stopped
 
   photon:
@@ -58,13 +50,13 @@ services:
       dockerfile: docker/photon.Dockerfile
     container_name: photon
     environment:
-        # Photon dump/index matching OSM_DATA_URL's area. See .env. A *.jsonl.zst URL is imported,
-        # a *.tar.bz2 URL is extracted. Default: Switzerland+Liechtenstein JSONL dump.
-        - PHOTON_INDEX_URL=${PHOTON_INDEX_URL:-https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst}
-        - PHOTON_IMPORT_HEAP=${PHOTON_IMPORT_HEAP:-4g}
+      # Photon dump/index matching OSM_DATA_URL's area. See .env. A *.jsonl.zst URL is imported,
+      # a *.tar.bz2 URL is extracted. Default: Switzerland+Liechtenstein JSONL dump.
+      - PHOTON_INDEX_URL=${PHOTON_INDEX_URL:-https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst}
+      - PHOTON_IMPORT_HEAP=${PHOTON_IMPORT_HEAP:-4g}
     volumes:
-      - ./data/photon:/photon_data # Persist photon's data
-#    command: ["-osm-pbf", "/data/switzerland-latest.osm.pbf", "-country-codes", "CH", "-languages", "de,fr,it,en"]
+      - ./data/photon:/photon_data:z # Persist photon's data
+    #    command: ["-osm-pbf", "/data/switzerland-latest.osm.pbf", "-country-codes", "CH", "-languages", "de,fr,it,en"]
     restart: unless-stopped
 
 # NoRain has no database models; Django uses local SQLite for its built-in apps. No Postgres

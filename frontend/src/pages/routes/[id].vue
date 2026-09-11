@@ -39,13 +39,14 @@ const departureTime = computed(() => {
 
 <template>
     <q-page>
-        <q-btn flat :icon="symSharpArrowBack" label="Zurück" to="/" class="q-ma-sm" />
+        <!-- Once the route is loaded, the back button moves into the panel's one-line header. -->
+        <q-btn v-if="!route" flat :icon="symSharpArrowBack" label="Zurück" to="/" class="q-ma-sm" />
 
         <div v-if="isLoading" class="text-center q-mt-xl">
             <q-spinner-dots size="3rem" />
         </div>
 
-        <q-banner v-else-if="error || !route" class="bg-red-1 q-ma-md" rounded>
+        <q-banner v-else-if="error || !route" class="bg-tint-error q-ma-md" rounded>
             Route nicht gefunden.
         </q-banner>
 
@@ -54,6 +55,10 @@ const departureTime = computed(() => {
             :route="route"
             :departure-date="departureDate"
             :departure-time="departureTime"
-        />
+        >
+            <template #back>
+                <q-btn flat round dense :icon="symSharpArrowBack" to="/" aria-label="Zurück" />
+            </template>
+        </RouteDetailPanel>
     </q-page>
 </template>

@@ -118,11 +118,11 @@ geocode:
 
 
 setup-geocoder:
-    :: wget https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst
-    docker compose run --entrypoint bash -v ./photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst:/photon-dump.jsonl.zst photon -c /import-photon-dump.sh
+    # wget https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst
+    podman compose run --entrypoint bash -v ./photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst:/photon-dump.jsonl.zst photon -c /import-photon-dump.sh
 
 photon-import-pbf:
-    docker compose run --entrypoint bash -v ./data/switzerland-latest.osm.pbf:/switzerland-latest.osm.pbf photon -osm-pbf=switzerland-latest.osm.pbf -country-codes="CH" -languages=de,fr,it,en
+    podman compose run --entrypoint bash -v ./data/switzerland-latest.osm.pbf:/switzerland-latest.osm.pbf photon -osm-pbf=switzerland-latest.osm.pbf -country-codes="CH" -languages=de,fr,it,en
 
 prepare input="C:\\Users\\mboos\\Downloads\\gtfs_fp2026_20260408.zip":
     just filter-gtfs {{ input }}

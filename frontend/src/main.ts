@@ -3,7 +3,7 @@ import "./assets/main.css";
 import { createApp } from "vue";
 import App from "./App.vue";
 import router from "./router";
-import { Quasar, Dialog } from "quasar";
+import { Quasar, Dialog, Dark, LocalStorage } from "quasar";
 import quasarLang from "quasar/lang/de-CH";
 import quasarIconSet from "quasar/icon-set/material-symbols-sharp";
 import { VueQueryPlugin } from "@tanstack/vue-query";
@@ -15,6 +15,7 @@ import "@quasar/extras/material-symbols-sharp/material-symbols-sharp.css";
 // Import Quasar css
 import "quasar/dist/quasar.css";
 import { getCookie, useBackendHost } from "@/utils";
+import { initialDarkConfig } from "@/utils/theme";
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
 const app = createApp(App);
@@ -58,9 +59,10 @@ DefaultConfig.config = new Configuration({
 app.use(router);
 app.use(VueQueryPlugin);
 app.use(Quasar, {
-    plugins: { Dialog },
+    plugins: { Dialog, Dark, LocalStorage },
     lang: quasarLang,
     iconSet: quasarIconSet,
+    config: { dark: initialDarkConfig() },
 });
 
 app.mount("#app");

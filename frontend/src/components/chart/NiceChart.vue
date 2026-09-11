@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, toRaw, toRefs, useTemplateRef, watch } from "vue";
 import Plotly from "./plotly";
-import type { Config, Data, Layout } from "plotly.js";
+import type { Config, Data, Layout, PlotMouseEvent } from "plotly.js";
 import { useQuasar } from "quasar";
 
 const $q = useQuasar();
+const emit = defineEmits<{ selectSample: [index: number] }>();
+function selectPoint(event: PlotMouseEvent) {
+    const custom = event.points[0]?.customdata;
+    if (Array.isArray(custom) && typeof custom[0] === "number") emit("selectSample", custom[0]);
+}
 
 const props = defineProps<{
     figure: { data?: Data[]; layout?: Partial<Layout> };
@@ -17,16 +22,30 @@ let resizeObserver: ResizeObserver | null = null;
 
 function buildLayout(): Partial<Layout> {
     const incoming = structuredClone(toRaw(figure.value.layout ?? {}));
-    // The card decides the size (square), so any fixed height/width from the backend
+    // The card decides the size, so any fixed height/width from the backend
     // would fight the container - drop it and let Plotly autosize.
     delete incoming.height;
     delete incoming.width;
+    // The backend sets template="plotly_white" for a sane default when charts are viewed
+    // outside this app; here we own theming instead, so every chrome color (axes, grid,
+    // fonts - never the per-series data colors, those stay the backend's) follows the
+    // app's light/dark state.
+    const dark = $q.dark.isActive;
+    const ink = dark ? "#e8eef2" : "#1b2733";
+    // Decluttered: no gridlines or axis lines - the tick labels carry the scale. Only the zero
+    // line stays, as a faint baseline, since it matters for rain and for head- vs. tailwind.
+    const baseline = dark ? "rgba(232, 238, 242, 0.25)" : "rgba(27, 39, 51, 0.2)";
+    const axisTheme = { color: ink, showgrid: false, showline: false, zerolinecolor: baseline, zerolinewidth: 1 };
     return {
         ...incoming,
         autosize: true,
         plot_bgcolor: "transparent",
         paper_bgcolor: "transparent",
-        legend: { ...incoming.legend, font: { color: $q.dark.isActive ? "white" : "black" } },
+        font: { color: ink },
+        legend: { ...incoming.legend, font: { ...incoming.legend?.font, color: ink } },
+        xaxis: { ...incoming.xaxis, ...axisTheme },
+        yaxis: { ...incoming.yaxis, ...axisTheme },
+        ...(incoming.yaxis2 ? { yaxis2: { ...incoming.yaxis2, ...axisTheme } } : {}),
         grid: { rows: 1, columns: 1, pattern: "independent" },
     };
 }
@@ -58,6 +77,8 @@ onMounted(async () => {
         resizeObserver.observe(chart.value);
     }
     await render();
+    chart.value?.on("plotly_hover", selectPoint);
+    chart.value?.on("plotly_click", selectPoint);
 });
 
 watch(
@@ -70,9 +91,22 @@ watch(
     { deep: true },
 );
 
+// Re-theme (but don't re-fetch data) when the user flips light/dark without a new figure.
+watch(
+    () => $q.dark.isActive,
+    async () => {
+        layout.value = buildLayout();
+        await render();
+    },
+);
+
 onBeforeUnmount(() => {
     resizeObserver?.disconnect();
-    if (chart.value) Plotly.purge(chart.value);
+    if (chart.value) {
+        chart.value.removeAllListeners("plotly_hover");
+        chart.value.removeAllListeners("plotly_click");
+        Plotly.purge(chart.value);
+    }
 });
 </script>
 

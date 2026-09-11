@@ -428,6 +428,169 @@
                 "title": "PropertiesSchema",
                 "type": "object"
             },
+            "EnsembleModelStatistics": {
+                "properties": {
+                    "metrics": {
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/EnsembleRange"
+                        },
+                        "title": "Metrics",
+                        "type": "object"
+                    },
+                    "pop": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Pop"
+                    },
+                    "rain_if_wet": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain If Wet"
+                    },
+                    "model": {
+                        "title": "Model",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "metrics",
+                    "model"
+                ],
+                "title": "EnsembleModelStatistics",
+                "type": "object"
+            },
+            "EnsembleRange": {
+                "properties": {
+                    "member_count": {
+                        "title": "Member Count",
+                        "type": "integer"
+                    },
+                    "p10": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "P10"
+                    },
+                    "median": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Median"
+                    },
+                    "p90": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "P90"
+                    }
+                },
+                "required": [
+                    "member_count"
+                ],
+                "title": "EnsembleRange",
+                "type": "object"
+            },
+            "ForecastUncertainty": {
+                "properties": {
+                    "metrics": {
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/EnsembleRange"
+                        },
+                        "title": "Metrics",
+                        "type": "object"
+                    },
+                    "pop": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Pop"
+                    },
+                    "rain_if_wet": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain If Wet"
+                    },
+                    "models": {
+                        "items": {
+                            "$ref": "#/components/schemas/EnsembleModelStatistics"
+                        },
+                        "title": "Models",
+                        "type": "array"
+                    },
+                    "requested_models": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Requested Models",
+                        "type": "array"
+                    },
+                    "forecast_time": {
+                        "title": "Forecast Time",
+                        "type": "string"
+                    },
+                    "fetched_at": {
+                        "title": "Fetched At",
+                        "type": "string"
+                    },
+                    "source": {
+                        "default": "open-meteo-ensemble",
+                        "title": "Source",
+                        "type": "string"
+                    },
+                    "precipitation_interval_s": {
+                        "default": 3600,
+                        "title": "Precipitation Interval S",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "metrics",
+                    "models",
+                    "requested_models",
+                    "forecast_time",
+                    "fetched_at"
+                ],
+                "title": "ForecastUncertainty",
+                "type": "object"
+            },
             "RouteWeatherOut": {
                 "properties": {
                     "line": {
@@ -557,6 +720,49 @@
                     "rain_mm": {
                         "title": "Rain Mm",
                         "type": "number"
+                    },
+                    "precipitation_interval_s": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Precipitation Interval S"
+                    },
+                    "rain_rate_mm_h": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain Rate Mm H"
+                    },
+                    "probability_source": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Probability Source"
+                    },
+                    "uncertainty": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/ForecastUncertainty"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
                     },
                     "pop": {
                         "anyOf": [

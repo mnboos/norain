@@ -1,6 +1,9 @@
 // @ts-nocheck
 /* tslint:disable */
 /* eslint-disable */
+export * from './EnsembleModelStatistics';
+export * from './EnsembleRange';
+export * from './ForecastUncertainty';
 export * from './GeometrySchema';
 export * from './PlacesSearchResult';
 export * from './PropertiesSchema';
