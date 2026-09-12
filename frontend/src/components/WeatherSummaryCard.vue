@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { symSharpInfo } from "@quasar/extras/material-symbols-sharp";
-import type { RouteWeatherOut } from "@norain/api";
+import type { RouteWeatherOut } from "@norain/api/models";
 import { forecastHeadline, peakRisk } from "@/utils/forecastDetails";
 const props = defineProps<{ forecast: RouteWeatherOut }>();
 const headline = computed(() => forecastHeadline(props.forecast.summary, props.forecast.samples));

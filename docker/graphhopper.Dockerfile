@@ -1,7 +1,8 @@
 FROM eclipse-temurin:24-jre
 
-#RUN apt update -y &&\
-#	rm -rf /var/lib/apt/lists/*
+RUN apt update -y && \
+    apt install -y --no-install-recommends ca-certificates wget && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /graphhopper
 

@@ -18,6 +18,7 @@ the implementation, and explanation develops understanding.
 - [Run background jobs and pre-warm forecasts](how-to/background-jobs.md).
 - [Change the geographic coverage](how-to/change-region.md).
 - [Develop, test, and regenerate the API client](how-to/development.md).
+- [Deploy and operate a production VPS](how-to/deploy-vps.md).
 - [Troubleshoot setup and missing forecasts](how-to/troubleshooting.md).
 
 ## Reference — look up details

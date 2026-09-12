@@ -1,45 +1,53 @@
 <route lang="json5">
 {
   name: "dashboard",
-  meta: { title: "Dashboard" }
+  meta: { title: "Dashboard", requiresAuth: true }
 }
 </route>
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useQuasar } from "quasar";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/vue-query";
-import { DefaultApi } from "@norain/api";
-import type { RecurringRouteIn, RecurringRouteOut } from "@norain/api";
+import { useRouter } from "vue-router";
+import type { RecurringRouteIn, RecurringRouteOut } from "@norain/api/models";
 import RouteListPanel from "@/components/RouteListPanel.vue";
 import RouteFormDialog from "@/components/RouteFormDialog.vue";
+import { useEntitlements } from "@/composables/useEntitlements";
+import { isQuotaExceeded } from "@/services/http";
+import {
+    useCreateRecurringRoute,
+    useDeleteRecurringRoute,
+    useRecurringRoutes,
+} from "@/queries/recurringRoutes";
 
-const api = new DefaultApi();
 const $q = useQuasar();
-const queryClient = useQueryClient();
+const router = useRouter();
 const showAddDialog = ref(false);
+const { maxRoutes, atRouteLimit } = useEntitlements();
 
-const { data: routes, isLoading } = useQuery({
-    queryKey: ["routes"],
-    queryFn: () => api.coreRoutesApiListRoutes(),
-    refetchInterval: 60_000,
-    staleTime: 30_000,
-});
+const { data: routes, isLoading } = useRecurringRoutes();
 
 const routesList = computed<RecurringRouteOut[]>(() => routes.value ?? []);
 
-const createMutation = useMutation({
-    mutationFn: (data: RecurringRouteIn) => api.coreRoutesApiCreateRoute({ recurringRouteIn: data }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["routes"] }),
-});
-
-const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.coreRoutesApiDeleteRoute({ routeId: id }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["routes"] }),
-});
+const createMutation = useCreateRecurringRoute();
+const deleteMutation = useDeleteRecurringRoute();
 
 function onRouteSave(data: RecurringRouteIn) {
-    createMutation.mutate(data);
+    createMutation.mutate(data, {
+        onError: (err: unknown) => {
+        // The server enforces the quota; 402 is it saying the tier is full.
+        if (isQuotaExceeded(err)) {
+            $q.dialog({
+                title: "Tarifgrenze erreicht",
+                message: `Der Free-Tarif erlaubt ${maxRoutes.value ?? 2} aktive Routen. Mit Pro sind es unbegrenzt viele.`,
+                cancel: { label: "Später", flat: true },
+                ok: { label: "Upgrade", color: "primary", unelevated: true },
+            }).onOk(() => void router.push("/account"));
+            return;
+        }
+        $q.notify({ type: "negative", message: "Route konnte nicht erstellt werden." });
+        },
+    });
 }
 
 function onRouteDelete(id: string) {
@@ -62,8 +70,11 @@ function onRouteDelete(id: string) {
             <RouteListPanel
                 :routes="routesList"
                 :loading="isLoading"
+                :at-route-limit="atRouteLimit"
+                :max-routes="maxRoutes"
                 @add="showAddDialog = true"
                 @delete="onRouteDelete"
+                @upgrade="router.push('/account')"
             />
         </div>
         <RouteFormDialog v-model="showAddDialog" @save="onRouteSave" />

@@ -33,6 +33,14 @@ for current restrictions.
 | PUT | `/api/routes/{route_id}` | Replace editable fields; enqueue geometry if coordinates/profile change |
 | DELETE | `/api/routes/{route_id}` | Delete route; return 204 without a body |
 | GET | `/api/routes/{route_id}/forecast` | Forecast a saved route for the supplied departure |
+| GET | `/api/billing/entitlements` | Current tier, its limits, and how much of them is used |
+| POST | `/api/billing/checkout` | Start a Stripe Checkout session; returns a hosted URL |
+| POST | `/api/billing/portal` | Open the Stripe billing portal; returns a hosted URL |
+| POST | `/api/billing/webhook` | Stripe subscription events (see Billing below) |
+
+The `/api/auth/*` and `/api/billing/*` paths are plain Django views mounted in
+`backend/urls.py`, not part of the django-ninja API, so they do not appear in the OpenAPI
+schema or the generated client. `frontend/src/services/` calls them directly.
 
 Create and update return a route object using the default success status 200.
 PUT uses the full input schema, not partial-update semantics. Omitted optional
@@ -74,7 +82,7 @@ This endpoint returns `RouteWeatherOut`; it does not save the route or include f
 
 ## Saved-route input
 
-[RecurringRouteIn](../../backend/core/routes_schemas.py) is shared by POST and PUT.
+[RecurringRouteIn](../../backend/core/api/recurring_route.py) is shared by POST and PUT.
 
 | Field | Type | Required / default |
 | --- | --- | --- |
@@ -104,7 +112,7 @@ It returns the weather response plus `route_id`, `departure_time`, `figures`
 
 ## Forecast response fields
 
-[Weather schemas](../../backend/core/weather_schemas.py) define the complete types.
+[Weather schemas](../../backend/core/api/route_weather.py) define the complete types.
 
 | Field | Meaning |
 | --- | --- |
@@ -155,3 +163,45 @@ fractions. See [forecast interpretation](../explanation/forecasts.md).
   charts then contain **Keine Wetterdaten** placeholders rather than failing on empty data.
 
 [Documentation index](../README.md)
+
+
+## Tiers
+
+Limits live in `backend/core/entitlements.py` and are enforced server-side at three
+places — route creation, the forecast endpoints, and the pre-warm task. The frontend only
+uses `/api/billing/entitlements` to decide what to *show*.
+
+| | Free | Pro |
+| --- | --- | --- |
+| Active saved routes | 2 | unlimited |
+| Forecast, rain probability (`pop`), `rainIfWet` | yes | yes |
+| Ensemble spread (`uncertainty`: p10/median/p90, per-model breakdown) | no | yes |
+
+`uncertainty` is stripped from the response for free accounts; `pop` and `rainIfWet` are
+not, because ensemble cells are shared between all accounts and pre-warmed anyway, so
+serving them costs nothing extra.
+
+## Billing
+
+`POST /api/billing/webhook` is the only thing that changes a tier. It is mounted outside
+the ninja API because `NinjaAPI(auth=session_auth)` CSRF-checks every route it owns and
+would reject Stripe's POST with 403; the `Stripe-Signature` check is what authenticates
+it instead. Each `event.id` is recorded in `ProcessedStripeEvent` and applied at most
+once, since Stripe retries on any non-2xx. The Checkout success redirect grants nothing —
+a browser may never load it.
+
+Handled events: `checkout.session.completed`, `customer.subscription.created`,
+`customer.subscription.updated`, `customer.subscription.deleted`,
+`invoice.payment_failed`. Anything else gets a 200 and is ignored.
+
+## Route list thumbnails
+
+`RecurringRouteOut.thumbnail` carries a simplified route path (at most 64 vertices) plus
+the five weather fields per sample that `frontend/src/utils/rideQuality.ts` scores. It is
+precomputed by the `refresh_route_thumbnail` background task and only read from the
+database by the list endpoint, which never parses a forecast cell or fetches from an
+upstream API.
+
+Scoring stays in TypeScript so the glyph and the full route map cannot disagree about the
+same route. A sample point with no warm forecast cell is `null` — never an invented
+value — and the frontend paints it neutral grey.

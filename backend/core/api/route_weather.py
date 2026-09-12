@@ -1,4 +1,9 @@
-from .schemas import CamelSchema
+from django.http import HttpRequest
+from ninja import Router
+
+from ..schemas import CamelSchema
+
+router = Router(tags=["Route weather"])
 
 
 class EnsembleRange(CamelSchema):
@@ -71,3 +76,32 @@ class RouteWeatherOut(CamelSchema):
     total_distance_m: float
     samples: list[WeatherSample]
     summary: RouteWeatherSummary
+
+
+@router.get("/route_weather", response=RouteWeatherOut)
+async def route_weather(
+    request: HttpRequest,
+    start_lat: float,
+    start_lon: float,
+    dest_lat: float,
+    dest_lon: float,
+    profile: str,
+    departure_time: str,
+    interval_seconds: int = 300,
+):
+    from ..entitlements import entitlements_for, strip_uncertainty
+    from ..weather import compute_route_weather
+
+    forecast = await compute_route_weather(
+        start_lat=start_lat,
+        start_lon=start_lon,
+        dest_lat=dest_lat,
+        dest_lon=dest_lon,
+        profile=profile,
+        departure_time=departure_time,
+        interval_seconds=interval_seconds,
+    )
+    limits = await entitlements_for(getattr(request, "auth", None))
+    if not limits.ensemble_uncertainty:
+        strip_uncertainty(forecast.samples)
+    return forecast

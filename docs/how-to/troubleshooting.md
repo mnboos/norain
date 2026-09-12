@@ -7,7 +7,9 @@ commands from the repository root and Django commands from `backend/`.
 | --- | --- |
 | `No .env file was found` or `Dotenv file not found` | Create the root `.env` using the [tutorial](../tutorials/first-forecast.md). ASGI reads that path even when management commands use `ENV_FILE`. |
 | Compose cannot find a configuration file | Include `-f docker-compose.dev.yml`; the repository has no default `compose.yml`. |
-| Compose reports missing database/storage variables | Supply `DB_NAME`, `DB_USER`, `DB_PASSWORD`, and `APP_STORAGE_PATH` for interpolation, even when starting only geographic services. |
+| Compose reports missing database/storage variables | Supply `DB_NAME`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `APP_STORAGE_PATH`. |
+| Django reports that a `DB_*` setting is missing | Copy `.env.template` to `.env` and start the Compose `db` service. SQLite is no longer supported. |
+| GeoDjango cannot find GEOS or GDAL | Install the host GIS libraries documented in the development guide, or correct `GEOS_LIBRARY_PATH` / `GDAL_LIBRARY_PATH`. |
 | Missing database table | Run `uv run python manage.py migrate` against the same environment as the server and worker. |
 | Search fails | Set `GEOCODER_API_URL=http://localhost:2322/api`, restart the backend, and inspect Photon logs and import completion. |
 | Routing fails or times out | Inspect GraphHopper logs; confirm import is complete, both points are covered, and the profile is enabled. |

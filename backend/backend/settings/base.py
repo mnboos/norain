@@ -10,25 +10,52 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-=4hnu)cr(c0xln2e#q-prnw+4z%ey#i=qw!+7b345ogd=uldah"
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-=4hnu)cr(c0xln2e#q-prnw+4z%ey#i=qw!+7b345ogd=uldah",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
+
+AUTH_USER_MODEL = "core.User"
 
 ALLOWED_HOSTS = []
 
+AUTHENTICATION_BACKENDS = ["core.auth.backend.IdentityBackend"]
+
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+CORS_ALLOWED_ORIGINS: list[str] = []
+CSRF_TRUSTED_ORIGINS: list[str] = []
+
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SAMESITE = "Lax"
+
+# Password-reset links remain valid only briefly and are invalidated after use.
+PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
+
+DEFAULT_FROM_EMAIL = "norain@localhost"
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+# Stripe. Empty in development: the billing endpoints then report 503 rather than
+# failing obscurely, and every entitlement can still be set by hand in the admin.
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_PRICE_ID_PRO = os.environ.get("STRIPE_PRICE_ID_PRO", "")
 
 # Application definition
 
@@ -42,6 +69,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.gis",
     "core",
     "django_tasks_db",
 ]
@@ -86,18 +114,31 @@ ASGI_APPLICATION = "backend.asgi.application"
 WSGI_APPLICATION = "backend.wsgi.application"
 
 
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-#
-# NoRain uses SQLite for route persistence, forecast grid caching, and Django's
-# built-in apps (sessions/admin/auth). No PostGIS/GDAL required.
+# Every environment uses PostGIS so development and tests exercise production's
+# constraints and spatial field types rather than silently falling back to SQLite.
+def required_db_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise RuntimeError(f"{name} must be set for the PostgreSQL connection.")
+    return value
+
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
+        "NAME": required_db_env("DB_NAME"),
+        "USER": required_db_env("DB_USER"),
+        "PASSWORD": required_db_env("DB_PASSWORD"),
+        "HOST": required_db_env("DB_HOST"),
+        "PORT": int(required_db_env("DB_PORT")),
+        "CONN_MAX_AGE": 60,
     }
 }
+
+if gdal_library_path := os.environ.get("GDAL_LIBRARY_PATH"):
+    GDAL_LIBRARY_PATH = gdal_library_path
+if geos_library_path := os.environ.get("GEOS_LIBRARY_PATH"):
+    GEOS_LIBRARY_PATH = geos_library_path
 
 
 # Password validation

@@ -9,7 +9,7 @@ flowchart TD
     UI[Vue / Quasar / MapLibre] --> API[Django / django-ninja]
     API --> Photon[Photon: place search]
     API --> GH[GraphHopper: routing and travel times]
-    API --> DB[(SQLite: routes, cells, task queue)]
+    API --> DB[(PostgreSQL/PostGIS: routes, cells, task queue)]
     Worker[Database task worker] --> DB
     Worker --> GH
     API --> Grid[Forecast grid layer]
@@ -68,7 +68,7 @@ Routing and geocoding also have bounded process-local LRU caches.
 
 ## Background work reduces request latency
 
-Django's database task backend holds geometry and weather-refresh jobs in SQLite.
+Django's database task backend holds geometry and weather-refresh jobs in PostgreSQL.
 `db_worker` processes them separately from HTTP requests. An external scheduler can
 run `refresh_forecasts` to enqueue cells for the next three departures of each active
 route with geometry. No scheduler is automatically installed.
@@ -81,15 +81,17 @@ in [troubleshooting](../how-to/troubleshooting.md).
 
 | Module | Responsibility |
 | --- | --- |
-| `backend/core/api.py` | Router registration and Photon search |
+| `backend/core/api/` | API router registration, endpoint modules, and schemas |
 | `backend/core/weather.py` | Routing, sampling, arrival times, wind, summary |
 | `backend/core/grid.py` | Provider fetching, cache lookup, source-aware extraction |
 | `backend/core/models.py` | Recurring routes and weather-cell persistence |
 | `backend/core/schedule.py` | Cron departures and forecast window |
 | `backend/core/tasks.py` | Geometry computation and forecast pre-warming |
-| `backend/core/routes_api.py` | Saved-route CRUD and forecast assembly |
+| `backend/core/api/recurring_route.py` | Saved-route CRUD and forecast assembly |
+| `backend/backend/settings/` | Shared, development, and production Django settings |
 | `backend/core/plotting.py`, `sections.py` | Plotly figures and condition groups |
 | `frontend/src/pages/`, `components/` | Route UI, maps, summaries, charts |
+| `frontend/src/queries/` | TanStack query keys, fetch hooks, mutations, and cache invalidation |
 | `packages/api/` | Shared generated TypeScript API client |
 
 [Documentation index](../README.md)

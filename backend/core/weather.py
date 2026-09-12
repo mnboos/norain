@@ -17,20 +17,18 @@ from datetime import date, datetime, timedelta
 
 import httpx
 from async_lru import alru_cache
-from django.http import HttpRequest
 from loguru import logger
-from ninja import Router
 
+from .api.route_weather import RouteWeatherOut, RouteWeatherSummary, WeatherSample
 from .grid import (
     ENSEMBLE_MODELS,
     extract_sample,
+    get_cached_ensemble_cell,
+    get_cached_forecast_cell,
     get_or_fetch_ensemble_cell,
     get_or_fetch_forecast_cell,
 )
 from .uncertainty import extract_uncertainty
-from .weather_schemas import RouteWeatherOut, RouteWeatherSummary, WeatherSample
-
-router = Router()
 
 GRAPHHOPPER_URL = os.environ.get("GRAPHHOPPER_API_URL", "http://localhost:8989").rstrip("/")
 
@@ -221,6 +219,8 @@ async def compute_route_weather(
     total_seconds: int | None = None,
     total_distance_m: float | None = None,
     interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
+    cache_only: bool = False,
+    include_uncertainty: bool = True,
 ) -> RouteWeatherOut:
     """Compute weather along a route.
 
@@ -228,6 +228,15 @@ async def compute_route_weather(
     skips the GraphHopper routing step. Otherwise fetches the route and samples it.
     Weather data is always looked up via the grid layer (ForecastCell / EnsembleCell),
     which caches raw API responses keyed by ~1 km² cells.
+
+    Args:
+        cache_only: read only cells already in the DB, never spend an API request. A sample
+            point whose cell is cold is simply left out. Callers that run per route on a
+            polling endpoint (the list thumbnails) must set this — the fetching path would
+            otherwise hit Open-Meteo once per cold cell on every poll.
+        include_uncertainty: when false, skip the ensemble lookup entirely. Drops `pop`,
+            `rain_if_wet` and the spread from every sample, so only use it where those are
+            not rendered.
     """
     departure = datetime.fromisoformat(departure_time)
     today = date.today()
@@ -279,7 +288,10 @@ async def compute_route_weather(
         day_key_str = departure.date().isoformat()
 
         # Look up deterministic weather from grid (fetches + stores if missing)
-        cell = await get_or_fetch_forecast_cell(lat_r, lon_r, day_key_str, days)
+        if cache_only:
+            cell = await get_cached_forecast_cell(lat_r, lon_r, day_key_str, days)
+        else:
+            cell = await get_or_fetch_forecast_cell(lat_r, lon_r, day_key_str, days)
         if cell is None:
             logger.warning(f"No forecast data for ({lat_r}, {lon_r}) at {eta}")
             continue
@@ -304,7 +316,12 @@ async def compute_route_weather(
             bearing = _bearing_deg(a["lon"], a["lat"], b["lon"], b["lat"]) if a_i != b_i else 0.0
 
         uncertainty = None
-        ens_cell = await get_or_fetch_ensemble_cell(lat_r, lon_r, day_key_str, days)
+        if not include_uncertainty:
+            ens_cell = None
+        elif cache_only:
+            ens_cell = await get_cached_ensemble_cell(lat_r, lon_r, day_key_str, days)
+        else:
+            ens_cell = await get_or_fetch_ensemble_cell(lat_r, lon_r, day_key_str, days)
         if ens_cell is not None:
             uncertainty = extract_uncertainty(
                 ens_cell.data, eta, bearing, ens_cell.fetched_at, ENSEMBLE_MODELS.split(","),
@@ -357,27 +374,4 @@ async def compute_route_weather(
         total_distance_m=round(total_dist, 1),
         samples=samples,
         summary=summary,
-    )
-
-
-# --------------------------------------------------------------------------- endpoint
-@router.get("/route_weather", response=RouteWeatherOut)
-async def route_weather(
-    request: HttpRequest,
-    start_lat: float,
-    start_lon: float,
-    dest_lat: float,
-    dest_lon: float,
-    profile: str,
-    departure_time: str,
-    interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
-):
-    return await compute_route_weather(
-        start_lat=start_lat,
-        start_lon=start_lon,
-        dest_lat=dest_lat,
-        dest_lon=dest_lon,
-        profile=profile,
-        departure_time=departure_time,
-        interval_seconds=interval_seconds,
     )

@@ -15,8 +15,8 @@ Initial imports need internet access and can take substantially longer than late
 ## 1. Configure the local services
 
 From the repository root, create `.env` if it does not exist. If it already exists,
-merge these settings without overwriting your values. There is no checked-in
-`.env.template`.
+merge these settings without overwriting your values. The checked-in `.env.template`
+contains the complete development example.
 
 ```dotenv
 GRAPHHOPPER_API_URL=http://localhost:8989
@@ -24,19 +24,21 @@ GEOCODER_API_URL=http://localhost:2322/api
 OPENWEATHERMAP_API_KEY=
 TZ=Europe/Zurich
 DB_NAME=norain
+DB_HOST=localhost
+DB_PORT=5432
 DB_USER=norain
 DB_PASSWORD=local-development-only
 APP_STORAGE_PATH=./data
 ```
 
-The `DB_*` and storage values satisfy interpolation of the additional database
-service in Compose; Django itself uses SQLite. Open-Meteo needs no API key.
+The `DB_*` settings are required by Django in every environment and initialize the
+development PostGIS container. Open-Meteo needs no API key.
 
-Start the two geographic services:
+Start PostGIS and the two geographic services:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d --build graphhopper photon
-docker compose -f docker-compose.dev.yml logs -f graphhopper photon
+docker compose -f docker-compose.dev.yml up -d --build db graphhopper photon
+docker compose -f docker-compose.dev.yml logs -f db graphhopper photon
 ```
 
 Wait for both services to finish importing and start serving requests. Press
@@ -108,14 +110,14 @@ weather, follow [troubleshooting](../how-to/troubleshooting.md).
 ## 6. Stop the local application
 
 Press Ctrl-C in the frontend, backend, and worker terminals. From the repository
-root, stop the geographic services:
+root, stop the supporting services:
 
 ```bash
-docker compose -f docker-compose.dev.yml stop graphhopper photon
+docker compose -f docker-compose.dev.yml stop db graphhopper photon
 ```
 
-Your route remains in `backend/db.sqlite3`, and the imported geographic data remains
-under `data/`. Repeat the startup commands to return to your saved route.
+Your routes remain in PostgreSQL, and the imported geographic data remains under
+`data/`. Repeat the startup commands to return to your saved route.
 
 Next, learn [how forecasts are interpreted](../explanation/forecasts.md) or
 [pre-warm upcoming forecasts](../how-to/background-jobs.md).

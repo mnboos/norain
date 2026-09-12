@@ -11,9 +11,11 @@ import { computed, onBeforeUnmount, onMounted, type Ref, ref, useTemplateRef, wa
 import { useQuasar } from "quasar";
 
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { PlacesSearchResult, RouteWeatherOut, WeatherSample } from "@norain/api";
+import type { PlacesSearchResult, RouteWeatherOut, WeatherSample } from "@norain/api/models";
 import { isNightEta, pickVisibleSamples, weatherIconSvg } from "@/utils/weatherIcons";
 import { swissTime } from "@/utils/forecastDetails";
+import { gradientStops, rideScore, rideScoreLabel, sampleProgress, scoreBand, scoreColor } from "@/utils/rideQuality";
+import MapLegend from "@/components/MapLegend.vue";
 
 maplibreConfig.WORKER_URL = maplibreWorkerUrl;
 
@@ -96,14 +98,17 @@ watch([zielort, hasMap], () => {
     destMarker = placeMarker(destMarker, zielort.value, "#d24d78");
 });
 
-// --- rain color helper: dry = teal, then light -> deep blue -> violet as rain gets heavier ---
-function rainColor(mm: number): string {
-    if (mm < 0.1) return "#1a9e8f"; // dry
-    if (mm < 0.5) return "#5aa6e6";
-    if (mm < 1.5) return "#2b6cb0";
-    if (mm < 4) return "#4a4fc4";
-    return "#7a3fc4"; // heavy
-}
+// The route line is colored by ride quality (see utils/rideQuality.ts). Spectral's middle
+// steps are very pale (#fee08b, #e6f598 sit near 1.2:1 against the light basemap), so a
+// white casing would let them vanish into CARTO Positron - the casing carries the ink
+// instead and flips with the theme. Same values NiceChart.vue uses for chart ink.
+const CASING_LIGHT = "#1b2733";
+const CASING_DARK = "#e8eef2";
+
+const scores = computed(() => (routeWeather.value?.samples ?? []).map(s => rideScore(s)?.score ?? null));
+const hasRoute = computed(() => (routeWeather.value?.samples.length ?? 0) > 0);
+/** Only claim a "Keine Daten" swatch when a stretch really is unknown. */
+const hasMissingScores = computed(() => scores.value.some(v => v === null));
 
 // --- sample marker: weather chip (condition glyph + temperature) with the wind arrow
 // attached beside it. The arrow points in the direction the wind blows TOWARD. ---
@@ -123,7 +128,7 @@ function sampleMarkerEl(sample: WeatherSample): HTMLDivElement {
             <path d="M12 2 L17 13 L12 10.5 L7 13 Z"
                   fill="${strong ? "#d24d78" : "#2c3e50"}" stroke="white" stroke-width="1.5"/>
         </svg>
-        <div class="wx-chip" style="border-color:${rainColor(sample.rainMm)}">
+        <div class="wx-chip" style="border-color:${scoreColor(rideScore(sample)?.score ?? null)}">
             <svg width="20" height="20" viewBox="0 0 24 24">${glyph}</svg>
             <span>${Math.round(sample.temp)}°</span>
         </div>`;
@@ -146,7 +151,10 @@ function applyMarkerThinning() {
     const map = mymap.value;
     if (!map || sampleMarkers.length === 0) return;
     const samples = sampleMarkers.map(m => m.sample);
-    const visible = pickVisibleSamples(samples, i => {
+    // Carry the quality band in, so a stretch that turns bad through wind or cold keeps a
+    // chip at the transition - the line's colour is never the only cue.
+    const thinnable = samples.map(s => ({ rainMm: s.rainMm, band: scoreBand(rideScore(s)?.score ?? null) }));
+    const visible = pickVisibleSamples(thinnable, i => {
         const s = samples[i];
         return map.project([s?.lon ?? 0, s?.lat ?? 0]);
     });
@@ -169,30 +177,20 @@ async function renderRoute(rw: RouteWeatherOut) {
     const map = mymap.value;
     if (!map) return;
 
-    // 1) Route line, colored along its length by rain via line-gradient.
+    // 1) Route line, colored along its length by ride quality via line-gradient.
     const lineGeojson: Record<string, unknown> = {
         type: "Feature",
         geometry: { type: "LineString", coordinates: rw.line },
         properties: {},
     };
 
-    // Build a line-gradient expression from the samples. line-progress is 0..1 along distance;
-    // we approximate each sample's progress by its share of total ride time (good enough for color).
-    const total = rw.totalSeconds || 1;
-    const stops: (number | string)[] = [];
-    let lastP = -1;
-    rw.samples.forEach(s => {
-        let p = Math.min(1, Math.max(0, s.elapsedS / total));
-        if (p <= lastP) p = lastP + 0.0001; // line-gradient stops must be strictly increasing
-        lastP = p;
-        stops.push(p, rainColor(s.rainMm));
-    });
-    if (stops.length < 4) {
-        stops.length = 0;
-        stops.push(0, rainColor(rw.samples[0]?.rainMm ?? 0), 1, rainColor(rw.summary.maxRainMm));
-    }
-
+    // line-progress is 0..1 along *distance*, so the stops have to be placed by distance
+    // too - sampleProgress() does that by locating each sample's vertex on the polyline.
+    // gradientStops() then subdivides each span so the blend actually travels through the
+    // Spectral ramp, and hard-edges any stretch we have no data for.
+    const stops = gradientStops(sampleProgress(rw.line, rw.samples, rw.totalSeconds), scores.value);
     const gradient: ExpressionSpecification = ["interpolate", ["linear"], ["line-progress"], ...stops];
+    const casing = $q.dark.isActive ? CASING_DARK : CASING_LIGHT;
 
     const existing = map.getSource("route-source");
     if (existing instanceof GeoJSONSource) {
@@ -207,7 +205,7 @@ async function renderRoute(rw: RouteWeatherOut) {
                 type: "line",
                 source: "route-source",
                 layout: { "line-cap": "round", "line-join": "round" },
-                paint: { "line-width": 10, "line-color": "#ffffff" },
+                paint: { "line-width": 10, "line-color": casing },
             },
             firstSymbolId,
         );
@@ -222,18 +220,25 @@ async function renderRoute(rw: RouteWeatherOut) {
             firstSymbolId,
         );
     }
+    // Both outside the addSource branch: that only runs on the first render and after a
+    // style swap, but the gradient and the casing change whenever the data or theme does.
     map.setPaintProperty("route-line", "line-gradient", gradient);
+    map.setPaintProperty("route-line-casing", "line-color", casing);
 
     // 2) Weather chips + wind arrows at each sample.
     clearSampleMarkers();
     rw.samples.forEach((s, index) => {
+        const rq = rideScore(s);
         const popup = new Popup({ offset: 16, closeButton: false }).setHTML(
             `<div style="font:13px/1.4 sans-serif;min-width:160px">
                 <b>${fmtTime(s.eta)} Uhr</b> · ${s.weatherDesc || ""}<br>
                 🌧️ ${s.rainRateMmH == null ? "—" : s.rainRateMmH.toFixed(1)} mm/h &nbsp; 🌡️ ${s.temp.toFixed(0)}°C<br>
-                Regenrisiko: ${s.pop == null ? "Nicht verfügbar" : Math.round(s.pop * 100) + "%"}<br>
+                Regenrisiko: ${s.pop == null ? "Nicht verfügbar" : `${Math.round(s.pop * 100)}%`}<br>
                 💨 ${s.windSpeed.toFixed(0)} km/h${s.windGust ? ` (Böen ${s.windGust.toFixed(0)})` : ""}<br>
-                <span class="${s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span>
+                <span class="${s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span><br>
+                <span class="wx-quality">
+                    <i style="background:${scoreColor(rq?.score ?? null)}"></i> Fahrqualität: ${rideScoreLabel(rq)}
+                </span>
             </div>`,
         );
         const marker = new Marker({ element: sampleMarkerEl(s), anchor: "bottom" })
@@ -244,7 +249,7 @@ async function renderRoute(rw: RouteWeatherOut) {
         el.tabIndex = 0;
         el.setAttribute("role", "button");
         el.setAttribute("aria-label", `Wetter um ${fmtTime(s.eta)} Uhr auswählen`);
-        el.addEventListener("click", () => emit("selectSample", index));
+        el.addEventListener("click", () => { emit("selectSample", index); });
         el.addEventListener("keydown", event => {
             if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
@@ -334,13 +339,32 @@ onBeforeUnmount(() => {
             <div class="text-h6 q-mb-md">Karte konnte nicht geladen werden</div>
             <div class="text-body2">{{ webglError }}</div>
         </div>
-        <div v-else id="map" ref="map" :style="{ height: height ?? '100vh' }"></div>
+        <div v-else class="wx-map-wrap" :style="{ height: height ?? '100vh' }">
+            <div id="map" ref="map"></div>
+            <MapLegend v-if="hasRoute" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
+        </div>
     </div>
 </template>
 
 <style scoped>
+.wx-map-wrap {
+    position: relative;
+    width: 100%;
+    /* Lets MapLegend shrink itself on the small saved-route tile. */
+    container-type: inline-size;
+}
+
 #map {
     width: 100%;
+    height: 100%;
+}
+
+/* Bottom-left: maplibre's attribution owns the bottom-right corner. */
+.wx-legend-anchor {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    z-index: 2;
 }
 .overlay {
     top: 0;
@@ -357,6 +381,14 @@ onBeforeUnmount(() => {
 
 .wx-strong {
     color: var(--q-negative);
+}
+
+.wx-quality i {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    vertical-align: baseline;
 }
 
 /* Popup text inherits the body color, which Quasar makes white in dark mode - so the popup

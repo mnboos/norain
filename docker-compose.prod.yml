@@ -1,0 +1,128 @@
+services:
+  caddy:
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE must be set}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN must be set}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL must be set}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/caddy/data:/data
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/caddy/config:/config
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/django/static:/app/static:ro
+    networks:
+      - edge
+
+  backend:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set}
+    restart: unless-stopped
+    env_file: .env
+    command: daphne -b 0.0.0.0 -p 8000 backend.asgi:application
+    depends_on:
+      db:
+        condition: service_healthy
+      graphhopper:
+        condition: service_healthy
+      photon:
+        condition: service_healthy
+    volumes:
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/django/static:/app/static
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5)"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - edge
+      - internal
+
+  worker:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set}
+    restart: unless-stopped
+    env_file: .env
+    command: python manage.py db_worker
+    depends_on:
+      db:
+        condition: service_healthy
+      graphhopper:
+        condition: service_healthy
+    networks:
+      - internal
+
+  scheduler:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set}
+    restart: unless-stopped
+    env_file: .env
+    command: python manage.py run_forecast_scheduler
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+
+  db:
+    image: postgis/postgis:17-3.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:?DB_NAME must be set}
+      POSTGRES_USER: ${DB_USER:?DB_USER must be set}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+    volumes:
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  graphhopper:
+    image: ${GRAPHHOPPER_IMAGE:?GRAPHHOPPER_IMAGE must be set}
+    restart: unless-stopped
+    environment:
+      OSM_DATA_DIR: /osm_data
+      OSM_DATA_URL: ${OSM_DATA_URL:?OSM_DATA_URL must be set}
+      GRAPHHOPPER_HEAP: ${GRAPHHOPPER_HEAP:-6g}
+    volumes:
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/graphhopper/osm:/osm_data
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/graphhopper/cache:/graph-cache
+      - ./data/graphhopper/graphhopper-config.yaml:/config.yaml:ro
+      - ./data/graphhopper/models:/custom_models:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8989/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 10m
+    networks:
+      - internal
+
+  photon:
+    image: ${PHOTON_IMAGE:?PHOTON_IMAGE must be set}
+    restart: unless-stopped
+    environment:
+      PHOTON_INDEX_URL: ${PHOTON_INDEX_URL:?PHOTON_INDEX_URL must be set}
+      PHOTON_IMPORT_HEAP: ${PHOTON_IMPORT_HEAP:-4g}
+    volumes:
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/photon:/photon_data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:2322/api?q=Zurich"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 10m
+    networks:
+      - internal
+
+networks:
+  edge:
+  internal:
+    internal: true

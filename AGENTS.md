@@ -7,20 +7,32 @@ Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo
 
 ```
 backend/          Django 6 + django-ninja (async ASGI via daphne)
+  backend/settings/
+    base.py          settings shared by all environments
+    development.py   local development and test overrides
+    production.py    required production secrets + security settings
   core/
-    weather.py       route_weather endpoint, routing + sampling + wind logic
+    api/
+      __init__.py     NinjaAPI assembly and router registration
+      billing.py      Stripe and entitlement JSON endpoints
+      places.py       Photon place-search endpoint and schemas
+      recurring_route.py  RecurringRoute CRUD/forecast endpoints and schemas
+      route_weather.py    ad-hoc route-weather endpoint and schemas
+    auth/
+      backend.py      Django identity backend + Ninja session/CSRF auth
+      tokens.py       email-verification token generator
+      views.py        account/session JSON endpoints
+    weather.py       routing + weather sampling + wind logic
     grid.py          forecast grid cache (ForecastCell, EnsembleCell) + API fetch + extraction
     plotting.py      Plotly figure generation (temp, precip, wind charts)
     models.py        RecurringRoute, ForecastCell, EnsembleCell
     schedule.py      croniter-based next_departure / forecast_available_at
     tasks.py         django-tasks background: route geometry, forecast pre-warming
-    routes_api.py    CRUD endpoints for recurring routes + per-route forecast
     sections.py      route sectioning by weather condition
     tests.py         django tests (SimpleTestCase + TestCase)
-    schemas.py       shared Pydantic (CamelSchema)
-    weather_schemas.py   RouteWeatherOut, WeatherSample, RouteWeatherSummary
-    routes_schemas.py    RecurringRouteIn/Out, RouteForecastOut
+    schemas.py       shared Pydantic base (CamelSchema)
 frontend/         Vue 3 + Quasar + @tanstack/vue-query
+  src/queries/    server-state keys, query hooks, mutations, cache invalidation
 .env             OSM_DATA_URL, PHOTON_INDEX_URL, GRAPHHOPPER_HEAP, OPENWEATHERMAP_API_KEY
 ```
 

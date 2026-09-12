@@ -1,8 +1,8 @@
 FROM eclipse-temurin:24-jre
 
-RUN apt update -y &&\
-	apt install -y pbzip2 zstd &&\
-	rm -rf /var/lib/apt/lists/*
+RUN apt update -y && \
+    apt install -y --no-install-recommends ca-certificates pbzip2 wget zstd && \
+    rm -rf /var/lib/apt/lists/*
 
 #WORKDIR /photon
 

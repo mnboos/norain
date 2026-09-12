@@ -4,22 +4,10 @@
 import os
 import sys
 
-from pathlib import Path
-
-from dotenv import load_dotenv
-
 
 def main():
-    if dotenv_path := os.environ.get("ENV_FILE"):
-        dotenv_path = Path(dotenv_path)
-    else:
-        dotenv_path = Path(__file__).parent.parent / ".env"
-    assert dotenv_path.is_file(), f"No .env file was found at: {dotenv_path}"
-    print("Loading dotenv: ", dotenv_path)
-    load_dotenv(dotenv_path, verbose=True)
-
     """Run administrative tasks."""
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings.development")
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

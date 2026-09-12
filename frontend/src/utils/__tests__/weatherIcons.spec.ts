@@ -48,6 +48,18 @@ describe("weatherIconSvg", () => {
 });
 
 describe("pickVisibleSamples", () => {
+    it("keeps a chip where the ride-quality band changes, even with flat rain", () => {
+        // Rain never changes condition, so only the band marks the transition - this is the
+        // case where wind or cold turns the line's colour with nothing else to signal it.
+        const samples = Array.from({ length: 21 }, (_, i) => ({ rainMm: 0, band: i < 10 ? 0 : 3 }));
+        const kept = pickVisibleSamples(samples, i => ({ x: i * 30, y: 0 }), 64, 24);
+        expect(kept.has(10)).toBe(true);
+
+        // Without the band there is nothing to hold that chip at this spacing.
+        const flat = samples.map(s => ({ rainMm: s.rainMm }));
+        expect(pickVisibleSamples(flat, i => ({ x: i * 30, y: 0 }), 64, 24).has(10)).toBe(false);
+    });
+
     /** Samples laid out on a horizontal line, `gap` pixels apart. */
     const row = (gap: number) => (i: number) => ({ x: i * gap, y: 0 });
 

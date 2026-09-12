@@ -1,21 +1,25 @@
 <script setup lang="ts">
-import {
-    symSharpAdd,
-    symSharpCloud,
-    symSharpCloudOff,
-    symSharpDelete,
-    symSharpRoute,
-} from "@quasar/extras/material-symbols-sharp";
-import type { RecurringRouteOut } from "@norain/api";
+import { symSharpAdd, symSharpDelete, symSharpRoute } from "@quasar/extras/material-symbols-sharp";
+import type { RecurringRouteOut } from "@norain/api/models";
 
-defineProps<{
-    routes: RecurringRouteOut[];
-    loading: boolean;
-}>();
+import RouteThumbnail from "@/components/RouteThumbnail.vue";
+import { rideScore, rideScoreLabel } from "@/utils/rideQuality";
+
+withDefaults(
+    defineProps<{
+        routes: RecurringRouteOut[];
+        loading: boolean;
+        /** Quota state, from useEntitlements. Server-enforced; this only shapes the UI. */
+        atRouteLimit?: boolean;
+        maxRoutes?: number | null;
+    }>(),
+    { atRouteLimit: false, maxRoutes: null },
+);
 
 const emit = defineEmits<{
     add: [];
     delete: [id: string];
+    upgrade: [];
 }>();
 
 function relativeTime(iso: string | null | undefined): string {
@@ -33,6 +37,22 @@ function relativeTime(iso: string | null | undefined): string {
     return dt.toLocaleDateString("de-CH", { weekday: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * The ride-quality wording for a route, repeating in text what the glyph says in colour.
+ * The Spectral ramp is red-green, so it can never be the only channel - see rideQuality.ts.
+ */
+function qualityLabel(route: RecurringRouteOut): string {
+    if (!route.hasGeometry) return "Route wird berechnet …";
+    const thumbnail = route.thumbnail;
+    // A thumbnail computed for a departure that has since passed describes the wrong ride.
+    if (!thumbnail || (thumbnail.departure && thumbnail.departure !== route.nextDeparture)) {
+        return "Noch keine Prognose";
+    }
+    const scored = (thumbnail.samples ?? []).flatMap(s => (s ? (rideScore(s) ?? []) : []));
+    if (!scored.length) return "Noch keine Prognose";
+    return rideScoreLabel(scored.reduce((a, b) => (b.score > a.score ? b : a)));
+}
+
 function profileLabel(profile: string): string {
     const labels: Record<string, string> = {
         bike: "Velo",
@@ -41,7 +61,7 @@ function profileLabel(profile: string): string {
         car: "Auto",
         foot: "Fuss",
     };
-    return labels[profile] || profile;
+    return labels[profile] ?? profile;
 }
 </script>
 
@@ -49,7 +69,15 @@ function profileLabel(profile: string): string {
     <q-list bordered separator class="full-height">
         <q-item-label header class="row items-center justify-between">
             <span>Routen</span>
-            <q-btn flat round dense :icon="symSharpAdd" @click="emit('add')" title="Route hinzufügen" />
+            <q-btn
+                flat
+                round
+                dense
+                :icon="symSharpAdd"
+                :disable="atRouteLimit"
+                :title="atRouteLimit ? 'Tarifgrenze erreicht' : 'Route hinzufügen'"
+                @click="emit('add')"
+            />
         </q-item-label>
 
         <!-- Loading -->
@@ -64,15 +92,25 @@ function profileLabel(profile: string): string {
             <q-btn color="primary" label="Route erstellen" @click="emit('add')" />
         </div>
 
+        <!-- At the tier limit: say so where the add button just went dead. -->
+        <q-item v-if="atRouteLimit" class="bg-grey-2 text-caption">
+            <q-item-section>
+                {{ maxRoutes }} von {{ maxRoutes }} Routen belegt — Pro hebt das Limit auf.
+            </q-item-section>
+            <q-item-section side>
+                <q-btn dense flat color="primary" label="Upgrade" @click="emit('upgrade')" />
+            </q-item-section>
+        </q-item>
+
         <!-- Route items -->
         <q-item v-for="route in routes" :key="route.id" v-ripple :to="`/routes/${route.id}`">
             <q-item-section avatar>
-                <q-icon :name="route.forecastAvailable ? symSharpCloud : symSharpCloudOff" />
+                <RouteThumbnail :route="route" />
             </q-item-section>
             <q-item-section>
                 <q-item-label>{{ route.name }}</q-item-label>
                 <q-item-label caption>
-                    {{ relativeTime(route.nextDeparture) }}
+                    {{ relativeTime(route.nextDeparture) }} · {{ qualityLabel(route) }}
                 </q-item-label>
                 <q-item-label caption>
                     {{ route.startName }} → {{ route.destName }} · {{ profileLabel(route.profile) }}

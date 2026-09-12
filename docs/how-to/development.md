@@ -3,6 +3,14 @@
 Use the [tutorial](../tutorials/first-forecast.md) to install dependencies and create
 `.env` first. Run each command group from its stated directory.
 
+GeoDjango requires GEOS, PROJ, and GDAL on the host. On Debian/Ubuntu install
+`binutils libproj-dev gdal-bin`; on Windows, set `GDAL_LIBRARY_PATH` and
+`GEOS_LIBRARY_PATH` to the corresponding OSGeo4W DLLs. Start PostGIS before Django:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d db
+```
+
 ## Check backend changes
 
 From `backend/`:
@@ -69,3 +77,42 @@ Update [HTTP reference](../reference/api.md) for endpoint changes,
 [configuration reference](../reference/configuration.md) for settings, and the
 relevant tutorial or how-to guide for workflow changes. Follow the page-type guidance
 in the [documentation index](../README.md).
+
+
+## Create an account you can sign in with
+
+`IdentityBackend` refuses any account whose `email_verified` is false, and
+`createsuperuser` cannot set that flag — so a fresh superuser reaches `/admin` but not the
+app itself until you verify it:
+
+```bash
+cd backend
+python manage.py createsuperuser          # asks for username, email and password
+python manage.py verify_user --identifier you@example.test
+```
+
+Signing in accepts either the email address or the username, case-insensitively.
+
+In development, verification and password-reset emails are printed to the console by
+`EMAIL_BACKEND = console`; copy the link out of the runserver output.
+
+Routes created before the ownership migration have no owner and are invisible in the UI.
+Assign them with:
+
+```bash
+python manage.py claim_routes --identifier you@example.test --dry-run   # then without --dry-run
+```
+
+## Set a billing tier without Stripe
+
+Entitlements read the local `Subscription` row, so a tier set by hand behaves exactly like
+a paid one. In the Django admin, open **Subscriptions**, pick the user, set *plan* to
+`pro` and *status* to `active`. With `STRIPE_SECRET_KEY` unset the upgrade buttons stay
+hidden and the billing endpoints answer 503.
+
+To exercise the real flow, run Stripe in test mode:
+
+```bash
+stripe listen --forward-to localhost:8000/api/billing/webhook   # prints STRIPE_WEBHOOK_SECRET
+stripe trigger customer.subscription.deleted                     # confirm the downgrade
+```

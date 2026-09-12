@@ -5,10 +5,11 @@ Usage: python manage.py refresh_forecasts
 Can be scheduled via cron or Claude Code's CronCreate to run hourly.
 """
 
+import asyncio
+
 from django.core.management.base import BaseCommand
 
 from core.tasks import _refresh_upcoming_forecasts_async
-import asyncio
 
 
 class Command(BaseCommand):
@@ -20,6 +21,7 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"Refreshed {result['routes']} routes: "
-                f"{result['cells_enqueued']} cell + {result['ensembles_enqueued']} ensemble refreshes enqueued"
+                f"{result['cells_enqueued']} cell + {result['ensembles_enqueued']} ensemble refreshes, "
+                f"{result['thumbnails_enqueued']} thumbnails enqueued"
             )
         )

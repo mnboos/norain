@@ -1,19 +1,17 @@
 <route lang="json5">
 {
   name: "route-detail",
-  meta: { title: "Route" }
+  meta: { title: "Route", requiresAuth: true }
 }
 </route>
 
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import { useQuery } from "@tanstack/vue-query";
 import { symSharpArrowBack } from "@quasar/extras/material-symbols-sharp";
-import { DefaultApi } from "@norain/api";
 import RouteDetailPanel from "@/components/RouteDetailPanel.vue";
+import { useRecurringRoute } from "@/queries/recurringRoutes";
 
-const api = new DefaultApi();
 const currentRoute = useRoute();
 const routeId = computed(() => String(currentRoute.params.id));
 
@@ -21,10 +19,7 @@ const {
     data: route,
     isLoading,
     error,
-} = useQuery({
-    queryKey: [api, "route", routeId],
-    queryFn: () => api.coreRoutesApiGetRoute({ routeId: routeId.value }),
-});
+} = useRecurringRoute(routeId);
 
 const departureDate = computed(() => {
     const next = route.value?.nextDeparture;

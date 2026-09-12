@@ -1,4 +1,4 @@
-import type { EnsembleRange, RouteWeatherOut, RouteWeatherSummary, WeatherSample } from "@norain/api";
+import type { EnsembleRange, RouteWeatherOut, RouteWeatherSummary, WeatherSample } from "@norain/api/models";
 
 export function swissTime(iso: string): string {
     // Provider/route timestamps without an offset are already Swiss local time.

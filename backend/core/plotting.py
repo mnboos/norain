@@ -2,7 +2,7 @@
 
 import plotly.graph_objects as go
 
-from .weather_schemas import RouteWeatherOut
+from .api.route_weather import RouteWeatherOut
 
 # Visual-only smoothing: the curve still passes through every real sample (the markers), but a
 # spline can slightly over/undershoot between two points at abrupt changes. Moderate smoothing
@@ -168,6 +168,9 @@ def generate_forecast_figures(forecast: RouteWeatherOut) -> list[dict]:
                 )
                 # Plotly otherwise syncs an overlaying axis's ticks to the primary axis, giving
                 # labels like 23.7 / 71.3 %; round percentage steps read better without gridlines.
+                # zeroline off: this axis starts at 0 just like the primary one (which keeps its
+                # zeroline as the rain baseline), so both would be drawn on the same pixel row and
+                # the single faint baseline the frontend theme intends would read twice as heavy.
                 fig.update_layout(
                     yaxis2={
                         "overlaying": "y",
@@ -176,6 +179,7 @@ def generate_forecast_figures(forecast: RouteWeatherOut) -> list[dict]:
                         "title": "%",
                         "tickmode": "linear",
                         "dtick": 25,
+                        "zeroline": False,
                     }
                 )
         fig.update_layout(
@@ -203,7 +207,9 @@ def generate_forecast_figures(forecast: RouteWeatherOut) -> list[dict]:
             xaxis={"title": {"text": "Fahrzeit (min)", "standoff": 4}, "zeroline": False},
             # Rain rate can't be negative: without this, an all-dry route autoranges to -1..1 mm/h
             # (and a spline dipping below 0 near a rain onset would be drawn as negative rain).
-            yaxis={"title": unit, "zeroline": True, **({"rangemode": "nonnegative"} if number == 1 else {})},
+            # The rain chart gets no zeroline: precipitation cannot go negative and rangemode pins
+            # the bottom of the range to 0, so the line only ever redraws the plot's bottom border.
+            yaxis={"title": unit, "zeroline": number != 1, **({"rangemode": "nonnegative"} if number == 1 else {})},
             legend={
                 "orientation": "h",
                 "x": 0,

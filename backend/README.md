@@ -1,6 +1,6 @@
 # NoRain backend
 
-Django and django-ninja provide the ASGI API. SQLite stores recurring routes,
+Django and django-ninja provide the ASGI API. PostgreSQL/PostGIS stores recurring routes,
 forecast cells, and database-backed tasks; `db_worker` processes queued geometry
 and weather jobs.
 

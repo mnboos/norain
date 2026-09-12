@@ -1,13 +1,24 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
-import type { RouteWeatherOut } from "@norain/api";
+import type { RouteWeatherOut } from "@norain/api/models";
 import { metricLabels, modelLabel, rangeText, swissTime } from "@/utils/forecastDetails";
+import { useEntitlements } from "@/composables/useEntitlements";
 
 const props = defineProps<{ forecast: RouteWeatherOut; selectedSample: number }>();
 const emit = defineEmits<{ "update:selectedSample": [index: number] }>();
 const expanded = ref(false);
 const sample = computed(() => props.forecast.samples[props.selectedSample]);
 const uncertainty = computed(() => sample.value?.uncertainty);
+
+const { entitlements } = useEntitlements();
+/**
+ * The spread is withheld from the free tier rather than missing.
+ *
+ * Those are different statements and the UI must not conflate them: "Nicht verfügbar"
+ * claims we have no data, which would be a lie here. Only say this when the server
+ * actually reports the tier — never infer a paywall from absent data.
+ */
+const uncertaintyLocked = computed(() => entitlements.value?.ensembleUncertainty === false);
 const now = ref(Date.now());
 const timer = setInterval(() => {
     now.value = Date.now();
@@ -53,7 +64,14 @@ const modelRows = computed(() => {
                 keine garantierten Grenzen. Alle verfügbaren Mitglieder zählen gleich; Modelle mit mehr Mitgliedern
                 haben mehr Gewicht.
             </p>
-            <q-banner v-if="partial" dense class="bg-tint-warn q-mb-md">
+            <q-banner v-if="uncertaintyLocked" dense class="bg-tint-warn q-mb-md">
+                Das Unsicherheitsband ist eine Pro-Funktion. Regenwahrscheinlichkeit und Vorhersage bleiben im
+                Free-Tarif vollständig verfügbar.
+                <template #action>
+                    <q-btn flat dense color="primary" label="Upgrade" to="/account" />
+                </template>
+            </q-banner>
+            <q-banner v-else-if="partial" dense class="bg-tint-warn q-mb-md">
                 Teilweise Ensemble-Abdeckung: Modelle oder Wettergrössen fehlen an einigen Punkten.
             </q-banner>
             <template v-if="sample">
@@ -92,7 +110,7 @@ const modelRows = computed(() => {
                             : `Wenn nass: im Mittel ${uncertainty.rainIfWet.toFixed(1)} mm/h.`
                     }}
                 </p>
-                <dl class="metric-grid">
+                <dl v-if="!uncertaintyLocked" class="metric-grid">
                     <template v-for="metric in metricLabels" :key="metric.key">
                         <dt>{{ metric.label }}</dt>
                         <dd>

@@ -1,74 +1,14 @@
 {
     "openapi": "3.1.0",
     "info": {
-        "title": "NinjaAPI",
+        "title": "NoRain API",
         "version": "1.0.0",
         "description": ""
     },
     "paths": {
-        "/api/search": {
-            "get": {
-                "operationId": "core_api_search",
-                "summary": "Search",
-                "parameters": [
-                    {
-                        "in": "query",
-                        "name": "query",
-                        "schema": {
-                            "title": "Query",
-                            "type": "string"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "query",
-                        "name": "zoom",
-                        "schema": {
-                            "title": "Zoom",
-                            "type": "number"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "query",
-                        "name": "lat",
-                        "schema": {
-                            "title": "Lat",
-                            "type": "number"
-                        },
-                        "required": true
-                    },
-                    {
-                        "in": "query",
-                        "name": "lon",
-                        "schema": {
-                            "title": "Lon",
-                            "type": "number"
-                        },
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "items": {
-                                        "$ref": "#/components/schemas/PlacesSearchResult"
-                                    },
-                                    "title": "Response",
-                                    "type": "array"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/api/route_weather": {
             "get": {
-                "operationId": "core_weather_route_weather",
+                "operationId": "core_api_route_weather_route_weather",
                 "summary": "Route Weather",
                 "parameters": [
                     {
@@ -147,12 +87,15 @@
                             }
                         }
                     }
-                }
+                },
+                "tags": [
+                    "Route weather"
+                ]
             }
         },
         "/api/routes": {
             "get": {
-                "operationId": "core_routes_api_list_routes",
+                "operationId": "core_api_recurring_route_list_routes",
                 "summary": "List Routes",
                 "parameters": [],
                 "responses": {
@@ -171,10 +114,13 @@
                         }
                     }
                 },
-                "description": "List all active recurring routes, sorted by next departure (soonest first)."
+                "description": "List the current account's active recurring routes by next departure.",
+                "tags": [
+                    "Recurring routes"
+                ]
             },
             "post": {
-                "operationId": "core_routes_api_create_route",
+                "operationId": "core_api_recurring_route_create_route",
                 "summary": "Create Route",
                 "parameters": [],
                 "responses": {
@@ -190,6 +136,9 @@
                     }
                 },
                 "description": "Create a new recurring route. Enqueues a background task to fetch route geometry.",
+                "tags": [
+                    "Recurring routes"
+                ],
                 "requestBody": {
                     "content": {
                         "application/json": {
@@ -204,7 +153,7 @@
         },
         "/api/routes/{route_id}": {
             "get": {
-                "operationId": "core_routes_api_get_route",
+                "operationId": "core_api_recurring_route_get_route",
                 "summary": "Get Route",
                 "parameters": [
                     {
@@ -230,10 +179,13 @@
                         }
                     }
                 },
-                "description": "Get a single recurring route by ID."
+                "description": "Get a single recurring route by ID.",
+                "tags": [
+                    "Recurring routes"
+                ]
             },
             "put": {
-                "operationId": "core_routes_api_update_route",
+                "operationId": "core_api_recurring_route_update_route",
                 "summary": "Update Route",
                 "parameters": [
                     {
@@ -260,6 +212,9 @@
                     }
                 },
                 "description": "Update a recurring route. Re-fetches geometry if start, destination, or profile changed.",
+                "tags": [
+                    "Recurring routes"
+                ],
                 "requestBody": {
                     "content": {
                         "application/json": {
@@ -272,7 +227,7 @@
                 }
             },
             "delete": {
-                "operationId": "core_routes_api_delete_route",
+                "operationId": "core_api_recurring_route_delete_route",
                 "summary": "Delete Route",
                 "parameters": [
                     {
@@ -291,12 +246,15 @@
                         "description": "No Content"
                     }
                 },
-                "description": "Delete a recurring route."
+                "description": "Delete a recurring route.",
+                "tags": [
+                    "Recurring routes"
+                ]
             }
         },
         "/api/routes/{route_id}/forecast": {
             "get": {
-                "operationId": "core_routes_api_route_forecast",
+                "operationId": "core_api_recurring_route_route_forecast",
                 "summary": "Route Forecast",
                 "parameters": [
                     {
@@ -340,94 +298,78 @@
                         }
                     }
                 },
-                "description": "Get weather forecast + Plotly figures for a specific departure of a saved route.\n\nAssembles the forecast from cached grid cells (ForecastCell + EnsembleCell).\nIf cells are missing, they are fetched on-the-fly and stored."
+                "description": "Get weather forecast + Plotly figures for a specific departure of a saved route.\n\nAssembles the forecast from cached grid cells (ForecastCell + EnsembleCell).\nIf cells are missing, they are fetched on-the-fly and stored.",
+                "tags": [
+                    "Recurring routes"
+                ]
+            }
+        },
+        "/api/search": {
+            "get": {
+                "operationId": "core_api_places_search",
+                "summary": "Search",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "query",
+                        "schema": {
+                            "title": "Query",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "zoom",
+                        "schema": {
+                            "title": "Zoom",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "lat",
+                        "schema": {
+                            "title": "Lat",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "lon",
+                        "schema": {
+                            "title": "Lon",
+                            "type": "number"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/PlacesSearchResult"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Places"
+                ]
             }
         }
     },
     "components": {
         "schemas": {
-            "GeometrySchema": {
-                "description": "Defines the geographical point of the feature.",
-                "properties": {
-                    "type": {
-                        "default": "Point",
-                        "title": "Type",
-                        "type": "string"
-                    },
-                    "coordinates": {
-                        "items": {
-                            "type": "number"
-                        },
-                        "title": "Coordinates",
-                        "type": "array"
-                    }
-                },
-                "required": [
-                    "coordinates"
-                ],
-                "title": "GeometrySchema",
-                "type": "object"
-            },
-            "PlacesSearchResult": {
-                "description": "Represents a single, augmented search result feature.",
-                "properties": {
-                    "type": {
-                        "default": "Feature",
-                        "title": "Type",
-                        "type": "string"
-                    },
-                    "properties": {
-                        "$ref": "#/components/schemas/PropertiesSchema"
-                    },
-                    "geometry": {
-                        "$ref": "#/components/schemas/GeometrySchema"
-                    }
-                },
-                "required": [
-                    "properties",
-                    "geometry"
-                ],
-                "title": "PlacesSearchResult",
-                "type": "object"
-            },
-            "PropertiesSchema": {
-                "description": "Defines the descriptive properties of a feature.",
-                "properties": {
-                    "name": {
-                        "title": "Name",
-                        "type": "string"
-                    },
-                    "city": {
-                        "anyOf": [
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "City"
-                    },
-                    "state": {
-                        "title": "State",
-                        "type": "string"
-                    },
-                    "countrycode": {
-                        "title": "Countrycode",
-                        "type": "string"
-                    },
-                    "show_canton": {
-                        "title": "Show Canton",
-                        "type": "boolean"
-                    }
-                },
-                "required": [
-                    "name",
-                    "show_canton"
-                ],
-                "title": "PropertiesSchema",
-                "type": "object"
-            },
             "EnsembleModelStatistics": {
                 "properties": {
                     "metrics": {
@@ -850,7 +792,6 @@
                 "type": "object"
             },
             "RecurringRouteOut": {
-                "description": "A recurring route with computed schedule fields.",
                 "properties": {
                     "id": {
                         "format": "uuid",
@@ -971,6 +912,16 @@
                             }
                         ],
                         "title": "Updated At"
+                    },
+                    "thumbnail": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/RouteThumbnail"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
                     }
                 },
                 "required": [
@@ -991,8 +942,110 @@
                 "title": "RecurringRouteOut",
                 "type": "object"
             },
+            "RouteThumbnail": {
+                "properties": {
+                    "departure": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Departure"
+                    },
+                    "path": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Path",
+                        "type": "array"
+                    },
+                    "samples": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "$ref": "#/components/schemas/RouteThumbnailSample"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "title": "Samples",
+                        "type": "array"
+                    },
+                    "computed_at": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Computed At"
+                    }
+                },
+                "title": "RouteThumbnail",
+                "type": "object"
+            },
+            "RouteThumbnailSample": {
+                "description": "Weather inputs for one point in a route-list thumbnail.",
+                "properties": {
+                    "i": {
+                        "title": "I",
+                        "type": "integer"
+                    },
+                    "rain_mm": {
+                        "title": "Rain Mm",
+                        "type": "number"
+                    },
+                    "temp": {
+                        "title": "Temp",
+                        "type": "number"
+                    },
+                    "headwind": {
+                        "title": "Headwind",
+                        "type": "number"
+                    },
+                    "precipitation_interval_s": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Precipitation Interval S"
+                    },
+                    "rain_rate_mm_h": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain Rate Mm H"
+                    }
+                },
+                "required": [
+                    "i",
+                    "rain_mm",
+                    "temp",
+                    "headwind"
+                ],
+                "title": "RouteThumbnailSample",
+                "type": "object"
+            },
             "RecurringRouteIn": {
-                "description": "Input for creating or updating a recurring route.",
                 "properties": {
                     "name": {
                         "title": "Name",
@@ -1004,10 +1057,14 @@
                         "type": "string"
                     },
                     "startLat": {
+                        "maximum": 90,
+                        "minimum": -90,
                         "title": "Startlat",
                         "type": "number"
                     },
                     "startLon": {
+                        "maximum": 180,
+                        "minimum": -180,
                         "title": "Startlon",
                         "type": "number"
                     },
@@ -1016,10 +1073,14 @@
                         "type": "string"
                     },
                     "destLat": {
+                        "maximum": 90,
+                        "minimum": -90,
                         "title": "Destlat",
                         "type": "number"
                     },
                     "destLon": {
+                        "maximum": 180,
+                        "minimum": -180,
                         "title": "Destlon",
                         "type": "number"
                     },
@@ -1061,7 +1122,6 @@
                 "type": "object"
             },
             "RouteForecastOut": {
-                "description": "Weather forecast for a specific departure of a saved route, with Plotly figures.",
                 "properties": {
                     "line": {
                         "items": {
@@ -1101,7 +1161,6 @@
                         "type": "string"
                     },
                     "figures": {
-                        "default": [],
                         "items": {
                             "additionalProperties": true,
                             "type": "object"
@@ -1110,7 +1169,6 @@
                         "type": "array"
                     },
                     "sections": {
-                        "default": [],
                         "items": {
                             "$ref": "#/components/schemas/RouteSection"
                         },
@@ -1131,7 +1189,6 @@
                 "type": "object"
             },
             "RouteSection": {
-                "description": "A contiguous segment of the route with uniform weather conditions.",
                 "properties": {
                     "start_km": {
                         "title": "Start Km",
@@ -1182,6 +1239,99 @@
                     "temp_max"
                 ],
                 "title": "RouteSection",
+                "type": "object"
+            },
+            "GeometrySchema": {
+                "properties": {
+                    "type": {
+                        "default": "Point",
+                        "title": "Type",
+                        "type": "string"
+                    },
+                    "coordinates": {
+                        "items": {
+                            "type": "number"
+                        },
+                        "title": "Coordinates",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "coordinates"
+                ],
+                "title": "GeometrySchema",
+                "type": "object"
+            },
+            "PlacesSearchResult": {
+                "properties": {
+                    "type": {
+                        "default": "Feature",
+                        "title": "Type",
+                        "type": "string"
+                    },
+                    "properties": {
+                        "$ref": "#/components/schemas/PropertiesSchema"
+                    },
+                    "geometry": {
+                        "$ref": "#/components/schemas/GeometrySchema"
+                    }
+                },
+                "required": [
+                    "properties",
+                    "geometry"
+                ],
+                "title": "PlacesSearchResult",
+                "type": "object"
+            },
+            "PropertiesSchema": {
+                "properties": {
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "city": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "City"
+                    },
+                    "state": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "State"
+                    },
+                    "countrycode": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Countrycode"
+                    },
+                    "show_canton": {
+                        "title": "Show Canton",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "name",
+                    "show_canton"
+                ],
+                "title": "PropertiesSchema",
                 "type": "object"
             }
         }

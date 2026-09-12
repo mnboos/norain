@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, toRefs } from "vue";
-import type { PlacesSearchResult } from "@norain/api";
+import type { PlacesSearchResult } from "@norain/api/models";
 
 const props = defineProps<{
     feature: PlacesSearchResult;

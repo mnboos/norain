@@ -16,10 +16,41 @@ Including another URLconf
 """
 
 from django.contrib import admin
+from django.http import HttpResponse
 from django.urls import path
+
 from core.api import api
+from core.api.billing import checkout_view, entitlements_view, portal_view, webhook_view
+from core.auth.views import (
+    login_view,
+    logout_view,
+    password_reset_confirm_view,
+    password_reset_view,
+    session_view,
+    signup_view,
+    verify_email_view,
+)
+
+
+def healthz(request):
+    return HttpResponse("ok", content_type="text/plain")
+
 
 urlpatterns = [
+    path("healthz", healthz),
     path("admin/", admin.site.urls),
+    path("api/auth/session", session_view),
+    path("api/auth/signup", signup_view),
+    path("api/auth/verify-email", verify_email_view),
+    path("api/auth/login", login_view),
+    path("api/auth/logout", logout_view),
+    path("api/auth/password-reset", password_reset_view),
+    path("api/auth/password-reset/confirm", password_reset_confirm_view),
+    # Billing lives outside the Ninja API: NinjaAPI(auth=session_auth) CSRF-checks every
+    # route it owns, which would reject Stripe's webhook POST with 403.
+    path("api/billing/entitlements", entitlements_view),
+    path("api/billing/checkout", checkout_view),
+    path("api/billing/portal", portal_view),
+    path("api/billing/webhook", webhook_view),
     path("api/", api.urls),
 ]

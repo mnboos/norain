@@ -10,11 +10,10 @@ import {
     symSharpSchedule,
 } from "@quasar/extras/material-symbols-sharp";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
-import { DefaultApi, type PlacesSearchResult } from "@norain/api";
-import type { RecurringRouteIn } from "@norain/api";
-import { useQuery } from "@tanstack/vue-query";
+import type { PlacesSearchResult, RecurringRouteIn } from "@norain/api/models";
+import { usePlaceSearch } from "@/queries/places";
 
-const props = defineProps<{
+defineProps<{
     modelValue: boolean;
 }>();
 
@@ -22,8 +21,6 @@ const emit = defineEmits<{
     "update:modelValue": [value: boolean];
     save: [data: RecurringRouteIn];
 }>();
-
-const api = new DefaultApi();
 
 const name = ref("");
 const description = ref("");
@@ -36,23 +33,9 @@ const time = ref("08:00");
 const filterStart = ref("");
 const filterDest = ref("");
 
-function usePlaceSearch(filter: Ref<string>) {
-    return useQuery({
-        queryKey: ["placeSearch", filter],
-        enabled: () => filter.value.length > 2,
-        queryFn: () =>
-            api.coreApiSearch({
-                query: filter.value,
-                zoom: 12,
-                lat: 47.5,
-                lon: 9.3,
-            }),
-        initialData: [],
-    });
-}
-
-const { data: placesStart } = usePlaceSearch(filterStart);
-const { data: placesDest } = usePlaceSearch(filterDest);
+const defaultSearchLocation = { zoom: 12, lat: 47.5, lon: 9.3 };
+const { data: placesStart } = usePlaceSearch(filterStart, defaultSearchLocation);
+const { data: placesDest } = usePlaceSearch(filterDest, defaultSearchLocation);
 
 // Quasar QSelect requires doneFn() to signal async filtering is complete.
 // Copied from the working map.vue pattern.
@@ -87,7 +70,7 @@ const dayLabels = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
 const scheduleDescription = computed(() => {
     if (!days.value.length || !time.value) return "";
-    const dayNames = days.value.map(d => dayLabels[d - 1]!);
+    const dayNames = days.value.map(d => dayLabels[d - 1] ?? "");
     const [h, m] = time.value.split(":").map(Number);
     return `${dayNames.join(", ")} um ${String(h).padStart(2, "0")}:${String(m ?? 0).padStart(2, "0")}`;
 });
@@ -115,11 +98,11 @@ function onSave() {
     emit("save", {
         name: name.value,
         description: description.value,
-        startLat: start.value.geometry.coordinates[1]!,
-        startLon: start.value.geometry.coordinates[0]!,
+        startLat: start.value.geometry.coordinates[1] ?? 0,
+        startLon: start.value.geometry.coordinates[0] ?? 0,
         startName: start.value.properties.name,
-        destLat: dest.value.geometry.coordinates[1]!,
-        destLon: dest.value.geometry.coordinates[0]!,
+        destLat: dest.value.geometry.coordinates[1] ?? 0,
+        destLon: dest.value.geometry.coordinates[0] ?? 0,
         destName: dest.value.properties.name,
         profile: profile.value,
         scheduleCron: scheduleCron.value,

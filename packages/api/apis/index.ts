@@ -1,3 +1,5 @@
 /* tslint:disable */
 /* eslint-disable */
-export * from './DefaultApi';
+export * from './PlacesApi';
+export * from './RecurringRoutesApi';
+export * from './RouteWeatherApi';

@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from .weather_schemas import EnsembleModelStatistics, EnsembleRange, ForecastUncertainty
+from .api.route_weather import EnsembleModelStatistics, EnsembleRange, ForecastUncertainty
 
 ENSEMBLE_VARIABLES = (
     "precipitation",

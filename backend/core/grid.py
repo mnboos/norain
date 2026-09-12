@@ -8,7 +8,7 @@ to avoid circular imports between weather.py <-> grid.py).
 """
 
 import os
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 from asgiref.sync import sync_to_async
@@ -262,7 +262,7 @@ def _get_forecast_cell_sync(
         cell = ForecastCell.objects.get(lat_r=lat_r, lon_r=lon_r, day_key=day_key, source=source)
     except ForecastCell.DoesNotExist:
         return None
-    if datetime.now(tz=timezone.utc) - cell.fetched_at > MAX_CELL_AGE:
+    if datetime.now(tz=UTC) - cell.fetched_at > MAX_CELL_AGE:
         return None
     if forecast_days is not None and cell.forecast_days < forecast_days:
         return None
@@ -282,7 +282,7 @@ def _get_ensemble_cell_sync(
         return None
     if cell.data.get("_norain_request_version") != ENSEMBLE_REQUEST_VERSION:
         return None
-    if datetime.now(tz=timezone.utc) - cell.fetched_at > MAX_CELL_AGE:
+    if datetime.now(tz=UTC) - cell.fetched_at > MAX_CELL_AGE:
         return None
     if forecast_days is not None and cell.forecast_days < forecast_days:
         return None
@@ -321,6 +321,25 @@ def _store_ensemble_cell_sync(
 # =============================================================================
 
 
+async def get_cached_forecast_cell(
+    lat_r: float, lon_r: float, day_key: str | date, forecast_days: int
+) -> ForecastCell | None:
+    """Return a fresh ForecastCell already in the DB, without ever fetching.
+
+    Checks both sources, because a cell laid down by the OWM fallback is just as usable
+    as an Open-Meteo one — looking up a single source would report a miss for data we hold.
+    Callers that must not spend an API request (the route-list thumbnails) use this.
+    """
+    if isinstance(day_key, str):
+        day_key = date.fromisoformat(day_key)
+
+    for source in ("open-meteo", "openweathermap"):
+        cell = await sync_to_async(_get_forecast_cell_sync)(lat_r, lon_r, day_key, source, forecast_days)
+        if cell is not None:
+            return cell
+    return None
+
+
 async def get_or_fetch_forecast_cell(
     lat_r: float, lon_r: float, day_key: str | date, forecast_days: int
 ) -> ForecastCell | None:
@@ -331,11 +350,9 @@ async def get_or_fetch_forecast_cell(
     if isinstance(day_key, str):
         day_key = date.fromisoformat(day_key)
 
-    # Try existing fresh cell
-    for source in ("open-meteo", "openweathermap"):
-        cell = await sync_to_async(_get_forecast_cell_sync)(lat_r, lon_r, day_key, source, forecast_days)
-        if cell is not None:
-            return cell
+    cell = await get_cached_forecast_cell(lat_r, lon_r, day_key, forecast_days)
+    if cell is not None:
+        return cell
 
     # Fetch fresh data
     data = None
@@ -366,6 +383,15 @@ async def get_or_fetch_forecast_cell(
     return cell
 
 
+async def get_cached_ensemble_cell(
+    lat_r: float, lon_r: float, day_key: str | date, forecast_days: int
+) -> EnsembleCell | None:
+    """Return a fresh EnsembleCell already in the DB, without ever fetching."""
+    if isinstance(day_key, str):
+        day_key = date.fromisoformat(day_key)
+    return await sync_to_async(_get_ensemble_cell_sync)(lat_r, lon_r, day_key, forecast_days)
+
+
 async def get_or_fetch_ensemble_cell(
     lat_r: float, lon_r: float, day_key: str | date, forecast_days: int
 ) -> EnsembleCell | None:
@@ -373,7 +399,7 @@ async def get_or_fetch_ensemble_cell(
     if isinstance(day_key, str):
         day_key = date.fromisoformat(day_key)
 
-    cell = await sync_to_async(_get_ensemble_cell_sync)(lat_r, lon_r, day_key, forecast_days)
+    cell = await get_cached_ensemble_cell(lat_r, lon_r, day_key, forecast_days)
     if cell is not None:
         return cell
 

@@ -1,0 +1,110 @@
+name: Release production images
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/norain
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgis:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_DB: norain
+          POSTGRES_USER: norain
+          POSTGRES_PASSWORD: test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U norain -d norain"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_NAME: norain
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: norain
+      DB_PASSWORD: test-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: sudo apt-get update && sudo apt-get install -y binutils libproj-dev gdal-bin
+      - run: cd backend && uv sync --frozen && uv run python manage.py test core
+      - run: cd frontend && npm ci && npm run build
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - image: backend
+            file: docker/backend.Dockerfile
+          - image: frontend
+            file: docker/frontend.Dockerfile
+          - image: graphhopper
+            file: docker/graphhopper.Dockerfile
+          - image: photon
+            file: docker/photon.Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          push: true
+          tags: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}:${{ github.sha }}
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_DEPLOY_SSH_KEY }}
+      - name: Configure VPS host key
+        env:
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Deploy immutable images
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          ssh -o StrictHostKeyChecking=yes "$VPS_USER@$VPS_HOST" \
+            "cd /srv/norain && \
+             BACKEND_IMAGE=$IMAGE_PREFIX-backend:$IMAGE_TAG \
+             FRONTEND_IMAGE=$IMAGE_PREFIX-frontend:$IMAGE_TAG \
+             GRAPHHOPPER_IMAGE=$IMAGE_PREFIX-graphhopper:$IMAGE_TAG \
+             PHOTON_IMAGE=$IMAGE_PREFIX-photon:$IMAGE_TAG \
+             ./deploy/release.sh"
+      - name: Verify public health endpoint
+        env:
+          PUBLIC_HEALTH_URL: ${{ secrets.VPS_PUBLIC_HEALTH_URL }}
+        run: curl --fail --retry 12 --retry-delay 5 --retry-connrefused "$PUBLIC_HEALTH_URL"

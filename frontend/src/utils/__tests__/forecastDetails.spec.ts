@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { forecastHeadline, peakRisk, rangeText, swissTime } from "../forecastDetails";
-import { RouteWeatherOutFromJSON } from "@norain/api";
+import { RouteWeatherOutFromJSON } from "@norain/api/models";
 
 const wireSample = {
     lat: 47.5,
@@ -46,11 +46,11 @@ function forecast(pop: number | null) {
 
 describe("forecast uncertainty presentation", () => {
     it("roundtrips nested API statistics and metadata", () => {
-        const value = forecast(0.25).samples[0]!;
-        expect(value.uncertainty?.metrics.temperature?.memberCount).toBe(2);
-        expect(value.uncertainty?.forecastTime).toBe("2026-09-10T12:00:00+02:00");
-        expect(value.probabilitySource).toBe("open-meteo-ensemble");
-        expect(value.rainRateMmH).toBe(0);
+        const value = forecast(0.25).samples[0];
+        expect(value?.uncertainty?.metrics.temperature?.memberCount).toBe(2);
+        expect(value?.uncertainty?.forecastTime).toBe("2026-09-10T12:00:00+02:00");
+        expect(value?.probabilitySource).toBe("open-meteo-ensemble");
+        expect(value?.rainRateMmH).toBe(0);
     });
     it("does not describe 25% as likely or hide a lower nonzero risk", () => {
         for (const p of [0.25, 0.1]) {
@@ -65,7 +65,9 @@ describe("forecast uncertainty presentation", () => {
         expect(forecastHeadline(f.summary, [])).toBe("Keine Wetterdaten");
         f.summary.rainProbability = 0;
         expect(forecastHeadline(f.summary, f.samples)).toContain("Keine nassen Ensemble-Mitglieder");
-        f.samples[0]!.probabilitySource = "openweathermap";
+        const sample = f.samples[0];
+        if (!sample) throw new Error("Fixture must contain a weather sample.");
+        sample.probabilitySource = "openweathermap";
         expect(forecastHeadline(f.summary, f.samples)).toContain("0% Regenrisiko");
     });
     it("does not invent ranges for one member", () => {

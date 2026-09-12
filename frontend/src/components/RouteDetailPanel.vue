@@ -1,16 +1,14 @@
 <script setup lang="ts">
 import { computed, toRefs, ref, watch } from "vue";
-import { useQuery } from "@tanstack/vue-query";
 import { symSharpCloudOff, symSharpMap } from "@quasar/extras/material-symbols-sharp";
-import { DefaultApi } from "@norain/api";
-import type { RecurringRouteOut } from "@norain/api";
+import type { RecurringRouteOut } from "@norain/api/models";
 import ForecastDetails from "@/components/ForecastDetails.vue";
 import WeatherSummaryCard from "@/components/WeatherSummaryCard.vue";
 import WeatherSections from "@/components/WeatherSections.vue";
 import WeatherCharts from "@/components/WeatherCharts.vue";
 import NiceMap from "@/components/NiceMap.vue";
+import { useRecurringRoute, useRecurringRouteForecast } from "@/queries/recurringRoutes";
 
-const api = new DefaultApi();
 
 const props = defineProps<{
     route: RecurringRouteOut;
@@ -25,11 +23,7 @@ const routeId = computed(() => route.value.id);
 const refetchInterval = computed(() => (!route.value.hasGeometry ? 3000 : false));
 
 // Fetch the full route data (for geometry status polling)
-const { data: routeDetail } = useQuery({
-    queryKey: [api, "route", routeId],
-    queryFn: () => api.coreRoutesApiGetRoute({ routeId: routeId.value }),
-    refetchInterval,
-});
+const { data: routeDetail } = useRecurringRoute(routeId, refetchInterval);
 
 const hasGeometry = computed(() => routeDetail.value?.hasGeometry ?? route.value.hasGeometry);
 const departureEnabled = computed(() => !!(hasGeometry.value && !!departureDate.value && !!departureTime.value));
@@ -37,17 +31,7 @@ const {
     data: forecast,
     isFetching: forecastLoading,
     error: forecastError,
-} = useQuery({
-    queryKey: [api, "routeForecast", routeId, departureDate, departureTime],
-    queryFn: () =>
-        api.coreRoutesApiRouteForecast({
-            routeId: routeId.value,
-            date: departureDate.value,
-            time: departureTime.value,
-        }),
-    enabled: departureEnabled,
-    staleTime: 5 * 60 * 1000,
-});
+} = useRecurringRouteForecast(routeId, departureDate, departureTime, departureEnabled);
 
 const selectedSample = ref(0);
 watch(forecast, () => {
@@ -112,7 +96,7 @@ function profileLabel(profile: string): string {
         <template v-if="forecast">
             <WeatherSummaryCard :forecast="forecast" class="q-mb-sm" />
             <WeatherSections v-if="forecast.sections?.length" :sections="forecast.sections" />
-            <ForecastDetails :forecast="forecast" v-model:selected-sample="selectedSample" />
+            <ForecastDetails v-model:selected-sample="selectedSample" :forecast="forecast" />
             <!-- Square tiles: one row of four on wide screens, 2x2 on tablets, stacked on phones. -->
             <div class="row q-col-gutter-md q-mt-none">
                 <WeatherCharts
@@ -125,8 +109,8 @@ function profileLabel(profile: string): string {
                         <NiceMap
                             :route-weather="forecast"
                             :selected-sample="selectedSample"
-                            @select-sample="selectedSample = $event"
                             height="100%"
+                            @select-sample="selectedSample = $event"
                         />
                     </q-card>
                 </div>

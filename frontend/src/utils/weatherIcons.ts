@@ -159,6 +159,13 @@ export interface ScreenPoint {
 
 export interface ThinnableSample {
     rainMm: number;
+    /**
+     * Optional ride-quality band (see utils/rideQuality.ts `scoreBand`). When the caller
+     * supplies it, a band change counts as a transition too - otherwise a stretch that
+     * turns bad through wind or cold alone could lose every chip next to it, leaving the
+     * line's colour as the only cue, which is exactly what colour must never be.
+     */
+    band?: number | null;
 }
 
 /**
@@ -186,11 +193,16 @@ export function pickVisibleSamples(
     let lastKept: ScreenPoint | undefined;
     let lastKeptIndex = -1;
     let prevCondition: RainCondition | undefined;
+    let prevBand: number | null | undefined;
 
     for (const [i, sample] of samples.entries()) {
         const cond = rainCondition(sample.rainMm);
-        const isTransition = prevCondition !== undefined && cond !== prevCondition;
+        const band = sample.band;
+        const isTransition =
+            (prevCondition !== undefined && cond !== prevCondition) ||
+            (prevBand !== undefined && band !== undefined && band !== prevBand);
         prevCondition = cond;
+        prevBand = band;
 
         const required = i === 0 || i === last ? 0 : isTransition ? transitionMinPx : minPx;
         const point = project(i);

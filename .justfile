@@ -131,7 +131,7 @@ prepare input="C:\\Users\\mboos\\Downloads\\gtfs_fp2026_20260408.zip":
 
 [working-directory: "backend"]
 export-openapi-schema:
-    uv run python manage.py export_openapi_schema --api core.api.api --indent 4 --output openapi.json
+    UV_CACHE_DIR=${UV_CACHE_DIR:-/tmp/norain-uv-cache} uv run python manage.py export_openapi_schema --api core.api.api --indent 4 --output openapi.json
 
 # (Re)generate the API client for the frontend from the schema.
 
@@ -150,18 +150,18 @@ delete-api:
 
 [working-directory: "backend"]
 update-api--build-only: delete-api
-    uv run openapi-generator-cli generate \
+    UV_CACHE_DIR=${UV_CACHE_DIR:-/tmp/norain-uv-cache} uv run openapi-generator-cli generate \
         --global-property "supportingFiles,apis,apiTests,models,apiDocs=false,modelDocs=false" \
         -i openapi.json \
         -g typescript-fetch \
         -o ../packages/api \
         --enable-post-process-file \
         -c api-generator.typescript-fetch.additionalProperties.json
-    uv run python add_ts_nocheck.py
-    git add ../packages/api/
+    UV_CACHE_DIR=${UV_CACHE_DIR:-/tmp/norain-uv-cache} uv run python add_ts_nocheck.py
 
 [working-directory: "frontend"]
 update-api: export-openapi-schema update-api--build-only
+    npm run lint
     npm run build
 
 [env("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic")]

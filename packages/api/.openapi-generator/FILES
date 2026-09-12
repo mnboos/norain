@@ -1,4 +1,6 @@
-apis/DefaultApi.ts
+apis/PlacesApi.ts
+apis/RecurringRoutesApi.ts
+apis/RouteWeatherApi.ts
 apis/index.ts
 index.ts
 models/EnsembleModelStatistics.ts
@@ -11,6 +13,8 @@ models/RecurringRouteIn.ts
 models/RecurringRouteOut.ts
 models/RouteForecastOut.ts
 models/RouteSection.ts
+models/RouteThumbnail.ts
+models/RouteThumbnailSample.ts
 models/RouteWeatherOut.ts
 models/RouteWeatherSummary.ts
 models/WeatherSample.ts

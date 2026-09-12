@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from django.test import SimpleTestCase, TestCase
 
+from .api.route_weather import RouteWeatherOut, WeatherSample
 from .grid import (
     ENSEMBLE_REQUEST_VERSION,
     _fetch_ensemble,
@@ -16,7 +17,6 @@ from .models import EnsembleCell
 from .plotting import generate_forecast_figures
 from .uncertainty import extract_uncertainty
 from .weather import _summarize, compute_route_weather
-from .weather_schemas import RouteWeatherOut, WeatherSample
 
 ETA = datetime(2026, 9, 10, 12)  # noqa: DTZ001 -- provider timestamps are Swiss local wall time
 FETCHED = ETA.replace(tzinfo=UTC)

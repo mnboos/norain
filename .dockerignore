@@ -1,0 +1,15 @@
+.git
+.github
+.idea
+.venv
+node_modules
+frontend/node_modules
+packages/api/node_modules
+data
+db
+backend/db.sqlite3
+.env
+.env.*
+*.sqlite3
+__pycache__
+.pytest_cache

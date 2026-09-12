@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { RouteSection } from "@norain/api";
+import type { RouteSection } from "@norain/api/models";
 
 defineProps<{
     sections: RouteSection[];

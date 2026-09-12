@@ -33,7 +33,8 @@ function buildLayout(): Partial<Layout> {
     const dark = $q.dark.isActive;
     const ink = dark ? "#e8eef2" : "#1b2733";
     // Decluttered: no gridlines or axis lines - the tick labels carry the scale. Only the zero
-    // line stays, as a faint baseline, since it matters for rain and for head- vs. tailwind.
+    // line stays, as a faint baseline, since it matters for head- vs. tailwind. Charts that cannot
+    // cross zero switch it off in the backend, where it would just redraw the plot's bottom border.
     const baseline = dark ? "rgba(232, 238, 242, 0.25)" : "rgba(27, 39, 51, 0.2)";
     const axisTheme = { color: ink, showgrid: false, showline: false, zerolinecolor: baseline, zerolinewidth: 1 };
     return {

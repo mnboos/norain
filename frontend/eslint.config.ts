@@ -15,7 +15,14 @@ export default defineConfigWithVueTs(
     ...ts.configs.stylisticTypeChecked,
 
     ...eslintPluginVue.configs["flat/recommended"],
-    { ignores: ["src/api/**/*", "src/locales/*", "dist/**"] },
+    { ignores: ["src/api/**/*", "src/locales/*", "dist/**", "typed-router.d.ts"] },
+    {
+        files: ["src/pages/**/*.vue"],
+        rules: {
+            // File-based routes intentionally use names such as index.vue and [id].vue.
+            "vue/multi-word-component-names": "off",
+        },
+    },
     {
         rules: {
             // Optional.

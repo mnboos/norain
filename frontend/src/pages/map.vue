@@ -19,13 +19,13 @@ import {
     symSharpElectricMoped,
     symSharpPedalBike,
 } from "@quasar/extras/material-symbols-sharp";
-import { DefaultApi, type PlacesSearchResult } from "@norain/api";
-import type { RecurringRouteOut } from "@norain/api";
-import { useQuery } from "@tanstack/vue-query";
+import type { PlacesSearchResult } from "@norain/api/models";
 import { useRoute } from "vue-router";
+import { usePlaceSearch } from "@/queries/places";
+import { useRecurringRoute } from "@/queries/recurringRoutes";
+import { useRouteWeather } from "@/queries/routeWeather";
 
 const route = useRoute();
-const api = new DefaultApi();
 
 const profile = ref("bike");
 const departureTime = ref<string>(defaultDepartureTime());
@@ -56,7 +56,7 @@ const profiles = [
     { label: "Auto", value: "car", icon: symSharpElectricCar },
 ];
 
-const routeIdParam = computed(() => (route.query.route as string) || null);
+const routeIdParam = computed(() => (typeof route.query.route === "string" ? route.query.route : null));
 
 const abfahrtsort = ref<PlacesSearchResult>({
     type: "Feature",
@@ -66,13 +66,7 @@ const abfahrtsort = ref<PlacesSearchResult>({
 const zielort = ref<PlacesSearchResult | undefined>(undefined);
 
 // If a routeId query param is present, load the saved route and pre-populate start/dest
-const { data: savedRoute } = useQuery({
-    queryKey: ["route", routeIdParam],
-    queryFn: () => api.coreRoutesApiGetRoute({ routeId: routeIdParam.value! }),
-    enabled: () => !!routeIdParam.value,
-});
-
-const isViewingSavedRoute = computed(() => !!savedRoute.value);
+const { data: savedRoute } = useRecurringRoute(routeIdParam);
 
 // Pre-populate start/destination from saved route
 watchEffect(() => {
@@ -100,44 +94,20 @@ const filterStart = ref("");
 const filterDest = ref("");
 const mapView = ref<{ zoom: number; lat: number; lng: number } | undefined>(undefined);
 
-function usePlaces(filter: ReturnType<typeof ref<string>>) {
-    return useQuery({
-        queryKey: ["search", filter, mapView],
-        enabled: () => !!mapView.value && (filter.value?.length ?? 0) > 2,
-        queryFn: () =>
-            api.coreApiSearch({
-                query: filter.value ?? "",
-                zoom: mapView.value?.zoom ?? 12,
-                lat: mapView.value?.lat ?? 0,
-                lon: mapView.value?.lng ?? 0,
-            }),
-        initialData: [],
-    });
-}
-
-const { data: placesStart, isFetching: isFetchingStart } = usePlaces(filterStart);
-const { data: placesDest, isFetching: isFetchingDest } = usePlaces(filterDest);
-
+const searchLocation = computed(() =>
+    mapView.value
+        ? { zoom: mapView.value.zoom, lat: mapView.value.lat, lon: mapView.value.lng }
+        : undefined,
+);
+const { data: placesStart, isFetching: isFetchingStart } = usePlaceSearch(filterStart, searchLocation);
+const { data: placesDest, isFetching: isFetchingDest } = usePlaceSearch(filterDest, searchLocation);
 const ready = computed(() => !!zielort.value);
 
 const {
     data: routeWeather,
     isFetching: isFetchingWeather,
     error: weatherError,
-} = useQuery({
-    queryKey: ["routeWeather", abfahrtsort, zielort, profile, departureTime],
-    enabled: ready,
-    queryFn: () =>
-        api.coreWeatherRouteWeather({
-            startLat: abfahrtsort.value.geometry.coordinates[1] ?? 0,
-            startLon: abfahrtsort.value.geometry.coordinates[0] ?? 0,
-            destLat: zielort.value?.geometry.coordinates[1] ?? 0,
-            destLon: zielort.value?.geometry.coordinates[0] ?? 0,
-            profile: profile.value,
-            departureTime: departureTime.value,
-        }),
-    staleTime: 5 * 60 * 1000,
-});
+} = useRouteWeather(abfahrtsort, zielort, profile, departureTime);
 
 const selectedSample = ref(0);
 watch(routeWeather, () => {
@@ -300,7 +270,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
 
                         <template v-else-if="routeWeather">
                             <WeatherSummaryCard :forecast="routeWeather" />
-                            <ForecastDetails :forecast="routeWeather" v-model:selected-sample="selectedSample" />
+                            <ForecastDetails v-model:selected-sample="selectedSample" :forecast="routeWeather" />
                         </template>
 
                         <div v-else-if="!ready" class="text-caption text-muted">
