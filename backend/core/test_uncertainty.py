@@ -15,10 +15,12 @@ from .grid import (
 )
 from .models import EnsembleCell
 from .plotting import generate_forecast_figures
+from .schedule import LOCAL_TZ
 from .uncertainty import extract_uncertainty
 from .weather import _summarize, compute_route_weather
 
-ETA = datetime(2026, 9, 10, 12)  # noqa: DTZ001 -- provider timestamps are Swiss local wall time
+# Provider timestamps are Swiss wall time with the zone left off.
+ETA = datetime(2026, 9, 10, 12, tzinfo=LOCAL_TZ).replace(tzinfo=None)
 FETCHED = ETA.replace(tzinfo=UTC)
 
 

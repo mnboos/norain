@@ -9,6 +9,7 @@ to avoid circular imports between weather.py <-> grid.py).
 
 import os
 from datetime import UTC, date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import httpx
 from asgiref.sync import sync_to_async
@@ -122,6 +123,19 @@ def _at(block: dict, var: str, i: int) -> float:
     return float(arr[i]) if i < len(arr) and arr[i] is not None else 0.0
 
 
+def _wind_value(value, *, direction=False, factor=1.0) -> float | None:
+    from .wind import finite_number
+
+    number = finite_number(value, nonnegative=not direction)
+    return None if number is None else number % 360 if direction else number * factor
+
+
+def _wind_at(block: dict, var: str, i: int, *, direction=False) -> float | None:
+    values = block.get(var)
+    value = values[i] if isinstance(values, list) and i < len(values) else None
+    return _wind_value(value, direction=direction)
+
+
 def _from_open_meteo(data: dict, eta: datetime) -> dict | None:
     """Pull the forecast nearest eta, preferring 15-min data, falling back to hourly.
 
@@ -130,6 +144,9 @@ def _from_open_meteo(data: dict, eta: datetime) -> dict | None:
     so out-of-range etas are *clamped* to the nearest available hour rather than
     returning ``None`` — better to show slightly-off data than no data at all.
     """
+    # Provider timestamps are Swiss local wall time. Saved routes can supply aware ETAs.
+    if eta.tzinfo is not None:
+        eta = eta.astimezone(ZoneInfo("Europe/Zurich")).replace(tzinfo=None)
     # minutely_15 covers ~1–2 h into the future; only use when the nearest match
     # is within 2 h, otherwise fall through to hourly.
     MINUTELY_15_MAX_DELTA = timedelta(hours=2)
@@ -161,12 +178,10 @@ def _from_open_meteo(data: dict, eta: datetime) -> dict | None:
         return {
             "rain_mm": float(rain[i]) if i < len(rain) and rain[i] is not None else 0.0,
             "temp": _at(b, "temperature_2m", i),
-            "wind_speed": _at(b, "wind_speed_10m", i),
-            "wind_gust": (float(b["wind_gusts_10m"][i])
-                          if i < len(b.get("wind_gusts_10m") or []) and b["wind_gusts_10m"][i] is not None
-                          else None),
+            "wind_speed": _wind_at(b, "wind_speed_10m", i),
+            "wind_gust": _wind_at(b, "wind_gusts_10m", i),
             "precipitation_interval_s": 900 if block == "minutely_15" else 3600,
-            "wind_dir": _at(b, "wind_direction_10m", i),
+            "wind_dir": _wind_at(b, "wind_direction_10m", i, direction=True),
             "weather_code": int(code) if code is not None else None,
             "pop": None,
             "source": "open-meteo",
@@ -205,9 +220,9 @@ def _from_owm(data: dict, eta: datetime) -> dict | None:
         "rain_mm": rain,
         "precipitation_interval_s": 3600,
         "temp": float(entry.get("temp", 0.0)),
-        "wind_speed": float(entry.get("wind_speed", 0.0)) * 3.6,
-        "wind_gust": float(entry["wind_gust"]) * 3.6 if entry.get("wind_gust") is not None else None,
-        "wind_dir": float(entry.get("wind_deg", 0.0)),
+        "wind_speed": _wind_value(entry.get("wind_speed"), factor=3.6),
+        "wind_gust": _wind_value(entry.get("wind_gust"), factor=3.6),
+        "wind_dir": _wind_value(entry.get("wind_deg"), direction=True),
         "weather_code": None,
         "pop": float(entry.get("pop")) if entry.get("pop") is not None else None,
         "source": "openweathermap",
@@ -293,27 +308,25 @@ def _store_forecast_cell_sync(
     lat_r: float, lon_r: float, day_key: date, forecast_days: int, data: dict, source: str
 ) -> ForecastCell:
     """Insert or update a ForecastCell with fresh data."""
-    cell, _ = ForecastCell.objects.update_or_create(
+    return ForecastCell.objects.update_or_create(
         lat_r=lat_r,
         lon_r=lon_r,
         day_key=day_key,
         source=source,
         defaults={"forecast_days": forecast_days, "data": data},
-    )
-    return cell
+    )[0]
 
 
 def _store_ensemble_cell_sync(
     lat_r: float, lon_r: float, day_key: date, forecast_days: int, data: dict
 ) -> EnsembleCell:
     """Insert or update an EnsembleCell with fresh data."""
-    cell, _ = EnsembleCell.objects.update_or_create(
+    return EnsembleCell.objects.update_or_create(
         lat_r=lat_r,
         lon_r=lon_r,
         day_key=day_key,
         defaults={"forecast_days": forecast_days, "data": data},
-    )
-    return cell
+    )[0]
 
 
 # =============================================================================
@@ -406,8 +419,18 @@ async def get_or_fetch_ensemble_cell(
     data = None
     try:
         data = await _fetch_ensemble(lat_r, lon_r, forecast_days, day_key.isoformat())
-    except (httpx.HTTPError, KeyError, ValueError):
-        pass
+    except (httpx.HTTPError, KeyError, ValueError) as exc:
+        # Logged, unlike before: a swallowed failure here stores no cell, so the task that
+        # called it still reports success while having fetched nothing. Rate limiting is
+        # the usual cause and it is invisible without this.
+        logger.warning(
+            "get_or_fetch_ensemble_cell: ensemble fetch failed for ({}, {}), day_key={}, forecast_days={}: {}",
+            lat_r,
+            lon_r,
+            day_key,
+            forecast_days,
+            exc,
+        )
 
     if data is None:
         return None

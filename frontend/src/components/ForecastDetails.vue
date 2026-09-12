@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
-import type { RouteWeatherOut } from "@norain/api/models";
+import type { RouteForecastOut } from "@norain/api/models";
 import { metricLabels, modelLabel, rangeText, swissTime } from "@/utils/forecastDetails";
 import { useEntitlements } from "@/composables/useEntitlements";
+import { useSampleUncertainty } from "@/queries/forecastParts";
 
-const props = defineProps<{ forecast: RouteWeatherOut; selectedSample: number }>();
+const props = defineProps<{ forecast: RouteForecastOut; selectedSample: number }>();
 const emit = defineEmits<{ "update:selectedSample": [index: number] }>();
 const expanded = ref(false);
 const sample = computed(() => props.forecast.samples[props.selectedSample]);
@@ -31,16 +32,23 @@ const age = computed(() =>
         ? Math.max(0, Math.floor((now.value - new Date(uncertainty.value.fetchedAt).getTime()) / 60000))
         : null,
 );
-const partial = computed(() =>
-    props.forecast.samples.some(
-        s =>
-            !s.uncertainty ||
-            s.uncertainty.requestedModels.some(name => !s.uncertainty?.models.some(m => m.model === name)) ||
-            metricLabels.some(metric => s.uncertainty?.metrics[metric.key]?.median == null),
-    ),
+/** Computed by the server over every sample, which no longer carry their model lists here. */
+const partial = computed(() => props.forecast.uncertaintyPartial);
+
+// The per-model breakdown is most of a sample's size and only this table shows it, for one
+// point at a time - so it is fetched for the selected point, and only while the panel is open.
+const {
+    data: breakdown,
+    isCurrent: breakdownCurrent,
+    isError: breakdownError,
+} = useSampleUncertainty(
+    () => props.forecast.jobId,
+    () => props.forecast.version,
+    () => props.selectedSample,
+    () => expanded.value && !!uncertainty.value,
 );
 const modelRows = computed(() => {
-    const u = uncertainty.value;
+    const u = breakdownCurrent.value ? breakdown.value : null;
     return u
         ? [...new Set([...u.requestedModels, ...u.models.map(m => m.model)])].map(name => ({
               name,
@@ -94,6 +102,9 @@ const modelRows = computed(() => {
                     {{ sample.pop == null ? "Nicht verfügbar" : `${Math.round(sample.pop * 100)}%` }} · Quelle:
                     {{ sample.probabilitySource ?? "Keine Wahrscheinlichkeitsdaten" }}
                 </p>
+                <p v-if="sample.stationCount" class="text-caption">
+                    Temperatur und Regenrisiko mit {{ sample.stationCount }} Messstationen in der Nähe abgeglichen.
+                </p>
                 <p v-if="uncertainty" class="text-caption">
                     Ensemble-Zeitpunkt: {{ swissTime(uncertainty.forecastTime) }} Uhr · Abgerufen vor {{ age }} min.
                     Niederschlag gilt für die vorhergehende Stunde. Ein nasses Mitglied meldet mindestens 0.1 mm.
@@ -120,8 +131,14 @@ const modelRows = computed(() => {
                     </template>
                 </dl>
                 <p class="text-caption">Positiver Gegenwind bremst, negative Werte bedeuten Rückenwind.</p>
+                <p v-if="uncertainty && breakdownError" class="text-caption">
+                    Modellvergleich konnte nicht geladen werden.
+                </p>
+                <div v-else-if="uncertainty && !breakdownCurrent" class="text-center q-pa-sm">
+                    <q-spinner-dots size="1.5rem" />
+                </div>
                 <div
-                    v-if="uncertainty"
+                    v-else-if="modelRows.length"
                     class="model-table"
                     tabindex="0"
                     aria-label="Modellvergleich, horizontal scrollbar"

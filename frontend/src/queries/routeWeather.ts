@@ -3,6 +3,9 @@ import { useQuery } from "@tanstack/vue-query";
 import { RouteWeatherApi } from "@norain/api/apis";
 import type { PlacesSearchResult } from "@norain/api/models";
 
+import { reportForecastProgress, useForecastProgress } from "@/queries/forecastProgress";
+import { awaitForecastJob } from "@/services/forecastJob";
+
 const api = new RouteWeatherApi();
 
 export const routeWeatherKeys = {
@@ -20,15 +23,17 @@ export function useRouteWeather(
     const queryKey = computed(() =>
         routeWeatherKeys.forecast(toValue(start), toValue(destination), toValue(profile), toValue(departure)),
     );
-    return useQuery({
+    const query = useQuery({
         queryKey,
         enabled: () => !!toValue(destination),
-        queryFn: () => {
+        // Routing and every provider fetch happen on workers, so this resolves when the
+        // job does rather than blocking a request for the whole fan-out.
+        queryFn: async ({ client, queryKey: key, signal }) => {
             const from = toValue(start).geometry.coordinates;
             const destinationValue = toValue(destination);
             if (!destinationValue) throw new Error("A destination is required.");
             const to = destinationValue.geometry.coordinates;
-            return api.coreApiRouteWeatherRouteWeather({
+            const job = await api.coreApiRouteWeatherRouteWeather({
                 startLat: from[1] ?? 0,
                 startLon: from[0] ?? 0,
                 destLat: to[1] ?? 0,
@@ -36,7 +41,9 @@ export function useRouteWeather(
                 profile: toValue(profile),
                 departureTime: toValue(departure),
             });
+            return await awaitForecastJob(job, reportForecastProgress(client, key), signal);
         },
         staleTime: 5 * 60 * 1000,
     });
+    return Object.assign(query, { progress: useForecastProgress(queryKey) });
 }

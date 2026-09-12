@@ -3,20 +3,18 @@
 from datetime import datetime
 from uuid import UUID
 
+from django.db.models import Q
 from django.http import HttpRequest
 from ninja import Router
 from ninja.errors import HttpError
 from pydantic import Field
 
 from ..auth.backend import session_auth
-from ..entitlements import entitlements_for, strip_uncertainty
-from ..models import RecurringRoute, route_point
-from ..plotting import generate_forecast_figures
+from ..entitlements import entitlements_for
+from ..models import ForecastJob, RecurringRoute, route_point
 from ..schedule import forecast_available_at, next_departure
 from ..schemas import CamelSchema
-from ..tasks import refresh_route_geometry
-from ..weather import compute_route_weather
-from .route_weather import RouteWeatherOut
+from .route_weather import ForecastJobOut, job_out
 
 router = Router(auth=session_auth, tags=["Recurring routes"])
 
@@ -42,7 +40,7 @@ class RouteThumbnailSample(CamelSchema):
     i: int
     rain_mm: float
     temp: float
-    headwind: float
+    headwind: float | None = None
     precipitation_interval_s: int | None = None
     rain_rate_mm_h: float | None = None
 
@@ -76,25 +74,6 @@ class RecurringRouteOut(CamelSchema):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     thumbnail: RouteThumbnail | None = None
-
-
-class RouteSection(CamelSchema):
-    start_km: float
-    end_km: float
-    start_time: str
-    end_time: str
-    condition: str
-    max_rain_mm: float
-    max_headwind: float
-    temp_min: float
-    temp_max: float
-
-
-class RouteForecastOut(RouteWeatherOut):
-    route_id: UUID
-    departure_time: str
-    figures: list[dict] = Field(default_factory=list)
-    sections: list[RouteSection] = Field(default_factory=list)
 
 
 async def _current_user(request: HttpRequest):
@@ -133,7 +112,11 @@ def _route_to_out(route: RecurringRoute) -> RecurringRouteOut:
         active=route.active,
         total_seconds=route.total_seconds,
         total_distance_m=route.total_distance_m,
-        has_geometry=route.sample_points is not None,
+        # hasattr, not getattr-with-default: the default expression would be evaluated
+        # eagerly and load the very field list_routes defers.
+        has_geometry=(
+            route.geometry_ready if hasattr(route, "geometry_ready") else route.sample_points is not None
+        ),
         next_departure=nd.isoformat() if nd else None,
         forecast_available=forecast_available_at(nd) if nd else False,
         created_at=route.created_at,
@@ -153,7 +136,15 @@ def _route_to_out(route: RecurringRoute) -> RecurringRouteOut:
 async def list_routes(request: HttpRequest):
     """List the current account's active recurring routes by next departure."""
     user = await _current_user(request)
-    routes = [r async for r in RecurringRoute.objects.filter(active=True, owner=user)]
+    # `polyline` and `sample_points` are large blobs that _route_to_out never reads, and
+    # this endpoint is polled every 60 s. `has_geometry` is annotated so deferring
+    # sample_points does not trigger a per-row query to test it.
+    query = (
+        RecurringRoute.objects.filter(active=True, owner=user)
+        .defer("polyline", "sample_points", "vertex_times")
+        .annotate(geometry_ready=Q(sample_points__isnull=False))
+    )
+    routes = [r async for r in query]
     result = [_route_to_out(r) for r in routes]
     # Sort: next_first (None sorts last)
     result.sort(key=lambda r: (r.next_departure is None, r.next_departure or ""))
@@ -179,6 +170,8 @@ async def _assert_route_quota(user, *, exclude_id: UUID | None = None) -> None:
 @router.post("/routes", response=RecurringRouteOut)
 async def create_route(request: HttpRequest, data: RecurringRouteIn):
     """Create a new recurring route. Enqueues a background task to fetch route geometry."""
+    from ..tasks import refresh_route_geometry
+
     user = await _current_user(request)
     await _assert_route_quota(user)
     values = data.model_dump(exclude={"start_lat", "start_lon", "dest_lat", "dest_lon"})
@@ -202,6 +195,8 @@ async def get_route(request: HttpRequest, route_id: UUID):
 @router.put("/routes/{route_id}", response=RecurringRouteOut)
 async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRouteIn):
     """Update a recurring route. Re-fetches geometry if start, destination, or profile changed."""
+    from ..tasks import refresh_route_geometry
+
     route = await _owned_route(request, route_id)
     # Reactivating a route consumes a slot just as creating one does.
     if data.active and not route.active:
@@ -224,6 +219,7 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
     if needs_geometry:
         route.sample_points = None
         route.polyline = None
+        route.vertex_times = None
         route.geometry_fetched_at = None
         await route.asave()
         await refresh_route_geometry.aenqueue(str(route.id))
@@ -244,61 +240,31 @@ async def delete_route(request: HttpRequest, route_id: UUID):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/routes/{route_id}/forecast", response=RouteForecastOut)
+@router.get("/routes/{route_id}/forecast", response={200: ForecastJobOut, 202: ForecastJobOut})
 async def route_forecast(
     request: HttpRequest,
     route_id: UUID,
     date: str,  # YYYY-MM-DD
     time: str,  # HH:MM
 ):
-    """Get weather forecast + Plotly figures for a specific departure of a saved route.
+    """Start (or join) the forecast for one departure of a saved route.
 
-    Assembles the forecast from cached grid cells (ForecastCell + EnsembleCell).
-    If cells are missing, they are fetched on-the-fly and stored.
+    Returns 200 with the finished payload -- weather, Plotly figures and sections -- when
+    an identical forecast is already computed and still fresh, otherwise 202 and a job to
+    watch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither
+    is allowed on this path.
     """
-    from ..sections import compute_sections
+    from ..tasks import start_forecast_job
 
     route = await _owned_route(request, route_id)
 
     if not route.sample_points:
         raise HttpError(409, "Route geometry not yet computed. Try again in a few seconds.")
 
-    departure_time = f"{date}T{time}"
-
-    forecast = await compute_route_weather(
-        start_lat=route.start_lat,
-        start_lon=route.start_lon,
-        dest_lat=route.dest_lat,
-        dest_lon=route.dest_lon,
-        profile=route.profile,
-        departure_time=departure_time,
-        sample_points=route.sample_points,
-        polyline=route.polyline_coordinates,
-        total_seconds=route.total_seconds,
-        total_distance_m=route.total_distance_m,
+    job = await start_forecast_job(
+        ForecastJob.Kind.ROUTE,
+        await _current_user(request),
+        {"route_id": str(route.id), "departure_time": f"{date}T{time}"},
     )
-
-    # The ensemble spread is a Pro feature; pop/rainIfWet stay for everyone.
-    limits = await entitlements_for(await _current_user(request))
-    if not limits.ensemble_uncertainty:
-        strip_uncertainty(forecast.samples)
-
-    # Generate Plotly figures
-
-    figures = generate_forecast_figures(forecast)
-
-    # Compute route sections
-
-    sections = compute_sections(forecast.samples, forecast.total_distance_m)
-
-    return RouteForecastOut(
-        route_id=route.id,
-        departure_time=departure_time,
-        line=forecast.line,
-        total_seconds=forecast.total_seconds,
-        total_distance_m=forecast.total_distance_m,
-        samples=forecast.samples,
-        summary=forecast.summary,
-        figures=figures,
-        sections=sections,
-    )
+    status = 200 if job.status == ForecastJob.Status.DONE else 202
+    return status, job_out(job)

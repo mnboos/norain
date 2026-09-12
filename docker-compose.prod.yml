@@ -1,10 +1,38 @@
+x-healthy: &healthy
+  condition: service_healthy
+
+# Shared by every service built from BACKEND_IMAGE. `<<:` merges shallowly: a service that
+# sets environment/depends_on/networks itself REPLACES these, so re-include what it needs.
+x-app: &app
+  image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set}
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    REDIS_URL: redis://redis:6379
+  depends_on: &app-deps
+    db: *healthy
+    redis: *healthy
+  networks:
+    - internal
+
+# App deps + graphhopper, for everything that routes.
+x-routing-deps: &routing-deps
+  <<: *app-deps
+  graphhopper: *healthy
+
+# Graphhopper and photon download and import their data on first boot.
+x-slow-start: &slow-start
+  interval: 30s
+  timeout: 10s
+  retries: 10
+  start_period: 10m
+
 services:
   caddy:
     image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE must be set}
     restart: unless-stopped
     depends_on:
-      backend:
-        condition: service_healthy
+      backend: *healthy
     environment:
       DOMAIN: ${DOMAIN:?DOMAIN must be set}
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL must be set}
@@ -20,21 +48,15 @@ services:
       - edge
 
   backend:
-    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set}
-    restart: unless-stopped
-    env_file: .env
+    <<: *app
     command: daphne -b 0.0.0.0 -p 8000 backend.asgi:application
     depends_on:
-      db:
-        condition: service_healthy
-      graphhopper:
-        condition: service_healthy
-      photon:
-        condition: service_healthy
+      <<: *routing-deps
+      photon: *healthy
     volumes:
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/django/static:/app/static
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5)"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5)" ]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -43,41 +65,45 @@ services:
       - edge
       - internal
 
-  worker:
-    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set}
-    restart: unless-stopped
-    env_file: .env
-    command: python manage.py db_worker
-    depends_on:
-      db:
-        condition: service_healthy
-      graphhopper:
-        condition: service_healthy
+  worker-cells:
+    <<: *app
+    command: python manage.py db_worker --queue-name cells
+    deploy:
+      replicas: 4
+
+  worker-forecasts:
+    <<: *app
+    command: python manage.py db_worker --queue-name forecasts
+    deploy:
+      replicas: 2
+    depends_on: *routing-deps
+
+  worker-default:
+    <<: *app
+    command: python manage.py db_worker --queue-name default
+    depends_on: *routing-deps
+
+  redis:
+    extends:
+      file: docker-compose.base.yml
+      service: redis
+    volumes:
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/redis:/data
     networks:
       - internal
 
   scheduler:
-    image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set}
-    restart: unless-stopped
-    env_file: .env
+    <<: *app
     command: python manage.py run_forecast_scheduler
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - internal
 
   db:
-    image: postgis/postgis:17-3.5
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_NAME:?DB_NAME must be set}
-      POSTGRES_USER: ${DB_USER:?DB_USER must be set}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+    extends:
+      service: db
+      file: docker-compose.base.yml
     volumes:
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -85,40 +111,33 @@ services:
       - internal
 
   graphhopper:
+    extends:
+      service: graphhopper
+      file: docker-compose.base.yml
     image: ${GRAPHHOPPER_IMAGE:?GRAPHHOPPER_IMAGE must be set}
-    restart: unless-stopped
     environment:
-      OSM_DATA_DIR: /osm_data
       OSM_DATA_URL: ${OSM_DATA_URL:?OSM_DATA_URL must be set}
-      GRAPHHOPPER_HEAP: ${GRAPHHOPPER_HEAP:-6g}
     volumes:
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/graphhopper/osm:/osm_data
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/graphhopper/cache:/graph-cache
-      - ./data/graphhopper/graphhopper-config.yaml:/config.yaml:ro
-      - ./data/graphhopper/models:/custom_models:ro
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8989/info"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 10m
+      <<: *slow-start
+      test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8989/info" ]
     networks:
       - internal
 
   photon:
+    extends:
+      service: photon
+      file: docker-compose.base.yml
     image: ${PHOTON_IMAGE:?PHOTON_IMAGE must be set}
-    restart: unless-stopped
     environment:
       PHOTON_INDEX_URL: ${PHOTON_INDEX_URL:?PHOTON_INDEX_URL must be set}
-      PHOTON_IMPORT_HEAP: ${PHOTON_IMPORT_HEAP:-4g}
     volumes:
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/photon:/photon_data
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:2322/api?q=Zurich"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 10m
+      <<: *slow-start
+      test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:2322/api?q=Zurich" ]
     networks:
       - internal
 

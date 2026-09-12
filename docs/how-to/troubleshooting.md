@@ -14,7 +14,11 @@ commands from the repository root and Django commands from `backend/`.
 | Search fails | Set `GEOCODER_API_URL=http://localhost:2322/api`, restart the backend, and inspect Photon logs and import completion. |
 | Routing fails or times out | Inspect GraphHopper logs; confirm import is complete, both points are covered, and the profile is enabled. |
 | **Fuss** routing fails | The UI offers `foot`, but that profile is commented out in the checked-in GraphHopper configuration. Use an enabled profile or configure and rebuild routing data for `foot`. |
-| **Route wird berechnet…** persists, or forecast returns HTTP 409 | Run `db_worker`; inspect routing failures and [retry geometry](background-jobs.md). |
+| **Route wird berechnet…** persists, or forecast returns HTTP 409 | Run the `default` worker; inspect routing failures and [retry geometry](background-jobs.md). |
+| A forecast stays `pending` or `fetching` forever | No worker is consuming that queue. All three of `cells`, `forecasts` and `default` must run — see [background jobs](background-jobs.md). |
+| Forecast fails with *Noch keine Wetterdaten verfügbar* | Every cell was still cold at assembly. Check the `cells` worker log for `NOT stored` warnings — usually the Open-Meteo rate limit; retry, or run fewer `cells` replicas. |
+| Ensemble ranges (e.g. the wind spread) are missing, with the *Teilweise Ensemble-Abdeckung* banner | Some ensemble cells failed to fetch, usually Open-Meteo answering `429 Too Many Requests` (`Ensemble cell NOT stored` in the `cells` worker log). A job with failed cells is only reused for 5 minutes (`INCOMPLETE_JOB_LIFETIME`), so reopening the forecast after that fetches the missing cells again. |
+| Progress never updates but the forecast eventually appears | The WebSocket could not be established (a proxy that drops upgrades); the client fell back to polling. Check that `REDIS_URL` is reachable and that the proxy forwards `/ws/`. |
 | Forecast refresh reports `SynchronousOnlyOperation` | The async pre-warm scan directly calls synchronous ORM cache helpers in `tasks.py`. This requires a code fix wrapping those lookups in `sync_to_async`; use on-demand forecasts meanwhile. |
 | **Keine Wetterdaten** appears in charts | Inspect backend logs for failed providers or extraction. Check network access and optional OWM credentials. Empty samples mean unavailable data. |
 | Forecast time is wrong or datetime comparison fails | Supply local date/time without a UTC offset; review [time-zone limitations](../explanation/forecasts.md). |

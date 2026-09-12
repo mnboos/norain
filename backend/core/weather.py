@@ -10,16 +10,15 @@ Given a start, a destination, a routing profile and a departure time, this:
 The route sampling is decoupled from the forecast resolution: GraphHopper gives the true
 per-road travel time, so we know exactly when you reach each point of the polyline.
 """
-import json
-import math
 import os
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 from async_lru import alru_cache
 from loguru import logger
 
 from .api.route_weather import RouteWeatherOut, RouteWeatherSummary, WeatherSample
+from .geo import haversine_m as _haversine_m
 from .grid import (
     ENSEMBLE_MODELS,
     extract_sample,
@@ -28,7 +27,10 @@ from .grid import (
     get_or_fetch_ensemble_cell,
     get_or_fetch_forecast_cell,
 )
+from .schedule import local_today
+from .stations import RAIN_HORIZON, STATION_HORIZON, get_cached_readings, lead_weight, station_correction
 from .uncertainty import extract_uncertainty
+from .wind import compute_wind_profile, normalize_wind, resolve_vertex_times
 
 GRAPHHOPPER_URL = os.environ.get("GRAPHHOPPER_API_URL", "http://localhost:8989").rstrip("/")
 
@@ -75,34 +77,6 @@ WMO_DE = {
 
 
 # --------------------------------------------------------------------------- geometry helpers
-def _haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlmb = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlmb / 2) ** 2
-    return 2 * r * math.asin(min(1.0, math.sqrt(a)))
-
-
-def _bearing_deg(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
-    """Initial compass bearing (deg, 0=N, clockwise) from point 1 to point 2."""
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dl = math.radians(lon2 - lon1)
-    y = math.sin(dl) * math.cos(p2)
-    x = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
-    return (math.degrees(math.atan2(y, x)) + 360.0) % 360.0
-
-
-def _wind_components(wind_speed: float, wind_dir: float, travel_bearing: float) -> tuple[float, float]:
-    """Resolve wind into head/cross components relative to the direction of travel.
-
-    `wind_dir` is the compass direction the wind blows *from*. Returns (headwind, crosswind):
-    headwind > 0 means wind against you, < 0 means tailwind; crosswind is the absolute side component.
-    """
-    rel = math.radians(wind_dir - travel_bearing)
-    return wind_speed * math.cos(rel), abs(wind_speed * math.sin(rel))
-
-
 def _cumulative_times_s(coords: list[list[float]], time_details: list[list]) -> list[float]:
     """Elapsed seconds at every polyline vertex.
 
@@ -130,6 +104,8 @@ def _cumulative_times_s(coords: list[list[float]], time_details: list[list]) -> 
 
 def _sample_indices(cum_s: list[float], interval_s: int) -> list[int]:
     """Vertex indices nearest to elapsed times 0, interval, 2*interval, ... and the final point."""
+    if not cum_s:
+        return []
     total = cum_s[-1] if cum_s else 0.0
     targets = []
     t = 0.0
@@ -153,6 +129,10 @@ def _sample_indices(cum_s: list[float], interval_s: int) -> list[int]:
 
 
 # --------------------------------------------------------------------------- routing
+# How a routing call fails: GraphHopper unreachable or refusing (HTTPError), a body that is
+# not JSON (ValueError), or a reply without a path (KeyError, IndexError).
+ROUTING_ERRORS = (httpx.HTTPError, ValueError, KeyError, IndexError)
+
 @alru_cache(maxsize=64)
 async def _fetch_route(profile: str, start_lat: float, start_lon: float, dest_lat: float, dest_lon: float) -> dict:
     body = {
@@ -169,10 +149,66 @@ async def _fetch_route(profile: str, start_lat: float, start_lon: float, dest_la
         return resp.json()
 
 
+# --------------------------------------------------------------------------- geometry
+async def build_geometry(
+    profile: str,
+    start_lat: float,
+    start_lon: float,
+    dest_lat: float,
+    dest_lon: float,
+    interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
+) -> dict:
+    """Route with GraphHopper and sample it at fixed *time* intervals.
+
+    Returns the polyline plus the sample points every later stage keys off, each carrying
+    its rounded grid coordinates. Shared by the ad-hoc forecast path, the saved-route
+    geometry task and forecast-job planning so all three sample a route identically.
+    """
+    route = await _fetch_route(profile, start_lat, start_lon, dest_lat, dest_lon)
+    path = route["paths"][0]
+    coords: list[list[float]] = path["points"]["coordinates"]
+    time_details = path.get("details", {}).get("time", [[0, len(coords) - 1, path.get("time", 0)]])
+    cum_s = _cumulative_times_s(coords, time_details)
+
+    sample_points = []
+    for idx in _sample_indices(cum_s, max(60, interval_seconds)):
+        lon, lat = coords[idx][0], coords[idx][1]
+        sample_points.append(
+            {
+                "lat": lat,
+                "lon": lon,
+                "lat_r": round(lat, COORD_ROUND),
+                "lon_r": round(lon, COORD_ROUND),
+                "elapsed_s": int(cum_s[idx]),
+                "idx": idx,
+            }
+        )
+
+    return {
+        "polyline": coords,
+        "vertex_times": cum_s,
+        "sample_points": sample_points,
+        "total_seconds": int(cum_s[-1]) if cum_s else 0,
+        "total_distance_m": round(path.get("distance", 0.0), 1),
+    }
+
+
 # --------------------------------------------------------------------------- forecast window
 def _forecast_days(eta: datetime, today: date) -> int:
     """Open-Meteo forecast_days needed to cover eta. `today` is the window origin (00:00 local)."""
     return max(1, min(16, (eta.date() - today).days + 2))
+
+
+def forecast_days_for(departure: datetime, sample_points: list[dict], today: date) -> int:
+    """The single forecast horizon covering every sample point of one departure.
+
+    Deriving this per sample instead would break two things at once. A route crossing
+    midnight gives a later sample a larger horizon, so ``_get_forecast_cell_sync`` rejects
+    the cell an earlier sample just stored and refetches it inside the same request; and
+    two samples in one cell would claim under different keys, defeating deduplication.
+    """
+    last = max((sp["elapsed_s"] for sp in sample_points), default=0)
+    return _forecast_days(departure + timedelta(seconds=last), today)
 
 
 # --------------------------------------------------------------------------- summarization
@@ -201,7 +237,7 @@ def _summarize(samples: list[WeatherSample], source: str) -> RouteWeatherSummary
         max_rain_mm=round(max((s.rain_mm for s in samples), default=0.0), 2),
         rain_probability=rain_probability,
         rain_amount=rain_amount,
-        max_headwind=round(max((s.headwind for s in samples), default=0.0), 1),
+        max_headwind=max((s.headwind for s in samples if s.headwind is not None), default=None),
         source=source,
     )
 
@@ -221,6 +257,9 @@ async def compute_route_weather(
     interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
     cache_only: bool = False,
     include_uncertainty: bool = True,
+    vertex_times: list[float] | None = None,
+    include_segments: bool = True,
+    station_correction_enabled: bool = False,
 ) -> RouteWeatherOut:
     """Compute weather along a route.
 
@@ -237,9 +276,12 @@ async def compute_route_weather(
         include_uncertainty: when false, skip the ensemble lookup entirely. Drops `pop`,
             `rain_if_wet` and the spread from every sample, so only use it where those are
             not rendered.
+        station_correction_enabled: nudge the temperature and rain probability of samples
+            near now toward what weather stations measure. Reads stored readings only; the
+            `refresh_station_observations` task is what fetches them.
     """
     departure = datetime.fromisoformat(departure_time)
-    today = date.today()
+    today = local_today()
 
     if sample_points is not None and polyline is not None:
         # Pre-computed route: skip GraphHopper
@@ -248,31 +290,27 @@ async def compute_route_weather(
         total_dist = total_distance_m or 0.0
     else:
         # Ad-hoc: fetch route from GraphHopper and compute sample points
-        route = await _fetch_route(profile, start_lat, start_lon, dest_lat, dest_lon)
-        path = route["paths"][0]
-        coords: list[list[float]] = path["points"]["coordinates"]
-        time_details = path.get("details", {}).get("time", [[0, len(coords) - 1, path.get("time", 0)]])
-        cum_s = _cumulative_times_s(coords, time_details)
-        sample_idx = _sample_indices(cum_s, max(60, interval_seconds))
-        total_s = int(cum_s[-1]) if cum_s else 0
-        total_dist = round(path.get("distance", 0.0), 1)
+        geometry = await build_geometry(
+            profile, start_lat, start_lon, dest_lat, dest_lon, interval_seconds
+        )
+        coords = geometry["polyline"]
+        sample_points = geometry["sample_points"]
+        total_s = geometry["total_seconds"]
+        total_dist = geometry["total_distance_m"]
+        vertex_times = geometry["vertex_times"]
 
-        # Build sample_points on the fly
-        sample_points = []
-        for idx in sample_idx:
-            lon, lat = coords[idx][0], coords[idx][1]
-            sample_points.append({
-                "lat": lat,
-                "lon": lon,
-                "lat_r": round(lat, COORD_ROUND),
-                "lon_r": round(lon, COORD_ROUND),
-                "elapsed_s": int(cum_s[idx]),
-                "idx": idx,
-            })
-
-    # For each sample point, look up weather from the grid
+    # For each sample point, look up weather from the grid. One horizon covers them all,
+    # so every cell of this departure shares a cache key and a claim key.
+    days = forecast_days_for(departure, sample_points, today)
+    day_key_str = departure.date().isoformat()
     samples: list[WeatherSample] = []
     forecast_source = "open-meteo"
+    forecasts = [None] * len(sample_points)
+    ensemble_cells = [None] * len(sample_points)
+    corrections = [None] * len(sample_points)
+    readings = [[] for _ in sample_points]
+    if station_correction_enabled:
+        readings = await get_cached_readings(sample_points, departure, datetime.now(tz=UTC))
 
     for i, sp in enumerate(sample_points):
         logger.debug("compute_route_weather: processing sample point {}: {}", i, sp)
@@ -282,10 +320,6 @@ async def compute_route_weather(
         lon_r = sp["lon_r"]
         elapsed = sp["elapsed_s"]
         eta = departure + timedelta(seconds=elapsed)
-        idx = sp.get("idx", i)  # vertex index for bearing calculation
-
-        days = _forecast_days(eta, today)
-        day_key_str = departure.date().isoformat()
 
         # Look up deterministic weather from grid (fetches + stores if missing)
         if cache_only:
@@ -295,36 +329,50 @@ async def compute_route_weather(
         if cell is None:
             logger.warning(f"No forecast data for ({lat_r}, {lon_r}) at {eta}")
             continue
-        logger.debug("compute_route_weather: got forecast cell for {}: {}\n{}", eta, cell, json.dumps(cell.data, indent=2))
+        logger.debug("compute_route_weather: got forecast cell for {}: {}", eta, cell)
         forecast = extract_sample(cell.data, eta, cell.source)
         if forecast is None:
             logger.warning(f"Could not extract sample at {eta} from cell data")
             continue
         forecast_source = forecast["source"]
-
-        # Wind bearing: use vertex index if available, else neighboring sample points
-        if "idx" in sp and sp["idx"] > 0 and sp["idx"] < len(coords) - 1:
-            a_idx = max(0, idx - 1)
-            b_idx = min(len(coords) - 1, idx + 1)
-            bearing = _bearing_deg(coords[a_idx][0], coords[a_idx][1], coords[b_idx][0], coords[b_idx][1])
-        else:
-            # Fallback to neighboring sample points
-            a_i = max(0, i - 1)
-            b_i = min(len(sample_points) - 1, i + 1)
-            a = sample_points[a_i]
-            b = sample_points[b_i]
-            bearing = _bearing_deg(a["lon"], a["lat"], b["lon"], b["lat"]) if a_i != b_i else 0.0
-
-        uncertainty = None
+        if readings[i]:
+            # Temperature is corrected here, before the wind profile and the samples are
+            # built, so every later reader of `forecast` sees the same number.
+            observed_at = min(r.observed_at for r in readings[i])
+            model_now = extract_sample(cell.data, observed_at, cell.source)
+            corrections[i] = station_correction(readings[i], model_now["temp"] if model_now else None)
+            if corrections[i] is not None and corrections[i].temp_offset is not None:
+                forecast["temp"] += lead_weight(eta, observed_at, STATION_HORIZON) * corrections[i].temp_offset
+        forecasts[i] = forecast
         if not include_uncertainty:
             ens_cell = None
         elif cache_only:
             ens_cell = await get_cached_ensemble_cell(lat_r, lon_r, day_key_str, days)
         else:
             ens_cell = await get_or_fetch_ensemble_cell(lat_r, lon_r, day_key_str, days)
+        ensemble_cells[i] = ens_cell
+
+    # Future anchors are now available. Integrate unrounded vectors over geometry once;
+    # gaps retain their original indices rather than becoming adjacent valid samples.
+    times = resolve_vertex_times(coords, sample_points, vertex_times)
+    wind = compute_wind_profile(
+        coords, sample_points,
+        [normalize_wind(f.get("wind_speed"), f.get("wind_dir")) if f is not None else None for f in forecasts],
+        times, total_dist, include_segments=include_segments,
+    )
+    for i, sp in enumerate(sample_points):
+        forecast = forecasts[i]
+        if forecast is None:
+            continue
+        lat, lon, elapsed = sp["lat"], sp["lon"], sp["elapsed_s"]
+        eta = departure + timedelta(seconds=elapsed)
+        forecast_source = forecast["source"]
+        ens_cell = ensemble_cells[i]
+        uncertainty = None
         if ens_cell is not None:
             uncertainty = extract_uncertainty(
-                ens_cell.data, eta, bearing, ens_cell.fetched_at, ENSEMBLE_MODELS.split(","),
+                ens_cell.data, eta, None, ens_cell.fetched_at, ENSEMBLE_MODELS.split(","),
+                wind_support=wind.samples[i].support,
             )
         pop = uncertainty.pop if uncertainty is not None else None
         rain_if_wet = uncertainty.rain_if_wet if uncertainty is not None else None
@@ -334,13 +382,29 @@ async def compute_route_weather(
             probability_source = forecast_source if pop is not None else None
         interval = forecast.get("precipitation_interval_s", 3600)
 
-        headwind, crosswind = _wind_components(forecast["wind_speed"], forecast["wind_dir"], bearing)
+        station_count = None
+        correction = corrections[i]
+        if correction is not None:
+            if correction.temp_offset is not None and lead_weight(eta, correction.observed_at, STATION_HORIZON) > 0:
+                station_count = correction.station_count
+            rain_weight = lead_weight(eta, correction.observed_at, RAIN_HORIZON)
+            if pop is not None and correction.wet_share is not None and rain_weight > 0:
+                pop = (1 - rain_weight) * pop + rain_weight * correction.wet_share
+                if correction.wet_rate_mm_h is not None and not rain_if_wet:
+                    # The ensemble has no wet member, but the stations measure rain: the
+                    # "if it rains" amount is their measured rate, not a made-up number.
+                    rain_if_wet = correction.wet_rate_mm_h
+                station_count = correction.station_count
+
+        headwind, crosswind = wind.samples[i].headwind, wind.samples[i].cross_abs_mean
 
         samples.append(
             WeatherSample(
                 lat=lat,
                 lon=lon,
                 elapsed_s=int(elapsed),
+                sample_index=i,
+                wind_coverage=wind.samples[i].coverage,
                 eta=eta.isoformat(),
                 rain_mm=round(forecast["rain_mm"], 2),
                 precipitation_interval_s=interval,
@@ -350,13 +414,14 @@ async def compute_route_weather(
                 pop=round(pop, 2) if pop is not None else None,
                 rain_if_wet=round(rain_if_wet, 2) if rain_if_wet is not None else None,
                 temp=round(forecast["temp"], 1),
-                wind_speed=round(forecast["wind_speed"], 1),
+                wind_speed=round(forecast["wind_speed"], 1) if forecast["wind_speed"] is not None else None,
                 wind_gust=round(forecast["wind_gust"], 1) if forecast["wind_gust"] is not None else None,
-                wind_dir=round(forecast["wind_dir"], 0),
-                headwind=round(headwind, 1),
-                crosswind=round(crosswind, 1),
+                wind_dir=round(forecast["wind_dir"], 0) % 360 if forecast["wind_dir"] is not None else None,
+                headwind=round(headwind, 1) if headwind is not None else None,
+                crosswind=round(crosswind, 1) if crosswind is not None else None,
                 weather_code=forecast["weather_code"],
                 weather_desc=WMO_DE.get(forecast["weather_code"], "") if forecast["weather_code"] is not None else "",
+                station_count=station_count,
             )
         )
 
@@ -367,11 +432,16 @@ async def compute_route_weather(
         )
 
     summary = _summarize(samples, forecast_source)
+    summary.station_corrected = any(s.station_count for s in samples)
+    if wind.distribution is not None:
+        from .api.route_weather import WindDistribution
+        summary.wind_distribution = WindDistribution(**wind.distribution)
 
     return RouteWeatherOut(
         line=coords,
         total_seconds=total_s,
-        total_distance_m=round(total_dist, 1),
+        total_distance_m=wind.total_distance_m,
         samples=samples,
         summary=summary,
+        wind_segments=wind.segments,
     )

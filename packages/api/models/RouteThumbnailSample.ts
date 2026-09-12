@@ -35,7 +35,7 @@ export interface RouteThumbnailSample {
     /**
      * 
      */
-    headwind: number;
+    headwind?: number | null;
     /**
      * 
      */
@@ -53,7 +53,6 @@ export function instanceOfRouteThumbnailSample(value: object): value is RouteThu
     if (!('i' in value) || value['i'] === undefined) return false;
     if ((!('rainMm' in (value as Record<string, any>)) && !('rain_mm' in (value as Record<string, any>))) || ((value as Record<string, any>)['rainMm'] === undefined && (value as Record<string, any>)['rain_mm'] === undefined)) return false;
     if (!('temp' in value) || value['temp'] === undefined) return false;
-    if (!('headwind' in value) || value['headwind'] === undefined) return false;
     return true;
 }
 
@@ -70,7 +69,7 @@ export function RouteThumbnailSampleFromJSONTyped(json: any, ignoreDiscriminator
         'i': json['i'],
         'rainMm': json['rain_mm'],
         'temp': json['temp'],
-        'headwind': json['headwind'],
+        'headwind': json['headwind'] === undefined ? undefined : json['headwind'] === null ? null : json['headwind'],
         'precipitationIntervalS': json['precipitation_interval_s'] === undefined ? undefined : json['precipitation_interval_s'] === null ? null : json['precipitation_interval_s'],
         'rainRateMmH': json['rain_rate_mm_h'] === undefined ? undefined : json['rain_rate_mm_h'] === null ? null : json['rain_rate_mm_h'],
     };

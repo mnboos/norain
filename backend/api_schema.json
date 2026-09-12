@@ -1,0 +1,1851 @@
+{
+    "components": {
+        "schemas": {
+            "EnsembleModelStatistics": {
+                "properties": {
+                    "metrics": {
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/EnsembleRange"
+                        },
+                        "title": "Metrics",
+                        "type": "object"
+                    },
+                    "model": {
+                        "title": "Model",
+                        "type": "string"
+                    },
+                    "pop": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Pop"
+                    },
+                    "rain_if_wet": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain If Wet"
+                    }
+                },
+                "required": [
+                    "metrics",
+                    "model"
+                ],
+                "title": "EnsembleModelStatistics",
+                "type": "object"
+            },
+            "EnsembleRange": {
+                "properties": {
+                    "median": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Median"
+                    },
+                    "member_count": {
+                        "title": "Member Count",
+                        "type": "integer"
+                    },
+                    "p10": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "P10"
+                    },
+                    "p90": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "P90"
+                    }
+                },
+                "required": [
+                    "member_count"
+                ],
+                "title": "EnsembleRange",
+                "type": "object"
+            },
+            "ForecastJobOut": {
+                "description": "A forecast being computed in the background, and its progress.",
+                "properties": {
+                    "cells_settled": {
+                        "default": 0,
+                        "title": "Cells Settled",
+                        "type": "integer"
+                    },
+                    "cells_total": {
+                        "default": 0,
+                        "title": "Cells Total",
+                        "type": "integer"
+                    },
+                    "error": {
+                        "default": "",
+                        "title": "Error",
+                        "type": "string"
+                    },
+                    "job_id": {
+                        "format": "uuid",
+                        "title": "Job Id",
+                        "type": "string"
+                    },
+                    "result": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/RouteForecastOut"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "status": {
+                        "title": "Status",
+                        "type": "string"
+                    },
+                    "ws_url": {
+                        "default": "",
+                        "description": "WebSocket path that streams this job's progress",
+                        "title": "Ws Url",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "job_id",
+                    "status"
+                ],
+                "title": "ForecastJobOut",
+                "type": "object"
+            },
+            "ForecastMapDetailOut": {
+                "description": "The route line and felt-wind arrows at one detail level.",
+                "properties": {
+                    "line": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Line",
+                        "type": "array"
+                    },
+                    "wind_arrows": {
+                        "items": {
+                            "$ref": "#/components/schemas/WindArrow"
+                        },
+                        "title": "Wind Arrows",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "line",
+                    "wind_arrows"
+                ],
+                "title": "ForecastMapDetailOut",
+                "type": "object"
+            },
+            "ForecastSampleOut": {
+                "properties": {
+                    "crosswind": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Crosswind"
+                    },
+                    "elapsed_s": {
+                        "title": "Elapsed S",
+                        "type": "integer"
+                    },
+                    "eta": {
+                        "title": "Eta",
+                        "type": "string"
+                    },
+                    "headwind": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Headwind"
+                    },
+                    "lat": {
+                        "title": "Lat",
+                        "type": "number"
+                    },
+                    "lon": {
+                        "title": "Lon",
+                        "type": "number"
+                    },
+                    "pop": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Pop"
+                    },
+                    "precipitation_interval_s": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Precipitation Interval S"
+                    },
+                    "probability_source": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Probability Source"
+                    },
+                    "rain_if_wet": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain If Wet"
+                    },
+                    "rain_mm": {
+                        "title": "Rain Mm",
+                        "type": "number"
+                    },
+                    "rain_rate_mm_h": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain Rate Mm H"
+                    },
+                    "sample_index": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Sample Index"
+                    },
+                    "station_count": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Station Count"
+                    },
+                    "temp": {
+                        "title": "Temp",
+                        "type": "number"
+                    },
+                    "uncertainty": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/ForecastUncertaintySummary"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "weather_code": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Weather Code"
+                    },
+                    "weather_desc": {
+                        "title": "Weather Desc",
+                        "type": "string"
+                    },
+                    "wind_coverage": {
+                        "anyOf": [
+                            {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Coverage"
+                    },
+                    "wind_dir": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Dir"
+                    },
+                    "wind_gust": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Gust"
+                    },
+                    "wind_speed": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Speed"
+                    }
+                },
+                "required": [
+                    "lat",
+                    "lon",
+                    "elapsed_s",
+                    "eta",
+                    "rain_mm",
+                    "temp",
+                    "weather_desc"
+                ],
+                "title": "ForecastSampleOut",
+                "type": "object"
+            },
+            "ForecastUncertainty": {
+                "properties": {
+                    "fetched_at": {
+                        "title": "Fetched At",
+                        "type": "string"
+                    },
+                    "forecast_time": {
+                        "title": "Forecast Time",
+                        "type": "string"
+                    },
+                    "metrics": {
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/EnsembleRange"
+                        },
+                        "title": "Metrics",
+                        "type": "object"
+                    },
+                    "models": {
+                        "items": {
+                            "$ref": "#/components/schemas/EnsembleModelStatistics"
+                        },
+                        "title": "Models",
+                        "type": "array"
+                    },
+                    "pop": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Pop"
+                    },
+                    "precipitation_interval_s": {
+                        "default": 3600,
+                        "title": "Precipitation Interval S",
+                        "type": "integer"
+                    },
+                    "rain_if_wet": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain If Wet"
+                    },
+                    "requested_models": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Requested Models",
+                        "type": "array"
+                    },
+                    "source": {
+                        "default": "open-meteo-ensemble",
+                        "title": "Source",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "metrics",
+                    "models",
+                    "requested_models",
+                    "forecast_time",
+                    "fetched_at"
+                ],
+                "title": "ForecastUncertainty",
+                "type": "object"
+            },
+            "ForecastUncertaintySummary": {
+                "description": "A sample's ensemble spread without the per-model breakdown.\n\nThe breakdown is most of the bytes and only the details panel shows it, for one point\nat a time, so it comes from ``/forecast_jobs/{id}/samples/{index}/uncertainty``.",
+                "properties": {
+                    "fetched_at": {
+                        "title": "Fetched At",
+                        "type": "string"
+                    },
+                    "forecast_time": {
+                        "title": "Forecast Time",
+                        "type": "string"
+                    },
+                    "metrics": {
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/EnsembleRange"
+                        },
+                        "title": "Metrics",
+                        "type": "object"
+                    },
+                    "pop": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Pop"
+                    },
+                    "precipitation_interval_s": {
+                        "default": 3600,
+                        "title": "Precipitation Interval S",
+                        "type": "integer"
+                    },
+                    "rain_if_wet": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain If Wet"
+                    },
+                    "source": {
+                        "default": "open-meteo-ensemble",
+                        "title": "Source",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "metrics",
+                    "forecast_time",
+                    "fetched_at"
+                ],
+                "title": "ForecastUncertaintySummary",
+                "type": "object"
+            },
+            "GeometrySchema": {
+                "properties": {
+                    "coordinates": {
+                        "items": {
+                            "type": "number"
+                        },
+                        "title": "Coordinates",
+                        "type": "array"
+                    },
+                    "type": {
+                        "default": "Point",
+                        "title": "Type",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "coordinates"
+                ],
+                "title": "GeometrySchema",
+                "type": "object"
+            },
+            "PlacesSearchResult": {
+                "properties": {
+                    "geometry": {
+                        "$ref": "#/components/schemas/GeometrySchema"
+                    },
+                    "properties": {
+                        "$ref": "#/components/schemas/PropertiesSchema"
+                    },
+                    "type": {
+                        "default": "Feature",
+                        "title": "Type",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "properties",
+                    "geometry"
+                ],
+                "title": "PlacesSearchResult",
+                "type": "object"
+            },
+            "PropertiesSchema": {
+                "properties": {
+                    "city": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "City"
+                    },
+                    "countrycode": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Countrycode"
+                    },
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "show_canton": {
+                        "title": "Show Canton",
+                        "type": "boolean"
+                    },
+                    "state": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "State"
+                    }
+                },
+                "required": [
+                    "name",
+                    "show_canton"
+                ],
+                "title": "PropertiesSchema",
+                "type": "object"
+            },
+            "RecurringRouteIn": {
+                "properties": {
+                    "active": {
+                        "default": true,
+                        "title": "Active",
+                        "type": "boolean"
+                    },
+                    "description": {
+                        "default": "",
+                        "title": "Description",
+                        "type": "string"
+                    },
+                    "destLat": {
+                        "maximum": 90,
+                        "minimum": -90,
+                        "title": "Destlat",
+                        "type": "number"
+                    },
+                    "destLon": {
+                        "maximum": 180,
+                        "minimum": -180,
+                        "title": "Destlon",
+                        "type": "number"
+                    },
+                    "destName": {
+                        "title": "Destname",
+                        "type": "string"
+                    },
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "profile": {
+                        "default": "bike",
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "scheduleCron": {
+                        "title": "Schedulecron",
+                        "type": "string"
+                    },
+                    "scheduleDescription": {
+                        "title": "Scheduledescription",
+                        "type": "string"
+                    },
+                    "startLat": {
+                        "maximum": 90,
+                        "minimum": -90,
+                        "title": "Startlat",
+                        "type": "number"
+                    },
+                    "startLon": {
+                        "maximum": 180,
+                        "minimum": -180,
+                        "title": "Startlon",
+                        "type": "number"
+                    },
+                    "startName": {
+                        "title": "Startname",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "name",
+                    "startLat",
+                    "startLon",
+                    "startName",
+                    "destLat",
+                    "destLon",
+                    "destName",
+                    "scheduleCron",
+                    "scheduleDescription"
+                ],
+                "title": "RecurringRouteIn",
+                "type": "object"
+            },
+            "RecurringRouteOut": {
+                "properties": {
+                    "active": {
+                        "title": "Active",
+                        "type": "boolean"
+                    },
+                    "created_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Created At"
+                    },
+                    "description": {
+                        "title": "Description",
+                        "type": "string"
+                    },
+                    "dest_lat": {
+                        "title": "Dest Lat",
+                        "type": "number"
+                    },
+                    "dest_lon": {
+                        "title": "Dest Lon",
+                        "type": "number"
+                    },
+                    "dest_name": {
+                        "title": "Dest Name",
+                        "type": "string"
+                    },
+                    "forecast_available": {
+                        "default": false,
+                        "title": "Forecast Available",
+                        "type": "boolean"
+                    },
+                    "has_geometry": {
+                        "default": false,
+                        "title": "Has Geometry",
+                        "type": "boolean"
+                    },
+                    "id": {
+                        "format": "uuid",
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "next_departure": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Next Departure"
+                    },
+                    "profile": {
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "schedule_cron": {
+                        "title": "Schedule Cron",
+                        "type": "string"
+                    },
+                    "schedule_description": {
+                        "title": "Schedule Description",
+                        "type": "string"
+                    },
+                    "start_lat": {
+                        "title": "Start Lat",
+                        "type": "number"
+                    },
+                    "start_lon": {
+                        "title": "Start Lon",
+                        "type": "number"
+                    },
+                    "start_name": {
+                        "title": "Start Name",
+                        "type": "string"
+                    },
+                    "thumbnail": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/RouteThumbnail"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "total_distance_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Total Distance M"
+                    },
+                    "total_seconds": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Total Seconds"
+                    },
+                    "updated_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Updated At"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "description",
+                    "start_lat",
+                    "start_lon",
+                    "start_name",
+                    "dest_lat",
+                    "dest_lon",
+                    "dest_name",
+                    "profile",
+                    "schedule_cron",
+                    "schedule_description",
+                    "active"
+                ],
+                "title": "RecurringRouteOut",
+                "type": "object"
+            },
+            "RouteForecastOut": {
+                "description": "A finished forecast as the job endpoint and the WebSocket serve it.\n\nSlimmer than what the job stores (see ``core.jobs.forecast_view``): ``line`` is the\ncoarse route line, ``wind_arrows`` are about 2 km apart and the samples carry no\nper-model breakdown. The chart figures, finer map detail and one sample's breakdown\neach come from their own endpoint, keyed by ``job_id``; ``version`` changes whenever\nthe job is recomputed under the same id.",
+                "properties": {
+                    "departure_time": {
+                        "title": "Departure Time",
+                        "type": "string"
+                    },
+                    "job_id": {
+                        "format": "uuid",
+                        "title": "Job Id",
+                        "type": "string"
+                    },
+                    "line": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Line",
+                        "type": "array"
+                    },
+                    "route_id": {
+                        "anyOf": [
+                            {
+                                "format": "uuid",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Route Id"
+                    },
+                    "samples": {
+                        "items": {
+                            "$ref": "#/components/schemas/ForecastSampleOut"
+                        },
+                        "title": "Samples",
+                        "type": "array"
+                    },
+                    "sections": {
+                        "items": {
+                            "$ref": "#/components/schemas/RouteSection"
+                        },
+                        "title": "Sections",
+                        "type": "array"
+                    },
+                    "summary": {
+                        "$ref": "#/components/schemas/RouteWeatherSummary"
+                    },
+                    "total_distance_m": {
+                        "title": "Total Distance M",
+                        "type": "number"
+                    },
+                    "total_seconds": {
+                        "title": "Total Seconds",
+                        "type": "integer"
+                    },
+                    "uncertainty_partial": {
+                        "default": false,
+                        "title": "Uncertainty Partial",
+                        "type": "boolean"
+                    },
+                    "version": {
+                        "title": "Version",
+                        "type": "string"
+                    },
+                    "wind_arrows": {
+                        "items": {
+                            "$ref": "#/components/schemas/WindArrow"
+                        },
+                        "title": "Wind Arrows",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "job_id",
+                    "version",
+                    "departure_time",
+                    "line",
+                    "total_seconds",
+                    "total_distance_m",
+                    "samples",
+                    "summary"
+                ],
+                "title": "RouteForecastOut",
+                "type": "object"
+            },
+            "RouteSection": {
+                "properties": {
+                    "condition": {
+                        "title": "Condition",
+                        "type": "string"
+                    },
+                    "end_km": {
+                        "title": "End Km",
+                        "type": "number"
+                    },
+                    "end_time": {
+                        "title": "End Time",
+                        "type": "string"
+                    },
+                    "max_headwind": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Headwind"
+                    },
+                    "max_rain_mm": {
+                        "title": "Max Rain Mm",
+                        "type": "number"
+                    },
+                    "start_km": {
+                        "title": "Start Km",
+                        "type": "number"
+                    },
+                    "start_time": {
+                        "title": "Start Time",
+                        "type": "string"
+                    },
+                    "temp_max": {
+                        "title": "Temp Max",
+                        "type": "number"
+                    },
+                    "temp_min": {
+                        "title": "Temp Min",
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "start_km",
+                    "end_km",
+                    "start_time",
+                    "end_time",
+                    "condition",
+                    "max_rain_mm",
+                    "temp_min",
+                    "temp_max"
+                ],
+                "title": "RouteSection",
+                "type": "object"
+            },
+            "RouteThumbnail": {
+                "properties": {
+                    "computed_at": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Computed At"
+                    },
+                    "departure": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Departure"
+                    },
+                    "path": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Path",
+                        "type": "array"
+                    },
+                    "samples": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "$ref": "#/components/schemas/RouteThumbnailSample"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "title": "Samples",
+                        "type": "array"
+                    }
+                },
+                "title": "RouteThumbnail",
+                "type": "object"
+            },
+            "RouteThumbnailSample": {
+                "description": "Weather inputs for one point in a route-list thumbnail.",
+                "properties": {
+                    "headwind": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Headwind"
+                    },
+                    "i": {
+                        "title": "I",
+                        "type": "integer"
+                    },
+                    "precipitation_interval_s": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Precipitation Interval S"
+                    },
+                    "rain_mm": {
+                        "title": "Rain Mm",
+                        "type": "number"
+                    },
+                    "rain_rate_mm_h": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain Rate Mm H"
+                    },
+                    "temp": {
+                        "title": "Temp",
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "i",
+                    "rain_mm",
+                    "temp"
+                ],
+                "title": "RouteThumbnailSample",
+                "type": "object"
+            },
+            "RouteWeatherSummary": {
+                "properties": {
+                    "first_rain_eta": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "First Rain Eta"
+                    },
+                    "first_rain_place": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "First Rain Place"
+                    },
+                    "max_headwind": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Headwind"
+                    },
+                    "max_rain_mm": {
+                        "title": "Max Rain Mm",
+                        "type": "number"
+                    },
+                    "rain_amount": {
+                        "title": "Rain Amount",
+                        "type": "number"
+                    },
+                    "rain_probability": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain Probability"
+                    },
+                    "source": {
+                        "title": "Source",
+                        "type": "string"
+                    },
+                    "station_corrected": {
+                        "default": false,
+                        "title": "Station Corrected",
+                        "type": "boolean"
+                    },
+                    "will_rain": {
+                        "title": "Will Rain",
+                        "type": "boolean"
+                    },
+                    "wind_distribution": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/WindDistribution"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "will_rain",
+                    "max_rain_mm",
+                    "rain_amount",
+                    "source"
+                ],
+                "title": "RouteWeatherSummary",
+                "type": "object"
+            },
+            "WindArrow": {
+                "description": "One felt-wind arrow for the map: only segments with complete felt-wind data.",
+                "properties": {
+                    "bearing": {
+                        "title": "Bearing",
+                        "type": "number"
+                    },
+                    "felt_angle": {
+                        "title": "Felt Angle",
+                        "type": "number"
+                    },
+                    "felt_speed": {
+                        "title": "Felt Speed",
+                        "type": "number"
+                    },
+                    "lat": {
+                        "title": "Lat",
+                        "type": "number"
+                    },
+                    "lon": {
+                        "title": "Lon",
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "lat",
+                    "lon",
+                    "bearing",
+                    "felt_speed",
+                    "felt_angle"
+                ],
+                "title": "WindArrow",
+                "type": "object"
+            },
+            "WindDistribution": {
+                "properties": {
+                    "calm_m": {
+                        "minimum": 0,
+                        "title": "Calm M",
+                        "type": "number"
+                    },
+                    "crosswind_m": {
+                        "minimum": 0,
+                        "title": "Crosswind M",
+                        "type": "number"
+                    },
+                    "felt_covered_m": {
+                        "minimum": 0,
+                        "title": "Felt Covered M",
+                        "type": "number"
+                    },
+                    "headwind_m": {
+                        "minimum": 0,
+                        "title": "Headwind M",
+                        "type": "number"
+                    },
+                    "max_felt_speed": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Felt Speed"
+                    },
+                    "mean_felt_speed": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Mean Felt Speed"
+                    },
+                    "tailwind_m": {
+                        "minimum": 0,
+                        "title": "Tailwind M",
+                        "type": "number"
+                    },
+                    "timing_source": {
+                        "enum": [
+                            "routing",
+                            "sample-interpolation",
+                            "unavailable"
+                        ],
+                        "title": "Timing Source",
+                        "type": "string"
+                    },
+                    "unknown_m": {
+                        "minimum": 0,
+                        "title": "Unknown M",
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "headwind_m",
+                    "crosswind_m",
+                    "tailwind_m",
+                    "calm_m",
+                    "unknown_m",
+                    "felt_covered_m",
+                    "timing_source"
+                ],
+                "title": "WindDistribution",
+                "type": "object"
+            }
+        }
+    },
+    "info": {
+        "description": "",
+        "title": "NoRain API",
+        "version": "1.0.0"
+    },
+    "openapi": "3.1.0",
+    "paths": {
+        "/api/forecast_jobs/{job_id}": {
+            "get": {
+                "description": "Poll one forecast job.\n\nThe WebSocket is the primary channel; this exists so a client behind a proxy that\ndrops upgrades still makes progress, and so tests can assert without a socket.",
+                "operationId": "core_api_route_weather_forecast_job",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Job Id",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastJobOut"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "Forecast Job",
+                "tags": [
+                    "Route weather"
+                ]
+            }
+        },
+        "/api/forecast_jobs/{job_id}/figures": {
+            "get": {
+                "description": "The Plotly chart figures of a finished job, for the pages that draw charts.",
+                "operationId": "core_api_route_weather_forecast_job_figures",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Job Id",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "additionalProperties": true,
+                                        "type": "object"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "Forecast Job Figures",
+                "tags": [
+                    "Route weather"
+                ]
+            }
+        },
+        "/api/forecast_jobs/{job_id}/map_detail": {
+            "get": {
+                "description": "The route line and felt-wind arrows at more detail than the job result carries.\n\nThe map asks for this only once it is zoomed in far enough to show the difference.",
+                "operationId": "core_api_route_weather_forecast_job_map_detail",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Job Id",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "detail",
+                        "required": true,
+                        "schema": {
+                            "enum": [
+                                "medium",
+                                "full"
+                            ],
+                            "title": "Detail",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastMapDetailOut"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "Forecast Job Map Detail",
+                "tags": [
+                    "Route weather"
+                ]
+            }
+        },
+        "/api/forecast_jobs/{job_id}/samples/{index}/uncertainty": {
+            "get": {
+                "description": "One sample's full ensemble spread, including the per-model breakdown.\n\n``null`` when the sample has none -- which includes every sample of a free account,\nsince the stored result is stripped before storage.",
+                "operationId": "core_api_route_weather_forecast_job_sample_uncertainty",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Job Id",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "path",
+                        "name": "index",
+                        "required": true,
+                        "schema": {
+                            "title": "Index",
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ForecastUncertainty"
+                                        },
+                                        {
+                                            "type": "null"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "Forecast Job Sample Uncertainty",
+                "tags": [
+                    "Route weather"
+                ]
+            }
+        },
+        "/api/route_weather": {
+            "get": {
+                "description": "Start (or join) the forecast for an ad-hoc route.\n\nReturns 200 with the payload when an identical forecast is already computed and still\nfresh, otherwise 202 and a job to watch over `wsUrl`. The routing call and every\nprovider fetch happen on workers -- this endpoint never blocks on them.",
+                "operationId": "core_api_route_weather_route_weather",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "start_lat",
+                        "required": true,
+                        "schema": {
+                            "title": "Start Lat",
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "start_lon",
+                        "required": true,
+                        "schema": {
+                            "title": "Start Lon",
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "dest_lat",
+                        "required": true,
+                        "schema": {
+                            "title": "Dest Lat",
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "dest_lon",
+                        "required": true,
+                        "schema": {
+                            "title": "Dest Lon",
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "profile",
+                        "required": true,
+                        "schema": {
+                            "title": "Profile",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "departure_time",
+                        "required": true,
+                        "schema": {
+                            "title": "Departure Time",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "interval_seconds",
+                        "required": false,
+                        "schema": {
+                            "default": 300,
+                            "title": "Interval Seconds",
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastJobOut"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastJobOut"
+                                }
+                            }
+                        },
+                        "description": "Accepted"
+                    }
+                },
+                "summary": "Route Weather",
+                "tags": [
+                    "Route weather"
+                ]
+            }
+        },
+        "/api/routes": {
+            "get": {
+                "description": "List the current account's active recurring routes by next departure.",
+                "operationId": "core_api_recurring_route_list_routes",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/RecurringRouteOut"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "List Routes",
+                "tags": [
+                    "Recurring routes"
+                ]
+            },
+            "post": {
+                "description": "Create a new recurring route. Enqueues a background task to fetch route geometry.",
+                "operationId": "core_api_recurring_route_create_route",
+                "parameters": [],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RecurringRouteIn"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecurringRouteOut"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "Create Route",
+                "tags": [
+                    "Recurring routes"
+                ]
+            }
+        },
+        "/api/routes/{route_id}": {
+            "delete": {
+                "description": "Delete a recurring route.",
+                "operationId": "core_api_recurring_route_delete_route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                },
+                "summary": "Delete Route",
+                "tags": [
+                    "Recurring routes"
+                ]
+            },
+            "get": {
+                "description": "Get a single recurring route by ID.",
+                "operationId": "core_api_recurring_route_get_route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecurringRouteOut"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "Get Route",
+                "tags": [
+                    "Recurring routes"
+                ]
+            },
+            "put": {
+                "description": "Update a recurring route. Re-fetches geometry if start, destination, or profile changed.",
+                "operationId": "core_api_recurring_route_update_route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RecurringRouteIn"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecurringRouteOut"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "Update Route",
+                "tags": [
+                    "Recurring routes"
+                ]
+            }
+        },
+        "/api/routes/{route_id}/forecast": {
+            "get": {
+                "description": "Start (or join) the forecast for one departure of a saved route.\n\nReturns 200 with the finished payload -- weather, Plotly figures and sections -- when\nan identical forecast is already computed and still fresh, otherwise 202 and a job to\nwatch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither\nis allowed on this path.",
+                "operationId": "core_api_recurring_route_route_forecast",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "date",
+                        "required": true,
+                        "schema": {
+                            "title": "Date",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "time",
+                        "required": true,
+                        "schema": {
+                            "title": "Time",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastJobOut"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    },
+                    "202": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastJobOut"
+                                }
+                            }
+                        },
+                        "description": "Accepted"
+                    }
+                },
+                "summary": "Route Forecast",
+                "tags": [
+                    "Recurring routes"
+                ]
+            }
+        },
+        "/api/search": {
+            "get": {
+                "operationId": "core_api_places_search",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "query",
+                        "required": true,
+                        "schema": {
+                            "title": "Query",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "zoom",
+                        "required": true,
+                        "schema": {
+                            "title": "Zoom",
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "lat",
+                        "required": true,
+                        "schema": {
+                            "title": "Lat",
+                            "type": "number"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "lon",
+                        "required": true,
+                        "schema": {
+                            "title": "Lon",
+                            "type": "number"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/PlacesSearchResult"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "Search",
+                "tags": [
+                    "Places"
+                ]
+            }
+        }
+    },
+    "servers": []
+}

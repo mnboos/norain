@@ -9,7 +9,6 @@ import WeatherCharts from "@/components/WeatherCharts.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import { useRecurringRoute, useRecurringRouteForecast } from "@/queries/recurringRoutes";
 
-
 const props = defineProps<{
     route: RecurringRouteOut;
     departureDate: string;
@@ -31,7 +30,16 @@ const {
     data: forecast,
     isFetching: forecastLoading,
     error: forecastError,
+    progress: forecastProgress,
 } = useRecurringRouteForecast(routeId, departureDate, departureTime, departureEnabled);
+
+// The forecast is assembled from one grid cell per ~1 km² of route, fetched by background
+// workers. Showing how many have landed turns an indefinite wait into a determinate one.
+const forecastProgressPercent = computed(() => {
+    const progress = forecastProgress.value;
+    if (!progress?.cellsTotal) return undefined;
+    return Math.round((100 * progress.cellsSettled) / progress.cellsTotal);
+});
 
 const selectedSample = ref(0);
 watch(forecast, () => {
@@ -100,8 +108,8 @@ function profileLabel(profile: string): string {
             <!-- Square tiles: one row of four on wide screens, 2x2 on tablets, stacked on phones. -->
             <div class="row q-col-gutter-md q-mt-none">
                 <WeatherCharts
-                    v-if="forecast.figures"
-                    :figures="forecast.figures"
+                    :job-id="forecast.jobId"
+                    :version="forecast.version"
                     @select-sample="selectedSample = $event"
                 />
                 <div class="col-12 col-sm-6 col-md-3">
@@ -119,7 +127,16 @@ function profileLabel(profile: string): string {
 
         <!-- Loading -->
         <div v-else-if="forecastLoading && hasGeometry" class="text-center q-mt-xl">
-            <q-spinner-dots size="3rem" />
+            <q-circular-progress
+                v-if="forecastProgressPercent !== undefined"
+                show-value
+                :value="forecastProgressPercent"
+                size="3rem"
+                :thickness="0.2"
+                color="primary"
+                track-color="grey-3"
+            />
+            <q-spinner-dots v-else size="3rem" />
             <p class="text-grey">Wetterdaten werden geladen…</p>
         </div>
 

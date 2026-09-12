@@ -18,6 +18,8 @@ process variables take precedence over values loaded by `python-dotenv`.
 | `GRAPHHOPPER_API_URL` | `http://localhost:8989` | Backend; base URL without `/route` |
 | `GEOCODER_API_URL` | Required for search; no default | Backend; full Photon endpoint, e.g. `http://localhost:2322/api` |
 | `OPENWEATHERMAP_API_KEY` | Optional | Enables OWM fallback when primary fetching fails |
+| `WEATHERUNDERGROUND_API_KEY` | Optional | Pro only: corrects temperature and rain risk near now with nearby personal weather stations. Budgeted for the free PWS owner key (1500 calls/day, 30/min) |
+| `REDIS_URL` | `redis://localhost:6379` | In-flight grid-cell claims (DB 1) and the forecast-progress channel layer (DB 2); needed by the web process and every worker |
 | `OSM_DATA_URL` | `https://download.geofabrik.de/europe/switzerland-latest.osm.pbf` | GraphHopper import |
 | `GRAPHHOPPER_HEAP` | `6g` | GraphHopper JVM initial and maximum heap |
 | `PHOTON_INDEX_URL` | `https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst` | Photon import |
@@ -39,7 +41,8 @@ in [grid.py](../../backend/core/grid.py), not environment settings.
 | --- | --- | --- |
 | Frontend | `http://127.0.0.1:3000` | `npm run dev` in `frontend/` |
 | Django API | `http://127.0.0.1:8000/api/` | `python manage.py runserver` in `backend/` |
-| Task worker | No HTTP port | `python manage.py db_worker` in `backend/` |
+| Task workers | No HTTP port | `python manage.py db_worker --queue-name {cells,forecasts,default}` in `backend/` |
+| Redis | Port 6379 | Cell claims and the WebSocket channel layer (`REDIS_URL`) |
 | GraphHopper | `http://localhost:8989` | Development Compose `graphhopper` |
 | Photon | `http://localhost:2322/api` | Development Compose `photon` |
 | PostgreSQL/PostGIS | Port 5432 | Development Compose `db` |

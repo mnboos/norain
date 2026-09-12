@@ -14,20 +14,20 @@
  */
 
 import { mapValues } from '../runtime';
-import type { ForecastUncertainty } from './ForecastUncertainty';
+import type { ForecastUncertaintySummary } from './ForecastUncertaintySummary';
 import {
-    ForecastUncertaintyFromJSON,
-    ForecastUncertaintyFromJSONTyped,
-    ForecastUncertaintyToJSON,
-    ForecastUncertaintyToJSONTyped,
-} from './ForecastUncertainty';
+    ForecastUncertaintySummaryFromJSON,
+    ForecastUncertaintySummaryFromJSONTyped,
+    ForecastUncertaintySummaryToJSON,
+    ForecastUncertaintySummaryToJSONTyped,
+} from './ForecastUncertaintySummary';
 
 /**
- * Weather at one point along the route, at the clock time you'll be there.
+ * 
  * @export
- * @interface WeatherSample
+ * @interface ForecastSampleOut
  */
-export interface WeatherSample {
+export interface ForecastSampleOut {
     /**
      * 
      */
@@ -63,7 +63,7 @@ export interface WeatherSample {
     /**
      * 
      */
-    uncertainty?: ForecastUncertainty | null;
+    uncertainty?: ForecastUncertaintySummary | null;
     /**
      * 
      */
@@ -79,7 +79,7 @@ export interface WeatherSample {
     /**
      * 
      */
-    windSpeed: number;
+    windSpeed?: number | null;
     /**
      * 
      */
@@ -87,15 +87,23 @@ export interface WeatherSample {
     /**
      * 
      */
-    windDir: number;
+    windDir?: number | null;
     /**
      * 
      */
-    headwind: number;
+    headwind?: number | null;
     /**
      * 
      */
-    crosswind: number;
+    crosswind?: number | null;
+    /**
+     * 
+     */
+    sampleIndex?: number | null;
+    /**
+     * 
+     */
+    windCoverage?: number | null;
     /**
      * 
      */
@@ -104,31 +112,31 @@ export interface WeatherSample {
      * 
      */
     weatherDesc: string;
+    /**
+     * 
+     */
+    stationCount?: number | null;
 }
 
 /**
- * Check if a given object implements the WeatherSample interface.
+ * Check if a given object implements the ForecastSampleOut interface.
  */
-export function instanceOfWeatherSample(value: object): value is WeatherSample {
+export function instanceOfForecastSampleOut(value: object): value is ForecastSampleOut {
     if (!('lat' in value) || value['lat'] === undefined) return false;
     if (!('lon' in value) || value['lon'] === undefined) return false;
     if ((!('elapsedS' in (value as Record<string, any>)) && !('elapsed_s' in (value as Record<string, any>))) || ((value as Record<string, any>)['elapsedS'] === undefined && (value as Record<string, any>)['elapsed_s'] === undefined)) return false;
     if (!('eta' in value) || value['eta'] === undefined) return false;
     if ((!('rainMm' in (value as Record<string, any>)) && !('rain_mm' in (value as Record<string, any>))) || ((value as Record<string, any>)['rainMm'] === undefined && (value as Record<string, any>)['rain_mm'] === undefined)) return false;
     if (!('temp' in value) || value['temp'] === undefined) return false;
-    if ((!('windSpeed' in (value as Record<string, any>)) && !('wind_speed' in (value as Record<string, any>))) || ((value as Record<string, any>)['windSpeed'] === undefined && (value as Record<string, any>)['wind_speed'] === undefined)) return false;
-    if ((!('windDir' in (value as Record<string, any>)) && !('wind_dir' in (value as Record<string, any>))) || ((value as Record<string, any>)['windDir'] === undefined && (value as Record<string, any>)['wind_dir'] === undefined)) return false;
-    if (!('headwind' in value) || value['headwind'] === undefined) return false;
-    if (!('crosswind' in value) || value['crosswind'] === undefined) return false;
     if ((!('weatherDesc' in (value as Record<string, any>)) && !('weather_desc' in (value as Record<string, any>))) || ((value as Record<string, any>)['weatherDesc'] === undefined && (value as Record<string, any>)['weather_desc'] === undefined)) return false;
     return true;
 }
 
-export function WeatherSampleFromJSON(json: any): WeatherSample {
-    return WeatherSampleFromJSONTyped(json, false);
+export function ForecastSampleOutFromJSON(json: any): ForecastSampleOut {
+    return ForecastSampleOutFromJSONTyped(json, false);
 }
 
-export function WeatherSampleFromJSONTyped(json: any, ignoreDiscriminator: boolean): WeatherSample {
+export function ForecastSampleOutFromJSONTyped(json: any, ignoreDiscriminator: boolean): ForecastSampleOut {
     if (json == null) {
         return json;
     }
@@ -142,25 +150,28 @@ export function WeatherSampleFromJSONTyped(json: any, ignoreDiscriminator: boole
         'precipitationIntervalS': json['precipitation_interval_s'] === undefined ? undefined : json['precipitation_interval_s'] === null ? null : json['precipitation_interval_s'],
         'rainRateMmH': json['rain_rate_mm_h'] === undefined ? undefined : json['rain_rate_mm_h'] === null ? null : json['rain_rate_mm_h'],
         'probabilitySource': json['probability_source'] === undefined ? undefined : json['probability_source'] === null ? null : json['probability_source'],
-        'uncertainty': json['uncertainty'] === undefined ? undefined : json['uncertainty'] === null ? null : ForecastUncertaintyFromJSON(json['uncertainty']),
+        'uncertainty': json['uncertainty'] === undefined ? undefined : json['uncertainty'] === null ? null : ForecastUncertaintySummaryFromJSON(json['uncertainty']),
         'pop': json['pop'] === undefined ? undefined : json['pop'] === null ? null : json['pop'],
         'rainIfWet': json['rain_if_wet'] === undefined ? undefined : json['rain_if_wet'] === null ? null : json['rain_if_wet'],
         'temp': json['temp'],
-        'windSpeed': json['wind_speed'],
+        'windSpeed': json['wind_speed'] === undefined ? undefined : json['wind_speed'] === null ? null : json['wind_speed'],
         'windGust': json['wind_gust'] === undefined ? undefined : json['wind_gust'] === null ? null : json['wind_gust'],
-        'windDir': json['wind_dir'],
-        'headwind': json['headwind'],
-        'crosswind': json['crosswind'],
+        'windDir': json['wind_dir'] === undefined ? undefined : json['wind_dir'] === null ? null : json['wind_dir'],
+        'headwind': json['headwind'] === undefined ? undefined : json['headwind'] === null ? null : json['headwind'],
+        'crosswind': json['crosswind'] === undefined ? undefined : json['crosswind'] === null ? null : json['crosswind'],
+        'sampleIndex': json['sample_index'] === undefined ? undefined : json['sample_index'] === null ? null : json['sample_index'],
+        'windCoverage': json['wind_coverage'] === undefined ? undefined : json['wind_coverage'] === null ? null : json['wind_coverage'],
         'weatherCode': json['weather_code'] === undefined ? undefined : json['weather_code'] === null ? null : json['weather_code'],
         'weatherDesc': json['weather_desc'],
+        'stationCount': json['station_count'] === undefined ? undefined : json['station_count'] === null ? null : json['station_count'],
     };
 }
 
-export function WeatherSampleToJSON(json: any): WeatherSample {
-    return WeatherSampleToJSONTyped(json, false);
+export function ForecastSampleOutToJSON(json: any): ForecastSampleOut {
+    return ForecastSampleOutToJSONTyped(json, false);
 }
 
-export function WeatherSampleToJSONTyped(value?: WeatherSample | null, ignoreDiscriminator: boolean = false): any {
+export function ForecastSampleOutToJSONTyped(value?: ForecastSampleOut | null, ignoreDiscriminator: boolean = false): any {
     if (value == null) {
         return value;
     }
@@ -175,7 +186,7 @@ export function WeatherSampleToJSONTyped(value?: WeatherSample | null, ignoreDis
         'precipitation_interval_s': value['precipitationIntervalS'],
         'rain_rate_mm_h': value['rainRateMmH'],
         'probability_source': value['probabilitySource'],
-        'uncertainty': ForecastUncertaintyToJSON(value['uncertainty']),
+        'uncertainty': ForecastUncertaintySummaryToJSON(value['uncertainty']),
         'pop': value['pop'],
         'rain_if_wet': value['rainIfWet'],
         'temp': value['temp'],
@@ -184,8 +195,11 @@ export function WeatherSampleToJSONTyped(value?: WeatherSample | null, ignoreDis
         'wind_dir': value['windDir'],
         'headwind': value['headwind'],
         'crosswind': value['crosswind'],
+        'sample_index': value['sampleIndex'],
+        'wind_coverage': value['windCoverage'],
         'weather_code': value['weatherCode'],
         'weather_desc': value['weatherDesc'],
+        'station_count': value['stationCount'],
     };
 }
 

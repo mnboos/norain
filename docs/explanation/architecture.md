@@ -7,17 +7,25 @@ journey geometry from weather data so recurring trips can reuse both independent
 ```mermaid
 flowchart TD
     UI[Vue / Quasar / MapLibre] --> API[Django / django-ninja]
+    UI -. websocket .-> WS[Channels consumer]
     API --> Photon[Photon: place search]
-    API --> GH[GraphHopper: routing and travel times]
-    API --> DB[(PostgreSQL/PostGIS: routes, cells, task queue)]
-    Worker[Database task worker] --> DB
-    Worker --> GH
-    API --> Grid[Forecast grid layer]
-    Worker --> Grid
+    API --> DB[(PostgreSQL/PostGIS: routes, cells, jobs, task queue)]
+    API --> Redis[(Redis: cell claims + channel layer)]
+    WS --> Redis
+    API -- enqueues --> Q{{Queues: cells / forecasts / default}}
+    Q --> WC[worker-cells x4]
+    Q --> WF[worker-forecasts x2]
+    Q --> WD[worker-default]
+    WF --> GH[GraphHopper: routing and travel times]
+    WD --> GH
+    WC --> Grid[Forecast grid layer]
+    WF --> Plot[Plotly figures and weather sections]
     Grid --> DB
     Grid --> OM[Open-Meteo: deterministic and ensemble]
     Grid --> OWM[OpenWeatherMap: deterministic fallback]
-    API --> Plot[Plotly figures and weather sections]
+    WC --> WU[Weather Underground: station readings near now]
+    WC --> Redis
+    WF --> Redis
 ```
 
 ## Geometry determines the sample times
@@ -32,7 +40,7 @@ journey, independent of a weather provider's forecast resolution. Arrival time i
 computed as departure plus estimated elapsed riding time. There is no live rider
 tracking or measured-speed correction.
 
-An ad-hoc request calculates geometry in the request flow. Creating a recurring
+Both ad-hoc and saved-route forecasts calculate geometry on a worker. Creating a recurring
 route stores its inputs immediately and queues geometry computation. The worker
 persists the polyline, duration, distance, and sample points, allowing later forecast
 requests to skip routing. Coordinate or profile changes invalidate that geometry;
@@ -61,32 +69,100 @@ OWM on a handled fetch failure. Without an OWM key, that fallback cannot supply
 data. Ensemble failures leave probability optional; deterministic weather can
 still be used.
 
-The ensemble fetcher also has a process-local LRU cache without a time-based TTL.
-A database refresh may therefore reuse a response already in that process's memory.
-The two-hour database policy is not a guarantee of a new upstream ensemble fetch.
-Routing and geocoding also have bounded process-local LRU caches.
+Routing and geocoding have bounded process-local LRU caches (`core/weather.py` and
+`core/api/places.py`); the grid layer has none, so a database miss always means an upstream
+fetch. What prevents duplicate fetches instead is an in-flight claim in Redis, taken before
+a cell task is queued and released when it finishes — including when it fails, so a cell
+both providers refused stays retryable.
 
-## Background work reduces request latency
+## Weather stations correct the first hours
 
-Django's database task backend holds geometry and weather-refresh jobs in PostgreSQL.
-`db_worker` processes them separately from HTTP requests. An external scheduler can
-run `refresh_forecasts` to enqueue cells for the next three departures of each active
-route with geometry. No scheduler is automatically installed.
+For Pro accounts, a ride that overlaps the next two hours is corrected with readings from
+Weather Underground personal weather stations (`core/stations.py`). Stations only measure
+the present, so the correction is the difference between what the stations read now and
+what the model says for now, added to the model at each sample's time with a weight that
+falls to zero two hours (temperature) or one hour (rain) from the reading.
 
-Weather requests fetch unusable or missing cells themselves, so forecast pre-warming
-is optional. The current pre-warm scan has an async/synchronous ORM mismatch noted
-in [troubleshooting](../how-to/troubleshooting.md).
+- Temperature is shifted by the median of the stations within 5 km, after dropping any
+  more than 3 °C from the median, clamped to ±5 °C.
+- Rain is used as presence only: the share of stations measuring rain moves the rain
+  probability. The model's rain amount stays.
+- Wind is not corrected; station anemometers sit too low and sheltered.
+- At least two stations are needed, readings must be under 30 minutes old, and stations
+  flagged as possibly wrong are skipped.
+
+Corrected samples carry `station_count` and the summary carries `station_corrected`, and the
+UI says so.
+
+The free station-owner key allows 1500 calls a day and 30 a minute. Station lists are cached
+for 14 days, readings for 10 minutes, a job reads at most six stations, and every call passes
+a counter in Redis that refuses calls past 1400 a day or 25 a minute. Unlike cell claims, the
+counter fails closed: without Redis no call is made. Only the `refresh_station_observations`
+task fetches; the hourly pre-warm scan never does, since readings are stale long before the
+next scan. A finished job whose ride is near now is reused for only 10 minutes.
+
+## Requests enqueue; workers compute
+
+No HTTP request performs a provider fetch, a routing call or a Plotly render. A forecast
+request creates a `ForecastJob` and returns a job id; `plan_forecast_job` resolves the
+route geometry and fans out one task per distinct ~1 km² grid cell; the last cell to settle
+hands the job to `assemble_forecast_job`, which builds the payload from cells that are warm
+by then and stores it. Progress reaches the browser over a WebSocket, with polling as a
+fallback.
+
+The job stores the complete payload but sends the browser a slim view of it: a route line
+simplified to about 50 m, felt-wind arrows about 2 km apart instead of up to 500 wind
+segments, and no chart figures or per-model ensemble breakdown. Those parts
+are fetched from their own endpoints by the components that show them — the charts on the
+route page, a finer line and denser wind arrows once the map is zoomed in, the model table once the details panel
+is opened. A long route's job message drops from about 260 KB to about 60 KB this way, and
+the map page never downloads chart data at all.
+
+The queues are split because the database task backend runs one task per worker process at
+a time: `cells` carries the provider fan-out across several replicas, `forecasts` carries
+planning and assembly (a person is waiting on those), and `default` carries geometry,
+thumbnails, pre-warm scans and maintenance. Because several workers run in parallel, queue
+order no longer implies completion order — work that must follow other work is sequenced by
+an explicit counter on the job, or deferred with `run_after`.
+
+Pre-warming decides how quickly a forecast appears rather than whether it is available: a
+route whose cells are all cold still resolves, it just spends longer fetching. A job that
+assembles no samples at all is reported as failed rather than as an empty forecast.
 
 ## Code map
+
+### Wind geometry and integration
+
+`core/geo.py` supplies spherical distance/bearing helpers. `core/wind.py` is pure geometry
+and vector processing with no provider or Django dependency. `weather.py` first reads the
+original deterministic/ensemble anchors, retaining missing slots, then computes a local
+wind profile before constructing samples and extracting ensemble statistics.
+
+Wind-from east/north vectors are interpolated between adjacent valid original anchors.
+Each non-zero geometry edge is subdivided at most every 25 m and clipped at sample-support
+boundaries. Headwind, absolute crosswind, apparent speed and angle buckets are evaluated
+locally before aggregation. Mean vector magnitude cannot replace mean apparent speed.
+Ensemble members project onto the same support directions before calculating quantiles;
+members are still fetched at sample resolution only. Stored float vertex times travel from
+GraphHopper through RecurringRoute and ForecastJob.geometry to assembly. Older geometry
+uses marked sample-time interpolation, with null apparent values where timing is unusable.
+
+At most 500 display chunks have their own midpoint values and coverage, while route totals
+come from independent numerical pieces. Ground scoring keeps its existing curves; absent
+wind produces an unknown score. Algorithm version and saved-route geometry revision enter
+job identity to avoid reusing older calculations after a geometry backfill.
 
 | Module | Responsibility |
 | --- | --- |
 | `backend/core/api/` | API router registration, endpoint modules, and schemas |
 | `backend/core/weather.py` | Routing, sampling, arrival times, wind, summary |
+| `backend/core/geo.py`, `wind.py` | Pure geometry, local wind projection/integration and exposure distribution |
 | `backend/core/grid.py` | Provider fetching, cache lookup, source-aware extraction |
 | `backend/core/models.py` | Recurring routes and weather-cell persistence |
 | `backend/core/schedule.py` | Cron departures and forecast window |
-| `backend/core/tasks.py` | Geometry computation and forecast pre-warming |
+| `backend/core/tasks.py` | Every heavy operation: geometry, cells, job planning and assembly, scans |
+| `backend/core/jobs.py`, `claims.py` | Forecast-job lifecycle; in-flight cell claims |
+| `backend/core/consumers.py`, `routing.py` | WebSocket delivery of job progress |
 | `backend/core/api/recurring_route.py` | Saved-route CRUD and forecast assembly |
 | `backend/backend/settings/` | Shared, development, and production Django settings |
 | `backend/core/plotting.py`, `sections.py` | Plotly figures and condition groups |

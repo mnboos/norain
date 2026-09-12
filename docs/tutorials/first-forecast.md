@@ -66,16 +66,21 @@ uv run python manage.py runserver 127.0.0.1:8000
 Keep this terminal running. Open <http://127.0.0.1:8000/api/docs> to see the
 interactive API documentation. Migrations create the local database tables.
 
-## 3. Start the background worker
+## 3. Start the background workers
 
-In another terminal, starting at the repository root:
+Every forecast is computed by workers, so without them the app shows progress that never
+finishes. In another terminal, starting at the repository root:
 
 ```bash
 cd backend
-uv run python manage.py db_worker
+uv run python manage.py db_worker --queue-name cells &
+uv run python manage.py db_worker --queue-name forecasts &
+uv run python manage.py db_worker --queue-name default
 ```
 
-Keep this terminal running too. The worker computes the geometry of saved routes.
+Keep this terminal running too. They also need Redis; if you are not running the Compose
+stack, start one with `docker run -p 6379:6379 redis:7-alpine` and leave `REDIS_URL` at its
+default.
 
 ## 4. Start the frontend
 

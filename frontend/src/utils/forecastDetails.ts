@@ -1,4 +1,4 @@
-import type { EnsembleRange, RouteWeatherOut, RouteWeatherSummary, WeatherSample } from "@norain/api/models";
+import type { EnsembleRange, RouteForecastOut, RouteWeatherSummary, ForecastSampleOut } from "@norain/api/models";
 
 export function swissTime(iso: string): string {
     // Provider/route timestamps without an offset are already Swiss local time.
@@ -6,7 +6,7 @@ export function swissTime(iso: string): string {
     return new Date(iso).toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" });
 }
 
-export function forecastHeadline(summary: RouteWeatherSummary, samples: WeatherSample[]): string {
+export function forecastHeadline(summary: RouteWeatherSummary, samples: ForecastSampleOut[]): string {
     if (!samples.length) return "Keine Wetterdaten";
     const p = summary.rainProbability;
     if (p == null) return summary.willRain ? "Regen in der Einzelprognose" : "Kein Regen in der Einzelprognose";
@@ -19,7 +19,7 @@ export function forecastHeadline(summary: RouteWeatherSummary, samples: WeatherS
     return `Regen möglich${time}`;
 }
 
-export function peakRisk(forecast: RouteWeatherOut): string {
+export function peakRisk(forecast: RouteForecastOut): string {
     const p = forecast.summary.rainProbability;
     return p == null ? "Keine Wahrscheinlichkeitsdaten" : `${Math.round(p * 100)}%`;
 }

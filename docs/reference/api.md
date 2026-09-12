@@ -26,13 +26,17 @@ for current restrictions.
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/search` | Search Photon for places |
-| GET | `/api/route_weather` | Compute an ad-hoc route forecast |
+| GET | `/api/route_weather` | Start (or join) an ad-hoc route forecast; returns a job |
 | GET | `/api/routes` | List active saved routes, ordered by next departure |
 | POST | `/api/routes` | Create a saved route and enqueue geometry |
 | GET | `/api/routes/{route_id}` | Retrieve one route by UUID, including an inactive route |
 | PUT | `/api/routes/{route_id}` | Replace editable fields; enqueue geometry if coordinates/profile change |
 | DELETE | `/api/routes/{route_id}` | Delete route; return 204 without a body |
-| GET | `/api/routes/{route_id}/forecast` | Forecast a saved route for the supplied departure |
+| GET | `/api/routes/{route_id}/forecast` | Start (or join) a saved-route forecast; returns a job |
+| GET | `/api/forecast_jobs/{job_id}` | Poll one forecast job (WebSocket fallback) |
+| GET | `/api/forecast_jobs/{job_id}/figures` | Plotly chart figures of a finished job |
+| GET | `/api/forecast_jobs/{job_id}/map_detail?detail=medium\|full` | Route line and felt-wind arrows at more detail than the job result's |
+| GET | `/api/forecast_jobs/{job_id}/samples/{index}/uncertainty` | One sample's full ensemble spread, with the per-model breakdown |
 | GET | `/api/billing/entitlements` | Current tier, its limits, and how much of them is used |
 | POST | `/api/billing/checkout` | Start a Stripe Checkout session; returns a hosted URL |
 | POST | `/api/billing/portal` | Open the Stripe billing portal; returns a hosted URL |
@@ -78,7 +82,40 @@ Example from Bash; substitute a local date within the forecast window:
 curl --fail --get http://127.0.0.1:8000/api/route_weather   --data-urlencode 'start_lat=47.5200'   --data-urlencode 'start_lon=9.2600'   --data-urlencode 'dest_lat=47.5570'   --data-urlencode 'dest_lon=8.8980'   --data-urlencode 'profile=bike'   --data-urlencode 'departure_time=YYYY-MM-DDT08:00:00'
 ```
 
-This endpoint returns `RouteWeatherOut`; it does not save the route or include figures.
+This endpoint returns a `ForecastJobOut`, not weather. Forecasts are computed by background
+workers, so the response is a job envelope:
+
+```json
+{"job_id": "…", "status": "pending", "cells_settled": 0, "cells_total": 0,
+ "error": "", "result": null, "ws_url": "/ws/forecast/…/"}
+```
+
+`status` moves `pending` → `planning` → `fetching` → `assembling` → `done`, or `failed`.
+Once it is `done`, `result` holds a `RouteForecastOut` — the same payload the saved-route
+endpoint produces. Ad-hoc jobs do not save the route, so `route_id` is null.
+
+`result` is a slim view of what the job stores, so that each page downloads only what it
+draws. It leaves out three parts, each served by its own endpoint once the job is `done`
+(404 before that, and 404 for another account's job):
+
+| Left out of `result` | Fetch from |
+| --- | --- |
+| Plotly `figures` | `GET /api/forecast_jobs/{job_id}/figures` |
+| The full route line (`result.line` is simplified to ~50 m) | `GET /api/forecast_jobs/{job_id}/map_detail?detail=medium` (~10 m) or `detail=full` |
+| The wind segments (`result.wind_arrows` holds one arrow per ~2 km) | the same `map_detail` call: `wind_arrows` ~500 m apart for `medium`, every drawable segment for `full` |
+| Each sample's `uncertainty.models` and `requested_models` | `GET /api/forecast_jobs/{job_id}/samples/{index}/uncertainty` (`null` when the sample has no spread, which includes every sample of a free account) |
+
+Every line level keeps each sample's vertex exactly, so a sample's `lon`/`lat` can be found
+on any of them. `result` adds `job_id`, `version` (changes when the job is recomputed under
+the same id — include it in any cache key for the parts) and `uncertainty_partial` (true
+when some sample lacks the spread, a requested model or a metric median).
+
+A request whose identical forecast is already computed and still fresh returns **200** with
+`result` already populated; otherwise **202**.
+
+To follow a job, connect a WebSocket to `ws_url` — it emits the same object on every change
+and closes nothing else — or poll `GET /api/forecast_jobs/{job_id}`. A job owned by an
+account is only readable by that account; an ad-hoc job is guarded by its unguessable id.
 
 ## Saved-route input
 
@@ -107,8 +144,9 @@ readiness indicates stored sample points; it does not guarantee available weathe
 
 The saved forecast endpoint requires `date=YYYY-MM-DD` and `time=HH:MM` query
 parameters. The requested departure need not match the saved cron schedule.
-It returns the weather response plus `route_id`, `departure_time`, `figures`
-(temperature, precipitation, wind Plotly figures), and `sections`.
+It returns a job like the ad-hoc endpoint; its `result` adds `route_id`, `departure_time`
+and `sections`. The temperature, precipitation and wind Plotly figures come from
+`/api/forecast_jobs/{job_id}/figures`.
 
 ## Forecast response fields
 
@@ -116,7 +154,7 @@ It returns the weather response plus `route_id`, `departure_time`, `figures`
 
 | Field | Meaning |
 | --- | --- |
-| `line` | Full route coordinate arrays; first two components are longitude and latitude |
+| `line` | Route coordinates simplified to ~50 m (see above for finer levels); each is `[longitude, latitude]` |
 | `total_seconds`, `total_distance_m` | Estimated trip duration and distance |
 | `samples` | Weather at sampled locations and their arrival times; can be empty |
 | `summary` | Route-level rain and headwind summary |
@@ -132,9 +170,9 @@ Samples additionally expose optional `precipitation_interval_s` (seconds),
 `rain_rate_mm_h` (normalized intensity), `probability_source`, and `uncertainty`.
 The generated TypeScript client presents these as camelCase properties.
 
-`uncertainty` contains `metrics`, per-model `models`, `requested_models`,
-`forecast_time`, `fetched_at`, `source`, `precipitation_interval_s`, `pop`, and
-`rain_if_wet`. Metric dictionary keys are `precipitation`, `temperature`,
+In the job `result`, `uncertainty` contains `metrics`, `forecast_time`, `fetched_at`,
+`source`, `precipitation_interval_s`, `pop`, and `rain_if_wet`; the sample uncertainty
+endpoint adds per-model `models` and `requested_models`. Metric dictionary keys are `precipitation`, `temperature`,
 `windSpeed`, `windGust`, `headwind`, and `crosswind`. Each metric has
 `member_count` and nullable `p10`, `median`, and `p90`; fewer than two members
 produces null percentiles. Model entries carry `model`, `metrics`, `pop`, and
@@ -205,3 +243,53 @@ upstream API.
 Scoring stays in TypeScript so the glyph and the full route map cannot disagree about the
 same route. A sample point with no warm forecast cell is `null` — never an invented
 value — and the frontend paints it neutral grey.
+
+## Route-relative and felt wind
+
+Finished jobs store `wind_segments` (at most 500 chunks) and `summary.wind_distribution`.
+The job `result` and `map_detail` serve the segments as `wind_arrows`: only segments with
+full wind and felt coverage, known elapsed time, felt speed, felt angle and bearing, reduced
+to `lat`, `lon` (5 decimals), `bearing`, `felt_speed` and `felt_angle` (1 decimal each), and
+spaced along the route by detail level (see the table above). The full segment fields below
+are what the job stores and what the wind chart is drawn from. They use the original cached weather anchors; finer geometry
+does not trigger extra provider requests. These fields are available on both tiers.
+Older stored results may omit them: clients should treat arrows as `[]` and distribution
+as `null`. HTTP and WebSocket JSON keep snake_case; the generated client exposes camelCase.
+
+Each sample's `headwind` is now the distance-weighted mean over its section, bounded by
+distance midpoints to adjacent original samples. Positive is headwind, negative tailwind.
+`crosswind` is the mean of absolute local crosswind. `wind_coverage` is the section's known
+fraction (0..1); `sample_index` identifies the original anchor even when cells are missing.
+An isolated valid anchor may have a local point value with coverage 0. `max_headwind` is
+the maximum available section average, not instantaneous maximum exposure.
+
+Wind speed, direction, head/crosswind, thumbnail headwind and summary/section maxima may
+be null. North (0°), calm (0 km/h) and unavailable data are distinct. Missing wind does
+not discard otherwise usable rain/temperature data, but prevents a complete ride score.
+
+Segment fields:
+
+| Fields | Meaning |
+| --- | --- |
+| `start_m`, `end_m` | Bounds along reported route distance |
+| `lat`, `lon`, `elapsed_s` | Midpoint location and elapsed seconds; time can be null |
+| `bearing`, `rider_speed` | Local compass heading and routing-model speed in km/h |
+| `wind_speed`, `wind_dir` | Interpolated ground wind; direction is where wind comes from |
+| `headwind`, `crosswind` | Signed midpoint components; segment crosswind is positive from the right |
+| `felt_speed`, `felt_angle` | Apparent speed in km/h and angle relative to travel, positive right |
+| `wind_coverage`, `felt_coverage` | Fractions known within the whole chunk, independently of its midpoint |
+
+Midpoint wind/speed/angle values may be null. A zero apparent vector has no angle. Apparent
+wind uses forecast wind plus routing-model speed; it does not model local shelter or actual
+rider speed. Wind arrows and the felt chart conservatively omit partially covered chunks.
+
+Distribution fields `headwind_m`, `crosswind_m`, `tailwind_m`, `calm_m`, `unknown_m` sum to
+the reported distance. Classification happens locally using ground angle: head <45°,
+cross 45–135°, tail >135°. Ground speed below 0.1 km/h is calm. Missing original anchors
+create unknown intervals; the next available samples are never joined across that gap.
+Curves and out-and-back routes remain part of the distance totals.
+
+`mean_felt_speed` averages only locally available apparent speeds over `felt_covered_m`;
+`max_felt_speed` is the largest evaluated local value. Both are null without apparent data.
+`timing_source` is `routing`, `sample-interpolation` for legacy geometry, or `unavailable`.
+Display-chunk count and map zoom do not affect these route totals.

@@ -3,7 +3,11 @@
 /* eslint-disable */
 export * from './EnsembleModelStatistics';
 export * from './EnsembleRange';
+export * from './ForecastJobOut';
+export * from './ForecastMapDetailOut';
+export * from './ForecastSampleOut';
 export * from './ForecastUncertainty';
+export * from './ForecastUncertaintySummary';
 export * from './GeometrySchema';
 export * from './PlacesSearchResult';
 export * from './PropertiesSchema';
@@ -13,6 +17,6 @@ export * from './RouteForecastOut';
 export * from './RouteSection';
 export * from './RouteThumbnail';
 export * from './RouteThumbnailSample';
-export * from './RouteWeatherOut';
 export * from './RouteWeatherSummary';
-export * from './WeatherSample';
+export * from './WindArrow';
+export * from './WindDistribution';

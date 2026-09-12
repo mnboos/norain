@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { forecastHeadline, peakRisk, rangeText, swissTime } from "../forecastDetails";
-import { RouteWeatherOutFromJSON } from "@norain/api/models";
+import { RouteForecastOutFromJSON } from "@norain/api/models";
 
 const wireSample = {
     lat: 47.5,
@@ -20,14 +20,15 @@ const wireSample = {
     pop: 0.25,
     uncertainty: {
         metrics: { temperature: { member_count: 2, p10: 12, median: 15, p90: 18 } },
-        models: [],
-        requested_models: ["a"],
         forecast_time: "2026-09-10T12:00:00+02:00",
         fetched_at: "2026-09-10T09:00:00Z",
     },
 };
 function forecast(pop: number | null) {
-    return RouteWeatherOutFromJSON({
+    return RouteForecastOutFromJSON({
+        job_id: "00000000-0000-0000-0000-000000000001",
+        version: "2026-09-10T09:00:00+00:00",
+        departure_time: "2026-09-10T12:00",
         line: [],
         total_seconds: 0,
         total_distance_m: 0,

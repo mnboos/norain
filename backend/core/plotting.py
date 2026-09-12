@@ -1,5 +1,8 @@
 """Compact Plotly forecasts with ensemble spread and elapsed ride time."""
 
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 import plotly.graph_objects as go
 
 from .api.route_weather import RouteWeatherOut
@@ -75,7 +78,7 @@ def _ensemble_traces(fig, forecast, metric, name, label, color, unit, visible=Tr
     return True
 
 
-def generate_forecast_figures(forecast: RouteWeatherOut) -> list[dict]:
+def generate_forecast_figures(forecast: RouteWeatherOut, *, departure_time: str | None = None) -> list[dict]:
     """Three figures; customdata carries the sample index for map/detail selection."""
     figures = []
     x = [s.elapsed_s / 60 for s in forecast.samples]
@@ -125,6 +128,7 @@ def generate_forecast_figures(forecast: RouteWeatherOut) -> list[dict]:
                     ("windSpeed", [s.wind_speed for s in forecast.samples]),
                     ("windGust", [s.wind_gust for s in forecast.samples]),
                     ("headwind", [s.headwind for s in forecast.samples]),
+                    ("crosswind", [s.crosswind for s in forecast.samples]),
                 ]
             # The dotted single forecast joins its metric's legend group and color; it only gets
             # its own legend entry when there is no ensemble median to carry the group.
@@ -149,6 +153,26 @@ def generate_forecast_figures(forecast: RouteWeatherOut) -> list[dict]:
                 )
             # A lone series needs no legend - the chart title already names it.
             show_legend = len(metrics) > 1
+            if number == 2 and forecast.wind_segments:
+                departure = datetime.fromisoformat(departure_time) if departure_time else (
+                    datetime.fromisoformat(forecast.samples[0].eta) - timedelta(seconds=forecast.samples[0].elapsed_s)
+                )
+                fx, fy, fc = [], [], []
+                for segment in forecast.wind_segments:
+                    elapsed = segment.elapsed_s
+                    fx.append(elapsed / 60 if elapsed is not None else None)
+                    valid = segment.wind_coverage >= 1 - 1e-9 and segment.felt_coverage >= 1 - 1e-9
+                    fy.append(segment.felt_speed if valid else None)
+                    eta = departure + timedelta(seconds=elapsed) if elapsed is not None else None
+                    if eta is not None and eta.tzinfo is not None:
+                        eta = eta.astimezone(ZoneInfo("Europe/Zurich"))
+                    fc.append([None, eta.strftime("%H:%M") if eta is not None else "—"])
+                fig.add_trace(go.Scatter(
+                    x=fx, y=fy, customdata=fc, name="Gefühlt (geschätzt)", legendgroup="felt",
+                    mode="lines", line={"color": "#977521", "width": 2, "shape": "linear"},
+                    visible="legendonly", connectgaps=False,
+                    hovertemplate="%{customdata[1]} Uhr · %{y:.1f} km/h<extra>Gefühlter Wind (geschätzt)</extra>",
+                ))
             if number == 1 and any(s.pop is not None for s in forecast.samples):
                 show_legend = True
                 fig.add_trace(
@@ -203,7 +227,8 @@ def generate_forecast_figures(forecast: RouteWeatherOut) -> list[dict]:
             showlegend=show_legend,
             # The legend is anchored to the plot's top and grows upward: leave room for two rows (the
             # wind grid always, precipitation on narrow tiles) so it never runs into the title.
-            margin={"l": 45, "r": 40 if number == 1 else 12, "t": 82 if show_legend else 38, "b": 42},
+            margin={"l": 45, "r": 40 if number == 1 else 12,
+                    "t": 106 if number == 2 and forecast.wind_segments else 82 if show_legend else 38, "b": 42},
             xaxis={"title": {"text": "Fahrzeit (min)", "standoff": 4}, "zeroline": False},
             # Rain rate can't be negative: without this, an all-dry route autoranges to -1..1 mm/h
             # (and a spline dipping below 0 near a rain onset would be drawn as negative rain).

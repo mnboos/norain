@@ -11,7 +11,7 @@
  * colour from the ramp.
  */
 
-import type { WeatherSample } from "@norain/api/models";
+import type { ForecastSampleOut } from "@norain/api/models";
 
 /**
  * ColorBrewer Spectral-10, reversed: violet = good ride, dark red = bad.
@@ -49,12 +49,12 @@ export type RideFactor = "rain" | "wind" | "temp";
  * The subset of a sample the scorer actually reads.
  *
  * The route-list thumbnails ship only these five fields per point instead of a whole
- * `WeatherSample` (a list of routes would otherwise carry every forecast in full). Taking
+ * `ForecastSampleOut` (a list of routes would otherwise carry every forecast in full). Taking
  * the narrow type here lets both callers share one implementation - porting the curves
  * anywhere else would let the thumbnail and the map drift apart on the same route.
  */
 export type RideInput = Pick<
-    WeatherSample,
+    ForecastSampleOut,
     "rainMm" | "precipitationIntervalS" | "rainRateMmH" | "temp" | "headwind"
 >;
 
@@ -138,13 +138,12 @@ export function rainRateMmH(sample: RideInput): number | null {
 }
 
 /**
- * Combined ride quality for one sample, or `null` when the precipitation rate is unknown.
- * `temp`, `headwind` and `windSpeed` are non-nullable on the wire, so only rain can
- * knock out a sample.
+ * Combined ride quality, or null when rain or ground-relative headwind is unknown.
+ * Keep the wind curve ground-relative; apparent wind would need a different calibration.
  */
 export function rideScore(sample: RideInput): RideScore | null {
     const rate = rainRateMmH(sample);
-    if (rate == null) return null;
+    if (rate == null || sample.headwind == null || !Number.isFinite(sample.headwind)) return null;
 
     const rain = clamp01(piecewise(rate, RAIN_CURVE));
     const wind = clamp01(piecewise(sample.headwind, WIND_CURVE));
@@ -258,7 +257,7 @@ function normalizeStops(ps: number[]): number[] {
  */
 export function sampleProgress(
     line: readonly (readonly number[])[],
-    samples: readonly WeatherSample[],
+    samples: readonly ForecastSampleOut[],
     totalSeconds: number,
 ): number[] {
     const byTime = () => normalizeStops(samples.map(s => clamp01(s.elapsedS / (totalSeconds || 1))));

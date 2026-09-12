@@ -5,7 +5,11 @@ apis/index.ts
 index.ts
 models/EnsembleModelStatistics.ts
 models/EnsembleRange.ts
+models/ForecastJobOut.ts
+models/ForecastMapDetailOut.ts
+models/ForecastSampleOut.ts
 models/ForecastUncertainty.ts
+models/ForecastUncertaintySummary.ts
 models/GeometrySchema.ts
 models/PlacesSearchResult.ts
 models/PropertiesSchema.ts
@@ -15,8 +19,8 @@ models/RouteForecastOut.ts
 models/RouteSection.ts
 models/RouteThumbnail.ts
 models/RouteThumbnailSample.ts
-models/RouteWeatherOut.ts
 models/RouteWeatherSummary.ts
-models/WeatherSample.ts
+models/WindArrow.ts
+models/WindDistribution.ts
 models/index.ts
 runtime.ts

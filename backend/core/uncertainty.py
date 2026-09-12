@@ -6,6 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from .api.route_weather import EnsembleModelStatistics, EnsembleRange, ForecastUncertainty
+from .wind import WeightedDirection, normalize_wind, project_support, project_wind
 
 ENSEMBLE_VARIABLES = (
     "precipitation",
@@ -45,9 +46,11 @@ def _statistics(values: dict[str, list[float]]) -> dict:
 def extract_uncertainty(
     data: dict,
     eta: datetime,
-    travel_bearing: float,
+    travel_bearing: float | None,
     fetched_at: datetime,
     requested_models: list[str],
+    *,
+    wind_support: list[WeightedDirection] | None = None,
 ) -> ForecastUncertainty | None:
     hourly = data.get("hourly")
     if not isinstance(hourly, dict) or not hourly.get("time"):
@@ -86,10 +89,18 @@ def extract_uncertainty(
             ):
                 if variable in entry:
                     values[metric].append(entry[variable])
-            if "wind_speed_10m" in entry and "wind_direction_10m" in entry:
-                relative = math.radians(entry["wind_direction_10m"] - travel_bearing)
-                values["headwind"].append(entry["wind_speed_10m"] * math.cos(relative))
-                values["crosswind"].append(abs(entry["wind_speed_10m"] * math.sin(relative)))
+            wind = normalize_wind(entry.get("wind_speed_10m"), entry.get("wind_direction_10m"))
+            if wind is not None:
+                if wind_support is not None:
+                    head, cross = project_support(wind, wind_support)
+                elif travel_bearing is not None:
+                    head, cross = project_wind(wind, travel_bearing)
+                    cross = abs(cross)
+                else:
+                    head, cross = None, None
+                if head is not None:
+                    values["headwind"].append(head)
+                    values["crosswind"].append(cross)
         models.append(EnsembleModelStatistics(model=model, **_statistics(values)))
         for metric in METRICS:
             pooled[metric].extend(values[metric])

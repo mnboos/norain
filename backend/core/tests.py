@@ -1,19 +1,26 @@
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import stripe
 from asgiref.sync import async_to_sync
+from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.tokens import default_token_generator
 from django.core import mail
-from django.test import Client, SimpleTestCase, TestCase, override_settings
+from django.core.cache import cache
+from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils.http import urlsafe_base64_encode
 
+from backend.asgi import application
 from core.api.route_weather import ForecastUncertainty, RouteWeatherOut, RouteWeatherSummary, WeatherSample
 from core.auth.tokens import email_verification_token_generator
+from core.claims import claim_cell
 from core.entitlements import FREE, PRO, entitlements_for_sync, strip_uncertainty
+from core.geo import bearing_deg as _bearing_deg
 from core.grid import (
     _ensemble_at,
     _from_open_meteo,
@@ -23,9 +30,11 @@ from core.grid import (
     _nearest_index,
     extract_sample,
 )
+from core.jobs import MAX_PLAN_ATTEMPTS, forecast_view, job_key, job_snapshot, publish
 from core.models import (
     EnsembleCell,
     ForecastCell,
+    ForecastJob,
     Plan,
     ProcessedStripeEvent,
     RecurringRoute,
@@ -33,17 +42,27 @@ from core.models import (
     route_line,
     route_point,
 )
-from core.schedule import next_departure
-from core.tasks import _known_samples, _prewarm_routes, _refresh_route_thumbnail_async
+from core.schedule import LOCAL_TZ, local_today, next_departure, upcoming_departures
+from core.tasks import (
+    _assemble_forecast_job_async,
+    _known_samples,
+    _plan_forecast_job_async,
+    _prewarm_routes,
+    _refresh_ensemble_cell_async,
+    _refresh_forecast_cell_async,
+    _refresh_route_thumbnail_async,
+    _scan_route_forecasts_async,
+    _settle_cell,
+)
 from core.thumbnails import MAX_THUMBNAIL_VERTICES, compute_route_thumbnail, simplify_path
 from core.weather import (
-    _bearing_deg,
     _cumulative_times_s,
     _forecast_days,
     _sample_indices,
     _summarize,
-    _wind_components,
+    forecast_days_for,
 )
+from core.wind import wind_components as _wind_components
 
 
 class GeometryTests(SimpleTestCase):
@@ -336,7 +355,7 @@ class OwmExtractTests(SimpleTestCase):
         data = self._owm_data(
             [
                 {
-                    "dt": int(datetime(2026, 6, 20, 13, 0).timestamp()),
+                    "dt": int(datetime(2026, 6, 20, 13, 0, tzinfo=LOCAL_TZ).timestamp()),
                     "temp": 18.0,
                     "wind_speed": 2.0,  # m/s
                     "wind_deg": 270,
@@ -344,7 +363,7 @@ class OwmExtractTests(SimpleTestCase):
                     "pop": 0.3,
                 },
                 {
-                    "dt": int(datetime(2026, 6, 20, 14, 0).timestamp()),
+                    "dt": int(datetime(2026, 6, 20, 14, 0, tzinfo=LOCAL_TZ).timestamp()),
                     "temp": 19.0,
                     "wind_speed": 3.0,
                     "wind_deg": 180,
@@ -430,11 +449,11 @@ class OwmExtractTests(SimpleTestCase):
 
     def test_empty_hourly_list(self):
         """Empty hourly list returns None."""
-        self.assertIsNone(_from_owm(self._owm_data([]), datetime.now()))
+        self.assertIsNone(_from_owm(self._owm_data([]), datetime.now(tz=LOCAL_TZ)))
 
     def test_hourly_missing_key(self):
         """No 'hourly' key at all returns None."""
-        self.assertIsNone(_from_owm({}, datetime.now()))
+        self.assertIsNone(_from_owm({}, datetime.now(tz=LOCAL_TZ)))
 
     def test_extract_sample_routes_to_owm(self):
         """extract_sample with source='openweathermap' uses OWM parser."""
@@ -500,14 +519,14 @@ class ForecastDaysTests(SimpleTestCase):
     def test_window_sized_from_today_not_departure(self):
         today = date(2026, 6, 16)
         # a same-day trip still needs 2 days; a pick 5 days out needs 7
-        self.assertEqual(_forecast_days(datetime(2026, 6, 16, 14, 0), today), 2)
-        self.assertEqual(_forecast_days(datetime(2026, 6, 21, 14, 0), today), 7)
+        self.assertEqual(_forecast_days(datetime(2026, 6, 16, 14, 0, tzinfo=LOCAL_TZ), today), 2)
+        self.assertEqual(_forecast_days(datetime(2026, 6, 21, 14, 0, tzinfo=LOCAL_TZ), today), 7)
 
     def test_clamped_to_open_meteo_limits(self):
         today = date(2026, 6, 16)
         # far future clamps to 16; a past eta floors to 1
-        self.assertEqual(_forecast_days(datetime(2026, 12, 31, 0, 0), today), 16)
-        self.assertEqual(_forecast_days(datetime(2026, 6, 10, 0, 0), today), 1)
+        self.assertEqual(_forecast_days(datetime(2026, 12, 31, 0, 0, tzinfo=LOCAL_TZ), today), 16)
+        self.assertEqual(_forecast_days(datetime(2026, 6, 10, 0, 0, tzinfo=LOCAL_TZ), today), 1)
 
 
 class PlottingTests(SimpleTestCase):
@@ -749,7 +768,7 @@ class AuthApiTests(TestCase):
 
     def test_login_accepts_either_email_or_username(self):
         User = get_user_model()
-        user = User.objects.create_user(
+        User.objects.create_user(
             username="Velofahrer", email="rider@example.test", password=self.password, email_verified=True
         )
 
@@ -856,7 +875,9 @@ class AuthApiTests(TestCase):
             "scheduleCron": "0 8 * * 1",
             "scheduleDescription": "Monday at 08:00",
         }
-        with patch("core.api.recurring_route.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())):
+        # Patched at the definition site: recurring_route imports the task inside the
+        # handler (to break a module-level import cycle), so it resolves at call time.
+        with patch("core.tasks.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())):
             response = self.post_json("/api/routes", data)
         self.assertEqual(response.status_code, 200)
         created = RecurringRoute.objects.get(id=response.json()["id"])
@@ -1010,7 +1031,10 @@ class RouteThumbnailTests(TestCase):
 
     def _compute(self):
         forecast_patch, ensemble_patch = self._no_network()
-        with forecast_patch, ensemble_patch:
+        # The thumbnail may read station readings but must never fetch them either.
+        with forecast_patch, ensemble_patch, patch(
+            "core.stations._fetch_nearby", AsyncMock(side_effect=AssertionError("fetched!"))
+        ), patch("core.stations._fetch_observation", AsyncMock(side_effect=AssertionError("fetched!"))):
             return async_to_sync(compute_route_thumbnail)(self.route)
 
     def test_warm_cells_produce_scoreable_samples_without_fetching(self):
@@ -1171,7 +1195,7 @@ class EntitlementTests(TestCase):
             "scheduleCron": "0 8 * * 1",
             "scheduleDescription": "Monday at 08:00",
         }
-        with patch("core.api.recurring_route.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())):
+        with patch("core.tasks.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())):
             return self.client.post(
                 "/api/routes", data=json.dumps(data), content_type="application/json", **self.csrf_headers()
             )
@@ -1442,3 +1466,775 @@ class BillingEndpointTests(TestCase):
             HTTP_X_CSRFTOKEN=self.client.cookies["csrftoken"].value,
         )
         self.assertEqual(response.status_code, 503)
+
+
+def _sample_with_uncertainty() -> WeatherSample:
+    """A sample carrying both the gated spread and the ungated probability."""
+    return WeatherSample(
+        lat=47.0,
+        lon=9.0,
+        elapsed_s=0,
+        eta="2026-09-14T08:00:00",
+        rain_mm=0.0,
+        temp=15.0,
+        wind_speed=10.0,
+        wind_dir=90.0,
+        headwind=5.0,
+        crosswind=1.0,
+        weather_desc="klar",
+        pop=0.3,
+        rain_if_wet=1.2,
+        uncertainty=ForecastUncertainty(
+            metrics={},
+            models=[],
+            requested_models=[],
+            forecast_time="2026-09-14T08:00:00",
+            fetched_at="2026-09-14T06:00:00",
+        ),
+    )
+
+
+def _finished_payload() -> dict:
+    """A minimal but complete stored result, as assemble_forecast_job would write it."""
+    return {
+        "line": [[9.0, 47.0]],
+        "total_seconds": 600,
+        "total_distance_m": 1500.0,
+        "samples": [],
+        "summary": {
+            "will_rain": False,
+            "max_rain_mm": 0.0,
+            "rain_amount": 0.0,
+            "max_headwind": 0.0,
+            "source": "open-meteo",
+        },
+        "departure_time": "2026-09-14T08:00",
+        "figures": [],
+        "sections": [],
+    }
+
+
+LOCMEM_CACHE = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+INMEM_CHANNELS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+
+@override_settings(CACHES=LOCMEM_CACHE, CHANNEL_LAYERS=INMEM_CHANNELS)
+class ForecastJobTests(TestCase):
+    """The forecast endpoints must enqueue work, never do it."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = get_user_model().objects.create_user(
+            username="rider", email="rider@example.com", password="pw", email_verified=True
+        )
+        self.departure = next_departure("0 8 * * *")
+        # Two sample points inside one ~1 km² cell plus one in another: three samples,
+        # two distinct cells.
+        self.sample_points = [
+            {"lat": 47.000, "lon": 9.000, "lat_r": 47.0, "lon_r": 9.0, "elapsed_s": 0, "idx": 0},
+            {"lat": 47.002, "lon": 9.002, "lat_r": 47.0, "lon_r": 9.0, "elapsed_s": 300, "idx": 1},
+            {"lat": 47.010, "lon": 9.010, "lat_r": 47.01, "lon_r": 9.01, "elapsed_s": 600, "idx": 2},
+        ]
+        self.route = RecurringRoute.objects.create(
+            owner=self.user,
+            name="Commute",
+            start_point=route_point(47.0, 9.0),
+            start_name="Start",
+            destination_point=route_point(47.01, 9.01),
+            dest_name="Destination",
+            schedule_cron="0 8 * * *",
+            schedule_description="Daily at 08:00",
+            polyline=route_line([[sp["lon"], sp["lat"]] for sp in self.sample_points]),
+            sample_points=self.sample_points,
+            total_seconds=600,
+            total_distance_m=1500.0,
+        )
+        self.client = Client(enforce_csrf_checks=True)
+        self.client.force_login(self.user)
+
+    def _job_params(self):
+        return {
+            "route_id": str(self.route.id),
+            "departure_time": f"{self.departure.date().isoformat()}T08:00",
+            "geometry_revision": self.route.geometry_fetched_at.isoformat() if self.route.geometry_fetched_at else None,
+        }
+
+    def _make_job(self, **overrides):
+        params = self._job_params()
+        fields = {
+            "key": job_key(ForecastJob.Kind.ROUTE, self.user.id, params),
+            "kind": ForecastJob.Kind.ROUTE,
+            "owner": self.user,
+            "params": params,
+        }
+        fields.update(overrides)
+        return ForecastJob.objects.create(**fields)
+
+    # -- the endpoints do no work -------------------------------------------------
+
+    def test_route_forecast_enqueues_instead_of_fetching(self):
+        """The saved-route endpoint must return a job, not spend a provider request."""
+        forecast_patch, ensemble_patch = RouteThumbnailTests._no_network()
+        with forecast_patch, ensemble_patch, patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
+            response = self.client.get(
+                f"/api/routes/{self.route.id}/forecast",
+                {"date": self.departure.date().isoformat(), "time": "08:00"},
+            )
+        self.assertEqual(response.status_code, 202)
+        # Wire format is snake_case like the rest of the ninja API; the generated
+        # TypeScript client is what turns it into camelCase.
+        body = response.json()
+        self.assertIn("job_id", body)
+        self.assertEqual(body["status"], ForecastJob.Status.PENDING)
+        self.assertEqual(body["ws_url"], f"/ws/forecast/{body['job_id']}/")
+
+    def test_route_weather_enqueues_instead_of_routing(self):
+        """The ad-hoc endpoint must not call GraphHopper on the request path either."""
+        with patch("core.weather._fetch_route", AsyncMock(side_effect=AssertionError("routed!"))), patch(
+            "core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())
+        ):
+            response = self.client.get(
+                "/api/route_weather",
+                {
+                    "start_lat": 47.0, "start_lon": 9.0,
+                    "dest_lat": 47.01, "dest_lon": 9.01,
+                    "profile": "bike",
+                    "departure_time": f"{self.departure.date().isoformat()}T08:00",
+                },
+            )
+        self.assertEqual(response.status_code, 202)
+
+    def test_finished_job_is_served_directly(self):
+        """An identical request inside the cell lifetime reuses the stored payload."""
+        self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
+        enqueue = AsyncMock()
+        with patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=enqueue)):
+            response = self.client.get(
+                f"/api/routes/{self.route.id}/forecast",
+                {"date": self.departure.date().isoformat(), "time": "08:00"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], ForecastJob.Status.DONE)
+        enqueue.assert_not_awaited()
+
+    def test_backfilled_geometry_gets_a_new_job(self):
+        self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
+        self.route.geometry_fetched_at = datetime.now(tz=UTC)
+        self.route.save(update_fields=["geometry_fetched_at"])
+        with patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
+            response = self.client.get(f"/api/routes/{self.route.id}/forecast",
+                                       {"date": self.departure.date().isoformat(), "time": "08:00"})
+        self.assertEqual(response.status_code, 202)
+
+    def test_times_survive_geometry_storage_and_job_snapshot(self):
+        from core.tasks import _job_geometry, _refresh_route_geometry_async
+        times = [0.0, 300.125, 600.75]
+        geometry = {"polyline": self.route.polyline_coordinates, "sample_points": self.sample_points,
+                    "vertex_times": times, "total_seconds": 600, "total_distance_m": 1500}
+        with patch("core.tasks.build_geometry", AsyncMock(return_value=geometry)), patch(
+            "core.tasks.refresh_route_thumbnail", SimpleNamespace(aenqueue=AsyncMock())
+        ):
+            async_to_sync(_refresh_route_geometry_async)(str(self.route.id))
+        self.route.refresh_from_db()
+        self.assertEqual(self.route.vertex_times, times)
+        job = self._make_job()
+        snapshot = async_to_sync(_job_geometry)(job)
+        self.assertEqual(snapshot["vertex_times"], times)
+        job.geometry = snapshot
+        job.save(update_fields=["geometry"])
+        job.refresh_from_db()
+        self.assertEqual(job.geometry["vertex_times"], times)
+        with patch("core.tasks.build_geometry", AsyncMock()) as fetch:
+            async_to_sync(_refresh_route_geometry_async)(str(self.route.id), backfill_only=True)
+        fetch.assert_not_awaited()
+
+    def test_backfill_is_dry_by_default_and_only_selects_missing_times(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+        with patch("core.management.commands.backfill_route_vertex_times.refresh_route_geometry") as refresh:
+            out = StringIO()
+            call_command("backfill_route_vertex_times", route_id=self.route.id, stdout=out)
+            refresh.enqueue.assert_not_called()
+            self.assertIn("Matched: 1", out.getvalue())
+            call_command("backfill_route_vertex_times", route_id=self.route.id, enqueue=True, stdout=StringIO())
+            refresh.enqueue.assert_called_once_with(str(self.route.id), backfill_only=True)
+            self.route.vertex_times = [0, 300, 600]
+            self.route.save(update_fields=["vertex_times"])
+            out = StringIO()
+            call_command("backfill_route_vertex_times", route_id=self.route.id, enqueue=True, stdout=out)
+            self.assertIn("Matched: 0", out.getvalue())
+
+    def test_actual_assembly_uses_warm_cells_without_fetching(self):
+        from core.weather import compute_route_weather
+        times = [0.0, 300.125, 600.75]
+        geometry = {"polyline": self.route.polyline_coordinates, "sample_points": self.sample_points,
+                    "vertex_times": times, "total_seconds": 600, "total_distance_m": 1500}
+        dep = datetime.fromisoformat(self._job_params()["departure_time"])
+        for lat, lon in ((47.0, 9.0), (47.01, 9.01)):
+            ForecastCell.objects.create(lat_r=lat, lon_r=lon, day_key=dep.date(), source="open-meteo", forecast_days=16,
+                                        data={"hourly": {"time": [dep.isoformat()], "temperature_2m": [18],
+                                                         "wind_speed_10m": [12], "wind_direction_10m": [90]}})
+        job = self._make_job(status=ForecastJob.Status.ASSEMBLING, geometry=geometry)
+        with patch("core.weather.get_or_fetch_forecast_cell", AsyncMock(side_effect=AssertionError("provider fetch"))) as fetch, patch(
+            "core.weather.get_or_fetch_ensemble_cell", AsyncMock(side_effect=AssertionError("ensemble fetch"))
+        ) as ensemble:
+            async_to_sync(_assemble_forecast_job_async)(str(job.id))
+            kwargs = dict(start_lat=0, start_lon=0, dest_lat=0, dest_lon=0, profile="bike", departure_time=dep.isoformat(),
+                          cache_only=True, **geometry)
+            plain = async_to_sync(compute_route_weather)(**kwargs, include_segments=False)
+            with patch("core.weather.build_geometry", AsyncMock(return_value=geometry)):
+                adhoc = async_to_sync(compute_route_weather)(start_lat=0, start_lon=0, dest_lat=0, dest_lon=0,
+                                                           profile="bike", departure_time=dep.isoformat(), cache_only=True)
+            fetch.assert_not_awaited()
+            ensemble.assert_not_awaited()
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.DONE, job.error)
+        self.assertTrue(job.result["wind_segments"])
+        self.assertEqual(job.result["summary"]["wind_distribution"]["timing_source"], "routing")
+        self.assertEqual(job.result["wind_segments"], [s.model_dump(mode="json") for s in adhoc.wind_segments])
+        self.assertEqual([s.headwind for s in plain.samples], [s["headwind"] for s in job.result["samples"]])
+        self.assertEqual(plain.wind_segments, [])
+
+    def test_another_account_cannot_read_a_job(self):
+        """Job ids are capabilities for ad-hoc runs, but an owned job stays private."""
+        job = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
+        other = get_user_model().objects.create_user(
+            username="other", email="other@example.com", password="pw", email_verified=True
+        )
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(other)
+        self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}").status_code, 404)
+
+    # -- planning fans out one task per distinct cell ------------------------------
+
+    def test_planning_deduplicates_cells(self):
+        """Two sample points in one cell must produce one fetch, not two."""
+        job = self._make_job()
+        forecast_enqueue, ensemble_enqueue = AsyncMock(), AsyncMock()
+        with patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)), patch(
+            "core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble_enqueue)
+        ), patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
+            async_to_sync(_plan_forecast_job_async)(str(job.id))
+
+        # Three sample points, two distinct cells, one deterministic + one ensemble each.
+        self.assertEqual(forecast_enqueue.await_count, 2)
+        self.assertEqual(ensemble_enqueue.await_count, 2)
+        job.refresh_from_db()
+        self.assertEqual(job.cells_total, 4)
+        self.assertEqual(job.status, ForecastJob.Status.FETCHING)
+
+    def test_scan_skips_cells_another_pass_already_claimed(self):
+        """The claim is what stops one cell being enqueued once per sample point."""
+        # The scan looks at the next three departures, each its own day_key.
+        today = local_today()
+        for dep in upcoming_departures(self.route.schedule_cron, count=3, after=datetime.now(tz=UTC)):
+            day_key = dep.date().isoformat()
+            days = forecast_days_for(dep, self.sample_points, today)
+            for lat_r, lon_r in ((47.0, 9.0), (47.01, 9.01)):
+                for kind in ("forecast", "ensemble"):
+                    claim_cell(kind, lat_r, lon_r, day_key, days)
+
+        forecast_enqueue, ensemble_enqueue = AsyncMock(), AsyncMock()
+        with patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)), patch(
+            "core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble_enqueue)
+        ), patch(
+            "core.tasks.refresh_route_thumbnail",
+            SimpleNamespace(using=lambda **kw: SimpleNamespace(aenqueue=AsyncMock())),
+        ):
+            async_to_sync(_scan_route_forecasts_async)(str(self.route.id))
+
+        forecast_enqueue.assert_not_awaited()
+        ensemble_enqueue.assert_not_awaited()
+
+    def test_planning_enqueues_claimed_cells_anyway(self):
+        """A job must hear about every cell it needs, even one the scan is fetching.
+
+        The claim holder is usually the pre-warm scan, whose task carries no job_id, so
+        skipping the enqueue here would leave the job's counter short -- or, worse, let it
+        assemble before the data landed.
+        """
+        job = self._make_job()
+        day_key = self.departure.date().isoformat()
+        days = forecast_days_for(
+            datetime.fromisoformat(job.params["departure_time"]),
+            self.sample_points,
+            local_today(),
+        )
+        for lat_r, lon_r in ((47.0, 9.0), (47.01, 9.01)):
+            self.assertTrue(claim_cell("forecast", lat_r, lon_r, day_key, days))
+
+        forecast_enqueue = AsyncMock()
+        with patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)), patch(
+            "core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=AsyncMock())
+        ), patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
+            async_to_sync(_plan_forecast_job_async)(str(job.id))
+
+        self.assertEqual(forecast_enqueue.await_count, 2)
+
+    def test_missing_geometry_gives_up_eventually(self):
+        """A route whose geometry never arrives must fail, not re-defer forever."""
+        self.route.sample_points = None
+        self.route.save(update_fields=["sample_points"])
+        job = self._make_job(attempts=MAX_PLAN_ATTEMPTS - 1)
+        with patch("core.tasks.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())), patch(
+            "core.tasks.plan_forecast_job", SimpleNamespace(using=lambda **kw: SimpleNamespace(aenqueue=AsyncMock()))
+        ):
+            async_to_sync(_plan_forecast_job_async)(str(job.id))
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.FAILED)
+        self.assertTrue(job.error)
+
+    # -- the handoff to assembly --------------------------------------------------
+
+    def test_assembly_is_enqueued_exactly_once(self):
+        """Parallel cell workers finishing together must not assemble the job twice."""
+        job = self._make_job(status=ForecastJob.Status.FETCHING, cells_total=2)
+        enqueue = AsyncMock()
+        with patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=enqueue)):
+            async_to_sync(_settle_cell)(str(job.id))
+            self.assertEqual(enqueue.await_count, 0)  # one of two cells done
+            async_to_sync(_settle_cell)(str(job.id))
+            self.assertEqual(enqueue.await_count, 1)
+            # A late duplicate settle must neither start a second assembly nor report
+            # more finished cells than the job has.
+            async_to_sync(_settle_cell)(str(job.id))
+            self.assertEqual(enqueue.await_count, 1)
+        job.refresh_from_db()
+        self.assertEqual(job.cells_settled, job.cells_total)
+
+    def test_failed_cell_still_settles_and_releases_its_claim(self):
+        """A cell both providers refuse must not strand the job or block retries."""
+        job = self._make_job(status=ForecastJob.Status.FETCHING, cells_total=1)
+        day_key = self.departure.date().isoformat()
+        self.assertTrue(claim_cell("forecast", 47.0, 9.0, day_key, 2))
+
+        with patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())), patch(
+            "core.grid.get_or_fetch_forecast_cell", AsyncMock(return_value=None)
+        ):
+            async_to_sync(_refresh_forecast_cell_async)(47.0, 9.0, day_key, 2, str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual(job.cells_settled, 1)
+        self.assertEqual(job.cells_failed, 1)
+        # Released, so the next scan can try this cell again.
+        self.assertTrue(claim_cell("forecast", 47.0, 9.0, day_key, 2))
+
+    def test_rate_limited_ensemble_cell_counts_as_failed_but_a_stored_one_does_not(self):
+        job = self._make_job(status=ForecastJob.Status.FETCHING, cells_total=3)
+        day_key = self.departure.date().isoformat()
+        with patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
+            with patch("core.grid.get_or_fetch_ensemble_cell", AsyncMock(return_value=None)):
+                async_to_sync(_refresh_ensemble_cell_async)(47.0, 9.0, day_key, 2, str(job.id))
+            with patch("core.grid.get_or_fetch_ensemble_cell", AsyncMock(return_value=SimpleNamespace())):
+                async_to_sync(_refresh_ensemble_cell_async)(47.0, 9.01, day_key, 2, str(job.id))
+            with patch(
+                "core.grid.get_or_fetch_ensemble_cell", AsyncMock(side_effect=RuntimeError("boom"))
+            ), self.assertRaises(RuntimeError):
+                async_to_sync(_refresh_ensemble_cell_async)(47.0, 9.02, day_key, 2, str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual((job.cells_settled, job.cells_failed), (3, 2))
+
+    def test_finished_job_with_failed_cells_is_only_reused_briefly(self):
+        """A burst of 429s must not hide the missing data for the whole cell lifetime."""
+        from core.jobs import INCOMPLETE_JOB_LIFETIME, get_or_start_job
+
+        params = self._job_params()
+        complete = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
+        ForecastJob.objects.filter(id=complete.id).update(updated_at=datetime.now(tz=UTC) - timedelta(hours=1))
+        needs_planning = async_to_sync(get_or_start_job)(ForecastJob.Kind.ROUTE, self.user, params)[1]
+        self.assertFalse(needs_planning, "a complete job lives for MAX_CELL_AGE")
+
+        ForecastJob.objects.filter(id=complete.id).update(
+            cells_failed=3, updated_at=datetime.now(tz=UTC) - INCOMPLETE_JOB_LIFETIME / 2
+        )
+        needs_planning = async_to_sync(get_or_start_job)(ForecastJob.Kind.ROUTE, self.user, params)[1]
+        self.assertFalse(needs_planning, "an incomplete job is still reused for a moment")
+
+        ForecastJob.objects.filter(id=complete.id).update(
+            updated_at=datetime.now(tz=UTC) - INCOMPLETE_JOB_LIFETIME - timedelta(seconds=1)
+        )
+        job, needs_planning = async_to_sync(get_or_start_job)(ForecastJob.Kind.ROUTE, self.user, params)
+        self.assertTrue(needs_planning)
+        job.refresh_from_db()
+        self.assertEqual((job.status, job.cells_failed), (ForecastJob.Status.PENDING, 0))
+
+    def test_broken_assembly_marks_the_job_failed_and_reraises(self):
+        """The watcher must hear about it, and the worker must still see the traceback."""
+        job = self._make_job(status=ForecastJob.Status.ASSEMBLING)
+        with patch("core.weather.compute_route_weather", AsyncMock(side_effect=KeyError("samples"))), self.assertRaises(
+            KeyError
+        ):
+            async_to_sync(_assemble_forecast_job_async)(str(job.id))
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.FAILED)
+        self.assertIsNone(job.result)
+
+    def test_routing_failure_fails_planning(self):
+        job = self._make_job()
+        with patch("core.tasks._job_geometry", AsyncMock(side_effect=httpx.ConnectError("graphhopper down"))):
+            async_to_sync(_plan_forecast_job_async)(str(job.id))
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.FAILED)
+
+    def test_empty_assembly_fails_rather_than_reporting_no_weather(self):
+        """A forecast with no samples must never be served as a finished one."""
+        job = self._make_job(status=ForecastJob.Status.ASSEMBLING, cells_total=4)
+        job.geometry = {
+            "polyline": [[sp["lon"], sp["lat"]] for sp in self.sample_points],
+            "sample_points": self.sample_points,
+            "total_seconds": 600,
+            "total_distance_m": 1500.0,
+        }
+        job.save(update_fields=["geometry"])
+
+        empty = RouteWeatherOut(
+            line=[[9.0, 47.0]],
+            total_seconds=600,
+            total_distance_m=1500.0,
+            samples=[],
+            summary=RouteWeatherSummary(
+                will_rain=False, max_rain_mm=0.0, rain_amount=0.0, max_headwind=0.0, source="open-meteo"
+            ),
+        )
+        with patch("core.weather.compute_route_weather", AsyncMock(return_value=empty)):
+            async_to_sync(_assemble_forecast_job_async)(str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.FAILED)
+        self.assertIsNone(job.result)
+
+    # -- entitlements --------------------------------------------------------------
+
+    def test_assembly_strips_spread_for_free_accounts(self):
+        """The stored payload is what the socket pushes, so it must already be stripped."""
+        job = self._make_job(status=ForecastJob.Status.ASSEMBLING)
+        job.geometry = {
+            "polyline": [[sp["lon"], sp["lat"]] for sp in self.sample_points],
+            "sample_points": self.sample_points,
+            "total_seconds": 600,
+            "total_distance_m": 1500.0,
+        }
+        job.save(update_fields=["geometry"])
+
+        sample = _sample_with_uncertainty()
+        forecast = RouteWeatherOut(
+            line=[[9.0, 47.0]],
+            total_seconds=600,
+            total_distance_m=1500.0,
+            samples=[sample],
+            summary=RouteWeatherSummary(
+                will_rain=False, max_rain_mm=0.0, rain_amount=0.0, max_headwind=0.0, source="open-meteo"
+            ),
+        )
+        with patch("core.weather.compute_route_weather", AsyncMock(return_value=forecast)), patch(
+            "core.plotting.generate_forecast_figures", return_value=[]
+        ):
+            async_to_sync(_assemble_forecast_job_async)(str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.DONE)
+        stored = job.result["samples"][0]
+        self.assertIsNone(stored["uncertainty"], "free tier must not receive the ensemble spread")
+        # pop and rainIfWet are deliberately not gated: the cells are shared and pre-warmed.
+        self.assertIsNotNone(stored["pop"])
+
+
+def _uncertainty(models=("icon_seamless_eps", "gfs025"), missing_median=None) -> dict:
+    metrics = {
+        name: {"member_count": 10, "p10": 1.0, "median": None if name == missing_median else 2.0, "p90": 3.0}
+        for name in ("precipitation", "temperature", "windSpeed", "windGust", "headwind", "crosswind")
+    }
+    return {
+        "metrics": metrics,
+        "pop": 0.2,
+        "rain_if_wet": 0.5,
+        "models": [{"model": name, "metrics": metrics, "pop": 0.2, "rain_if_wet": 0.5} for name in models],
+        "requested_models": ["icon_seamless_eps", "gfs025"],
+        "forecast_time": "2026-09-14T08:00:00+02:00",
+        "fetched_at": "2026-09-14T06:00:00+00:00",
+        "source": "open-meteo-ensemble",
+        "precipitation_interval_s": 3600,
+    }
+
+
+def _long_payload(vertices: int = 2000, every: int = 150) -> dict:
+    """A stored result with a long zig-zag line and a sample on every ``every``-th vertex."""
+    # Zig-zag by ~1 m, well under the coarse tolerance, so simplification has work to do.
+    line = [[9.0 + i / 10_000, 47.0 + (i % 2) / 100_000] for i in range(vertices)]
+    samples = [
+        {
+            "lat": line[i][1], "lon": line[i][0], "elapsed_s": i, "eta": "2026-09-14T08:00",
+            "rain_mm": 0.0, "temp": 15.0, "weather_desc": "Klar", "uncertainty": _uncertainty(),
+        }
+        for i in range(0, vertices, every)
+    ]
+    return {
+        **_finished_payload(),
+        "line": line,
+        "samples": samples,
+        "figures": [{"data": [], "layout": {}}],
+        "wind_segments": _wind_segments(10_000),
+    }
+
+
+def _wind_segment(start_m: float, **overrides) -> dict:
+    segment = {
+        "start_m": start_m, "end_m": start_m + 100, "lat": 47.123456789, "lon": 9.0 + start_m / 100_000,
+        "elapsed_s": start_m / 5, "bearing": 90.04, "rider_speed": 18.0, "wind_speed": 12.0,
+        "wind_dir": 270.0, "headwind": -10.0, "crosswind": 1.0, "felt_speed": 8.26, "felt_angle": -12.34,
+        "wind_coverage": 1.0, "felt_coverage": 1.0,
+    }
+    return {**segment, **overrides}
+
+
+def _wind_segments(length_m: int) -> list[dict]:
+    """One complete segment per 100 m."""
+    return [_wind_segment(float(start)) for start in range(0, length_m, 100)]
+
+
+@override_settings(CACHES=LOCMEM_CACHE, CHANNEL_LAYERS=INMEM_CHANNELS)
+class ForecastViewTests(TestCase):
+    """The job result goes out slim; pages fetch the parts they draw on their own."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="viewer", email="viewer@example.com", password="pw", email_verified=True
+        )
+        self.client = Client(enforce_csrf_checks=True)
+        self.client.force_login(self.user)
+
+    def _job(self, result=None, **overrides):
+        params = {"route_id": "x", "departure_time": "2026-09-14T08:00"}
+        fields = {
+            "key": job_key(ForecastJob.Kind.ROUTE, self.user.id, params),
+            "kind": ForecastJob.Kind.ROUTE,
+            "owner": self.user,
+            "params": params,
+            "status": ForecastJob.Status.DONE,
+            "result": _long_payload() if result is None else result,
+        }
+        fields.update(overrides)
+        return ForecastJob.objects.create(**fields)
+
+    def test_view_drops_figures_and_model_breakdown_but_keeps_storage_whole(self):
+        job = self._job()
+        view = job_snapshot(job)["result"]
+
+        self.assertNotIn("figures", view)
+        for sample in view["samples"]:
+            self.assertNotIn("models", sample["uncertainty"])
+            self.assertNotIn("requested_models", sample["uncertainty"])
+            self.assertEqual(sample["uncertainty"]["metrics"]["temperature"]["median"], 2.0)
+        self.assertEqual(view["job_id"], str(job.id))
+        self.assertEqual(view["version"], job.updated_at.isoformat())
+
+        job.refresh_from_db()
+        self.assertEqual(len(job.result["figures"]), 1)
+        self.assertIn("models", job.result["samples"][0]["uncertainty"])
+        self.assertEqual(len(job.result["line"]), 2000)
+
+    def test_coarse_line_is_shorter_and_keeps_every_sample_vertex_exactly(self):
+        job = self._job()
+        stored = job.result
+        view = forecast_view(job)
+
+        self.assertLess(len(view["line"]), len(stored["line"]) // 4)
+        self.assertEqual(view["line"][0], stored["line"][0])
+        self.assertEqual(view["line"][-1], stored["line"][-1])
+        for sample in stored["samples"]:
+            # The frontend matches samples to vertices by exact equality.
+            self.assertIn([sample["lon"], sample["lat"]], view["line"])
+
+    def test_uncertainty_partial(self):
+        complete = _long_payload(vertices=10, every=5)
+        self.assertFalse(forecast_view(self._job(complete))["uncertainty_partial"])
+
+        missing_model = _long_payload(vertices=10, every=5)
+        missing_model["samples"][1]["uncertainty"] = _uncertainty(models=("icon_seamless_eps",))
+        self.assertTrue(forecast_view(self._job(missing_model, key="b"))["uncertainty_partial"])
+
+        missing_metric = _long_payload(vertices=10, every=5)
+        missing_metric["samples"][0]["uncertainty"] = _uncertainty(missing_median="crosswind")
+        self.assertTrue(forecast_view(self._job(missing_metric, key="c"))["uncertainty_partial"])
+
+        stripped = _long_payload(vertices=10, every=5)
+        stripped["samples"][0]["uncertainty"] = None
+        view = forecast_view(self._job(stripped, key="d"))
+        self.assertTrue(view["uncertainty_partial"])
+        self.assertIsNone(view["samples"][0]["uncertainty"])
+
+    def test_job_endpoint_validates_the_slim_shape(self):
+        job = self._job()
+        response = self.client.get(f"/api/forecast_jobs/{job.id}")
+        self.assertEqual(response.status_code, 200)
+        result = response.json()["result"]
+        self.assertNotIn("figures", result)
+        self.assertLess(len(result["line"]), 2000)
+
+    def test_figures_endpoint(self):
+        job = self._job()
+        response = self.client.get(f"/api/forecast_jobs/{job.id}/figures")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), [{"data": [], "layout": {}}])
+
+    def test_line_detail_levels(self):
+        job = self._job()
+        coarse = len(forecast_view(job)["line"])
+        medium = self.client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "medium"}).json()["line"]
+        full = self.client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "full"}).json()["line"]
+
+        self.assertLessEqual(coarse, len(medium))
+        self.assertLess(len(medium), len(full))
+        self.assertEqual(full, job.result["line"])
+        for sample in job.result["samples"]:
+            self.assertIn([sample["lon"], sample["lat"]], medium)
+        self.assertEqual(
+            self.client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "huge"}).status_code, 422
+        )
+
+    def test_wind_arrows_are_spaced_by_detail_and_carry_only_drawn_fields(self):
+        job = self._job()
+        coarse = forecast_view(job)["wind_arrows"]
+        medium = self.client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "medium"}).json()["wind_arrows"]
+        full = self.client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "full"}).json()["wind_arrows"]
+
+        # 10 km of 100 m segments: every 2 km, every 500 m, all of them.
+        self.assertEqual((len(coarse), len(medium), len(full)), (5, 20, 100))
+        self.assertEqual(coarse[0], {"lat": 47.12346, "lon": 9.0, "bearing": 90.0, "felt_speed": 8.3, "felt_angle": -12.3})
+        self.assertEqual(set(medium[0]), {"lat", "lon", "bearing", "felt_speed", "felt_angle"})
+        self.assertNotIn("wind_segments", forecast_view(job))
+
+        job.refresh_from_db()
+        self.assertEqual(len(job.result["wind_segments"]), 100, "storage keeps every segment")
+
+    def test_wind_arrows_skip_incomplete_segments_without_losing_the_spacing(self):
+        result = _long_payload(vertices=10, every=5)
+        result["wind_segments"] = [
+            _wind_segment(0.0, felt_coverage=0.5),
+            _wind_segment(100.0, felt_angle=None),
+            _wind_segment(200.0, elapsed_s=None),
+            _wind_segment(300.0),
+            _wind_segment(400.0, wind_coverage=0.99),
+            _wind_segment(2300.0),
+            _wind_segment(2400.0),
+        ]
+        arrows = forecast_view(self._job(result))["wind_arrows"]
+        # The first complete one is at 300 m, so the next may not start before 2300 m.
+        self.assertEqual([a["lon"] for a in arrows], [0.003 + 9.0, 0.023 + 9.0])
+
+    def test_sample_uncertainty_endpoint(self):
+        job = self._job()
+        response = self.client.get(f"/api/forecast_jobs/{job.id}/samples/1/uncertainty")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([m["model"] for m in response.json()["models"]], ["icon_seamless_eps", "gfs025"])
+        self.assertEqual(self.client.get(f"/api/forecast_jobs/{job.id}/samples/999/uncertainty").status_code, 404)
+
+        stripped = _long_payload(vertices=10, every=5)
+        stripped["samples"][0]["uncertainty"] = None
+        free_job = self._job(stripped, key="free")
+        response = self.client.get(f"/api/forecast_jobs/{free_job.id}/samples/0/uncertainty")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json())
+
+    def test_adhoc_job_parts(self):
+        """The map page's ad-hoc forecast has no owner; its id alone guards it."""
+        job = self._job(key="adhoc", owner=None, kind=ForecastJob.Kind.ADHOC)
+        client = self.client
+
+        body = client.get(f"/api/forecast_jobs/{job.id}").json()
+        self.assertEqual(body["result"]["job_id"], str(job.id))
+        self.assertTrue(body["result"]["version"])
+        self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "medium"}).status_code, 200)
+        self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/samples/0/uncertainty").status_code, 200)
+        self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/figures").status_code, 200)
+
+    def test_parts_are_404_before_the_job_is_done_and_for_other_accounts(self):
+        pending = self._job(result={}, key="pending", status=ForecastJob.Status.FETCHING)
+        for path in ("figures", "map_detail?detail=full", "samples/0/uncertainty"):
+            self.assertEqual(self.client.get(f"/api/forecast_jobs/{pending.id}/{path}").status_code, 404, path)
+
+        job = self._job()
+        other = get_user_model().objects.create_user(
+            username="other", email="other@example.com", password="pw", email_verified=True
+        )
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(other)
+        for path in ("figures", "map_detail?detail=full", "samples/0/uncertainty"):
+            self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/{path}").status_code, 404, path)
+
+
+@override_settings(CACHES=LOCMEM_CACHE, CHANNEL_LAYERS=INMEM_CHANNELS)
+class ForecastJobConsumerTests(TransactionTestCase):
+    """The socket must deliver a result even when the job finished before it opened."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="watcher", email="watcher@example.com", password="pw", email_verified=True
+        )
+
+    def _job(self, **overrides):
+        params = {"route_id": "x", "departure_time": "2026-09-14T08:00"}
+        fields = {
+            "key": job_key(ForecastJob.Kind.ADHOC, None, params),
+            "kind": ForecastJob.Kind.ADHOC,
+            "params": params,
+            "status": ForecastJob.Status.DONE,
+            "result": _finished_payload(),
+        }
+        fields.update(overrides)
+        return ForecastJob.objects.create(**fields)
+
+    async def _connect(self, job, user=None):
+        communicator = WebsocketCommunicator(application, f"/ws/forecast/{job.id}/")
+        communicator.scope["user"] = user or AnonymousUser()
+        connected = (await communicator.connect())[0]
+        return communicator, connected
+
+    def test_connect_replays_the_current_state(self):
+        """A job that completed before the socket opened published to an empty group."""
+        job = self._job()
+
+        async def run():
+            communicator, connected = await self._connect(job)
+            self.assertTrue(connected)
+            message = await communicator.receive_json_from()
+            await communicator.disconnect()
+            return message
+
+        message = async_to_sync(run)()
+        self.assertEqual(message["status"], ForecastJob.Status.DONE)
+        self.assertEqual(message["job_id"], str(job.id))
+        self.assertIsNotNone(message["result"])
+
+    def test_progress_reaches_a_connected_socket(self):
+        """A worker publishing progress must reach the browser watching the job."""
+        job = self._job(status=ForecastJob.Status.FETCHING, result=None, cells_total=2)
+
+        async def run():
+            communicator = (await self._connect(job))[0]
+            await communicator.receive_json_from()  # the connect-time snapshot
+            job.cells_settled = 1
+            await publish(job)
+            message = await communicator.receive_json_from()
+            await communicator.disconnect()
+            return message
+
+        message = async_to_sync(run)()
+        self.assertEqual(message["cells_settled"], 1)
+        self.assertEqual(message["cells_total"], 2)
+
+    def test_another_account_cannot_watch_an_owned_job(self):
+        """An owned job is as private on the socket as it is on the job endpoint."""
+        job = self._job(owner=self.user)
+        other = get_user_model().objects.create_user(
+            username="nosy", email="nosy@example.com", password="pw", email_verified=True
+        )
+
+        async def run():
+            communicator, connected = await self._connect(job, user=other)
+            await communicator.disconnect()
+            return connected
+
+        self.assertFalse(async_to_sync(run)())

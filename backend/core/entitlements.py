@@ -4,12 +4,14 @@ Deliberately independent of Stripe: these functions read the local Subscription 
 the webhook keeps in sync. That keeps the enforcement sites testable without API keys, and
 means a tier set by hand in the Django admin behaves exactly like a paid one.
 
-Enforced at three places — miss any one and the limit is not real:
-  * create_route (core/api/recurring_route.py) — the route count.
-  * route_forecast / route_weather — the ensemble spread.
-  * _refresh_upcoming_forecasts_async (core/tasks.py) — the pre-warm fan-out, which is
-    what actually spends the Open-Meteo budget. It is nowhere near the HTTP layer, so it
-    is the easy one to forget.
+Enforced at these places — miss any one and the limit is not real:
+  * create_route / update_route (core/api/recurring_route.py) — the route count.
+  * assemble_forecast_job (core/tasks.py) — the ensemble spread is stripped before the
+    result is stored, and the station correction is only computed for accounts that have it.
+  * _prewarm_routes (core/tasks.py) — the pre-warm fan-out, which is what actually spends
+    the Open-Meteo budget. It is nowhere near the HTTP layer, so it is the easy one to forget.
+  * plan_forecast_job (core/tasks.py) — the station task, which spends the Weather
+    Underground budget. The pre-warm scan never fetches stations at all.
 """
 
 from dataclasses import dataclass
@@ -27,14 +29,15 @@ class Entitlements:
     plan: str
     max_routes: int | None
     ensemble_uncertainty: bool
+    station_correction: bool
 
     @property
     def is_pro(self) -> bool:
         return self.plan == Plan.PRO
 
 
-FREE = Entitlements(plan=Plan.FREE, max_routes=2, ensemble_uncertainty=False)
-PRO = Entitlements(plan=Plan.PRO, max_routes=None, ensemble_uncertainty=True)
+FREE = Entitlements(plan=Plan.FREE, max_routes=2, ensemble_uncertainty=False, station_correction=False)
+PRO = Entitlements(plan=Plan.PRO, max_routes=None, ensemble_uncertainty=True, station_correction=True)
 
 BY_PLAN = {Plan.FREE: FREE, Plan.PRO: PRO}
 

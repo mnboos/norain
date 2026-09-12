@@ -47,7 +47,7 @@ export interface RouteSection {
     /**
      * 
      */
-    maxHeadwind: number;
+    maxHeadwind?: number | null;
     /**
      * 
      */
@@ -68,7 +68,6 @@ export function instanceOfRouteSection(value: object): value is RouteSection {
     if ((!('endTime' in (value as Record<string, any>)) && !('end_time' in (value as Record<string, any>))) || ((value as Record<string, any>)['endTime'] === undefined && (value as Record<string, any>)['end_time'] === undefined)) return false;
     if (!('condition' in value) || value['condition'] === undefined) return false;
     if ((!('maxRainMm' in (value as Record<string, any>)) && !('max_rain_mm' in (value as Record<string, any>))) || ((value as Record<string, any>)['maxRainMm'] === undefined && (value as Record<string, any>)['max_rain_mm'] === undefined)) return false;
-    if ((!('maxHeadwind' in (value as Record<string, any>)) && !('max_headwind' in (value as Record<string, any>))) || ((value as Record<string, any>)['maxHeadwind'] === undefined && (value as Record<string, any>)['max_headwind'] === undefined)) return false;
     if ((!('tempMin' in (value as Record<string, any>)) && !('temp_min' in (value as Record<string, any>))) || ((value as Record<string, any>)['tempMin'] === undefined && (value as Record<string, any>)['temp_min'] === undefined)) return false;
     if ((!('tempMax' in (value as Record<string, any>)) && !('temp_max' in (value as Record<string, any>))) || ((value as Record<string, any>)['tempMax'] === undefined && (value as Record<string, any>)['temp_max'] === undefined)) return false;
     return true;
@@ -90,7 +89,7 @@ export function RouteSectionFromJSONTyped(json: any, ignoreDiscriminator: boolea
         'endTime': json['end_time'],
         'condition': json['condition'],
         'maxRainMm': json['max_rain_mm'],
-        'maxHeadwind': json['max_headwind'],
+        'maxHeadwind': json['max_headwind'] === undefined ? undefined : json['max_headwind'] === null ? null : json['max_headwind'],
         'tempMin': json['temp_min'],
         'tempMax': json['temp_max'],
     };

@@ -4,8 +4,7 @@ Enables the UI to show "Dry: km 0–12, Rain: km 12–18, Dry: km 18–22" style
 breakdowns. Computed on the backend so email rendering can use the same sections.
 """
 
-from .api.recurring_route import RouteSection
-from .api.route_weather import WeatherSample
+from .api.route_weather import RouteSection, WeatherSample
 
 
 def _condition(rain_mm: float) -> str:
@@ -80,7 +79,8 @@ def _build_section(
     end_time = _format_time(last.elapsed_s)
     condition = _condition(max(s.rain_mm for s in samples))
     max_rain_mm = round(max(s.rain_mm for s in samples), 2)
-    max_headwind = round(max(s.headwind for s in samples), 1)
+    winds = [s.headwind for s in samples if s.headwind is not None]
+    max_headwind = round(max(winds), 1) if winds else None
     temps = [s.temp for s in samples]
     temp_min = round(min(temps), 1)
     temp_max = round(max(temps), 1)

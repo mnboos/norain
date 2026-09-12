@@ -38,8 +38,9 @@ function relativeTime(iso: string | null | undefined): string {
 }
 
 /**
- * The ride-quality wording for a route, repeating in text what the glyph says in colour.
- * The Spectral ramp is red-green, so it can never be the only channel - see rideQuality.ts.
+ * The ride-quality wording for a route. The glyph beside it is deliberately shape-only, so
+ * this caption is the *sole* channel carrying the forecast in the list - it must never be
+ * dropped to save a line, and it must stay non-empty wherever a forecast exists.
  */
 function qualityLabel(route: RecurringRouteOut): string {
     if (!route.hasGeometry) return "Route wird berechnet …";

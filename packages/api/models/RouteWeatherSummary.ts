@@ -14,6 +14,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { WindDistribution } from './WindDistribution';
+import {
+    WindDistributionFromJSON,
+    WindDistributionFromJSONTyped,
+    WindDistributionToJSON,
+    WindDistributionToJSONTyped,
+} from './WindDistribution';
+
 /**
  * 
  * @export
@@ -47,11 +55,19 @@ export interface RouteWeatherSummary {
     /**
      * 
      */
-    maxHeadwind: number;
+    maxHeadwind?: number | null;
+    /**
+     * 
+     */
+    windDistribution?: WindDistribution | null;
     /**
      * 
      */
     source: string;
+    /**
+     * 
+     */
+    stationCorrected?: boolean;
 }
 
 /**
@@ -61,7 +77,6 @@ export function instanceOfRouteWeatherSummary(value: object): value is RouteWeat
     if ((!('willRain' in (value as Record<string, any>)) && !('will_rain' in (value as Record<string, any>))) || ((value as Record<string, any>)['willRain'] === undefined && (value as Record<string, any>)['will_rain'] === undefined)) return false;
     if ((!('maxRainMm' in (value as Record<string, any>)) && !('max_rain_mm' in (value as Record<string, any>))) || ((value as Record<string, any>)['maxRainMm'] === undefined && (value as Record<string, any>)['max_rain_mm'] === undefined)) return false;
     if ((!('rainAmount' in (value as Record<string, any>)) && !('rain_amount' in (value as Record<string, any>))) || ((value as Record<string, any>)['rainAmount'] === undefined && (value as Record<string, any>)['rain_amount'] === undefined)) return false;
-    if ((!('maxHeadwind' in (value as Record<string, any>)) && !('max_headwind' in (value as Record<string, any>))) || ((value as Record<string, any>)['maxHeadwind'] === undefined && (value as Record<string, any>)['max_headwind'] === undefined)) return false;
     if (!('source' in value) || value['source'] === undefined) return false;
     return true;
 }
@@ -82,8 +97,10 @@ export function RouteWeatherSummaryFromJSONTyped(json: any, ignoreDiscriminator:
         'maxRainMm': json['max_rain_mm'],
         'rainProbability': json['rain_probability'] === undefined ? undefined : json['rain_probability'] === null ? null : json['rain_probability'],
         'rainAmount': json['rain_amount'],
-        'maxHeadwind': json['max_headwind'],
+        'maxHeadwind': json['max_headwind'] === undefined ? undefined : json['max_headwind'] === null ? null : json['max_headwind'],
+        'windDistribution': json['wind_distribution'] === undefined ? undefined : json['wind_distribution'] === null ? null : WindDistributionFromJSON(json['wind_distribution']),
         'source': json['source'],
+        'stationCorrected': json['station_corrected'] == null ? undefined : json['station_corrected'],
     };
 }
 
@@ -105,7 +122,9 @@ export function RouteWeatherSummaryToJSONTyped(value?: RouteWeatherSummary | nul
         'rain_probability': value['rainProbability'],
         'rain_amount': value['rainAmount'],
         'max_headwind': value['maxHeadwind'],
+        'wind_distribution': WindDistributionToJSON(value['windDistribution']),
         'source': value['source'],
+        'station_corrected': value['stationCorrected'],
     };
 }
 

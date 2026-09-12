@@ -13,9 +13,12 @@ with the map about the same route. So this module ships the raw numbers the scor
 
 from datetime import datetime
 
+from asgiref.sync import sync_to_async
 from loguru import logger
 from shapely.geometry import LineString
 
+from .entitlements import entitlements_for_sync
+from .geo import METRES_PER_DEGREE, simplify_line
 from .models import RecurringRoute
 from .schedule import next_departure
 from .weather import compute_route_weather
@@ -47,27 +50,20 @@ def simplify_path(
     must_keep = {int(sp["idx"]) for sp in sample_points if 0 <= int(sp.get("idx", -1)) < len(polyline)}
     must_keep.update({0, len(polyline) - 1})
 
-    keep = set(must_keep)
     if len(polyline) > MAX_THUMBNAIL_VERTICES:
         # Raise the tolerance until the simplified line fits. Starting from the bounding
         # box keeps this to a handful of iterations at any route length.
         line = LineString(polyline)
         minx, miny, maxx, maxy = line.bounds
-        tolerance = max(maxx - minx, maxy - miny) / 200 or 1e-6
-        simplified: list[tuple[float, float]] = []
+        tolerance_m = max(maxx - minx, maxy - miny) / 200 * METRES_PER_DEGREE or 0.1
+        keep: set[int] = set()
         for _ in range(24):
-            simplified = list(LineString(polyline).simplify(tolerance).coords)
-            if len(simplified) + len(must_keep) <= MAX_THUMBNAIL_VERTICES:
+            keep = set(simplify_line(polyline, must_keep, tolerance_m))
+            if len(keep) <= MAX_THUMBNAIL_VERTICES:
                 break
-            tolerance *= 2
-        # simplify() returns coordinates, not indices; map them back by exact position.
-        by_coord = {(round(p[0], 7), round(p[1], 7)): i for i, p in enumerate(polyline)}
-        for x, y in simplified:
-            i = by_coord.get((round(x, 7), round(y, 7)))
-            if i is not None:
-                keep.add(i)
+            tolerance_m *= 2
     else:
-        keep.update(range(len(polyline)))
+        keep = set(range(len(polyline)))
 
     kept = sorted(keep)
     path = [[polyline[i][0], polyline[i][1]] for i in kept]
@@ -92,6 +88,11 @@ async def compute_route_thumbnail(route: RecurringRoute) -> dict | None:
     if len(path) < 2:
         return None
 
+    # The owner's tier decides whether the map shows station-corrected temperatures, so the
+    # list reads the same way or the two would disagree about one ride. Readings are only
+    # read here, never fetched.
+    limits = await sync_to_async(lambda: entitlements_for_sync(route.owner if route.owner_id else None))()
+
     forecast = await compute_route_weather(
         start_lat=route.start_lat,
         start_lon=route.start_lon,
@@ -105,15 +106,18 @@ async def compute_route_thumbnail(route: RecurringRoute) -> dict | None:
         total_distance_m=route.total_distance_m,
         cache_only=True,
         include_uncertainty=False,
+        vertex_times=route.vertex_times,
+        include_segments=False,
+        station_correction_enabled=limits.station_correction,
     )
 
     # compute_route_weather drops sample points whose cell was cold, so align what came
     # back onto the route's own sample points by elapsed time; the gaps become None.
-    by_elapsed = {s.elapsed_s: s for s in forecast.samples}
+    by_index = {s.sample_index: s for s in forecast.samples}
     samples: list[dict | None] = []
-    for sp in route.sample_points:
+    for index, sp in enumerate(route.sample_points):
         vertex = index_map.get(int(sp.get("idx", -1)))
-        sample = by_elapsed.get(int(sp["elapsed_s"]))
+        sample = by_index.get(index)
         if vertex is None or sample is None:
             samples.append(None)
             continue

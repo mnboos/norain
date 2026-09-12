@@ -32,7 +32,7 @@ const CONDITION_COLORS: Record<string, string> = {
             · {{ section.startKm }}–{{ section.endKm }} km · {{ section.startTime }}–{{ section.endTime }} ·
             {{ section.tempMin }}–{{ section.tempMax }}°C
             <template v-if="section.maxRainMm > 0"> · 🌧 {{ section.maxRainMm }} mm</template>
-            <template v-if="section.maxHeadwind > 0"> · 💨 {{ section.maxHeadwind }} km/h</template>
+            <template v-if="section.maxHeadwind != null && section.maxHeadwind > 0"> · 💨 {{ section.maxHeadwind }} km/h</template>
         </div>
     </div>
 </template>

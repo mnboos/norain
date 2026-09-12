@@ -11,11 +11,14 @@ import { computed, onBeforeUnmount, onMounted, type Ref, ref, useTemplateRef, wa
 import { useQuasar } from "quasar";
 
 import "maplibre-gl/dist/maplibre-gl.css";
-import type { PlacesSearchResult, RouteWeatherOut, WeatherSample } from "@norain/api/models";
+import type { PlacesSearchResult, RouteForecastOut, ForecastSampleOut, WindArrow } from "@norain/api/models";
 import { isNightEta, pickVisibleSamples, weatherIconSvg } from "@/utils/weatherIcons";
 import { swissTime } from "@/utils/forecastDetails";
 import { gradientStops, rideScore, rideScoreLabel, sampleProgress, scoreBand, scoreColor } from "@/utils/rideQuality";
 import MapLegend from "@/components/MapLegend.vue";
+import { useForecastMapDetail, type LineDetail } from "@/queries/forecastParts";
+import { finerDetail, lineDetailForZoom } from "@/utils/mapDetail";
+import { apparentArrowBearing, feltWindText, visibleWindArrows } from "@/utils/wind";
 
 maplibreConfig.WORKER_URL = maplibreWorkerUrl;
 
@@ -28,7 +31,7 @@ const LIGHT_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.js
 const DARK_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
 
 const props = defineProps<{
-    routeWeather: RouteWeatherOut | undefined;
+    routeWeather: RouteForecastOut | undefined;
     abfahrtsort?: PlacesSearchResult;
     zielort?: PlacesSearchResult;
     /** CSS height of the map canvas. Defaults to the full viewport. */
@@ -105,17 +108,48 @@ watch([zielort, hasMap], () => {
 const CASING_LIGHT = "#1b2733";
 const CASING_DARK = "#e8eef2";
 
+// --- map detail: the job result carries a coarse line and wind arrows ~2 km apart; finer
+// ones are fetched once the map is zoomed in far enough to show the difference. ---
+const zoomDetail = ref<LineDetail>("coarse");
+/** The finest detail fetched so far for the current forecast. Zooming out keeps it. */
+const loadedDetail = ref<{ detail: LineDetail; line: number[][]; windArrows: WindArrow[] } | undefined>(undefined);
+const requestedDetail = computed(() => finerDetail(zoomDetail.value, loadedDetail.value?.detail ?? "coarse"));
+const { data: fetchedDetail } = useForecastMapDetail(
+    () => routeWeather.value?.jobId,
+    () => routeWeather.value?.version,
+    requestedDetail,
+);
+const drawnLine = computed(() => loadedDetail.value?.line ?? routeWeather.value?.line ?? []);
+const drawnWindArrows = computed(() => loadedDetail.value?.windArrows ?? routeWeather.value?.windArrows ?? []);
+
+watch(
+    () => [routeWeather.value?.jobId, routeWeather.value?.version],
+    () => {
+        loadedDetail.value = undefined;
+    },
+);
+watch(fetchedDetail, fetched => {
+    const detail = requestedDetail.value;
+    if (!fetched || detail === "coarse" || finerDetail(detail, loadedDetail.value?.detail ?? "coarse") !== detail) {
+        return;
+    }
+    loadedDetail.value = { detail, line: fetched.line, windArrows: fetched.windArrows };
+    void renderLine();
+    renderWindMarkers();
+});
+
 const scores = computed(() => (routeWeather.value?.samples ?? []).map(s => rideScore(s)?.score ?? null));
 const hasRoute = computed(() => (routeWeather.value?.samples.length ?? 0) > 0);
 /** Only claim a "Keine Daten" swatch when a stretch really is unknown. */
 const hasMissingScores = computed(() => scores.value.some(v => v === null));
+const hasWindProfile = computed(() => routeWeather.value?.summary.windDistribution != null);
 
 // --- sample marker: weather chip (condition glyph + temperature) with the wind arrow
 // attached beside it. The arrow points in the direction the wind blows TOWARD. ---
-function sampleMarkerEl(sample: WeatherSample): HTMLDivElement {
+function sampleMarkerEl(sample: ForecastSampleOut): HTMLDivElement {
     const el = document.createElement("div");
     el.className = "wx-marker";
-    const strong = sample.headwind > 8;
+    const strong = sample.headwind != null && sample.headwind > 8;
     const glyph = weatherIconSvg(sample.weatherCode, {
         rainMm: sample.rainMm,
         night: isNightEta(sample.eta),
@@ -123,11 +157,11 @@ function sampleMarkerEl(sample: WeatherSample): HTMLDivElement {
     // wind_dir is the direction the wind comes FROM; blowing-toward = +180°. Only the arrow
     // rotates - rotating the whole marker would tip the temperature text over with it.
     el.innerHTML = `
-        <svg class="wx-wind" width="16" height="16" viewBox="0 0 24 24"
+        ${!hasWindProfile.value && sample.windDir != null && sample.windSpeed != null && sample.windSpeed > 0 ? `<svg class="wx-wind" width="16" height="16" viewBox="0 0 24 24" aria-label="Wind über Grund"
              style="transform:rotate(${sample.windDir + 180}deg)">
             <path d="M12 2 L17 13 L12 10.5 L7 13 Z"
                   fill="${strong ? "#d24d78" : "#2c3e50"}" stroke="white" stroke-width="1.5"/>
-        </svg>
+        </svg>` : ""}
         <div class="wx-chip" style="border-color:${scoreColor(rideScore(sample)?.score ?? null)}">
             <svg width="20" height="20" viewBox="0 0 24 24">${glyph}</svg>
             <span>${Math.round(sample.temp)}°</span>
@@ -135,60 +169,203 @@ function sampleMarkerEl(sample: WeatherSample): HTMLDivElement {
     return el;
 }
 
-let sampleMarkers: { marker: Marker; popup: Popup; sample: WeatherSample }[] = [];
+/** A shown chip. The popup is built on first hover, since most chips are never hovered. */
+interface SampleMarker { marker: Marker; popup?: Popup }
+/** Markers exist only for the chips currently shown, keyed by sample index. */
+let sampleMarkers = new Map<number, SampleMarker>();
+/** A shown felt-wind arrow. Its popup is built on first open. */
+interface WindMarker { marker: Marker; popup?: Popup }
+/** Markers exist only for the arrows currently shown, keyed by position. */
+let windMarkers = new Map<string, WindMarker>();
 
-function clearSampleMarkers() {
-    sampleMarkers.forEach(({ marker, popup }) => {
-        popup.remove();
-        marker.remove();
-    });
-    sampleMarkers = [];
+function clearWindMarkers() {
+    windMarkers.forEach(({ marker, popup }) => { popup?.remove(); marker.remove(); });
+    windMarkers = new Map();
 }
 
-/** Hide chips that would overlap at the current zoom. Cheaper than re-creating markers,
- *  and it keeps the popups alive. */
+function windArrowLabel(arrow: WindArrow): string {
+    return `Gefühlter Wind (geschätzt): ${feltWindText(arrow)}`;
+}
+
+function createWindMarker(map: MapLibreMap, arrow: WindArrow): WindMarker {
+    const element = document.createElement("div");
+    element.className = "wx-felt-arrow";
+    element.tabIndex = 0;
+    element.setAttribute("role", "button");
+    element.setAttribute("aria-label", windArrowLabel(arrow));
+    element.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 L20 17 L12 13 L4 17 Z" fill="#2f7fd8" stroke="white" stroke-width="1.5"/></svg>';
+    const marker = new Marker({ element, rotation: apparentArrowBearing(arrow) ?? 0,
+        rotationAlignment: "map", pitchAlignment: "map" })
+        .setLngLat([arrow.lon, arrow.lat])
+        .addTo(map);
+    const entry: WindMarker = { marker };
+    const toggle = () => {
+        if (entry.popup?.isOpen()) {
+            entry.popup.remove();
+            return;
+        }
+        entry.popup ??= new Popup({ offset: 14 }).setLngLat([arrow.lon, arrow.lat]).setText(windArrowLabel(arrow));
+        entry.popup.addTo(map);
+    };
+    element.addEventListener("click", event => {
+        // Keep the map's own click handling from closing the popup straight away.
+        event.stopPropagation();
+        toggle();
+    });
+    element.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); }
+    });
+    return entry;
+}
+
+/**
+ * Show the arrows that fit on screen. Arrows that stay visible keep their marker (and any
+ * open popup) across a pan or zoom; only those that appear or drop out are touched.
+ */
+function renderWindMarkers() {
+    const map = mymap.value;
+    if (!map) return;
+    const { clientWidth: width, clientHeight: height } = map.getCanvas();
+    const arrows = visibleWindArrows(drawnWindArrows.value, arrow => {
+        const point = map.project([arrow.lon, arrow.lat]);
+        return point.x < 0 || point.y < 0 || point.x > width || point.y > height ? { x: NaN, y: NaN } : point;
+    });
+    const wanted = new Map(arrows.map(arrow => [`${arrow.lon},${arrow.lat}`, arrow]));
+    for (const [key, { marker, popup }] of windMarkers) {
+        if (!wanted.has(key)) {
+            popup?.remove();
+            marker.remove();
+            windMarkers.delete(key);
+        }
+    }
+    for (const [key, arrow] of wanted) {
+        if (!windMarkers.has(key)) windMarkers.set(key, createWindMarker(map, arrow));
+    }
+}
+
+function removeSampleMarker({ marker, popup }: SampleMarker) {
+    popup?.remove();
+    marker.remove();
+}
+
+function clearSampleMarkers() {
+    sampleMarkers.forEach(removeSampleMarker);
+    sampleMarkers = new Map();
+}
+
+/** Screen margin around the viewport in which chips are still built, so a short pan does
+ *  not show them popping in at the edge. */
+const MARKER_VIEW_MARGIN_PX = 80;
+
+/**
+ * Show the chips that fit at the current zoom and lie in view, and only build those.
+ *
+ * Thinning runs over every sample so the choice does not change as the map pans; the
+ * viewport filter comes after it. A chip that drops out is removed from the DOM rather
+ * than hidden - a zoomed-out long route would otherwise carry a marker per sample.
+ */
 function applyMarkerThinning() {
     const map = mymap.value;
-    if (!map || sampleMarkers.length === 0) return;
-    const samples = sampleMarkers.map(m => m.sample);
+    const samples = routeWeather.value?.samples ?? [];
+    if (!map) return;
     // Carry the quality band in, so a stretch that turns bad through wind or cold keeps a
     // chip at the transition - the line's colour is never the only cue.
-    const thinnable = samples.map(s => ({ rainMm: s.rainMm, band: scoreBand(rideScore(s)?.score ?? null) }));
-    const visible = pickVisibleSamples(thinnable, i => {
-        const s = samples[i];
-        return map.project([s?.lon ?? 0, s?.lat ?? 0]);
-    });
-    sampleMarkers.forEach(({ marker }, i) => {
-        marker.getElement().classList.toggle("wx-marker--hidden", !visible.has(i));
-    });
+    const thinnable = samples.map((s, i) => ({ rainMm: s.rainMm, band: scoreBand(scores.value[i] ?? null) }));
+    const points = samples.map(s => map.project([s.lon, s.lat]));
+    const { clientWidth: width, clientHeight: height } = map.getCanvas();
+    const inView = (i: number) => {
+        const p = points[i];
+        return !!p && p.x >= -MARKER_VIEW_MARGIN_PX && p.y >= -MARKER_VIEW_MARGIN_PX
+            && p.x <= width + MARKER_VIEW_MARGIN_PX && p.y <= height + MARKER_VIEW_MARGIN_PX;
+    };
+    const visible = new Set(
+        [...pickVisibleSamples(thinnable, i => points[i] ?? { x: NaN, y: NaN })].filter(inView),
+    );
+
+    for (const [index, entry] of sampleMarkers) {
+        if (!visible.has(index)) {
+            removeSampleMarker(entry);
+            sampleMarkers.delete(index);
+        }
+    }
+    for (const index of visible) {
+        const sample = samples[index];
+        if (sample && !sampleMarkers.has(index)) sampleMarkers.set(index, createSampleMarker(map, sample, index));
+    }
 }
 
 function fmtTime(iso: string): string {
     return swissTime(iso);
 }
 
-function windText(s: WeatherSample): string {
+function windText(s: ForecastSampleOut): string {
+    if (s.headwind == null) return "Windrichtung zur Strecke nicht verfügbar";
     if (s.headwind > 1) return `${Math.round(s.headwind)} km/h Gegenwind`;
     if (s.headwind < -1) return `${Math.round(-s.headwind)} km/h Rückenwind`;
-    return "Seitenwind";
+    return s.crosswind == null ? "Seitenwind nicht verfügbar" : `${Math.round(s.crosswind)} km/h Seitenwind (Abschnittsmittel)`;
 }
 
-async function renderRoute(rw: RouteWeatherOut) {
-    const map = mymap.value;
-    if (!map) return;
+function samplePopupHtml(s: ForecastSampleOut): string {
+    const rq = rideScore(s);
+    return `<div style="font:13px/1.4 sans-serif;min-width:160px">
+        <b>${fmtTime(s.eta)} Uhr</b> · ${s.weatherDesc || ""}<br>
+        🌧️ ${s.rainRateMmH == null ? "—" : s.rainRateMmH.toFixed(1)} mm/h &nbsp; 🌡️ ${s.temp.toFixed(0)}°C<br>
+        Regenrisiko: ${s.pop == null ? "Nicht verfügbar" : `${Math.round(s.pop * 100)}%`}<br>
+        💨 ${s.windSpeed == null ? "Nicht verfügbar" : `${s.windSpeed.toFixed(0)} km/h über Grund`}${s.windGust ? ` (Böen ${s.windGust.toFixed(0)})` : ""}<br>
+        <span class="${s.headwind != null && s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span><br>
+        ${s.windCoverage != null && s.windCoverage < 1 ? `Windabdeckung im Abschnitt: ${Math.round(s.windCoverage * 100)}%<br>` : ""}
+        <span class="wx-quality">
+            <i style="background:${scoreColor(rq?.score ?? null)}"></i> Fahrqualität: ${rideScoreLabel(rq)}
+        </span>
+    </div>`;
+}
 
-    // 1) Route line, colored along its length by ride quality via line-gradient.
+function createSampleMarker(map: MapLibreMap, s: ForecastSampleOut, index: number): SampleMarker {
+    const marker = new Marker({ element: sampleMarkerEl(s), anchor: "bottom" }).setLngLat([s.lon, s.lat]).addTo(map);
+    const entry: SampleMarker = { marker };
+    const el = marker.getElement();
+    el.tabIndex = 0;
+    el.setAttribute("role", "button");
+    el.setAttribute("aria-label", `Wetter um ${fmtTime(s.eta)} Uhr auswählen`);
+    el.addEventListener("click", () => { emit("selectSample", index); });
+    el.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            emit("selectSample", index);
+        }
+    });
+    el.addEventListener("mouseenter", () => {
+        if (!entry.popup) {
+            entry.popup = new Popup({ offset: 16, closeButton: false }).setHTML(samplePopupHtml(s));
+            marker.setPopup(entry.popup);
+        }
+        if (!entry.popup.isOpen()) marker.togglePopup();
+    });
+    el.addEventListener("mouseleave", () => {
+        if (entry.popup?.isOpen()) marker.togglePopup();
+    });
+    return entry;
+}
+
+/** Draw the route line, coloured along its length by ride quality via line-gradient. */
+async function renderLine() {
+    const map = mymap.value;
+    const rw = routeWeather.value;
+    if (!map || !rw) return;
+    const line = drawnLine.value;
+
     const lineGeojson: Record<string, unknown> = {
         type: "Feature",
-        geometry: { type: "LineString", coordinates: rw.line },
+        geometry: { type: "LineString", coordinates: line },
         properties: {},
     };
 
     // line-progress is 0..1 along *distance*, so the stops have to be placed by distance
     // too - sampleProgress() does that by locating each sample's vertex on the polyline.
-    // gradientStops() then subdivides each span so the blend actually travels through the
-    // Spectral ramp, and hard-edges any stretch we have no data for.
-    const stops = gradientStops(sampleProgress(rw.line, rw.samples, rw.totalSeconds), scores.value);
+    // Every line level the backend serves keeps those vertices, so this works on whichever
+    // line is drawn. gradientStops() then subdivides each span so the blend actually
+    // travels through the Spectral ramp, and hard-edges any stretch we have no data for.
+    const stops = gradientStops(sampleProgress(line, rw.samples, rw.totalSeconds), scores.value);
     const gradient: ExpressionSpecification = ["interpolate", ["linear"], ["line-progress"], ...stops];
     const casing = $q.dark.isActive ? CASING_DARK : CASING_LIGHT;
 
@@ -224,49 +401,25 @@ async function renderRoute(rw: RouteWeatherOut) {
     // style swap, but the gradient and the casing change whenever the data or theme does.
     map.setPaintProperty("route-line", "line-gradient", gradient);
     map.setPaintProperty("route-line-casing", "line-color", casing);
+}
 
-    // 2) Weather chips + wind arrows at each sample.
+async function renderRoute() {
+    const map = mymap.value;
+    if (!map) return;
+
+    await renderLine();
+
+    // Fit the map to the route, then pick the chips for the zoom we actually ended up at
+    // (fitBounds may not emit a moveend on a re-render). The coarse line's bounds are the
+    // full line's: simplification keeps both ends and every corner that matters at this scale.
     clearSampleMarkers();
-    rw.samples.forEach((s, index) => {
-        const rq = rideScore(s);
-        const popup = new Popup({ offset: 16, closeButton: false }).setHTML(
-            `<div style="font:13px/1.4 sans-serif;min-width:160px">
-                <b>${fmtTime(s.eta)} Uhr</b> · ${s.weatherDesc || ""}<br>
-                🌧️ ${s.rainRateMmH == null ? "—" : s.rainRateMmH.toFixed(1)} mm/h &nbsp; 🌡️ ${s.temp.toFixed(0)}°C<br>
-                Regenrisiko: ${s.pop == null ? "Nicht verfügbar" : `${Math.round(s.pop * 100)}%`}<br>
-                💨 ${s.windSpeed.toFixed(0)} km/h${s.windGust ? ` (Böen ${s.windGust.toFixed(0)})` : ""}<br>
-                <span class="${s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span><br>
-                <span class="wx-quality">
-                    <i style="background:${scoreColor(rq?.score ?? null)}"></i> Fahrqualität: ${rideScoreLabel(rq)}
-                </span>
-            </div>`,
-        );
-        const marker = new Marker({ element: sampleMarkerEl(s), anchor: "bottom" })
-            .setLngLat([s.lon, s.lat])
-            .setPopup(popup)
-            .addTo(map);
-        const el = marker.getElement();
-        el.tabIndex = 0;
-        el.setAttribute("role", "button");
-        el.setAttribute("aria-label", `Wetter um ${fmtTime(s.eta)} Uhr auswählen`);
-        el.addEventListener("click", () => { emit("selectSample", index); });
-        el.addEventListener("keydown", event => {
-            if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                emit("selectSample", index);
-            }
-        });
-        el.addEventListener("mouseenter", () => marker.togglePopup());
-        el.addEventListener("mouseleave", () => marker.togglePopup());
-        sampleMarkers.push({ marker, popup, sample: s });
-    });
-
-    // 3) Fit the map to the route, then thin the chips for the zoom we actually ended up at
-    // (fitBounds runs after the markers exist, and may not emit a zoomend on a re-render).
     const bounds = new LngLatBounds();
-    rw.line.forEach(c => bounds.extend([c[0] ?? 0, c[1] ?? 0]));
+    drawnLine.value.forEach(c => bounds.extend([c[0] ?? 0, c[1] ?? 0]));
     if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60 });
     map.once("idle", applyMarkerThinning);
+    // A new forecast can put a different felt wind at the same spot, so no arrow carries over.
+    clearWindMarkers();
+    renderWindMarkers();
     highlightSample();
 }
 
@@ -274,14 +427,17 @@ watch(
     [routeWeather, hasMap],
     async () => {
         if (routeWeather.value && mymap.value) {
-            await renderRoute(routeWeather.value);
+            await renderRoute();
+        } else if (!routeWeather.value) {
+            clearSampleMarkers();
+            clearWindMarkers();
         }
     },
     { immediate: true },
 );
 
 // setStyle() replaces the whole style, which wipes our custom source/layers (but not the
-// DOM-based markers/popups, those survive) - re-add the route once the new style is ready.
+// DOM-based markers/popups, those survive) - re-add the line once the new style is ready.
 watch(
     () => $q.dark.isActive,
     dark => {
@@ -289,10 +445,14 @@ watch(
         if (!map) return;
         map.setStyle(dark ? DARK_STYLE : LIGHT_STYLE);
         map.once("style.load", () => {
-            if (routeWeather.value) void renderRoute(routeWeather.value);
+            void renderLine();
         });
     },
 );
+
+function onZoomEnd(map: MapLibreMap) {
+    zoomDetail.value = lineDetailForZoom(map.getZoom());
+}
 
 onMounted(() => {
     if (!mapContainer.value) return;
@@ -310,7 +470,15 @@ onMounted(() => {
             map.on("moveend", () => {
                 emitMapView(map);
             });
-            map.on("zoomend", applyMarkerThinning);
+            onZoomEnd(map);
+            // moveend covers zooms too; the chips depend on both zoom and what is in view.
+            map.on("moveend", applyMarkerThinning);
+            map.on("zoomend", () => {
+                onZoomEnd(map);
+            });
+            // moveend also follows every zoom, so no separate zoomend listener is needed.
+            map.on("moveend", renderWindMarkers);
+            map.on("resize", renderWindMarkers);
         });
         map.on("error", e => {
             console.error("MapLibre error:", e);
@@ -324,6 +492,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     clearSampleMarkers();
+    clearWindMarkers();
+    mymap.value?.off("moveend", renderWindMarkers);
+    mymap.value?.off("resize", renderWindMarkers);
     startMarker?.remove();
     destMarker?.remove();
     selectedMarker?.remove();
@@ -342,6 +513,10 @@ onBeforeUnmount(() => {
         <div v-else class="wx-map-wrap" :style="{ height: height ?? '100vh' }">
             <div id="map" ref="map"></div>
             <MapLegend v-if="hasRoute" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
+            <div v-if="hasWindProfile" class="wx-wind-legend text-caption">
+                <span aria-hidden="true">➤</span> Gefühlter Wind (geschätzt)
+                <div>Pfeile zeigen die Luftbewegung relativ zur Fahrt.</div>
+            </div>
         </div>
     </div>
 </template>
@@ -370,6 +545,9 @@ onBeforeUnmount(() => {
     top: 0;
     left: 0;
 }
+.wx-wind-legend { position: absolute; top: 8px; left: 8px; padding: 4px 8px;
+    border-radius: 4px; background: var(--q-dark, #263238); color: white; max-width: calc(100% - 16px); }
+.wx-wind-legend span { color: #77b7ff; }
 </style>
 
 <style>
@@ -420,6 +598,7 @@ body.body--dark .maplibregl-popup-anchor-right .maplibregl-popup-tip {
     gap: 2px;
     cursor: pointer;
 }
+.wx-felt-arrow { cursor: pointer; }
 
 .wx-selected {
     width: 24px;
@@ -429,10 +608,6 @@ body.body--dark .maplibregl-popup-anchor-right .maplibregl-popup-tip {
     background: rgb(43 108 176 / 15%);
     box-shadow: 0 0 0 3px white;
     pointer-events: none;
-}
-
-.wx-marker--hidden {
-    display: none;
 }
 
 .wx-wind {

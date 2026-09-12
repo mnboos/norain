@@ -6,12 +6,25 @@ export interface DetailResponse {
     detail: string;
 }
 
-/** Pull the backend's `detail` message out of an error body, without asserting its shape. */
+/** A plain JSON object, whose fields can be read and checked one by one. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Reads a response body into the shape a caller expects, or null when it does not match. */
+export type Parse<T> = (value: unknown) => T | null;
+
+/** Pull the backend's `detail` message out of a body, without asserting its shape. */
 function detailOf(value: unknown): string | null {
-    if (typeof value !== "object" || value === null) return null;
-    const detail: unknown = Reflect.get(value, "detail");
+    if (!isRecord(value)) return null;
+    const detail = value.detail;
     return typeof detail === "string" && detail ? detail : null;
 }
+
+export const parseDetail: Parse<DetailResponse> = (value) => {
+    const detail = detailOf(value);
+    return detail === null ? null : { detail };
+};
 
 /** An error carrying the HTTP status, so callers can react to 402 (quota) specifically. */
 export class ApiError extends Error {
@@ -28,7 +41,7 @@ export class ApiError extends Error {
  * Session-cookie JSON request against the plain-Django endpoints (`/api/auth/*`,
  * `/api/billing/*`). The generated `@norain/api` client covers the Ninja API instead.
  */
-export async function request<T>(path: string, method = "GET", body?: object): Promise<T> {
+export async function request<T>(path: string, parse: Parse<T>, method = "GET", body?: object): Promise<T> {
     const response = await fetch(`${useBackendHost()}${path}`, {
         method,
         credentials: "include",
@@ -40,14 +53,15 @@ export async function request<T>(path: string, method = "GET", body?: object): P
             : undefined,
         body: body ? JSON.stringify(body) : undefined,
     });
-    // Deserialising JSON into a caller-chosen type is unchecked by nature; the rule has
-    // no way to express that, and every caller here matches a schema the backend owns.
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const payload: T = await response.json();
+    const payload: unknown = await response.json();
     if (!response.ok) {
         throw new ApiError(detailOf(payload) ?? "Die Anfrage ist fehlgeschlagen.", response.status);
     }
-    return payload;
+    const parsed = parse(payload);
+    if (parsed === null) {
+        throw new ApiError("Unerwartete Antwort vom Server.", response.status);
+    }
+    return parsed;
 }
 
 /**

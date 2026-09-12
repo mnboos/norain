@@ -7,37 +7,44 @@ email/username sign-in, and a free/Pro subscription tier backed by Stripe.
 ## Project layout
 
 ```
-backend/          Django 6 + django-ninja (async ASGI via daphne)
+backend/          Django 6 + Channels (async ASGI via daphne)
+  backend/settings/  base.py + development.py / production.py (a package, not settings.py)
+  backend/asgi.py    ProtocolTypeRouter: the Django app for http, consumers for websocket
   core/
-    weather.py       route_weather endpoint, routing + sampling + wind logic
+    weather.py       routing + sampling + wind logic, compute_route_weather, build_geometry
     grid.py          forecast grid cache (ForecastCell, EnsembleCell) + API fetch + extraction
+    stations.py      Weather Underground stations: budgeted fetch, cache, near-now correction
     plotting.py      Plotly figure generation (temp, precip, wind charts)
     models.py        User (custom, AUTH_USER_MODEL), Subscription, ProcessedStripeEvent,
-                     RecurringRoute, ForecastCell, EnsembleCell
-    authentication.py  session_auth (CSRF + session) and IdentityBackend (email OR username)
-    auth_views.py    signup / verify / login / logout / password reset (plain Django views)
-    billing_views.py Stripe checkout, portal, webhook, entitlements (plain Django views)
+                     RecurringRoute, ForecastCell, EnsembleCell, StationLookup,
+                     StationObservation, ForecastJob
+    jobs.py          forecast-job identity, lifecycle and channel-layer publishing
+    claims.py        cache-backed in-flight claim for grid-cell fetches
+    consumers.py     ForecastJobConsumer (websocket), routing.py maps it to a URL
+    api/             ninja routers: route_weather.py (+ the forecast payload schemas),
+                     recurring_route.py (route CRUD), billing.py, places.py
+    auth/            backend.py (session_auth, IdentityBackend), views.py, tokens.py
     entitlements.py  every tier limit, in one place
     thumbnails.py    route-list glyph: path simplification + cache-only weather
     schedule.py      croniter-based next_departure / forecast_available_at
-    tasks.py         django-tasks background: route geometry, forecast pre-warming
-    routes_api.py    CRUD endpoints for recurring routes + per-route forecast
+    tasks.py         every heavy operation: geometry, cells, job planning/assembly, scans
     sections.py      route sectioning by weather condition
-    tests.py         django tests (SimpleTestCase + TestCase)
+    tests.py         django tests (SimpleTestCase + TestCase + TransactionTestCase)
     schemas.py       shared Pydantic (CamelSchema)
-    weather_schemas.py   RouteWeatherOut, WeatherSample, RouteWeatherSummary
-    routes_schemas.py    RecurringRouteIn/Out, RouteForecastOut
     management/commands/  verify_user, claim_routes, refresh_forecasts, run_forecast_scheduler
 frontend/         Vue 3 + Quasar + @tanstack/vue-query
   src/
     services/        http.ts (shared fetch+CSRF), auth.ts, billing.ts — the plain-Django
                      endpoints; the ninja API goes through the generated @norain/api client
     composables/     useSession, useEntitlements
-    utils/rideQuality.ts   ride-quality scoring + Spectral colour ramp (the single source)
+    utils/rideQuality.ts   ride-quality scoring (single source; map + list) + the Spectral
+                           ramp (map route line only — the list glyph is not coloured)
     utils/routeThumbnail.ts  geographic path -> square viewBox projection
     components/RouteThumbnail.vue  the tiny route glyph in the list
 packages/api/     generated TypeScript client (see "Regenerating the client")
-.env             OSM_DATA_URL, PHOTON_INDEX_URL, GRAPHHOPPER_HEAP, OPENWEATHERMAP_API_KEY
+.env             OSM_DATA_URL, PHOTON_INDEX_URL, GRAPHHOPPER_HEAP, OPENWEATHERMAP_API_KEY,
+                 WEATHERUNDERGROUND_API_KEY,
+                 REDIS_URL (claim cache + channel layer)
 ```
 
 ## Key architecture
@@ -70,16 +77,26 @@ exists and fail with "Related model 'core.user' cannot be resolved" — so `0002
 
 ### Tiers and entitlements
 
-Every limit lives in `core/entitlements.py`: free = 2 active routes and no ensemble
-spread. Enforced at **three** places, and a limit is only real if all three hold:
+Every limit lives in `core/entitlements.py`: free = 2 active routes, no ensemble
+spread and no station correction. Enforced at **three** places, and a limit is only real if all three hold:
 
-1. `create_route` / `update_route` (`routes_api.py`) — the route count, 402 when full.
-2. `route_forecast` and `route_weather` — `strip_uncertainty()` for free accounts.
+1. `create_route` / `update_route` (`api/recurring_route.py`) — the route count, 402 when full.
+2. `assemble_forecast_job` (`tasks.py`) — `strip_uncertainty()` for free accounts. This is
+   **not** in the endpoints any more: the job's stored `result` is what the WebSocket pushes
+   and what the job endpoint returns, so it has to be stripped *before* storage or a free
+   account reads Pro data straight out of the row. The owner is part of the job key, so
+   results never cross tiers.
    `pop` and `rain_if_wet` are deliberately *not* gated: ensemble cells are shared and
    pre-warmed, so serving them costs nothing extra.
-3. `_refresh_upcoming_forecasts_async` (`tasks.py`) — the pre-warm fan-out, which is what
-   actually spends the Open-Meteo budget. It is nowhere near the HTTP layer, so it is the
-   easy one to forget.
+3. `_prewarm_routes` (`tasks.py`) — decides which routes get a `scan_route_forecasts` task,
+   and the scans are what actually spend the Open-Meteo budget. Nowhere near the HTTP layer,
+   so it is the easy one to forget.
+
+The station correction (`station_correction`) is gated differently, because a corrected
+number cannot be stripped afterwards: `_wants_stations` in `plan_forecast_job` decides
+whether the Weather Underground task runs (that is where the budget is spent), and
+`assemble_forecast_job` and `compute_route_thumbnail` pass `station_correction_enabled` from
+the owner's tier. The pre-warm scan never fetches stations.
 
 Entitlements read the local `Subscription` row, never Stripe, so a tier set by hand in the
 admin behaves exactly like a paid one and the whole layer is testable without API keys.
@@ -91,6 +108,62 @@ admin behaves exactly like a paid one and the whole layer is testable without AP
 webhook POST. The signature check authenticates it instead. Every `event.id` goes into
 `ProcessedStripeEvent` and is applied once — Stripe retries on any non-2xx. Tier changes
 come only from webhook events; the Checkout success redirect proves nothing.
+
+### Every heavy operation is a task
+
+No HTTP request performs a provider fetch, a GraphHopper call or a Plotly render. The
+forecast endpoints create a `ForecastJob`, enqueue `plan_forecast_job` and return **202**
+with a job id; a finished job that is still fresh returns **200** with its stored payload.
+
+```
+POST-ish GET  ->  ForecastJob (202)
+                     plan_forecast_job     queue: forecasts   geometry + fan-out
+                       refresh_forecast_cell  \ queue: cells   one task per ~1 km² cell
+                       refresh_ensemble_cell  /
+                         assemble_forecast_job  queue: forecasts  cache_only + figures
+                           -> job.result, pushed over ws/forecast/<job_id>/
+```
+
+The stored `job.result` is always complete. `job_snapshot` serves a slim view of it
+(`core.jobs.forecast_view`: a ~50 m line, wind arrows ~2 km apart instead of the wind
+segments, no figures, no per-model breakdown), and pages fetch those parts from
+`/api/forecast_jobs/{id}/figures`, `/map_detail?detail=` (line + arrows) and
+`/samples/{i}/uncertainty` only when they draw them. Shape on read only — never let page
+shape into the job key, or two pages would compute two jobs for one forecast. Every line
+level must keep each sample's vertex exactly: the map finds samples on the line by equality.
+
+Four rules hold this together:
+
+- **Assembly reads `cache_only=True`.** Every cell it needs was fetched by a `cells` task.
+  Reaching for `get_or_fetch_*` there would put provider calls back on the path this whole
+  design exists to keep them off.
+- **`cells_total` is committed before the first cell task is enqueued.** A `cells` worker
+  can settle a cell while `plan_forecast_job` is still running, and a settle against
+  `cells_total=0` would hand the job to assembly with no data.
+- **The handoff to assembly is one guarded UPDATE, not a read-back.** `F()` makes the
+  increment atomic but not the read after it, so with several `cells` workers two tasks can
+  both see a complete job. Only the row still in `fetching` flips to `assembling`, and only
+  that caller enqueues.
+- **A job with no samples fails, it does not finish.** An empty forecast served as `done`
+  would sit in front of the user as though it were the weather, for the full `MAX_CELL_AGE`.
+
+Queue split, because `db_worker` has no concurrency flag (one process, one task at a time —
+parallelism is replicas): `cells` for the provider fan-out, `forecasts` for planning and
+assembly (someone is waiting), `default` for geometry, thumbnails, scans and maintenance.
+Queue position no longer implies completion order, so anything that used to rely on FIFO —
+the thumbnail rebuild — now uses `.using(run_after=…)`.
+
+`core/claims.py` keeps one cell from being fetched by several tasks at once (`cache.add` is
+atomic). It fails **open** — a Redis outage costs deduplication, never forecasts — and the
+claim is released on failure too, or one dead cell would block retries for the whole TTL.
+A job still enqueues a cell whose claim is held elsewhere: the holder is usually the
+pre-warm scan, whose task carries no `job_id` and would never report back.
+
+**Import cycle, load-bearing.** `core.tasks` imports `core.weather`, which imports
+`core.api.route_weather`, whose package `__init__` imports `core.api.recurring_route`. So
+`recurring_route` and `core/jobs.py` import their way back out **inside functions**, not at
+module scope. Move those to the top and any process reaching `core.tasks` or `backend.asgi`
+first — a worker, daphne, the shell command in the background-jobs guide — dies on import.
 
 ### Route-list thumbnails
 
@@ -105,12 +178,43 @@ Two rules hold this together:
   of `get_or_fetch_*`. The list polls every 60 s; the fetching accessor would hammer
   Open-Meteo once per cold cell per poll.
 - **Never port the scoring to Python.** `frontend/src/utils/rideQuality.ts` owns the
-  curves and the colour ramp and the full map already uses them. A second implementation
-  would drift and the glyph would disagree with the map about the same route.
+  curves, and the map and the list both call it. A second implementation would drift and
+  the list would disagree with the map about the same route.
 
-A sample point with no warm cell stays `null` and is painted neutral grey; a thumbnail
-whose `departure` no longer matches the route's live `nextDeparture` is greyed out
-entirely, rather than showing yesterday's weather as today's.
+**The glyph carries no quality colour** — only the route's shape. At 40 px it has no
+legend, no hover and no axis, so a ramp there would be the sole channel; the Spectral ramp
+is also red–green and is dark at *both* ends (perfect `#5e4fa2` and awful `#9e0142` differ
+in lightness by 0.04, so they are indistinguishable in greyscale). The quality is text
+instead: `RouteListPanel.qualityLabel` beside the glyph, and the `aria-label`. That caption
+is the only channel in the list — do not remove it. The Spectral ramp stays on the **map
+route line**, where the legend, the popup's Fahrqualität line and `WeatherSections` back it.
+
+The stroke still distinguishes *data presence*, which is a fact about the data rather than
+a reading of the weather: a sample point with no warm cell stays `null` and is painted
+neutral grey, and a thumbnail whose `departure` no longer matches the route's live
+`nextDeparture` is greyed out entirely, rather than showing yesterday's weather as today's.
+
+### Weather-station correction
+
+`core/stations.py`. Pro rides that overlap the next 2 h get temperature and rain probability
+nudged toward nearby Weather Underground stations: station-now minus model-now, added at
+each eta with a weight fading to 0 at 2 h (temp) / 1 h (rain). Wind is never corrected.
+Rules that hold this together:
+
+- **Only the `refresh_station_observations` task fetches.** `compute_route_weather` reads
+  `get_cached_readings` only. It is one extra unit in `cells_total` and always settles
+  as not failed — no stations nearby is a normal answer, and `cells_failed` would shorten
+  the job's lifetime as if forecast data were missing.
+- **Every call goes through `_spend_call`**, which fails *closed* (unlike `claims.py`):
+  the free key allows 1500/day and 30/min, and going over can get it switched off.
+- **Temperature is corrected in `forecasts[i]` before `compute_wind_profile`**; the pop
+  correction happens where `pop` is resolved, so `_summarize` sees it.
+- **Mark it.** Corrected samples carry `station_count`, the summary `station_corrected`,
+  and the UI says so. Don't present a corrected value as the plain model.
+- A done job whose ride is near now is reused for `STATION_JOB_LIFETIME` (10 min) only.
+
+In tests, patch `core.stations._fetch_nearby` / `_fetch_observation`, and set
+`WEATHERUNDERGROUND_API_KEY` with `patch.dict(os.environ, ...)` — `.env` may hold a real key.
 
 ### Forecast grid caching
 
@@ -146,27 +250,41 @@ OWM One Call 3.0 returns `rain` as a float (mm); legacy 2.5 returns `{"1h": valu
 
 ### Plotting
 
-`generate_forecast_figures()` returns 3 Plotly figure JSONs. When `forecast.samples` is
-empty, it returns placeholder figures with a "Keine Wetterdaten" annotation instead of
-crashing.
+`generate_forecast_figures()` returns 3 Plotly figure JSONs. It is plain synchronous CPU
+and is called only from `assemble_forecast_job`, never from a request — on one daphne
+process a Plotly render in a request coroutine stalls every other request. When
+`forecast.samples` is empty it returns placeholder figures with a "Keine Wetterdaten"
+annotation instead of crashing, though a job that assembles no samples fails before it
+gets that far.
 
 ### Recurring routes
 
 Users configure routes with cron schedules. `next_departure()` computes the next departure,
-`forecast_available_at()` checks if it's within the 16-day Open-Meteo window. Background
-tasks (`refresh_upcoming_forecasts`) pre-warm forecast cells for upcoming departures.
+`forecast_available_at()` checks if it's within the 16-day Open-Meteo window.
+`run_forecast_scheduler` runs `refresh_forecasts` hourly, which now only *queues*
+`refresh_upcoming_forecasts`; that fans out to one `scan_route_forecasts` task per eligible
+route, so one slow route no longer holds up the pass, and it purges the Stripe ledger and
+expired `ForecastJob` rows.
 
 ## Testing
 
 - `SimpleTestCase` for pure functions (no DB)
-- `TestCase` for DB-dependent tests (CellCacheTests, EntitlementTests, StripeWebhookTests)
+- `TestCase` for DB-dependent tests (CellCacheTests, EntitlementTests, StripeWebhookTests,
+  ForecastJobTests), `TransactionTestCase` for the consumer (`ForecastJobConsumerTests`)
+- Tests call the private `_..._async` twins directly, never the `@task()` wrappers — no
+  test needs a live worker
 - Run: `cd backend && python manage.py test core`
 - Frontend: `cd frontend && npm run test:unit` and `npm run type-check`
 
-When asserting that the thumbnail path spends no API request, patch
-`core.weather.get_or_fetch_forecast_cell` — `weather.py` imports the name into its own
+**Patch at the binding site, which differs by module.** When asserting that a path spends no
+API request, patch `core.weather.get_or_fetch_forecast_cell` *and*
+`core.weather.get_or_fetch_ensemble_cell` — `weather.py` imports both names into its own
 namespace, so patching `core.grid.*` does not intercept and the test passes while the code
-still fetches.
+still fetches. The opposite holds for `refresh_route_geometry`: `api/recurring_route.py`
+imports it *inside* the handler (to break the cycle above), so patch `core.tasks.*` there.
+
+Override both `CACHES` (locmem) and `CHANNEL_LAYERS` (`InMemoryChannelLayer`) for anything
+touching claims or job progress, so tests need neither Redis nor a worker.
 
 ## Regenerating the client
 

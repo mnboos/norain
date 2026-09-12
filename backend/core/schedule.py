@@ -3,10 +3,31 @@
 Uses croniter to compute next departure times from cron expressions.
 """
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from croniter import croniter
 from loguru import logger
+
+# Cron schedules, provider timestamps and the forecast window are all Swiss wall time,
+# whatever zone the server itself runs in.
+LOCAL_TZ = ZoneInfo("Europe/Zurich")
+
+
+def local_now() -> datetime:
+    return datetime.now(tz=LOCAL_TZ)
+
+
+def local_today() -> date:
+    """Today in Swiss local time: the origin of the Open-Meteo forecast window."""
+    return local_now().date()
+
+
+def _local(after: datetime | None) -> datetime:
+    """Read *after* as Swiss wall time; a value without a zone already is."""
+    if after is None:
+        return local_now()
+    return after.astimezone(LOCAL_TZ) if after.tzinfo is not None else after.replace(tzinfo=LOCAL_TZ)
 
 
 def next_departure(cron_expr: str, after: datetime | None = None) -> datetime | None:
@@ -14,11 +35,8 @@ def next_departure(cron_expr: str, after: datetime | None = None) -> datetime | 
 
     Returns ``None`` if the cron expression is invalid or cannot be parsed.
     """
-    if after is None:
-        after = datetime.now()
-
     try:
-        it = croniter(cron_expr, after)
+        it = croniter(cron_expr, _local(after))
         return it.get_next(datetime)
     except:
         logger.exception("next_departure: failed to parse cron expression {!r}", cron_expr)
@@ -34,11 +52,8 @@ def upcoming_departures(
 
     Returns an empty list if the cron expression is invalid.
     """
-    if after is None:
-        after = datetime.now()
-
     try:
-        it = croniter(cron_expr, after)
+        it = croniter(cron_expr, _local(after))
         return [it.get_next(datetime) for _ in range(count)]
     except:
         logger.exception("upcoming_departures: failed to parse cron expression {!r}", cron_expr)
@@ -50,7 +65,7 @@ def forecast_available_at(dt: datetime) -> bool:
 
     Open-Meteo supports up to 16 days of forecast (today + 15 days).
     """
-    today = datetime.now().date()
+    today = local_today()
     available = today <= dt.date() <= today + timedelta(days=15)
     if not available:
         logger.debug(

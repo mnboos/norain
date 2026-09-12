@@ -1,11 +1,4 @@
 services:
-  motis:
-    extends:
-      service: motis
-      file: docker-compose.base.yml
-    ports:
-      - "8080:8080"
-
   graphhopper:
     extends:
       service: graphhopper
@@ -27,3 +20,9 @@ services:
       file: docker-compose.base.yml
     ports:
       - "5432:5432"
+  redis:
+    extends:
+      service: redis
+      file: docker-compose.base.yml
+    ports:
+      - "6379:6379"

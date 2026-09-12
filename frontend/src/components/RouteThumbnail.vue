@@ -1,18 +1,21 @@
 <script setup lang="ts">
 /**
- * The tiny route-shape glyph in the route list: the path the ride takes, painted with the
- * same ride-quality ramp the full map uses.
+ * The tiny route-shape glyph in the route list: the shape of the ride, and nothing else.
  *
- * It is a glyph, not a chart - no axes, no legend, no hover layer. At 40 px there is room
- * for exactly one thing: the shape, coloured. Everything the colour says is repeated as
- * text by the caller (and in the `aria-label` here), because the Spectral ramp is
- * red-green and must never be the only channel - see the note at the top of
- * `rideQuality.ts`.
+ * It deliberately carries **no quality colour**. It is a glyph, not a chart - no axes, no
+ * legend, no hover layer - so a colour ramp here would be the only channel, at 40 px, for
+ * a reader who has to tell "fine" from "soaked" at a glance. The quality is text instead:
+ * the caption beside the glyph (`RouteListPanel.qualityLabel`) and the `aria-label` here.
+ *
+ * The one thing the stroke still distinguishes is *data presence*: neutral grey means no
+ * usable forecast for that stretch, which is a fact about the data rather than a reading
+ * of the weather. The map route line keeps the Spectral ramp, where a legend, the popup's
+ * Fahrqualität line and the section list back it up.
  */
 import { computed } from "vue";
 import type { RecurringRouteOut } from "@norain/api/models";
 
-import { NO_DATA_COLOR, rideScore, rideScoreLabel, scoreColor } from "@/utils/rideQuality";
+import { NO_DATA_COLOR, rideScore, rideScoreLabel } from "@/utils/rideQuality";
 import { pointsAttr, projectPath } from "@/utils/routeThumbnail";
 
 /** Only the three fields the glyph reads, so callers and tests need not build a whole route. */
@@ -25,8 +28,8 @@ const thumbnail = computed(() => props.route.thumbnail ?? null);
 /**
  * A thumbnail is computed for one departure and frozen; `nextDeparture` is recomputed on
  * every request. Once the ride it describes has passed, the row rolls on to the next
- * departure and the stored colours no longer describe it - so drop them rather than show
- * yesterday's weather as today's.
+ * departure and the stored samples no longer describe it - so fall back to grey rather
+ * than present yesterday's weather as today's.
  */
 const stale = computed(() => {
     const t = thumbnail.value;
@@ -37,7 +40,7 @@ const stale = computed(() => {
 
 const points = computed(() => projectPath(thumbnail.value?.path ?? [], props.size));
 
-/** One `<polyline>` per span between consecutive samples, with its colour. */
+/** One `<polyline>` per span between consecutive samples: theme ink, or grey where unknown. */
 const spans = computed(() => {
     const t = thumbnail.value;
     const pts = points.value;
@@ -62,9 +65,10 @@ const spans = computed(() => {
 
         const s0 = scores[k] ?? null;
         const s1 = scores[k + 1] ?? null;
-        // Worse-of-the-two, so a wet stretch is never hidden by the dry end of its span;
-        // grey the moment either end is unknown, rather than blending into invented data.
-        const color = stale.value || s0 == null || s1 == null ? NO_DATA_COLOR : scoreColor(Math.max(s0, s1));
+        // The score decides only whether this stretch is *known*, not what colour it gets.
+        // Grey the moment either end is unknown, rather than implying weather we don't have.
+        const known = !stale.value && s0 != null && s1 != null;
+        const color = known ? "currentColor" : NO_DATA_COLOR;
 
         // Slice inclusive of both endpoints so consecutive spans share a vertex and the
         // line has no gaps at the joins.
@@ -120,5 +124,8 @@ defineExpose({ label });
 .route-thumbnail {
     display: block;
     overflow: visible;
+    /* The known-forecast spans stroke `currentColor`, so the ink follows the Quasar theme
+       var and flips with dark mode on its own - no second JS path watching $q.dark. */
+    color: var(--q-primary);
 }
 </style>

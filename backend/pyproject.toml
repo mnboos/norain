@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "async-lru==2.3.0",
+    "channels==4.3.2",
+    "channels-redis==4.3.0",
     "croniter==6.2.4",
     "daphne==4.2.3",
     "django==6.1.1",
@@ -19,6 +21,7 @@ dependencies = [
     "psycopg[binary,pool]==3.3.5",
     "python-dotenv==1.2.3",
     "rasterio==1.5.1",
+    "redis[hiredis]==8.1.0",
     "shapely==2.1.2",
     "stripe==13.2.0",
 ]
@@ -28,6 +31,7 @@ dev = [
     "openapi-generator-cli==7.25.0",
     "ruff==0.16.6",
     "taskipy==1.14.1",
+    "types-channels==4.3.0.20260518",
 ]
 
 [tool.taskipy.tasks]

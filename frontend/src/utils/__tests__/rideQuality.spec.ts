@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { WeatherSample } from "@norain/api/models";
+import type { ForecastSampleOut } from "@norain/api/models";
 import {
     NO_DATA_COLOR,
     SPECTRAL_10,
@@ -12,7 +12,7 @@ import {
     scoreColor,
 } from "@/utils/rideQuality";
 
-function sample(over: Partial<WeatherSample> = {}): WeatherSample {
+function sample(over: Partial<ForecastSampleOut> = {}): ForecastSampleOut {
     return {
         lat: 47.5,
         lon: 9.25,
@@ -38,7 +38,7 @@ function at<T>(list: readonly T[], i: number): T {
 }
 
 /** Score of a sample, or null when it has no usable data - what gradientStops consumes. */
-const scoresOf = (ss: WeatherSample[]) => ss.map(s => rideScore(s)?.score ?? null);
+const scoresOf = (ss: ForecastSampleOut[]) => ss.map(s => rideScore(s)?.score ?? null);
 
 /** Unpack the flat maplibre stop list, checking it really is [number, string, ...]. */
 function pairs(stops: (number | string)[]): { p: number; color: string }[] {

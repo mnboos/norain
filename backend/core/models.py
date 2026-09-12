@@ -1,7 +1,9 @@
 import uuid
+from typing import ClassVar
 
 from django.conf import settings
-from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserManager
+from django.contrib.auth.models import AbstractUser
+from django.contrib.auth.models import UserManager as DjangoUserManager
 from django.contrib.gis.db import models
 from django.contrib.gis.geos import LineString, Point
 from django.db.models.functions import Lower
@@ -47,10 +49,10 @@ class User(AbstractUser):
     objects = UserManager()
 
     class Meta(AbstractUser.Meta):
-        constraints = [
+        constraints = (
             models.UniqueConstraint(Lower("email"), name="core_user_email_ci_unique"),
             models.UniqueConstraint(Lower("username"), name="core_user_username_ci_unique"),
-        ]
+        )
 
     def __str__(self):
         return self.username or self.email
@@ -147,6 +149,7 @@ class RecurringRoute(models.Model):
         help_text="[{lat, lon, lat_r, lon_r, elapsed_s, idx}, ...] pre-computed sample points with rounded coords",
     )
     geometry_fetched_at = models.DateTimeField(null=True, blank=True)
+    vertex_times = models.JSONField(null=True, blank=True, help_text="Floating-point elapsed seconds at every polyline vertex")
 
     # Pre-rendered route-list glyph: simplified path + the weather fields the frontend
     # scorer reads, for the next departure. Written by refresh_route_thumbnail so the
@@ -159,7 +162,8 @@ class RecurringRoute(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["-created_at"]
+        # A list, not a tuple: migrations compare it as written, and 0001 stores a list.
+        ordering: ClassVar[list[str]] = ["-created_at"]
 
     @property
     def start_lat(self) -> float:
@@ -205,11 +209,11 @@ class ForecastCell(models.Model):
     fetched_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = [("lat_r", "lon_r", "day_key", "source")]
-        indexes = [
+        unique_together = (("lat_r", "lon_r", "day_key", "source"),)
+        indexes = (
             models.Index(fields=["lat_r", "lon_r", "day_key"]),
             models.Index(fields=["fetched_at"]),
-        ]
+        )
 
     def __str__(self):
         return f"ForecastCell({self.lat_r}, {self.lon_r}, {self.day_key}, {self.source})"
@@ -232,11 +236,132 @@ class EnsembleCell(models.Model):
     fetched_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = [("lat_r", "lon_r", "day_key")]
-        indexes = [
+        unique_together = (("lat_r", "lon_r", "day_key"),)
+        indexes = (
             models.Index(fields=["lat_r", "lon_r", "day_key"]),
             models.Index(fields=["fetched_at"]),
-        ]
+        )
 
     def __str__(self):
         return f"EnsembleCell({self.lat_r}, {self.lon_r}, {self.day_key})"
+
+
+class StationLookup(models.Model):
+    """The Weather Underground stations nearest one lookup cell (~4-5 km).
+
+    Stations rarely come and go, so this is kept for weeks and spares the call budget.
+    """
+
+    lat_c = models.FloatField(help_text="Latitude rounded to 1/20 degree")
+    lon_c = models.FloatField(help_text="Longitude rounded to 1/20 degree")
+    stations = models.JSONField(help_text="[{id, lat, lon, qc, updated}, ...], nearest first")
+    fetched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = (("lat_c", "lon_c"),)
+
+    def __str__(self):
+        return f"StationLookup({self.lat_c}, {self.lon_c})"
+
+
+class StationObservation(models.Model):
+    """The latest reading of one Weather Underground personal weather station.
+
+    Kept apart from ``ForecastCell``: a reading belongs to a station, not a grid cell, and
+    it is only worth anything for minutes, not the two hours a forecast cell lives.
+    """
+
+    station_id = models.CharField(max_length=64, unique=True)
+    lat = models.FloatField()
+    lon = models.FloatField()
+    observed_at = models.DateTimeField()
+    temp = models.FloatField(null=True, blank=True, help_text="°C")
+    precip_rate = models.FloatField(null=True, blank=True, help_text="mm/h")
+    qc_status = models.IntegerField(null=True, blank=True, help_text="-1 unchecked, 0 possibly wrong, 1 passed")
+    fetched_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = (models.Index(fields=["observed_at"]),)
+
+    def __str__(self):
+        return f"StationObservation({self.station_id}, {self.observed_at})"
+
+
+class ForecastJob(models.Model):
+    """One forecast computation, carried out by background tasks.
+
+    The forecast endpoints do no work themselves: they create (or find) a job, enqueue
+    ``plan_forecast_job`` and return. The job then accumulates progress as individual
+    cell tasks settle, and ``assemble_forecast_job`` writes the finished payload into
+    ``result``. The browser watches a job over the WebSocket in ``core/consumers.py``.
+    """
+
+    class Kind(models.TextChoices):
+        ADHOC = "adhoc", "Ad-hoc route"
+        ROUTE = "route", "Saved route"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PLANNING = "planning", "Planning"
+        FETCHING = "fetching", "Fetching cells"
+        ASSEMBLING = "assembling", "Assembling"
+        DONE = "done", "Done"
+        FAILED = "failed", "Failed"
+
+    TERMINAL_STATUSES = (Status.DONE, Status.FAILED)
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    # Identical requests collapse onto one job. The owner is part of the key because
+    # `result` is already entitlement-stripped when it is stored -- a free account and a
+    # Pro account asking for the same ride must not share a row.
+    key = models.CharField(max_length=64, unique=True)
+
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="forecast_jobs",
+    )
+    params = models.JSONField(help_text="The request that asked for this forecast")
+    # Resolved once by plan_forecast_job and reused by assemble_forecast_job, so the
+    # GraphHopper call happens at most once per job even though the two tasks usually run
+    # in different worker processes (the alru_cache in weather.py is per process).
+    geometry = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="polyline, sample_points, total_seconds, total_distance_m",
+    )
+
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    cells_total = models.IntegerField(default=0)
+    # Counts failed cells too. A cell whose providers are all down must still settle, or
+    # one dead coordinate would leave the job fetching forever.
+    cells_settled = models.IntegerField(default=0)
+    # How many of the settled cells stored nothing (a provider error, a 429). A finished job
+    # with failures is reused only briefly, so a short provider outage does not hide the
+    # missing data for the whole MAX_CELL_AGE.
+    cells_failed = models.IntegerField(default=0)
+    # Bounds the re-defer loop in plan_forecast_job when route geometry never arrives.
+    attempts = models.IntegerField(default=0)
+
+    result = models.JSONField(null=True, blank=True)
+    error = models.TextField(blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = (
+            models.Index(fields=["status"]),
+            models.Index(fields=["updated_at"]),
+        )
+
+    def __str__(self):
+        return f"ForecastJob({self.kind}, {self.status}, {self.cells_settled}/{self.cells_total})"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.status in self.TERMINAL_STATUSES

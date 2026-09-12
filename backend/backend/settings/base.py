@@ -70,15 +70,50 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.gis",
+    "channels",
     "core",
     "django_tasks_db",
 ]
 
+# Queue split. `db_worker` has no concurrency flag -- it runs one task at a time -- so
+# throughput comes from running several worker processes, and the split keeps a burst of
+# provider fetches from starving the work a user is actually waiting on:
+#   cells      the provider fan-out, one task per grid cell (many, slow, I/O bound)
+#   forecasts  job planning and assembly (few, latency-sensitive: someone is watching)
+#   default    geometry, thumbnails, pre-warm scans, maintenance
 TASKS = {
     "default": {
         "BACKEND": "django_tasks_db.DatabaseBackend",
-        "QUEUES": ["default"],
+        "QUEUES": ["default", "cells", "forecasts"],
         "OPTIONS": {"id_function": "uuid.uuid7"},
+    }
+}
+
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+
+# Not a page cache. This is the in-flight claim for grid-cell fetches: `cache.add()` is
+# atomic, so exactly one caller wins the right to enqueue a fetch for a given cell and the
+# rest skip it. A claim cannot live on the cell row itself -- ForecastCell.fetched_at is
+# auto_now, so writing a claim there would bump it and make a stale cell look fresh.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"{REDIS_URL}/1",
+    }
+}
+
+# Workers run in their own containers, so progress events reach the daphne process (and
+# from there the browser's WebSocket) through the channel layer.
+#
+# channels_redis waits for messages with a blocking Redis read of 5 s (`brpop_timeout`).
+# redis-py 8 also gives every socket a default 5 s read timeout, so an idle wait timed out
+# at the same moment and killed the WebSocket with "Timeout reading from ...". The read
+# timeout must stay longer than the blocking read; it is still finite, so a dead
+# connection is noticed.
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [{"address": f"{REDIS_URL}/2", "socket_timeout": 15}]},
     }
 }
 

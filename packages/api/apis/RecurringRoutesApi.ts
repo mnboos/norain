@@ -14,6 +14,11 @@
 
 import * as runtime from '../runtime';
 import {
+    type ForecastJobOut,
+    ForecastJobOutFromJSON,
+    ForecastJobOutToJSON,
+} from '../models/ForecastJobOut';
+import {
     type RecurringRouteIn,
     RecurringRouteInFromJSON,
     RecurringRouteInToJSON,
@@ -23,11 +28,6 @@ import {
     RecurringRouteOutFromJSON,
     RecurringRouteOutToJSON,
 } from '../models/RecurringRouteOut';
-import {
-    type RouteForecastOut,
-    RouteForecastOutFromJSON,
-    RouteForecastOutToJSON,
-} from '../models/RouteForecastOut';
 
 export interface RecurringRoutesApiCoreApiRecurringRouteCreateRouteRequest {
     /**
@@ -312,21 +312,21 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
     }
 
     /**
-     * Get weather forecast + Plotly figures for a specific departure of a saved route.  Assembles the forecast from cached grid cells (ForecastCell + EnsembleCell). If cells are missing, they are fetched on-the-fly and stored.
+     * Start (or join) the forecast for one departure of a saved route.  Returns 200 with the finished payload -- weather, Plotly figures and sections -- when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither is allowed on this path.
      * Route Forecast
      */
-    async coreApiRecurringRouteRouteForecastRaw(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RouteForecastOut>> {
+    async coreApiRecurringRouteRouteForecastRaw(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastJobOut>> {
         const requestOptions = await this.coreApiRecurringRouteRouteForecastRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) => RouteForecastOutFromJSON(jsonValue));
+        return new runtime.JSONApiResponse(response, (jsonValue) => ForecastJobOutFromJSON(jsonValue));
     }
 
     /**
-     * Get weather forecast + Plotly figures for a specific departure of a saved route.  Assembles the forecast from cached grid cells (ForecastCell + EnsembleCell). If cells are missing, they are fetched on-the-fly and stored.
+     * Start (or join) the forecast for one departure of a saved route.  Returns 200 with the finished payload -- weather, Plotly figures and sections -- when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither is allowed on this path.
      * Route Forecast
      */
-    async coreApiRecurringRouteRouteForecast(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RouteForecastOut> {
+    async coreApiRecurringRouteRouteForecast(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
         const response = await this.coreApiRecurringRouteRouteForecastRaw(requestParameters, initOverrides);
         return await response.value();
     }

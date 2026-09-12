@@ -14,10 +14,56 @@
 
 import * as runtime from '../runtime';
 import {
-    type RouteWeatherOut,
-    RouteWeatherOutFromJSON,
-    RouteWeatherOutToJSON,
-} from '../models/RouteWeatherOut';
+    type ForecastJobOut,
+    ForecastJobOutFromJSON,
+    ForecastJobOutToJSON,
+} from '../models/ForecastJobOut';
+import {
+    type ForecastMapDetailOut,
+    ForecastMapDetailOutFromJSON,
+    ForecastMapDetailOutToJSON,
+} from '../models/ForecastMapDetailOut';
+import {
+    type ForecastUncertainty,
+    ForecastUncertaintyFromJSON,
+    ForecastUncertaintyToJSON,
+} from '../models/ForecastUncertainty';
+
+export interface RouteWeatherApiCoreApiRouteWeatherForecastJobRequest {
+    /**
+     * 
+     */
+    jobId: string;
+}
+
+export interface RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest {
+    /**
+     * 
+     */
+    jobId: string;
+}
+
+export interface RouteWeatherApiCoreApiRouteWeatherForecastJobMapDetailRequest {
+    /**
+     * 
+     */
+    jobId: string;
+    /**
+     * 
+     */
+    detail: CoreApiRouteWeatherForecastJobMapDetailDetailEnum;
+}
+
+export interface RouteWeatherApiCoreApiRouteWeatherForecastJobSampleUncertaintyRequest {
+    /**
+     * 
+     */
+    jobId: string;
+    /**
+     * 
+     */
+    index: number;
+}
 
 export interface RouteWeatherApiCoreApiRouteWeatherRouteWeatherRequest {
     /**
@@ -54,6 +100,213 @@ export interface RouteWeatherApiCoreApiRouteWeatherRouteWeatherRequest {
  * 
  */
 export class RouteWeatherApi extends runtime.BaseAPI {
+
+    /**
+     * Creates request options for coreApiRouteWeatherForecastJob without sending the request
+     */
+    async coreApiRouteWeatherForecastJobRequestOpts(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['jobId'] == null) {
+            throw new runtime.RequiredError(
+                'jobId',
+                'Required parameter "jobId" was null or undefined when calling coreApiRouteWeatherForecastJob().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/api/forecast_jobs/{job_id}`;
+        urlPath = urlPath.replace('{job_id}', encodeURIComponent(String(requestParameters['jobId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Poll one forecast job.  The WebSocket is the primary channel; this exists so a client behind a proxy that drops upgrades still makes progress, and so tests can assert without a socket.
+     * Forecast Job
+     */
+    async coreApiRouteWeatherForecastJobRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastJobOut>> {
+        const requestOptions = await this.coreApiRouteWeatherForecastJobRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ForecastJobOutFromJSON(jsonValue));
+    }
+
+    /**
+     * Poll one forecast job.  The WebSocket is the primary channel; this exists so a client behind a proxy that drops upgrades still makes progress, and so tests can assert without a socket.
+     * Forecast Job
+     */
+    async coreApiRouteWeatherForecastJob(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
+        const response = await this.coreApiRouteWeatherForecastJobRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for coreApiRouteWeatherForecastJobFigures without sending the request
+     */
+    async coreApiRouteWeatherForecastJobFiguresRequestOpts(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['jobId'] == null) {
+            throw new runtime.RequiredError(
+                'jobId',
+                'Required parameter "jobId" was null or undefined when calling coreApiRouteWeatherForecastJobFigures().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/api/forecast_jobs/{job_id}/figures`;
+        urlPath = urlPath.replace('{job_id}', encodeURIComponent(String(requestParameters['jobId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * The Plotly chart figures of a finished job, for the pages that draw charts.
+     * Forecast Job Figures
+     */
+    async coreApiRouteWeatherForecastJobFiguresRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<{ [key: string]: any | null; }>>> {
+        const requestOptions = await this.coreApiRouteWeatherForecastJobFiguresRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse<any>(response);
+    }
+
+    /**
+     * The Plotly chart figures of a finished job, for the pages that draw charts.
+     * Forecast Job Figures
+     */
+    async coreApiRouteWeatherForecastJobFigures(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<{ [key: string]: any | null; }>> {
+        const response = await this.coreApiRouteWeatherForecastJobFiguresRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for coreApiRouteWeatherForecastJobMapDetail without sending the request
+     */
+    async coreApiRouteWeatherForecastJobMapDetailRequestOpts(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobMapDetailRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['jobId'] == null) {
+            throw new runtime.RequiredError(
+                'jobId',
+                'Required parameter "jobId" was null or undefined when calling coreApiRouteWeatherForecastJobMapDetail().'
+            );
+        }
+
+        if (requestParameters['detail'] == null) {
+            throw new runtime.RequiredError(
+                'detail',
+                'Required parameter "detail" was null or undefined when calling coreApiRouteWeatherForecastJobMapDetail().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['detail'] != null) {
+            queryParameters['detail'] = requestParameters['detail'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/api/forecast_jobs/{job_id}/map_detail`;
+        urlPath = urlPath.replace('{job_id}', encodeURIComponent(String(requestParameters['jobId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * The route line and felt-wind arrows at more detail than the job result carries.  The map asks for this only once it is zoomed in far enough to show the difference.
+     * Forecast Job Map Detail
+     */
+    async coreApiRouteWeatherForecastJobMapDetailRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobMapDetailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastMapDetailOut>> {
+        const requestOptions = await this.coreApiRouteWeatherForecastJobMapDetailRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ForecastMapDetailOutFromJSON(jsonValue));
+    }
+
+    /**
+     * The route line and felt-wind arrows at more detail than the job result carries.  The map asks for this only once it is zoomed in far enough to show the difference.
+     * Forecast Job Map Detail
+     */
+    async coreApiRouteWeatherForecastJobMapDetail(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobMapDetailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastMapDetailOut> {
+        const response = await this.coreApiRouteWeatherForecastJobMapDetailRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for coreApiRouteWeatherForecastJobSampleUncertainty without sending the request
+     */
+    async coreApiRouteWeatherForecastJobSampleUncertaintyRequestOpts(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobSampleUncertaintyRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['jobId'] == null) {
+            throw new runtime.RequiredError(
+                'jobId',
+                'Required parameter "jobId" was null or undefined when calling coreApiRouteWeatherForecastJobSampleUncertainty().'
+            );
+        }
+
+        if (requestParameters['index'] == null) {
+            throw new runtime.RequiredError(
+                'index',
+                'Required parameter "index" was null or undefined when calling coreApiRouteWeatherForecastJobSampleUncertainty().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/api/forecast_jobs/{job_id}/samples/{index}/uncertainty`;
+        urlPath = urlPath.replace('{job_id}', encodeURIComponent(String(requestParameters['jobId'])));
+        urlPath = urlPath.replace('{index}', encodeURIComponent(String(requestParameters['index'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * One sample\'s full ensemble spread, including the per-model breakdown.  ``null`` when the sample has none -- which includes every sample of a free account, since the stored result is stripped before storage.
+     * Forecast Job Sample Uncertainty
+     */
+    async coreApiRouteWeatherForecastJobSampleUncertaintyRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobSampleUncertaintyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastUncertainty>> {
+        const requestOptions = await this.coreApiRouteWeatherForecastJobSampleUncertaintyRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => ForecastUncertaintyFromJSON(jsonValue));
+    }
+
+    /**
+     * One sample\'s full ensemble spread, including the per-model breakdown.  ``null`` when the sample has none -- which includes every sample of a free account, since the stored result is stripped before storage.
+     * Forecast Job Sample Uncertainty
+     */
+    async coreApiRouteWeatherForecastJobSampleUncertainty(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobSampleUncertaintyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastUncertainty> {
+        const response = await this.coreApiRouteWeatherForecastJobSampleUncertaintyRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * Creates request options for coreApiRouteWeatherRouteWeather without sending the request
@@ -145,21 +398,32 @@ export class RouteWeatherApi extends runtime.BaseAPI {
     }
 
     /**
+     * Start (or join) the forecast for an ad-hoc route.  Returns 200 with the payload when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. The routing call and every provider fetch happen on workers -- this endpoint never blocks on them.
      * Route Weather
      */
-    async coreApiRouteWeatherRouteWeatherRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherRouteWeatherRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RouteWeatherOut>> {
+    async coreApiRouteWeatherRouteWeatherRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherRouteWeatherRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastJobOut>> {
         const requestOptions = await this.coreApiRouteWeatherRouteWeatherRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) => RouteWeatherOutFromJSON(jsonValue));
+        return new runtime.JSONApiResponse(response, (jsonValue) => ForecastJobOutFromJSON(jsonValue));
     }
 
     /**
+     * Start (or join) the forecast for an ad-hoc route.  Returns 200 with the payload when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. The routing call and every provider fetch happen on workers -- this endpoint never blocks on them.
      * Route Weather
      */
-    async coreApiRouteWeatherRouteWeather(requestParameters: RouteWeatherApiCoreApiRouteWeatherRouteWeatherRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RouteWeatherOut> {
+    async coreApiRouteWeatherRouteWeather(requestParameters: RouteWeatherApiCoreApiRouteWeatherRouteWeatherRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
         const response = await this.coreApiRouteWeatherRouteWeatherRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
+}
+
+/**
+  * @export
+  * @enum {string}
+  */
+export enum CoreApiRouteWeatherForecastJobMapDetailDetailEnum {
+    Medium = 'medium',
+    Full = 'full',
 }
