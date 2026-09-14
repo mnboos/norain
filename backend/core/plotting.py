@@ -5,7 +5,7 @@ from zoneinfo import ZoneInfo
 
 import plotly.graph_objects as go
 
-from .api.route_weather import RouteWeatherOut
+from .forecast_schemas import RouteWeatherOut
 
 # Visual-only smoothing: the curve still passes through every real sample (the markers), but a
 # spline can slightly over/undershoot between two points at abrupt changes. Moderate smoothing

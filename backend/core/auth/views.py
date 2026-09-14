@@ -189,8 +189,6 @@ def login_view(request: HttpRequest):
 
 def _refresh_forecasts_after_login(user) -> None:
     """Queue the check for stale forecasts on the user's routes. Never fails the sign-in."""
-    # Imported here: core.tasks reaches core.api, whose package imports back into core.
-
     try:
         refresh_user_forecasts.enqueue(user.pk)
     except Exception:  # a sign-in that worked must not turn into a 500 over pre-warming

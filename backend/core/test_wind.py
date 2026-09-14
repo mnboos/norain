@@ -2,11 +2,20 @@
 
 import json
 import math
+from datetime import datetime
 from time import perf_counter
 
 from django.test import SimpleTestCase
 
+from .forecast_schemas import RouteWeatherOut
 from .geo import vertex_distances
+from .grid import _from_open_meteo, _from_owm
+from .plotting import generate_forecast_figures
+from .schedule import LOCAL_TZ
+from .test_uncertainty import ETA, FETCHED, ensemble_data
+from .test_uncertainty import sample as weather_sample
+from .uncertainty import extract_uncertainty
+from .weather import _summarize
 from .wind import (
     WeightedDirection,
     compute_wind_profile,
@@ -38,11 +47,6 @@ def profile(coords, *, wind_dir=0, wind_speed=30, speed=20, **kwargs):
 
 class WindTests(SimpleTestCase):
     def test_provider_missing_wind_is_not_north_or_calm(self):
-        from datetime import datetime
-
-        from .grid import _from_open_meteo, _from_owm
-        from .schedule import LOCAL_TZ
-
         eta = datetime(2026, 9, 12, 12, tzinfo=LOCAL_TZ)
         wall_time = eta.replace(tzinfo=None).isoformat()
         meteo = _from_open_meteo({"hourly": {"time": [wall_time], "temperature_2m": [18]}}, eta)
@@ -53,10 +57,6 @@ class WindTests(SimpleTestCase):
             self.assertEqual(sample["temp"], 18)
 
     def test_aware_departure_matches_provider_local_time(self):
-        from datetime import datetime
-
-        from .grid import _from_open_meteo
-
         data = {
             "hourly": {
                 "time": ["2026-09-13T12:00:00", "2026-09-13T13:00:00"],
@@ -67,9 +67,6 @@ class WindTests(SimpleTestCase):
         self.assertEqual(_from_open_meteo(data, datetime.fromisoformat("2026-09-13T10:00:00Z"))["wind_speed"], 10)
 
     def test_ensemble_projects_members_before_quantiles(self):
-        from .test_uncertainty import ETA, FETCHED, ensemble_data
-        from .uncertainty import extract_uncertainty
-
         data = ensemble_data()
         data["hourly"]["wind_direction_10m_a"] = [270, 270]
         data["hourly"]["wind_direction_10m_member01_a"] = [270, 270]
@@ -82,12 +79,7 @@ class WindTests(SimpleTestCase):
         self.assertIsNotNone(empty.pop)
 
     def test_legacy_payload_defaults_and_felt_chart_gap_selection(self):
-        from .api.route_weather import RouteWeatherOut
-        from .plotting import generate_forecast_figures
-        from .test_uncertainty import sample
-        from .weather import _summarize
-
-        samples = [sample()]
+        samples = [weather_sample()]
         forecast = RouteWeatherOut(
             line=[[0, 0], [0, 0.01]],
             total_seconds=200,

@@ -17,7 +17,7 @@ import httpx
 from async_lru import alru_cache
 from loguru import logger
 
-from .api.route_weather import RouteWeatherOut, RouteWeatherSummary, WeatherSample
+from .forecast_schemas import RouteWeatherOut, RouteWeatherSummary, WeatherSample, WindDistribution
 from .geo import haversine_m as _haversine_m
 from .grid import (
     ENSEMBLE_MODELS,
@@ -437,7 +437,6 @@ async def compute_route_weather(
     summary = _summarize(samples, forecast_source)
     summary.station_corrected = any(s.station_count for s in samples)
     if wind.distribution is not None:
-        from .api.route_weather import WindDistribution
         summary.wind_distribution = WindDistribution(**wind.distribution)
 
     return RouteWeatherOut(

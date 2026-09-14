@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from django.test import SimpleTestCase, TestCase
 
-from .api.route_weather import RouteWeatherOut, WeatherSample
+from .forecast_schemas import RouteWeatherOut, WeatherSample
 from .grid import (
     ENSEMBLE_REQUEST_VERSION,
     _fetch_ensemble,

@@ -171,8 +171,6 @@ def wind_arrows_at_detail(result: dict, detail: str) -> list[dict]:
 
 def uncertainty_partial(samples: list[dict]) -> bool:
     """Whether some sample lacks ensemble data: no spread, a missing model or metric."""
-    # Imported here: core.uncertainty reaches core.api, and core.tasks imports this module.
-
     for sample in samples:
         uncertainty = sample.get("uncertainty")
         if not uncertainty:
@@ -271,10 +269,6 @@ async def get_or_start_job(kind: str, owner, params: dict) -> tuple[ForecastJob,
     already available or an identical job is still in flight -- in both cases the caller
     just subscribes instead of starting a second fan-out.
     """
-    # Imported here, not at module scope: core.grid reaches core.api (via core.uncertainty),
-    # which imports core.tasks, which imports this module -- a cycle that only bites when
-    # the ASGI app loads consumers before the API package.
-
     key = job_key(kind, owner.id if owner is not None else None, params)
     now = datetime.now(tz=UTC)
 

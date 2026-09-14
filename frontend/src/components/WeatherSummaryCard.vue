@@ -1,26 +1,64 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { symSharpInfo } from "@quasar/extras/material-symbols-sharp";
 import type { RouteForecastOut } from "@norain/api/models";
-import { forecastHeadline, peakRisk } from "@/utils/forecastDetails";
+import { forecastHeadline, swissTime } from "@/utils/forecastDetails";
+import WeatherSections from "@/components/WeatherSections.vue";
 import WindDistributionBar from "@/components/WindDistributionBar.vue";
 const props = defineProps<{ forecast: RouteForecastOut }>();
+const width = ref(0);
+const showExplanation = ref(false);
+const wide = computed(() => width.value >= 1024);
+const metricColumns = computed(() => (wide.value ? 6 : width.value >= 480 ? 3 : 2));
 const headline = computed(() => forecastHeadline(props.forecast.summary, props.forecast.samples));
+const rainTime = computed(() =>
+    props.forecast.samples.length &&
+    props.forecast.summary.firstRainEta &&
+    (props.forecast.summary.rainProbability == null || props.forecast.summary.rainProbability > 0)
+        ? swissTime(props.forecast.summary.firstRainEta)
+        : null,
+);
+const status = computed(() =>
+    rainTime.value
+        ? props.forecast.summary.rainProbability == null
+            ? "Regen in der Einzelprognose"
+            : "Regen möglich"
+        : "Vorhersage",
+);
+const explanation = computed(() => {
+    if (!props.forecast.samples.length) return "Für diese Fahrt liegen noch keine Wetterdaten vor.";
+    const p = props.forecast.summary.rainProbability;
+    if (p == null) return "Keine Wahrscheinlichkeitsdaten verfügbar. Die Einschätzung basiert auf der Einzelprognose.";
+    return `Am riskantesten verfügbaren Punkt beträgt das Regenrisiko ${Math.round(p * 100)} %. Die Einzelprognose kann davon abweichen.`;
+});
 const peakRate = computed(() => {
     const rates = props.forecast.samples.flatMap(s => (s.rainRateMmH == null ? [] : [s.rainRateMmH]));
-    return rates.length ? `${Math.max(...rates).toFixed(1)} mm/h` : "—";
+    return rates.length ? Math.max(...rates).toFixed(1) : null;
 });
 // One compact row of key figures; the fine print lives in the info tooltip to keep the card short.
 const stats = computed(() => [
-    { label: "Max. Regenrisiko", value: peakRisk(props.forecast) },
-    { label: "Max. Intensität", value: peakRate.value },
-    { label: "Max. Gegenwind im Abschnitt", value: props.forecast.summary.maxHeadwind == null
-        ? "Nicht verfügbar" : `${props.forecast.summary.maxHeadwind} km/h` },
-    { label: "Max. Windaufwand (geschätzt)", value: props.forecast.summary.maxWindPowerW == null
-        ? "Nicht verfügbar" : props.forecast.summary.maxWindPowerW > 0
-            ? `+${Math.round(props.forecast.summary.maxWindPowerW)} W` : "Kein Mehraufwand" },
-    { label: "Dauer", value: `${Math.round(props.forecast.totalSeconds / 60)} min` },
-    { label: "Distanz", value: `${(props.forecast.totalDistanceM / 1000).toFixed(1)} km` },
+    {
+        label: "Regenrisiko",
+        value:
+            props.forecast.summary.rainProbability == null
+                ? null
+                : Math.round(props.forecast.summary.rainProbability * 100),
+        unit: "%",
+    },
+    { label: "Intensität max.", value: peakRate.value, unit: "mm/h" },
+    { label: "Gegenwind max.", value: props.forecast.summary.maxHeadwind, unit: "km/h" },
+    {
+        label: "Windaufwand max.",
+        value:
+            props.forecast.summary.maxWindPowerW == null
+                ? null
+                : props.forecast.summary.maxWindPowerW > 0
+                  ? `+${Math.round(props.forecast.summary.maxWindPowerW)}`
+                  : "0",
+        unit: "W",
+    },
+    { label: "Dauer", value: Math.round(props.forecast.totalSeconds / 60), unit: "min" },
+    { label: "Distanz", value: (props.forecast.totalDistanceM / 1000).toFixed(1), unit: "km" },
 ]);
 const note =
     "Das Regenrisiko gilt am jeweils riskantesten verfügbaren Punkt und dessen Vorhersagestunde. Es ist keine " +
@@ -31,29 +69,101 @@ const note =
 </script>
 
 <template>
-    <q-card :class="forecast.summary.willRain ? 'bg-tint-wet' : 'bg-tint-dry'">
-        <q-card-section class="q-py-sm">
-            <div class="row items-center q-gutter-x-xs">
-                <div class="text-subtitle1 text-weight-medium">{{ headline }}</div>
-                <q-icon :name="symSharpInfo" size="18px" class="text-muted cursor-pointer" tabindex="0" :aria-label="note">
-                    <q-tooltip max-width="320px">{{ note }}</q-tooltip>
-                </q-icon>
-                <q-space />
-                <div class="text-caption text-muted">
-                    Daten: {{ forecast.summary.source }}
-                    <template v-if="forecast.summary.stationCorrected"> · kurzfristig mit Messstationen abgeglichen</template>
+    <q-card flat>
+        <q-resize-observer @resize="size => (width = size.width)" />
+        <div class="row">
+            <q-card-section class="q-pa-lg" :class="wide ? 'col-3' : 'col-12'">
+                <div
+                    class="text-overline"
+                    :class="
+                        forecast.summary.rainProbability || forecast.summary.willRain
+                            ? 'text-warning'
+                            : 'text-secondary'
+                    "
+                >
+                    <q-badge
+                        rounded
+                        :color="forecast.summary.rainProbability || forecast.summary.willRain ? 'warning' : 'secondary'"
+                        class="q-mr-sm"
+                    />
+                    {{ status }}
                 </div>
-            </div>
-            <div class="row q-col-gutter-x-lg">
-                <div v-for="stat in stats" :key="stat.label" class="col-auto">
-                    <div class="text-caption text-muted">{{ stat.label }}</div>
-                    <div class="text-subtitle1 text-weight-medium">{{ stat.value }}</div>
+                <h2 v-if="rainTime" class="text-h5 text-weight-medium q-my-sm">
+                    ab ca.
+                    <span class="text-primary text-weight-medium">{{ rainTime }}</span>
+                    Uhr
+                </h2>
+                <h2 v-else class="text-h5 text-weight-medium q-my-sm">{{ headline }}</h2>
+                <p class="text-caption q-mb-md" :class="$q.dark.isActive ? 'text-grey-5' : 'text-grey-7'">
+                    {{ explanation }}
+                </p>
+                <WeatherSections v-if="forecast.sections?.length" :sections="forecast.sections" />
+            </q-card-section>
+            <q-separator :vertical="wide" :class="wide ? '' : 'full-width'" />
+            <q-card-section class="q-pa-lg" :class="wide ? 'col' : 'col-12'" aria-label="Kennzahlen der Fahrt">
+                <dl class="row q-col-gutter-sm q-mb-lg">
+                    <div
+                        v-for="(stat, index) in stats"
+                        :key="stat.label"
+                        :class="`col-${12 / metricColumns}`"
+                        class="row no-wrap"
+                    >
+                        <q-separator v-if="index % metricColumns !== 0" vertical class="q-mr-sm" />
+                        <div class="col">
+                            <dt
+                                class="text-caption text-uppercase"
+                                :class="$q.dark.isActive ? 'text-grey-5' : 'text-grey-7'"
+                            >
+                                {{ stat.label }}
+                            </dt>
+                            <dd v-if="stat.value != null" class="q-ma-none text-h6 text-weight-medium">
+                                {{ stat.value }}
+                                <small
+                                    class="text-caption q-ml-xs"
+                                    :class="$q.dark.isActive ? 'text-grey-5' : 'text-grey-7'"
+                                >
+                                    {{ stat.unit }}
+                                </small>
+                            </dd>
+                            <dd v-else class="q-ma-none text-caption">Nicht verfügbar</dd>
+                        </div>
+                    </div>
+                </dl>
+                <WindDistributionBar
+                    v-if="forecast.summary.windDistribution"
+                    :distribution="forecast.summary.windDistribution"
+                />
+                <div
+                    class="row items-center q-gutter-x-xs text-caption q-mt-sm"
+                    :class="$q.dark.isActive ? 'text-grey-5' : 'text-grey-7'"
+                >
+                    <q-btn
+                        flat
+                        dense
+                        round
+                        size="sm"
+                        :icon="symSharpInfo"
+                        aria-label="Kennzahlen erklärt"
+                        @click="showExplanation = true"
+                    />
+                    <q-dialog v-model="showExplanation">
+                        <q-card>
+                            <q-card-section class="text-body2">{{ note }}</q-card-section>
+                            <q-card-actions align="right">
+                                <q-btn v-close-popup flat label="Schliessen" color="primary" />
+                            </q-card-actions>
+                        </q-card>
+                    </q-dialog>
+                    <span>Maximalwerte · Windaufwand geschätzt</span>
                 </div>
-            </div>
-            <div v-if="forecast.samples.some(s => s.pop == null)" class="text-caption">
-                Wahrscheinlichkeitsdaten teilweise nicht verfügbar.
-            </div>
-            <WindDistributionBar v-if="forecast.summary.windDistribution" :distribution="forecast.summary.windDistribution" />
-        </q-card-section>
+                <p
+                    v-if="forecast.samples.some(s => s.pop == null)"
+                    class="text-caption"
+                    :class="$q.dark.isActive ? 'text-grey-5' : 'text-grey-7'"
+                >
+                    Wahrscheinlichkeitsdaten teilweise nicht verfügbar.
+                </p>
+            </q-card-section>
+        </div>
     </q-card>
 </template>

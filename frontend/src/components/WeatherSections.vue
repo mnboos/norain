@@ -12,33 +12,34 @@ const CONDITION_LABELS: Record<string, string> = {
 };
 
 const CONDITION_COLORS: Record<string, string> = {
-    dry: "bg-tint-dry",
-    rain: "bg-tint-wet",
-    heavy_rain: "bg-tint-heavy",
+    dry: "secondary",
+    rain: "primary",
+    heavy_rain: "deep-purple",
 };
 </script>
 
 <template>
-    <!-- One-line chips instead of tall cards, so the sections cost a single row of height. -->
-    <div class="row items-center q-gutter-xs q-mb-xs">
-        <span class="text-caption text-muted q-mr-xs">Streckenabschnitte</span>
-        <div
-            v-for="(section, i) in sections"
-            :key="i"
-            class="section-chip rounded-borders text-caption"
-            :class="CONDITION_COLORS[section.condition] || 'bg-tint-neutral'"
-        >
-            <span class="text-weight-medium">{{ CONDITION_LABELS[section.condition] || section.condition }}</span>
-            · {{ section.startKm }}–{{ section.endKm }} km · {{ section.startTime }}–{{ section.endTime }} ·
-            {{ section.tempMin }}–{{ section.tempMax }}°C
-            <template v-if="section.maxRainMm > 0"> · 🌧 {{ section.maxRainMm }} mm</template>
-            <template v-if="section.maxHeadwind != null && section.maxHeadwind > 0"> · 💨 {{ section.maxHeadwind }} km/h</template>
+    <div>
+        <div class="text-caption text-muted q-mb-xs">Streckenabschnitte · Einzelprognose</div>
+        <div class="row items-center q-gutter-xs">
+            <q-badge
+                v-for="(section, i) in sections"
+                :key="i"
+                outline
+                class="q-pa-xs"
+                :color="CONDITION_COLORS[section.condition] || 'grey'"
+            >
+                <span class="text-weight-medium">{{ CONDITION_LABELS[section.condition] || section.condition }}</span>
+                &nbsp;{{ section.startKm }}–{{ section.endKm }} km
+                <q-tooltip>
+                    {{ section.startTime }}–{{ section.endTime }} · {{ section.tempMin }}–{{ section.tempMax }}°C
+                    <template v-if="section.maxRainMm > 0">· Regen: {{ section.maxRainMm }} mm</template>
+                    <template v-if="section.maxHeadwind != null">· Gegenwind: {{ section.maxHeadwind }} km/h</template>
+                </q-tooltip>
+            </q-badge>
+            <q-badge v-if="sections.length" color="grey" outline class="q-pa-xs">
+                {{ Math.min(...sections.map(s => s.tempMin)) }}–{{ Math.max(...sections.map(s => s.tempMax)) }}°C
+            </q-badge>
         </div>
     </div>
 </template>
-
-<style scoped>
-.section-chip {
-    padding: 2px 8px;
-}
-</style>

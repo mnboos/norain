@@ -439,7 +439,7 @@ class StationJobTests(_NearNowRoute, TestCase):
         with patch.dict(os.environ, WITH_KEY), patch(
             "core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=assemble)
         ), patch(
-            "core.stations.refresh_stations_for_ride", AsyncMock(side_effect=RuntimeError("boom"))
+            "core.tasks.refresh_stations_for_ride", AsyncMock(side_effect=RuntimeError("boom"))
         ), self.assertRaises(RuntimeError):
             async_to_sync(_refresh_station_observations_async)(str(job.id))
         job.refresh_from_db()

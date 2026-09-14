@@ -11,10 +11,12 @@ from pydantic import Field, field_validator
 
 from ..auth.backend import session_auth
 from ..entitlements import entitlements_for
+from ..forecast_schemas import ForecastJobOut
 from ..models import ForecastJob, RecurringRoute, route_point
 from ..schedule import forecast_available_at, next_departure
 from ..schemas import CamelSchema
-from .route_weather import ForecastJobOut, check_routing_profile, job_out
+from ..tasks import refresh_route_geometry, start_forecast_job
+from .route_weather import check_routing_profile, job_out
 
 router = Router(auth=session_auth, tags=["Recurring routes"])
 
@@ -173,8 +175,6 @@ async def _assert_route_quota(user, *, exclude_id: UUID | None = None) -> None:
 @router.post("/routes", response=RecurringRouteOut)
 async def create_route(request: HttpRequest, data: RecurringRouteIn):
     """Create a new recurring route. Enqueues a background task to fetch route geometry."""
-    from ..tasks import refresh_route_geometry
-
     user = await _current_user(request)
     await _assert_route_quota(user)
     values = data.model_dump(exclude={"start_lat", "start_lon", "dest_lat", "dest_lon"})
@@ -198,8 +198,6 @@ async def get_route(request: HttpRequest, route_id: UUID):
 @router.put("/routes/{route_id}", response=RecurringRouteOut)
 async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRouteIn):
     """Update a recurring route. Re-fetches geometry if start, destination, or profile changed."""
-    from ..tasks import refresh_route_geometry
-
     route = await _owned_route(request, route_id)
     # Reactivating a route consumes a slot just as creating one does.
     if data.active and not route.active:
@@ -257,8 +255,6 @@ async def route_forecast(
     watch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither
     is allowed on this path.
     """
-    from ..tasks import start_forecast_job
-
     route = await _owned_route(request, route_id)
 
     if not route.sample_points:

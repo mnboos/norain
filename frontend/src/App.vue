@@ -13,14 +13,22 @@ const { isAuthenticated, session } = useSession();
     <q-layout view="hHh LpR lFf">
         <!-- Brand blue in light mode; Quasar's dark surface in dark mode, where white text on
              the lighter dark-mode primary would be hard to read. -->
-        <q-header elevated :class="$q.dark.isActive ? 'bg-dark' : 'bg-primary'">
-            <q-toolbar>
-                <q-toolbar-title>NoRain</q-toolbar-title>
-                <q-tabs>
+        <q-header :class="$q.dark.isActive ? 'bg-dark' : 'bg-primary'">
+            <q-toolbar class="q-px-lg">
+                <q-toolbar-title class="text-subtitle1 text-weight-bold">NoRain</q-toolbar-title>
+                <q-tabs v-if="!$q.screen.lt.sm" dense shrink>
                     <q-route-tab to="/" label="Dashboard" />
                     <q-route-tab to="/map" label="Karte" />
                 </q-tabs>
-                <q-btn flat no-caps to="/account" :label="isAuthenticated ? session.user?.email : 'Anmelden'" />
+                <q-btn
+                    flat
+                    dense
+                    no-caps
+                    size="sm"
+                    to="/account"
+                    :label="isAuthenticated ? session.user?.email : 'Anmelden'"
+                    class="q-mx-sm"
+                />
                 <q-btn
                     flat
                     round
@@ -32,6 +40,10 @@ const { isAuthenticated, session } = useSession();
                     <q-tooltip>{{ $q.dark.isActive ? "Helles Design" : "Dunkles Design" }}</q-tooltip>
                 </q-btn>
             </q-toolbar>
+            <q-tabs v-if="$q.screen.lt.sm" dense>
+                <q-route-tab to="/" label="Dashboard" />
+                <q-route-tab to="/map" label="Karte" />
+            </q-tabs>
         </q-header>
         <q-page-container>
             <router-view />

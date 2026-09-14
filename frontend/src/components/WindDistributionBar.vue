@@ -7,31 +7,41 @@ const props = defineProps<{ distribution: WindDistribution }>();
 const parts = computed(() => windDistributionParts(props.distribution));
 const total = computed(() => parts.value.reduce((sum, p) => sum + p.meters, 0));
 const description = computed(() => parts.value.map(p => `${(p.meters / 1000).toFixed(1)} km ${p.label}`).join(" · "));
+const colors = ["negative", "primary", "secondary", "blue-grey-3", "grey-7"];
 </script>
 
 <template>
     <div class="q-mt-sm text-caption" data-testid="wind-distribution">
-        <div class="text-weight-medium">Wind entlang der Strecke</div>
-        <template v-if="total > 0">
-            <div class="wind-bar" role="img" :aria-label="description">
-                <span
-v-for="part in parts" :key="part.label"
-                      :style="{ width: `${100 * part.meters / total}%`, background: part.color }" />
-            </div>
-            <div>{{ description }}</div>
-            <div v-if="distribution.meanFeltSpeed != null">
+        <div class="row items-center q-gutter-x-sm">
+            <span class="text-uppercase text-muted">Wind entlang der Strecke</span>
+            <span v-if="total > 0 && distribution.meanFeltSpeed != null" class="text-muted">
                 Gefühlt im Mittel {{ distribution.meanFeltSpeed.toFixed(1) }} km/h (geschätzt)
                 <span v-if="distribution.feltCoveredM < total - 0.01">
                     · verfügbar auf {{ (distribution.feltCoveredM / 1000).toFixed(1) }} km
                 </span>
-                <span v-if="distribution.timingSource === 'sample-interpolation'"> · Fahrtempo näherungsweise</span>
+                <span v-if="distribution.timingSource === 'sample-interpolation'">· Fahrtempo näherungsweise</span>
+            </span>
+            <span v-else-if="total > 0" class="text-muted">Gefühlter Wind nicht verfügbar.</span>
+        </div>
+        <template v-if="total > 0">
+            <div class="row no-wrap rounded-borders overflow-hidden q-my-xs" role="img" :aria-label="description">
+                <q-linear-progress
+                    v-for="(part, index) in parts"
+                    :key="part.label"
+                    :value="1"
+                    :color="colors[index]"
+                    size="8px"
+                    :style="{ width: `${(100 * part.meters) / total}%` }"
+                    aria-hidden="true"
+                />
             </div>
-            <div v-else>Gefühlter Wind nicht verfügbar.</div>
+            <div class="row q-gutter-x-md text-muted">
+                <span v-for="(part, index) in parts" :key="part.label">
+                    <q-badge :color="colors[index]" class="q-mr-xs" />
+                    {{ (part.meters / 1000).toFixed(1) }} km {{ part.label }}
+                </span>
+            </div>
         </template>
         <div v-else>Keine Strecke</div>
     </div>
 </template>
-
-<style scoped>
-.wind-bar { display: flex; width: 100%; height: 8px; border-radius: 4px; overflow: hidden; margin: 4px 0; }
-</style>

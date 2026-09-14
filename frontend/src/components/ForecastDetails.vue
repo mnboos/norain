@@ -5,7 +5,7 @@ import { metricLabels, modelLabel, rangeText, swissTime } from "@/utils/forecast
 import { useEntitlements } from "@/composables/useEntitlements";
 import { useSampleUncertainty } from "@/queries/forecastParts";
 
-const props = defineProps<{ forecast: RouteForecastOut; selectedSample: number }>();
+const props = defineProps<{ forecast: RouteForecastOut; selectedSample: number; showChartKey?: boolean }>();
 const emit = defineEmits<{ "update:selectedSample": [index: number] }>();
 const expanded = ref(false);
 const sample = computed(() => props.forecast.samples[props.selectedSample]);
@@ -66,6 +66,14 @@ const modelRows = computed(() => {
         class="forecast-details q-mb-sm"
         data-testid="forecast-details"
     >
+        <template #header>
+            <q-item-section>
+                <div class="row items-center q-gutter-x-sm">
+                    <span class="text-caption text-primary">Vorhersage-Details</span>
+                    <span v-if="showChartKey" class="text-caption text-muted">Schattierung: 10.–90. Perzentil · Linie: Median · Gepunktet: Einzelprognose. Punkt auswählen für Details.</span>
+                </div>
+            </q-item-section>
+        </template>
         <div class="q-pa-md">
             <p class="text-caption">
                 Die Bereiche zeigen das 10.–90. Perzentil der Ensemble-Mitglieder. Sie beschreiben die Modellstreuung,

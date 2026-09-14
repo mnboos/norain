@@ -10,17 +10,29 @@ from django.db.models import F
 from django.tasks import task
 from loguru import logger
 
-from .claims import claim_cell, release_cell
-from .jobs import MAX_PLAN_ATTEMPTS, PLAN_RETRY_DELAY, get_or_start_job, publish, set_status
-from .models import ForecastJob, ProcessedStripeEvent, RecurringRoute, route_line
-from .schedule import forecast_available_at, local_today, upcoming_departures
-from .weather import (  # reuse existing functions
+from core.claims import claim_cell, release_cell
+from core.entitlements import entitlements_for, entitlements_for_sync, strip_uncertainty
+from core.grid import (
+    get_cached_ensemble_cell,
+    get_cached_forecast_cell,
+    get_or_fetch_ensemble_cell,
+    get_or_fetch_forecast_cell,
+)
+from core.jobs import MAX_PLAN_ATTEMPTS, PLAN_RETRY_DELAY, get_or_start_job, publish, set_status
+from core.models import ForecastJob, ProcessedStripeEvent, RecurringRoute, route_line
+from core.plotting import generate_forecast_figures
+from core.schedule import forecast_available_at, local_today, upcoming_departures
+from core.sections import compute_sections
+from core.stations import api_key, purge_station_data, refresh_stations_for_ride, ride_in_window
+from core.thumbnails import compute_route_thumbnail
+from core.weather import (  # reuse existing functions
     ROUTING_ERRORS,
     SAMPLE_INTERVAL_DEFAULT_S,
     build_geometry,
+    compute_route_weather,
     forecast_days_for,
 )
-from .wind import valid_vertex_times
+from core.wind import valid_vertex_times
 
 
 @task()
@@ -81,8 +93,6 @@ def _known_samples(thumbnail: dict | None) -> int:
 
 
 async def _refresh_route_thumbnail_async(route_id: str) -> None:
-    from .thumbnails import compute_route_thumbnail
-
     try:
         route = await RecurringRoute.objects.aget(id=route_id)
     except RecurringRoute.DoesNotExist:
@@ -126,8 +136,6 @@ def refresh_forecast_cell(
 async def _refresh_forecast_cell_async(
     lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None
 ) -> None:
-    from .grid import get_or_fetch_forecast_cell
-
     stored = False
     try:
         cell = await get_or_fetch_forecast_cell(lat_r, lon_r, day_key, forecast_days)
@@ -154,8 +162,6 @@ def refresh_ensemble_cell(
 async def _refresh_ensemble_cell_async(
     lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None
 ) -> None:
-    from .grid import get_or_fetch_ensemble_cell
-
     stored = False
     try:
         cell = await get_or_fetch_ensemble_cell(lat_r, lon_r, day_key, forecast_days)
@@ -176,8 +182,6 @@ def refresh_station_observations(job_id: str) -> None:
 
 
 async def _refresh_station_observations_async(job_id: str) -> None:
-    from .stations import refresh_stations_for_ride
-
     try:
         job = await ForecastJob.objects.filter(id=job_id).afirst()
         if job is not None and job.geometry:
@@ -316,9 +320,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         # would have its plan task re-deferring itself forever.
         job.attempts += 1
         if job.attempts >= MAX_PLAN_ATTEMPTS:
-            await set_status(
-                job, ForecastJob.Status.FAILED, error="Routen-Geometrie konnte nicht berechnet werden."
-            )
+            await set_status(job, ForecastJob.Status.FAILED, error="Routen-Geometrie konnte nicht berechnet werden.")
             return
         await job.asave(update_fields=["attempts", "updated_at"])
         await plan_forecast_job.using(run_after=datetime.now(tz=UTC) + PLAN_RETRY_DELAY).aenqueue(str(job.id))
@@ -342,8 +344,6 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     job.status = ForecastJob.Status.FETCHING
     await job.asave(update_fields=["geometry", "cells_total", "cells_settled", "cells_failed", "status", "updated_at"])
     await publish(job)
-
-    from .grid import get_cached_ensemble_cell, get_cached_forecast_cell
 
     settled = 0
     for lat_r, lon_r in cells:
@@ -376,9 +376,6 @@ async def _plan_forecast_job_async(job_id: str) -> None:
 
 async def _wants_stations(job: ForecastJob, departure: datetime, total_seconds: float | None) -> bool:
     """Whether this job should spend Weather Underground calls: a key, a Pro owner, a ride near now."""
-    from .entitlements import entitlements_for
-    from .stations import api_key, ride_in_window
-
     if not api_key() or not ride_in_window(departure, total_seconds, datetime.now(tz=UTC)):
         return False
     return (await entitlements_for(job.owner)).station_correction
@@ -391,11 +388,6 @@ def assemble_forecast_job(job_id: str) -> None:
 
 
 async def _assemble_forecast_job_async(job_id: str) -> None:
-    from .entitlements import entitlements_for, strip_uncertainty
-    from .plotting import generate_forecast_figures
-    from .sections import compute_sections
-    from .weather import compute_route_weather
-
     job = await ForecastJob.objects.select_related("owner").filter(id=job_id).afirst()
     if job is None:
         logger.warning(f"Forecast job {job_id} not found for assembly")
@@ -440,8 +432,7 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
         payload = forecast.model_dump(mode="json")
         payload["figures"] = generate_forecast_figures(forecast, departure_time=params["departure_time"])
         payload["sections"] = [
-            section.model_dump(mode="json")
-            for section in compute_sections(forecast.samples, forecast.total_distance_m)
+            section.model_dump(mode="json") for section in compute_sections(forecast.samples, forecast.total_distance_m)
         ]
         if job.kind == ForecastJob.Kind.ROUTE:
             payload["route_id"] = params["route_id"]
@@ -454,9 +445,7 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
         if not assembled:
             # Tell the watcher. The exception itself carries on to the worker, which records
             # the task as failed with its traceback and moves on to the next one.
-            await set_status(
-                job, ForecastJob.Status.FAILED, error="Wetterdaten konnten nicht zusammengestellt werden."
-            )
+            await set_status(job, ForecastJob.Status.FAILED, error="Wetterdaten konnten nicht zusammengestellt werden.")
 
     if not forecast.samples and job.cells_total:
         # Every cell was still cold at assembly time. Reporting this as a finished forecast
@@ -533,8 +522,6 @@ async def _prewarm_routes(owner_id: int | None = None) -> list[RecurringRoute]:
     longest, and the choice is stable between runs, unlike dropping all of them. The extra
     routes stay visible and usable in the UI — they just stop being pre-warmed.
     """
-    from .entitlements import entitlements_for_sync
-
     selected: list[RecurringRoute] = []
     by_owner: dict[int | None, list[RecurringRoute]] = {}
     query = (
@@ -596,8 +583,6 @@ async def _refresh_upcoming_forecasts_async() -> dict:
 
     # Both ledgers only exist to reject repeats and to answer polls; without a purge they
     # grow forever.
-    from .stations import purge_station_data
-
     purged = await sync_to_async(_purge_processed_events)()
     jobs_purged = await sync_to_async(_purge_expired_jobs)()
     stations_purged = await sync_to_async(purge_station_data)()
@@ -622,8 +607,6 @@ def scan_route_forecasts(route_id: str) -> dict:
 
 
 async def _scan_route_forecasts_async(route_id: str) -> dict:
-    from .grid import get_cached_ensemble_cell, get_cached_forecast_cell
-
     route = await RecurringRoute.objects.filter(id=route_id).afirst()
     if route is None or not route.sample_points:
         return {"cells_enqueued": 0, "ensembles_enqueued": 0}
@@ -665,7 +648,5 @@ async def _scan_route_forecasts_async(route_id: str) -> dict:
     # grey" guard in _refresh_route_thumbnail_async covers a pass that still runs early.
     await refresh_route_thumbnail.using(run_after=now + THUMBNAIL_DELAY).aenqueue(str(route.id))
 
-    logger.debug(
-        f"scan_route_forecasts({route.name}): {cell_count} cells, {ensemble_count} ensembles enqueued"
-    )
+    logger.debug(f"scan_route_forecasts({route.name}): {cell_count} cells, {ensemble_count} ensembles enqueued")
     return {"cells_enqueued": cell_count, "ensembles_enqueued": ensemble_count}

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import fixture from "./fixtures/uncertainty.json" with { type: "json" };
+import { mockForecast } from "./forecastMock";
 
 const feltTrace = {
     x: [0, 5, 10], y: [20, 34, 22], customdata: [[null, "12:00"], [null, "12:05"], [null, "12:10"]],
@@ -57,21 +58,11 @@ const saved = { id, name: "Wind-Testfahrt", start_name: "Start", dest_name: "Zie
 test("wind profile renders on desktop and mobile; felt chart does not select a weather sample", async ({ page }, info) => {
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
-    await page.route(url => url.pathname.startsWith("/api/"), async route => {
-        const path = new URL(route.request().url()).pathname;
-        const body = path.includes("session") ? { authenticated: true, user: { id: 1, username: "wind", email: "wind@example.com" } }
-            : path.includes("entitlements") ? { plan: "free", max_routes: 2, ensemble_uncertainty: false }
-                : path.includes("/forecast") ? { job_id: id, status: "done", result: forecast }
-                    : path === "/api/routes" ? [saved] : saved;
-        await route.fulfill({ json: body });
-    });
-    await page.route("https://basemaps.cartocdn.com/**", route => route.fulfill({
-        json: { version: 8, sources: {}, layers: [{ id: "background", type: "background", paint: { "background-color": "#eef1f3" } }] },
-    }));
+    await mockForecast(page, saved, forecast, false);
     await page.goto(`/routes/${id}`);
     await expect(page.getByTestId("wind-distribution")).toBeVisible();
-    await expect(page.getByText("Max. Gegenwind im Abschnitt", { exact: true })).toBeVisible();
-    await expect(page.getByText("Max. Windaufwand (geschätzt)", { exact: true })).toBeVisible();
+    await expect(page.getByText("Gegenwind max.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Windaufwand max.", { exact: true })).toBeVisible();
     await expect(page.locator(".wx-wind-arrow").first()).toBeVisible();
     await expect(page.locator(".wx-wind-arrow").first()).toHaveAttribute("aria-label", /^Wind: 15 km\/h aus NO, von vorne rechts · \+90 W Windaufwand/);
     await page.getByText("Vorhersage-Details", { exact: true }).click();
@@ -79,10 +70,9 @@ test("wind profile renders on desktop and mobile; felt chart does not select a w
     await slider.focus();
     await slider.press("ArrowRight");
     const selected = await slider.inputValue();
-    const legend = page.locator(".legendtext").filter({ hasText: "Gefühlt (geschätzt)" });
+    const legend = page.locator(".legend .traces").filter({ hasText: "Gefühlt (geschätzt)" }).locator(".legendtoggle");
     await legend.scrollIntoViewIfNeeded();
     await page.screenshot({ path: info.outputPath("wind-before-legend.png"), fullPage: true });
-    console.log("legend bounds", await legend.boundingBox(), "viewport", page.viewportSize());
     await legend.click();
     // Hover/click the actual newly visible Plotly line. Null customdata must not reset selection.
     const line = page.locator(".js-plotly-plot").nth(2).locator(".scatterlayer .trace").last().locator("path.js-line");

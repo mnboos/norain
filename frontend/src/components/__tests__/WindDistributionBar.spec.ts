@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
+import { Quasar } from "quasar";
 import { type WindDistribution, WindDistributionTimingSourceEnum } from "@norain/api/models";
 import WindDistributionBar from "../WindDistributionBar.vue";
 
@@ -8,12 +9,12 @@ const distribution: WindDistribution = { headwindM: 1234, crosswindM: 2000, tail
 
 describe("wind distribution", () => {
     it("shows unknown and calm separately and exposes text independent of colour", () => {
-        const wrapper = mount(WindDistributionBar, { props: { distribution } });
+        const wrapper = mount(WindDistributionBar, { props: { distribution }, global: { plugins: [Quasar] } });
         expect(wrapper.get('[role="img"]').attributes("aria-label")).toContain("0.3 km Unbekannt");
         expect(wrapper.text()).toContain("0.5 km Windstille");
         expect(wrapper.text()).toContain("verfügbar auf 4.0 km");
         expect(wrapper.text()).toContain("Fahrtempo näherungsweise");
-        expect(wrapper.get('.wind-bar span').attributes("style")).toContain("24.68%");
+        expect(wrapper.get('[role="img"] .q-linear-progress').attributes("style")).toContain("24.68%");
     });
     it("handles a zero length route without invalid widths", () => {
         const wrapper = mount(WindDistributionBar, { props: { distribution: { ...distribution,

@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, date, datetime, timedelta
+from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -12,14 +13,15 @@ from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.tokens import default_token_generator
 from django.core import mail
 from django.core.cache import cache
+from django.core.management import call_command
 from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils.http import urlsafe_base64_encode
 
 from backend.asgi import application
-from core.api.route_weather import ForecastUncertainty, RouteWeatherOut, RouteWeatherSummary, WeatherSample
 from core.auth.tokens import email_verification_token_generator
 from core.claims import claim_cell
 from core.entitlements import FREE, PRO, entitlements_for_sync, strip_uncertainty
+from core.forecast_schemas import ForecastUncertainty, RouteWeatherOut, RouteWeatherSummary, WeatherSample
 from core.geo import bearing_deg as _bearing_deg
 from core.grid import (
     _ensemble_at,
@@ -30,7 +32,15 @@ from core.grid import (
     _nearest_index,
     extract_sample,
 )
-from core.jobs import MAX_PLAN_ATTEMPTS, forecast_view, job_key, job_snapshot, publish
+from core.jobs import (
+    INCOMPLETE_JOB_LIFETIME,
+    MAX_PLAN_ATTEMPTS,
+    forecast_view,
+    get_or_start_job,
+    job_key,
+    job_snapshot,
+    publish,
+)
 from core.models import (
     EnsembleCell,
     ForecastCell,
@@ -42,15 +52,19 @@ from core.models import (
     route_line,
     route_point,
 )
+from core.plotting import generate_forecast_figures
 from core.schedule import LOCAL_TZ, local_today, next_departure, upcoming_departures
 from core.tasks import (
     _assemble_forecast_job_async,
+    _job_geometry,
     _known_samples,
     _plan_forecast_job_async,
     _prewarm_routes,
     _refresh_ensemble_cell_async,
     _refresh_forecast_cell_async,
+    _refresh_route_geometry_async,
     _refresh_route_thumbnail_async,
+    _refresh_user_forecasts_async,
     _scan_route_forecasts_async,
     _settle_cell,
 )
@@ -60,6 +74,7 @@ from core.weather import (
     _forecast_days,
     _sample_indices,
     _summarize,
+    compute_route_weather,
     forecast_days_for,
 )
 from core.wind import wind_components as _wind_components
@@ -552,8 +567,6 @@ class PlottingTests(SimpleTestCase):
         )
 
     def test_empty_samples_returns_placeholder_figures(self):
-        from core.plotting import generate_forecast_figures
-
         forecast = self._make_forecast([])
         figures = generate_forecast_figures(forecast)
 
@@ -563,8 +576,6 @@ class PlottingTests(SimpleTestCase):
             self.assertIn("layout", fig)
 
     def test_placeholder_figures_contain_message(self):
-        from core.plotting import generate_forecast_figures
-
         forecast = self._make_forecast([])
         figures = generate_forecast_figures(forecast)
 
@@ -578,8 +589,6 @@ class PlottingTests(SimpleTestCase):
 
     def test_figures_only_use_cartesian_traces(self):
         """Figures must stick to scatter/bar - the frontend registers only those."""
-        from core.plotting import generate_forecast_figures
-
         samples = [
             WeatherSample(
                 lat=47.5,
@@ -789,7 +798,7 @@ class AuthApiTests(TestCase):
             username="Rider", email="rider@example.test", password=self.password, email_verified=True
         )
         enqueue = Mock()
-        with patch("core.tasks.refresh_user_forecasts", SimpleNamespace(enqueue=enqueue)):
+        with patch("core.auth.views.refresh_user_forecasts", SimpleNamespace(enqueue=enqueue)):
             response = self.post_json("/api/auth/login", {"identifier": "Rider", "password": "wrong"})
             self.assertEqual(response.status_code, 401)
             enqueue.assert_not_called()
@@ -800,7 +809,7 @@ class AuthApiTests(TestCase):
 
         self.post_json("/api/auth/logout", {})
         broken = SimpleNamespace(enqueue=Mock(side_effect=RuntimeError("queue down")))
-        with patch("core.tasks.refresh_user_forecasts", broken):
+        with patch("core.auth.views.refresh_user_forecasts", broken):
             response = self.post_json("/api/auth/login", {"identifier": "Rider", "password": self.password})
         self.assertEqual(response.status_code, 200)
 
@@ -895,9 +904,7 @@ class AuthApiTests(TestCase):
             "scheduleCron": "0 8 * * 1",
             "scheduleDescription": "Monday at 08:00",
         }
-        # Patched at the definition site: recurring_route imports the task inside the
-        # handler (to break a module-level import cycle), so it resolves at call time.
-        with patch("core.tasks.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())):
+        with patch("core.api.recurring_route.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())):
             response = self.post_json("/api/routes", data)
         self.assertEqual(response.status_code, 200)
         created = RecurringRoute.objects.get(id=response.json()["id"])
@@ -1220,7 +1227,7 @@ class EntitlementTests(TestCase):
             "scheduleCron": "0 8 * * 1",
             "scheduleDescription": "Monday at 08:00",
         }
-        with patch("core.tasks.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())):
+        with patch("core.api.recurring_route.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())):
             return self.client.post(
                 "/api/routes", data=json.dumps(data), content_type="application/json", **self.csrf_headers()
             )
@@ -1328,8 +1335,6 @@ class EntitlementTests(TestCase):
         self.assertEqual(len(async_to_sync(_prewarm_routes)()), 4)
 
     def test_sign_in_refresh_scans_only_that_accounts_routes_within_quota(self):
-        from core.tasks import _refresh_user_forecasts_async
-
         points = [{"lat": 47.5, "lon": 9.3, "lat_r": 47.5, "lon_r": 9.3, "elapsed_s": 0, "idx": 0}]
         mine = [self.add_route(f"mine-{i}", sample_points=points) for i in range(3)]
         for i, route in enumerate(mine):
@@ -1688,7 +1693,6 @@ class ForecastJobTests(TestCase):
         self.assertEqual(response.status_code, 202)
 
     def test_times_survive_geometry_storage_and_job_snapshot(self):
-        from core.tasks import _job_geometry, _refresh_route_geometry_async
         times = [0.0, 300.125, 600.75]
         geometry = {"polyline": self.route.polyline_coordinates, "sample_points": self.sample_points,
                     "vertex_times": times, "total_seconds": 600, "total_distance_m": 1500}
@@ -1710,9 +1714,6 @@ class ForecastJobTests(TestCase):
         fetch.assert_not_awaited()
 
     def test_backfill_is_dry_by_default_and_only_selects_missing_times(self):
-        from io import StringIO
-
-        from django.core.management import call_command
         with patch("core.management.commands.backfill_route_vertex_times.refresh_route_geometry") as refresh:
             out = StringIO()
             call_command("backfill_route_vertex_times", route_id=self.route.id, stdout=out)
@@ -1727,7 +1728,6 @@ class ForecastJobTests(TestCase):
             self.assertIn("Matched: 0", out.getvalue())
 
     def test_actual_assembly_uses_warm_cells_without_fetching(self):
-        from core.weather import compute_route_weather
         times = [0.0, 300.125, 600.75]
         geometry = {"polyline": self.route.polyline_coordinates, "sample_points": self.sample_points,
                     "vertex_times": times, "total_seconds": 600, "total_distance_m": 1500}
@@ -1871,7 +1871,7 @@ class ForecastJobTests(TestCase):
         self.assertTrue(claim_cell("forecast", 47.0, 9.0, day_key, 2))
 
         with patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())), patch(
-            "core.grid.get_or_fetch_forecast_cell", AsyncMock(return_value=None)
+            "core.tasks.get_or_fetch_forecast_cell", AsyncMock(return_value=None)
         ):
             async_to_sync(_refresh_forecast_cell_async)(47.0, 9.0, day_key, 2, str(job.id))
 
@@ -1885,12 +1885,12 @@ class ForecastJobTests(TestCase):
         job = self._make_job(status=ForecastJob.Status.FETCHING, cells_total=3)
         day_key = self.departure.date().isoformat()
         with patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
-            with patch("core.grid.get_or_fetch_ensemble_cell", AsyncMock(return_value=None)):
+            with patch("core.tasks.get_or_fetch_ensemble_cell", AsyncMock(return_value=None)):
                 async_to_sync(_refresh_ensemble_cell_async)(47.0, 9.0, day_key, 2, str(job.id))
-            with patch("core.grid.get_or_fetch_ensemble_cell", AsyncMock(return_value=SimpleNamespace())):
+            with patch("core.tasks.get_or_fetch_ensemble_cell", AsyncMock(return_value=SimpleNamespace())):
                 async_to_sync(_refresh_ensemble_cell_async)(47.0, 9.01, day_key, 2, str(job.id))
             with patch(
-                "core.grid.get_or_fetch_ensemble_cell", AsyncMock(side_effect=RuntimeError("boom"))
+                "core.tasks.get_or_fetch_ensemble_cell", AsyncMock(side_effect=RuntimeError("boom"))
             ), self.assertRaises(RuntimeError):
                 async_to_sync(_refresh_ensemble_cell_async)(47.0, 9.02, day_key, 2, str(job.id))
 
@@ -1899,8 +1899,6 @@ class ForecastJobTests(TestCase):
 
     def test_finished_job_with_failed_cells_is_only_reused_briefly(self):
         """A burst of 429s must not hide the missing data for the whole cell lifetime."""
-        from core.jobs import INCOMPLETE_JOB_LIFETIME, get_or_start_job
-
         params = self._job_params()
         complete = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
         ForecastJob.objects.filter(id=complete.id).update(updated_at=datetime.now(tz=UTC) - timedelta(hours=1))
@@ -1924,7 +1922,7 @@ class ForecastJobTests(TestCase):
     def test_broken_assembly_marks_the_job_failed_and_reraises(self):
         """The watcher must hear about it, and the worker must still see the traceback."""
         job = self._make_job(status=ForecastJob.Status.ASSEMBLING)
-        with patch("core.weather.compute_route_weather", AsyncMock(side_effect=KeyError("samples"))), self.assertRaises(
+        with patch("core.tasks.compute_route_weather", AsyncMock(side_effect=KeyError("samples"))), self.assertRaises(
             KeyError
         ):
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
@@ -1959,7 +1957,7 @@ class ForecastJobTests(TestCase):
                 will_rain=False, max_rain_mm=0.0, rain_amount=0.0, max_headwind=0.0, source="open-meteo"
             ),
         )
-        with patch("core.weather.compute_route_weather", AsyncMock(return_value=empty)):
+        with patch("core.tasks.compute_route_weather", AsyncMock(return_value=empty)):
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
 
         job.refresh_from_db()
@@ -1989,8 +1987,8 @@ class ForecastJobTests(TestCase):
                 will_rain=False, max_rain_mm=0.0, rain_amount=0.0, max_headwind=0.0, source="open-meteo"
             ),
         )
-        with patch("core.weather.compute_route_weather", AsyncMock(return_value=forecast)), patch(
-            "core.plotting.generate_forecast_figures", return_value=[]
+        with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)), patch(
+            "core.tasks.generate_forecast_figures", return_value=[]
         ):
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
 
@@ -2005,8 +2003,6 @@ class ForecastJobTests(TestCase):
 
     def test_tier_change_replans_a_fresh_job_in_both_directions(self):
         """A result is shaped by the tier; the job key is not, so reuse must check it."""
-        from core.jobs import get_or_start_job
-
         params = self._job_params()
         job = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
 

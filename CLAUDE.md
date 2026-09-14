@@ -21,8 +21,9 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     jobs.py          forecast-job identity, lifecycle and channel-layer publishing
     claims.py        cache-backed in-flight claim for grid-cell fetches
     consumers.py     ForecastJobConsumer (websocket), routing.py maps it to a URL
-    api/             ninja routers: route_weather.py (+ the forecast payload schemas),
-                     recurring_route.py (route CRUD), billing.py, places.py
+    forecast_schemas.py  the forecast payload (RouteWeatherOut, WeatherSample, ForecastJobOut, …)
+    api/             ninja routers: route_weather.py, recurring_route.py (route CRUD),
+                     billing.py, places.py
     auth/            backend.py (session_auth, IdentityBackend), views.py, tokens.py
     entitlements.py  every tier limit, in one place
     thumbnails.py    route-list glyph: path simplification + cache-only weather
@@ -161,11 +162,14 @@ claim is released on failure too, or one dead cell would block retries for the w
 A job still enqueues a cell whose claim is held elsewhere: the holder is usually the
 pre-warm scan, whose task carries no `job_id` and would never report back.
 
-**Import cycle, load-bearing.** `core.tasks` imports `core.weather`, which imports
-`core.api.route_weather`, whose package `__init__` imports `core.api.recurring_route`. So
-`recurring_route` and `core/jobs.py` import their way back out **inside functions**, not at
-module scope. Move those to the top and any process reaching `core.tasks` or `backend.asgi`
-first — a worker, daphne, the shell command in the background-jobs guide — dies on import.
+**Imports go at module scope — keep the layering that allows it.** The forecast payload
+schemas live in `core/forecast_schemas.py`, outside the `core.api` package, because the
+domain modules (`weather`, `uncertainty`, `plotting`, `sections`) need them and importing
+anything under `core.api` runs its `__init__`, which loads the routers, which import
+`core.tasks`. The direction is one way: `core.api.*` → `core.tasks` → domain modules →
+`forecast_schemas`. Never make a domain module import from `core.api`; that recreates the
+cycle, and any process reaching `core.tasks` or `backend.asgi` first — a worker, daphne —
+dies on import. Don't paper over a new cycle with a function-level import; fix the layering.
 
 ### Route-list thumbnails
 
@@ -293,8 +297,11 @@ expired `ForecastJob` rows. A successful SPA sign-in (`login_view`) also enqueue
 API request, patch `core.weather.get_or_fetch_forecast_cell` *and*
 `core.weather.get_or_fetch_ensemble_cell` — `weather.py` imports both names into its own
 namespace, so patching `core.grid.*` does not intercept and the test passes while the code
-still fetches. The opposite holds for `refresh_route_geometry`: `api/recurring_route.py`
-imports it *inside* the handler (to break the cycle above), so patch `core.tasks.*` there.
+still fetches. The same rule everywhere: the route handlers use
+`core.api.recurring_route.refresh_route_geometry`, assembly uses `core.tasks.compute_route_weather`
+/ `core.tasks.generate_forecast_figures`, the cell tasks `core.tasks.get_or_fetch_*`, sign-in
+`core.auth.views.refresh_user_forecasts`. A patch on the defining module is silently ignored —
+an `AssertionError` side effect then passes vacuously.
 
 Override both `CACHES` (locmem) and `CHANNEL_LAYERS` (`InMemoryChannelLayer`) for anything
 touching claims or job progress, so tests need neither Redis nor a worker.

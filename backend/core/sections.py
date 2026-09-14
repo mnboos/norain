@@ -4,7 +4,7 @@ Enables the UI to show "Dry: km 0–12, Rain: km 12–18, Dry: km 18–22" style
 breakdowns. Computed on the backend so email rendering can use the same sections.
 """
 
-from .api.route_weather import RouteSection, WeatherSample
+from .forecast_schemas import RouteSection, WeatherSample
 
 
 def _condition(rain_mm: float) -> str:

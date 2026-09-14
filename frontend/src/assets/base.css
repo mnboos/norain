@@ -79,7 +79,6 @@
 /* `html body`, not `body`: quasar.css is imported after this file and sets its own body font */
 html body {
     min-height: 100vh;
-    min-width: 100vw;
     color: var(--color-text);
     background: var(--color-background);
     transition:

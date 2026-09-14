@@ -17,6 +17,7 @@ from loguru import logger
 
 from .models import EnsembleCell, ForecastCell
 from .uncertainty import ENSEMBLE_VARIABLES
+from .wind import finite_number
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 OWM_ONECALL_URL = "https://api.openweathermap.org/data/3.0/onecall"
@@ -124,8 +125,6 @@ def _at(block: dict, var: str, i: int) -> float:
 
 
 def _wind_value(value, *, direction=False, factor=1.0) -> float | None:
-    from .wind import finite_number
-
     number = finite_number(value, nonnegative=not direction)
     return None if number is None else number % 360 if direction else number * factor
 

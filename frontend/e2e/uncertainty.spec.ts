@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import fixture from "./fixtures/uncertainty.json" with { type: "json" };
+import { mockForecast } from "./forecastMock";
 
 const saved = {
     id: fixture.route_id,
@@ -22,31 +23,14 @@ const saved = {
 };
 
 test.beforeEach(async ({ page }) => {
-    await page.route(
-        url => url.pathname.startsWith("/api/"),
-        async route => {
-            const path = new URL(route.request().url()).pathname;
-            await route.fulfill({
-                json: path.includes("/forecast") || path.includes("/route_weather") ? fixture : saved,
-            });
-        },
-    );
-    await page.route("https://basemaps.cartocdn.com/**", route =>
-        route.fulfill({
-            json: {
-                version: 8,
-                sources: {},
-                layers: [{ id: "background", type: "background", paint: { "background-color": "#f4f6f7" } }],
-            },
-        }),
-    );
+    await mockForecast(page, saved);
 });
 
 test("expands uncertainty, selects chart points, and highlights the map", async ({ page }, testInfo) => {
     const errors: string[] = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(`/routes/${saved.id}`);
-    await expect(page.getByText("Max. Regenrisiko")).toBeVisible();
+    await expect(page.getByText("Regenrisiko", { exact: true })).toBeVisible();
     await page.getByText("Vorhersage-Details", { exact: true }).click();
     const details = page.getByTestId("forecast-details");
     await expect(details.getByText("Modellvergleich am ausgewählten Punkt · Bereiche und Median")).toBeVisible();
@@ -71,16 +55,7 @@ test("expands uncertainty, selects chart points, and highlights the map", async 
 test("mobile map shares details and supports touch selection without overflow", async ({ browser }, testInfo) => {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
     const page = await context.newPage();
-    await page.route(
-        url => url.pathname.startsWith("/api/"),
-        route =>
-            route.fulfill({
-                json: new URL(route.request().url()).pathname.includes("route_weather") ? fixture : saved,
-            }),
-    );
-    await page.route("https://basemaps.cartocdn.com/**", route =>
-        route.fulfill({ json: { version: 8, sources: {}, layers: [] } }),
-    );
+    await mockForecast(page, saved);
     await page.goto(`/map?route=${saved.id}`);
     await page.getByText("Vorhersage-Details", { exact: true }).tap();
     const slider = page.getByRole("slider", { name: "Streckenpunkt" });

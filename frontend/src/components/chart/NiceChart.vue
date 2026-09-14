@@ -46,7 +46,15 @@ function buildLayout(): Partial<Layout> {
         plot_bgcolor: "transparent",
         paper_bgcolor: "transparent",
         font: { family: FONT_FAMILY, color: ink },
-        legend: { ...incoming.legend, font: { ...incoming.legend?.font, family: FONT_FAMILY, color: ink } },
+        // Reserve space above the plot for the legend in the shallow forecast cards.
+        // Server figures may position legends below the axes, outside the card's bounds.
+        title: { ...incoming.title, font: { ...incoming.title?.font, size: 14 }, y: 0.98, yanchor: "top" },
+        margin: { ...incoming.margin, t: 100, b: 48, l: 44, r: 44 },
+        legend: {
+            ...incoming.legend, orientation: "h", traceorder: "normal", tracegroupgap: 0,
+            x: 0, xanchor: "left", y: 1.03, yanchor: "bottom",
+            font: { ...incoming.legend?.font, family: FONT_FAMILY, color: ink, size: 10 },
+        },
         xaxis: { ...incoming.xaxis, ...axisTheme },
         yaxis: { ...incoming.yaxis, ...axisTheme },
         ...(incoming.yaxis2 ? { yaxis2: { ...incoming.yaxis2, ...axisTheme } } : {}),
@@ -67,7 +75,8 @@ async function render() {
     // Plotly measures label text during layout; measuring the fallback font before Lexend
     // has loaded leaves ticks and legend entries mis-sized.
     // (jsdom has no document.fonts)
-    await document.fonts?.ready;
+    const fontDocument: Partial<Document> = document;
+    await fontDocument.fonts?.ready;
     const el = chart.value;
     if (el) {
         await Plotly.react(el, data.value, layout.value, config.value);
