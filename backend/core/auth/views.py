@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login, logout
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
@@ -17,6 +18,9 @@ from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
+from loguru import logger
+
+from core.tasks import refresh_user_forecasts
 
 from .tokens import email_verification_token_generator
 
@@ -75,7 +79,6 @@ def _send_verification_email(user) -> None:
 
 def _send_password_reset_email(user) -> None:
     uid = urlsafe_base64_encode(force_bytes(user.pk))
-    from django.contrib.auth.tokens import default_token_generator
 
     token = default_token_generator.make_token(user)
     link = _frontend_link("/account", reset_uid=uid, reset_token=token)
@@ -180,7 +183,18 @@ def login_view(request: HttpRequest):
         return JsonResponse({"detail": "Invalid credentials, or the email has not been verified."}, status=401)
 
     login(request, user)
+    _refresh_forecasts_after_login(user)
     return JsonResponse(_account_payload(user))
+
+
+def _refresh_forecasts_after_login(user) -> None:
+    """Queue the check for stale forecasts on the user's routes. Never fails the sign-in."""
+    # Imported here: core.tasks reaches core.api, whose package imports back into core.
+
+    try:
+        refresh_user_forecasts.enqueue(user.pk)
+    except Exception:  # a sign-in that worked must not turn into a 500 over pre-warming
+        logger.exception(f"Could not enqueue refresh_user_forecasts for user {user.pk}")
 
 
 @require_POST
@@ -209,8 +223,6 @@ def password_reset_confirm_view(request: HttpRequest):
     user = _user_from_uid(str(data.get("uid", "")))
     token = str(data.get("token", ""))
     password = _password(data.get("password"))
-
-    from django.contrib.auth.tokens import default_token_generator
 
     if not user or not default_token_generator.check_token(user, token):
         return JsonResponse({"detail": "This password-reset link is invalid or has expired."}, status=400)

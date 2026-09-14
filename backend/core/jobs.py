@@ -15,8 +15,12 @@ from channels.layers import get_channel_layer
 from loguru import logger
 from redis.exceptions import RedisError
 
+from .entitlements import entitlements_for
 from .geo import simplify_line
+from .grid import MAX_CELL_AGE
 from .models import ForecastJob
+from .stations import api_key, ride_in_window
+from .uncertainty import METRICS
 
 # A job that has not been touched for this long is assumed dead -- its worker was killed
 # mid-flight -- and the next request restarts it rather than waiting forever on it.
@@ -48,10 +52,14 @@ def job_key(kind: str, owner_id: int | None, params: dict) -> str:
 
     Identical requests collapse onto one job, so a page that mounts twice, or two people
     asking for the same public ride, cost one fan-out. ``owner_id`` is part of the identity
-    because ``result`` is stored already entitlement-stripped.
+    because ``result`` is stored already entitlement-stripped. The owner's *tier* is not:
+    ``get_or_start_job`` compares it against the marker the result was assembled with.
     """
-    payload = json.dumps({"version": FORECAST_ALGORITHM_VERSION, "kind": kind, "owner": owner_id, "params": params},
-                         sort_keys=True, separators=(",", ":"))
+    payload = json.dumps(
+        {"version": FORECAST_ALGORITHM_VERSION, "kind": kind, "owner": owner_id, "params": params},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -146,14 +154,16 @@ def wind_arrows_at_detail(result: dict, detail: str) -> list[dict]:
         if not _complete_ground_wind(segment) or segment.get("start_m", 0) < next_start:
             continue
         power = segment.get("wind_power_w")
-        arrows.append({
-            "lat": round(segment["lat"], 5),
-            "lon": round(segment["lon"], 5),
-            "bearing": round(segment["bearing"], 1),
-            "wind_speed": round(segment["wind_speed"], 1),
-            "wind_dir": round(segment["wind_dir"], 1),
-            "wind_power_w": round(power) if power is not None else None,
-        })
+        arrows.append(
+            {
+                "lat": round(segment["lat"], 5),
+                "lon": round(segment["lon"], 5),
+                "bearing": round(segment["bearing"], 1),
+                "wind_speed": round(segment["wind_speed"], 1),
+                "wind_dir": round(segment["wind_dir"], 1),
+                "wind_power_w": round(power) if power is not None else None,
+            }
+        )
         if spacing is not None:
             next_start = segment.get("start_m", 0) + spacing
     return arrows
@@ -162,7 +172,6 @@ def wind_arrows_at_detail(result: dict, detail: str) -> list[dict]:
 def uncertainty_partial(samples: list[dict]) -> bool:
     """Whether some sample lacks ensemble data: no spread, a missing model or metric."""
     # Imported here: core.uncertainty reaches core.api, and core.tasks imports this module.
-    from .uncertainty import METRICS
 
     for sample in samples:
         uncertainty = sample.get("uncertainty")
@@ -188,7 +197,7 @@ def forecast_view(job: ForecastJob) -> dict:
     the route page would each compute their own job for the same forecast.
     """
     result = job.result or {}
-    view = {key: value for key, value in result.items() if key not in ("figures", "wind_segments")}
+    view = {key: value for key, value in result.items() if key not in ("figures", "wind_segments", "entitlements")}
     view["line"] = line_at_detail(result, "coarse")
     view["wind_arrows"] = wind_arrows_at_detail(result, "coarse")
     samples = result.get("samples") or []
@@ -197,7 +206,8 @@ def forecast_view(job: ForecastJob) -> dict:
             **sample,
             "uncertainty": (
                 {k: v for k, v in sample["uncertainty"].items() if k not in ("models", "requested_models")}
-                if sample.get("uncertainty") else None
+                if sample.get("uncertainty")
+                else None
             ),
         }
         for sample in samples
@@ -233,8 +243,6 @@ async def set_status(job: ForecastJob, status: str, *, error: str = "") -> None:
 
 async def _uses_stations(job: ForecastJob, owner, now: datetime) -> bool:
     """Whether this job's result would be corrected with station readings if planned now."""
-    from .entitlements import entitlements_for
-    from .stations import api_key, ride_in_window
 
     departure = job.params.get("departure_time")
     if not api_key() or not departure:
@@ -243,6 +251,17 @@ async def _uses_stations(job: ForecastJob, owner, now: datetime) -> bool:
     if not ride_in_window(datetime.fromisoformat(departure), total_seconds, now):
         return False
     return (await entitlements_for(owner)).station_correction
+
+
+async def _built_for_current_tier(job: ForecastJob, owner) -> bool:
+    """Whether a finished result was assembled for the owner's tier as it is now.
+
+    The result is shaped by the tier -- spread stripped, stations applied or not -- so after
+    an upgrade it would keep hiding what was paid for, and after a downgrade keep serving Pro
+    data. A result without the marker predates it and is rebuilt as well.
+    """
+
+    return (job.result or {}).get("entitlements") == (await entitlements_for(owner)).result_marker()
 
 
 async def get_or_start_job(kind: str, owner, params: dict) -> tuple[ForecastJob, bool]:
@@ -255,7 +274,6 @@ async def get_or_start_job(kind: str, owner, params: dict) -> tuple[ForecastJob,
     # Imported here, not at module scope: core.grid reaches core.api (via core.uncertainty),
     # which imports core.tasks, which imports this module -- a cycle that only bites when
     # the ASGI app loads consumers before the API package.
-    from .grid import MAX_CELL_AGE
 
     key = job_key(kind, owner.id if owner is not None else None, params)
     now = datetime.now(tz=UTC)
@@ -273,7 +291,7 @@ async def get_or_start_job(kind: str, owner, params: dict) -> tuple[ForecastJob,
     done = job.status == ForecastJob.Status.DONE
     if done and now - job.updated_at > STATION_JOB_LIFETIME and await _uses_stations(job, owner, now):
         lifetime = STATION_JOB_LIFETIME
-    if job.status == ForecastJob.Status.DONE and now - job.updated_at <= lifetime:
+    if done and now - job.updated_at <= lifetime and await _built_for_current_tier(job, owner):
         return job, False
 
     # Still working, and recently enough that its worker is plausibly alive.
@@ -292,8 +310,16 @@ async def get_or_start_job(kind: str, owner, params: dict) -> tuple[ForecastJob,
     job.params = params
     await job.asave(
         update_fields=[
-            "status", "cells_total", "cells_settled", "cells_failed", "attempts",
-            "error", "result", "geometry", "params", "updated_at",
+            "status",
+            "cells_total",
+            "cells_settled",
+            "cells_failed",
+            "attempts",
+            "error",
+            "result",
+            "geometry",
+            "params",
+            "updated_at",
         ]
     )
     return job, True

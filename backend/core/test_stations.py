@@ -12,6 +12,7 @@ from django.core.cache import cache
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from core import stations
+from core.entitlements import entitlements_for_sync
 from core.jobs import STATION_JOB_LIFETIME, get_or_start_job, job_key
 from core.models import (
     ForecastCell,
@@ -468,7 +469,8 @@ class StationJobTests(_NearNowRoute, TestCase):
         self.assertTrue(pro.result["summary"]["station_corrected"])
 
     def reuse(self, age):
-        job = self.make_job(status=ForecastJob.Status.DONE, result={"samples": []})
+        marker = entitlements_for_sync(self.user).result_marker()
+        job = self.make_job(status=ForecastJob.Status.DONE, result={"samples": [], "entitlements": marker})
         ForecastJob.objects.filter(id=job.id).update(updated_at=datetime.now(tz=UTC) - age)
         with patch.dict(os.environ, WITH_KEY):
             return async_to_sync(get_or_start_job)(job.kind, self.user, job.params)[1]

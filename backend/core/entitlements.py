@@ -35,6 +35,13 @@ class Entitlements:
     def is_pro(self) -> bool:
         return self.plan == Plan.PRO
 
+    def result_marker(self) -> dict:
+        """The limits that shape a stored forecast, recorded in it so a tier change can be detected.
+
+        Compared by ``get_or_start_job``: a result built for another tier is never reused.
+        """
+        return {"ensemble_uncertainty": self.ensemble_uncertainty, "station_correction": self.station_correction}
+
 
 FREE = Entitlements(plan=Plan.FREE, max_routes=2, ensemble_uncertainty=False, station_correction=False)
 PRO = Entitlements(plan=Plan.PRO, max_routes=None, ensemble_uncertainty=True, station_correction=True)

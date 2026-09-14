@@ -1,7 +1,7 @@
 import json
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import stripe
@@ -784,6 +784,26 @@ class AuthApiTests(TestCase):
         response = self.post_json("/api/auth/login", {"email": "Velofahrer", "password": self.password})
         self.assertEqual(response.status_code, 200)
 
+    def test_login_queues_the_forecast_refresh_and_survives_a_queue_failure(self):
+        user = get_user_model().objects.create_user(
+            username="Rider", email="rider@example.test", password=self.password, email_verified=True
+        )
+        enqueue = Mock()
+        with patch("core.tasks.refresh_user_forecasts", SimpleNamespace(enqueue=enqueue)):
+            response = self.post_json("/api/auth/login", {"identifier": "Rider", "password": "wrong"})
+            self.assertEqual(response.status_code, 401)
+            enqueue.assert_not_called()
+
+            response = self.post_json("/api/auth/login", {"identifier": "Rider", "password": self.password})
+        self.assertEqual(response.status_code, 200)
+        enqueue.assert_called_once_with(user.pk)
+
+        self.post_json("/api/auth/logout", {})
+        broken = SimpleNamespace(enqueue=Mock(side_effect=RuntimeError("queue down")))
+        with patch("core.tasks.refresh_user_forecasts", broken):
+            response = self.post_json("/api/auth/login", {"identifier": "Rider", "password": self.password})
+        self.assertEqual(response.status_code, 200)
+
     def test_superuser_can_login_without_email_verification(self):
         user = get_user_model().objects.create_superuser(
             username="admin", email="admin@example.test", password=self.password
@@ -1307,6 +1327,26 @@ class EntitlementTests(TestCase):
             self.add_route(f"route-{i}")
         self.assertEqual(len(async_to_sync(_prewarm_routes)()), 4)
 
+    def test_sign_in_refresh_scans_only_that_accounts_routes_within_quota(self):
+        from core.tasks import _refresh_user_forecasts_async
+
+        points = [{"lat": 47.5, "lon": 9.3, "lat_r": 47.5, "lon_r": 9.3, "elapsed_s": 0, "idx": 0}]
+        mine = [self.add_route(f"mine-{i}", sample_points=points) for i in range(3)]
+        for i, route in enumerate(mine):
+            RecurringRoute.objects.filter(id=route.id).update(created_at=datetime(2026, 1, i + 1, tzinfo=UTC))
+        other = get_user_model().objects.create_user(
+            username="other", email="other@example.test", password="x", email_verified=True
+        )
+        self.add_route("theirs", owner=other, sample_points=points)
+
+        enqueue = AsyncMock()
+        with patch("core.tasks.scan_route_forecasts", SimpleNamespace(aenqueue=enqueue)):
+            result = async_to_sync(_refresh_user_forecasts_async)(self.user.id)
+
+        # Free: the two oldest, exactly as the hourly pass would pick them.
+        self.assertEqual(result, {"routes": 2})
+        self.assertEqual([c.args[0] for c in enqueue.await_args_list], [str(mine[0].id), str(mine[1].id)])
+
 
 @override_settings(STRIPE_WEBHOOK_SECRET="whsec_test", STRIPE_SECRET_KEY="sk_test", STRIPE_PRICE_ID_PRO="price_test")
 class StripeWebhookTests(TestCase):
@@ -1516,6 +1556,7 @@ def _finished_payload() -> dict:
         "departure_time": "2026-09-14T08:00",
         "figures": [],
         "sections": [],
+        "entitlements": FREE.result_marker(),
     }
 
 
@@ -1959,6 +2000,37 @@ class ForecastJobTests(TestCase):
         self.assertIsNone(stored["uncertainty"], "free tier must not receive the ensemble spread")
         # pop and rainIfWet are deliberately not gated: the cells are shared and pre-warmed.
         self.assertIsNotNone(stored["pop"])
+        self.assertEqual(job.result["entitlements"], FREE.result_marker())
+        self.assertNotIn("entitlements", forecast_view(job))
+
+    def test_tier_change_replans_a_fresh_job_in_both_directions(self):
+        """A result is shaped by the tier; the job key is not, so reuse must check it."""
+        from core.jobs import get_or_start_job
+
+        params = self._job_params()
+        job = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
+
+        def needs_planning():
+            return async_to_sync(get_or_start_job)(ForecastJob.Kind.ROUTE, self.user, params)[1]
+
+        self.assertFalse(needs_planning(), "same tier: reused")
+
+        # Upgrade: the stripped result would keep hiding the spread.
+        Subscription.objects.create(user=self.user, plan=Plan.PRO)
+        self.assertTrue(needs_planning())
+
+        # Downgrade: a Pro result must not keep being served to a free account.
+        ForecastJob.objects.filter(id=job.id).update(
+            status=ForecastJob.Status.DONE, result={**_finished_payload(), "entitlements": PRO.result_marker()}
+        )
+        self.assertFalse(needs_planning(), "Pro result for a Pro account: reused")
+        Subscription.objects.filter(user=self.user).delete()
+        self.assertTrue(needs_planning())
+
+        # Stored before the marker existed: the tier it was built for is unknown.
+        legacy = {key: value for key, value in _finished_payload().items() if key != "entitlements"}
+        ForecastJob.objects.filter(id=job.id).update(status=ForecastJob.Status.DONE, result=legacy)
+        self.assertTrue(needs_planning())
 
 
 def _uncertainty(models=("icon_seamless_eps", "gfs025"), missing_median=None) -> dict:

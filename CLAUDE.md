@@ -85,7 +85,9 @@ spread and no station correction. Enforced at **three** places, and a limit is o
    **not** in the endpoints any more: the job's stored `result` is what the WebSocket pushes
    and what the job endpoint returns, so it has to be stripped *before* storage or a free
    account reads Pro data straight out of the row. The owner is part of the job key, so
-   results never cross tiers.
+   results never cross accounts — but the tier is not, so assembly records
+   `result["entitlements"]` and `get_or_start_job` never reuses a result built for another
+   tier (upgrade or downgrade; a result without the marker is rebuilt too).
    `pop` and `rain_if_wet` are deliberately *not* gated: ensemble cells are shared and
    pre-warmed, so serving them costs nothing extra.
 3. `_prewarm_routes` (`tasks.py`) — decides which routes get a `scan_route_forecasts` task,
@@ -273,7 +275,9 @@ Users configure routes with cron schedules. `next_departure()` computes the next
 `run_forecast_scheduler` runs `refresh_forecasts` hourly, which now only *queues*
 `refresh_upcoming_forecasts`; that fans out to one `scan_route_forecasts` task per eligible
 route, so one slow route no longer holds up the pass, and it purges the Stripe ledger and
-expired `ForecastJob` rows.
+expired `ForecastJob` rows. A successful SPA sign-in (`login_view`) also enqueues
+`refresh_user_forecasts`, which scans just that account's routes through the same
+`_prewarm_routes` quota; a failure to enqueue never fails the sign-in.
 
 ## Testing
 

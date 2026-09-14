@@ -1,4 +1,5 @@
 import { ForecastJobOutFromJSON, type ForecastJobOut, type RouteForecastOut } from "@norain/api/models";
+import { useWebSocket } from "@vueuse/core";
 
 import { useBackendHost } from "@/utils";
 
@@ -77,56 +78,78 @@ function watchOverSocket(
 ): Promise<RouteForecastOut> {
     return new Promise((resolve, reject) => {
         const wsUrl = `${useBackendHost(location.protocol === "https:" ? "wss:" : "ws:")}${job.wsUrl ?? `/ws/forecast/${job.jobId}/`}`;
-        const socket = new WebSocket(wsUrl);
-        let opened = false;
+        let settled = false;
+        const resources: {
+            openTimer: ReturnType<typeof setTimeout> | undefined;
+            closeSocket: (() => void) | undefined;
+        } = { openTimer: undefined, closeSocket: undefined };
 
         const cleanup = () => {
-            clearTimeout(openTimer);
+            if (resources.openTimer !== undefined) clearTimeout(resources.openTimer);
             signal?.removeEventListener("abort", onAbort);
-            socket.close();
+            resources.closeSocket?.();
+        };
+        const finish = (complete: () => void) => {
+            if (settled) return;
+            settled = true;
+            cleanup();
+            complete();
+        };
+        const fail = (error: Error) => {
+            finish(() => {
+                reject(error);
+            });
         };
         const onAbort = () => {
-            cleanup();
-            reject(new DOMException("Aborted", "AbortError"));
+            fail(new DOMException("Aborted", "AbortError"));
         };
-        // Don't let a silently-hanging upgrade stall the forecast indefinitely.
-        const openTimer = setTimeout(() => {
-            if (!opened) {
-                cleanup();
-                reject(new Error("WebSocket did not open"));
-            }
-        }, SOCKET_OPEN_TIMEOUT_MS);
 
+        if (signal?.aborted) {
+            onAbort();
+            return;
+        }
+
+        const socket = useWebSocket(wsUrl, {
+            immediate: true,
+            autoConnect: false,
+            autoClose: false,
+            autoReconnect: false,
+            onConnected: () => {
+                if (resources.openTimer !== undefined) clearTimeout(resources.openTimer);
+            },
+            onMessage: (_socket, event) => {
+                if (typeof event.data !== "string") return;
+                let update: ForecastJobOut;
+                try {
+                    update = ForecastJobOutFromJSON(JSON.parse(event.data));
+                } catch {
+                    return; // ignore a frame we cannot read; the next one or the poll will do
+                }
+                reportProgress(update, onProgress);
+                if (!isTerminal(update)) return;
+                try {
+                    const result = settle(update);
+                    finish(() => {
+                        resolve(result);
+                    });
+                } catch (error) {
+                    fail(error instanceof Error ? error : new Error(String(error)));
+                }
+            },
+            onError: () => {
+                fail(new Error("WebSocket error"));
+            },
+            onDisconnected: () => {
+                fail(new Error("WebSocket closed before the job finished"));
+            },
+        });
+        resources.closeSocket = socket.close;
+
+        // Don't let a silently-hanging upgrade stall the forecast indefinitely.
+        resources.openTimer = setTimeout(() => {
+            fail(new Error("WebSocket did not open"));
+        }, SOCKET_OPEN_TIMEOUT_MS);
         signal?.addEventListener("abort", onAbort);
-        socket.addEventListener("open", () => {
-            opened = true;
-            clearTimeout(openTimer);
-        });
-        socket.addEventListener("message", (event: MessageEvent<string>) => {
-            let update: ForecastJobOut;
-            try {
-                update = ForecastJobOutFromJSON(JSON.parse(event.data));
-            } catch {
-                return; // ignore a frame we cannot read; the next one or the poll will do
-            }
-            reportProgress(update, onProgress);
-            if (!isTerminal(update)) return;
-            cleanup();
-            try {
-                resolve(settle(update));
-            } catch (error) {
-                reject(error instanceof Error ? error : new Error(String(error)));
-            }
-        });
-        socket.addEventListener("error", () => {
-            cleanup();
-            reject(new Error("WebSocket error"));
-        });
-        socket.addEventListener("close", () => {
-            clearTimeout(openTimer);
-            signal?.removeEventListener("abort", onAbort);
-            reject(new Error("WebSocket closed before the job finished"));
-        });
     });
 }
 

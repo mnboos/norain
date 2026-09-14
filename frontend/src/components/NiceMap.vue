@@ -157,11 +157,15 @@ function sampleMarkerEl(sample: ForecastSampleOut): HTMLDivElement {
     // wind_dir is the direction the wind comes FROM; blowing-toward = +180°. Only the arrow
     // rotates - rotating the whole marker would tip the temperature text over with it.
     el.innerHTML = `
-        ${!hasWindProfile.value && sample.windDir != null && sample.windSpeed != null && sample.windSpeed > 0 ? `<svg class="wx-wind" width="16" height="16" viewBox="0 0 24 24" aria-label="Wind über Grund"
+        ${
+            !hasWindProfile.value && sample.windDir != null && sample.windSpeed != null && sample.windSpeed > 0
+                ? `<svg class="wx-wind" width="16" height="16" viewBox="0 0 24 24" aria-label="Wind über Grund"
              style="transform:rotate(${sample.windDir + 180}deg)">
             <path d="M12 2 L17 13 L12 10.5 L7 13 Z"
                   fill="${strong ? "#d24d78" : "#2c3e50"}" stroke="white" stroke-width="1.5"/>
-        </svg>` : ""}
+        </svg>`
+                : ""
+        }
         <div class="wx-chip" style="border-color:${scoreColor(rideScore(sample)?.score ?? null)}">
             <svg width="20" height="20" viewBox="0 0 24 24">${glyph}</svg>
             <span>${Math.round(sample.temp)}°</span>
@@ -170,16 +174,25 @@ function sampleMarkerEl(sample: ForecastSampleOut): HTMLDivElement {
 }
 
 /** A shown chip. The popup is built on first hover, since most chips are never hovered. */
-interface SampleMarker { marker: Marker; popup?: Popup }
+interface SampleMarker {
+    marker: Marker;
+    popup?: Popup;
+}
 /** Markers exist only for the chips currently shown, keyed by sample index. */
 let sampleMarkers = new Map<number, SampleMarker>();
 /** A shown wind arrow. Its popup is built on first open. */
-interface WindMarker { marker: Marker; popup?: Popup }
+interface WindMarker {
+    marker: Marker;
+    popup?: Popup;
+}
 /** Markers exist only for the arrows currently shown, keyed by position. */
 let windMarkers = new Map<string, WindMarker>();
 
 function clearWindMarkers() {
-    windMarkers.forEach(({ marker, popup }) => { popup?.remove(); marker.remove(); });
+    windMarkers.forEach(({ marker, popup }) => {
+        popup?.remove();
+        marker.remove();
+    });
     windMarkers = new Map();
 }
 
@@ -196,8 +209,12 @@ function createWindMarker(map: MapLibreMap, arrow: WindArrow): WindMarker {
     element.setAttribute("aria-label", windArrowLabel(arrow));
     const size = windArrowSize(arrow.windPowerW);
     element.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 L20 17 L12 13 L4 17 Z" fill="#2f7fd8" stroke="white" stroke-width="1.5"/></svg>`;
-    const marker = new Marker({ element, rotation: groundArrowBearing(arrow) ?? 0,
-        rotationAlignment: "map", pitchAlignment: "map" })
+    const marker = new Marker({
+        element,
+        rotation: groundArrowBearing(arrow) ?? 0,
+        rotationAlignment: "map",
+        pitchAlignment: "map",
+    })
         .setLngLat([arrow.lon, arrow.lat])
         .addTo(map);
     const entry: WindMarker = { marker };
@@ -215,7 +232,10 @@ function createWindMarker(map: MapLibreMap, arrow: WindArrow): WindMarker {
         toggle();
     });
     element.addEventListener("keydown", event => {
-        if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); }
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggle();
+        }
     });
     return entry;
 }
@@ -277,12 +297,15 @@ function applyMarkerThinning() {
     const { clientWidth: width, clientHeight: height } = map.getCanvas();
     const inView = (i: number) => {
         const p = points[i];
-        return !!p && p.x >= -MARKER_VIEW_MARGIN_PX && p.y >= -MARKER_VIEW_MARGIN_PX
-            && p.x <= width + MARKER_VIEW_MARGIN_PX && p.y <= height + MARKER_VIEW_MARGIN_PX;
+        return (
+            !!p &&
+            p.x >= -MARKER_VIEW_MARGIN_PX &&
+            p.y >= -MARKER_VIEW_MARGIN_PX &&
+            p.x <= width + MARKER_VIEW_MARGIN_PX &&
+            p.y <= height + MARKER_VIEW_MARGIN_PX
+        );
     };
-    const visible = new Set(
-        [...pickVisibleSamples(thinnable, i => points[i] ?? { x: NaN, y: NaN })].filter(inView),
-    );
+    const visible = new Set([...pickVisibleSamples(thinnable, i => points[i] ?? { x: NaN, y: NaN })].filter(inView));
 
     for (const [index, entry] of sampleMarkers) {
         if (!visible.has(index)) {
@@ -304,12 +327,14 @@ function windText(s: ForecastSampleOut): string {
     if (s.headwind == null) return "Windrichtung zur Strecke nicht verfügbar";
     if (s.headwind > 1) return `${Math.round(s.headwind)} km/h Gegenwind`;
     if (s.headwind < -1) return `${Math.round(-s.headwind)} km/h Rückenwind`;
-    return s.crosswind == null ? "Seitenwind nicht verfügbar" : `${Math.round(s.crosswind)} km/h Seitenwind (Abschnittsmittel)`;
+    return s.crosswind == null
+        ? "Seitenwind nicht verfügbar"
+        : `${Math.round(s.crosswind)} km/h Seitenwind (Abschnittsmittel)`;
 }
 
 function samplePopupHtml(s: ForecastSampleOut): string {
     const rq = rideScore(s);
-    return `<div style="font:13px/1.4 sans-serif;min-width:160px">
+    return `<div style="font:13px/1.4 var(--app-font);min-width:160px">
         <b>${fmtTime(s.eta)} Uhr</b> · ${s.weatherDesc || ""}<br>
         🌧️ ${s.rainRateMmH == null ? "—" : s.rainRateMmH.toFixed(1)} mm/h &nbsp; 🌡️ ${s.temp.toFixed(0)}°C<br>
         Regenrisiko: ${s.pop == null ? "Nicht verfügbar" : `${Math.round(s.pop * 100)}%`}<br>
@@ -330,7 +355,9 @@ function createSampleMarker(map: MapLibreMap, s: ForecastSampleOut, index: numbe
     el.tabIndex = 0;
     el.setAttribute("role", "button");
     el.setAttribute("aria-label", `Wetter um ${fmtTime(s.eta)} Uhr auswählen`);
-    el.addEventListener("click", () => { emit("selectSample", index); });
+    el.addEventListener("click", () => {
+        emit("selectSample", index);
+    });
     el.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
@@ -469,6 +496,11 @@ onMounted(() => {
             style: $q.dark.isActive ? DARK_STYLE : LIGHT_STYLE,
             center: [9.252317, 47.521889],
             zoom: 12,
+            attributionControl: {
+                compact: true,
+
+                // customAttribution: "© OpenStreetMap-Mitwirkende, © CARTO",
+            },
         });
 
         map.on("load", () => {
@@ -521,7 +553,8 @@ onBeforeUnmount(() => {
             <div id="map" ref="map"></div>
             <MapLegend v-if="hasRoute" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
             <div v-if="hasWindProfile" class="wx-wind-legend text-caption">
-                <span aria-hidden="true">➤</span> Wind
+                <span aria-hidden="true">➤</span>
+                Wind
                 <div>Pfeile zeigen, wohin der Wind weht. Grösse = Windaufwand (geschätzt).</div>
             </div>
         </div>
@@ -552,9 +585,19 @@ onBeforeUnmount(() => {
     top: 0;
     left: 0;
 }
-.wx-wind-legend { position: absolute; top: 8px; left: 8px; padding: 4px 8px;
-    border-radius: 4px; background: var(--q-dark, #263238); color: white; max-width: calc(100% - 16px); }
-.wx-wind-legend span { color: #77b7ff; }
+.wx-wind-legend {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--q-dark, #263238);
+    color: white;
+    max-width: calc(100% - 16px);
+}
+.wx-wind-legend span {
+    color: #77b7ff;
+}
 </style>
 
 <style>
@@ -605,7 +648,9 @@ body.body--dark .maplibregl-popup-anchor-right .maplibregl-popup-tip {
     gap: 2px;
     cursor: pointer;
 }
-.wx-wind-arrow { cursor: pointer; }
+.wx-wind-arrow {
+    cursor: pointer;
+}
 
 .wx-selected {
     width: 24px;
@@ -631,9 +676,7 @@ body.body--dark .maplibregl-popup-anchor-right .maplibregl-popup-tip {
     border-radius: 999px;
     background: #fff;
     box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
-    font:
-        600 12px/1 system-ui,
-        sans-serif;
+    font: 600 12px/1 var(--app-font);
     color: #2c3e50;
     white-space: nowrap;
 }

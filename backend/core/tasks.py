@@ -424,7 +424,8 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
             # this whole design exists to keep them off.
             cache_only=True,
             # Computed, not stripped afterwards: a corrected number cannot be un-corrected.
-            # The owner is part of the job key, so free and Pro never share a result.
+            # The owner is part of the job key, so free and Pro never share a result, and the
+            # tier is recorded in it below, so a tier change is never served a stale one.
             station_correction_enabled=limits.station_correction,
         )
 
@@ -445,6 +446,9 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
         if job.kind == ForecastJob.Kind.ROUTE:
             payload["route_id"] = params["route_id"]
         payload["departure_time"] = params["departure_time"]
+        # The tier this result was shaped for. The job key does not carry it, so without this
+        # an upgrade or downgrade would keep being served the old tier's forecast.
+        payload["entitlements"] = limits.result_marker()
         assembled = True
     finally:
         if not assembled:
@@ -514,8 +518,11 @@ def refresh_upcoming_forecasts() -> dict:
     return async_to_sync(_refresh_upcoming_forecasts_async)()
 
 
-async def _prewarm_routes() -> list[RecurringRoute]:
+async def _prewarm_routes(owner_id: int | None = None) -> list[RecurringRoute]:
     """Active routes whose owner's tier still entitles them to pre-warming.
+
+    With ``owner_id``, only that account's routes -- the same quota applies, so a sign-in
+    never pre-warms a route the hourly pass would skip.
 
     This is where the Open-Meteo budget is actually spent — a route here fans out one
     fetch per sample point per upcoming departure — so the quota has to be applied at
@@ -536,6 +543,8 @@ async def _prewarm_routes() -> list[RecurringRoute]:
         .defer("polyline", "thumbnail")  # large JSON blobs this pass never reads
         .order_by("created_at")
     )
+    if owner_id is not None:
+        query = query.filter(owner_id=owner_id)
     async for route in query:
         by_owner.setdefault(route.owner_id, []).append(route)
 
@@ -549,20 +558,41 @@ async def _prewarm_routes() -> list[RecurringRoute]:
     return selected
 
 
-async def _refresh_upcoming_forecasts_async() -> dict:
-    """Hand each eligible route its own scan task, then run maintenance.
-
-    The scan itself used to walk every route's sample points inline, so one slow route held
-    up the whole pass and none of it ever reached the queue.
-    """
-    routes = await _prewarm_routes()
-
+async def _enqueue_scans(routes: list[RecurringRoute]) -> int:
+    """One scan task per route that has geometry to scan; returns how many were enqueued."""
     scanned = 0
     for route in routes:
         if not route.sample_points:
             continue
         await scan_route_forecasts.aenqueue(str(route.id))
         scanned += 1
+    return scanned
+
+
+@task()
+def refresh_user_forecasts(user_id: int) -> dict:
+    """Check one account's routes for forecasts to refresh, right after it signs in.
+
+    The hourly pass can leave a route's cells up to an hour past MAX_CELL_AGE; scanning at
+    sign-in means the list and the first forecast the user opens are usually warm already.
+    Cheap to repeat: a scan skips warm cells and the claims deduplicate the rest.
+    """
+    return async_to_sync(_refresh_user_forecasts_async)(user_id)
+
+
+async def _refresh_user_forecasts_async(user_id: int) -> dict:
+    scanned = await _enqueue_scans(await _prewarm_routes(owner_id=user_id))
+    logger.debug(f"refresh_user_forecasts({user_id}): {scanned} route scans enqueued")
+    return {"routes": scanned}
+
+
+async def _refresh_upcoming_forecasts_async() -> dict:
+    """Hand each eligible route its own scan task, then run maintenance.
+
+    The scan itself used to walk every route's sample points inline, so one slow route held
+    up the whole pass and none of it ever reached the queue.
+    """
+    scanned = await _enqueue_scans(await _prewarm_routes())
 
     # Both ledgers only exist to reject repeats and to answer polls; without a purge they
     # grow forever.

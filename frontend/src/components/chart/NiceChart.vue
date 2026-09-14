@@ -4,6 +4,9 @@ import Plotly from "./plotly";
 import type { Config, Data, Layout, PlotMouseEvent } from "plotly.js";
 import { useQuasar } from "quasar";
 
+// Plotly draws SVG text from layout.font and ignores CSS; keep in sync with --app-font in base.css.
+const FONT_FAMILY = '"Lexend Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
 const $q = useQuasar();
 const emit = defineEmits<{ selectSample: [index: number] }>();
 function selectPoint(event: PlotMouseEvent) {
@@ -42,8 +45,8 @@ function buildLayout(): Partial<Layout> {
         autosize: true,
         plot_bgcolor: "transparent",
         paper_bgcolor: "transparent",
-        font: { color: ink },
-        legend: { ...incoming.legend, font: { ...incoming.legend?.font, color: ink } },
+        font: { family: FONT_FAMILY, color: ink },
+        legend: { ...incoming.legend, font: { ...incoming.legend?.font, family: FONT_FAMILY, color: ink } },
         xaxis: { ...incoming.xaxis, ...axisTheme },
         yaxis: { ...incoming.yaxis, ...axisTheme },
         ...(incoming.yaxis2 ? { yaxis2: { ...incoming.yaxis2, ...axisTheme } } : {}),
@@ -61,6 +64,10 @@ const config = ref<Partial<Config>>({
 });
 
 async function render() {
+    // Plotly measures label text during layout; measuring the fallback font before Lexend
+    // has loaded leaves ticks and legend entries mis-sized.
+    // (jsdom has no document.fonts)
+    await document.fonts?.ready;
     const el = chart.value;
     if (el) {
         await Plotly.react(el, data.value, layout.value, config.value);

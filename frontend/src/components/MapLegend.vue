@@ -40,9 +40,7 @@ const barGradient = computed(() => `linear-gradient(to right, ${SPECTRAL_10.join
     padding: 6px 8px 5px;
     border-radius: 6px;
     box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
-    font:
-        11px/1.3 system-ui,
-        sans-serif;
+    font: 11px/1.3 var(--app-font);
     color: var(--q-text-muted);
     user-select: none;
 }

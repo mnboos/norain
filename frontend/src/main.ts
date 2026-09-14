@@ -11,6 +11,8 @@ import { Configuration, DefaultConfig, type Middleware, type RequestContext } fr
 
 // Import icon libraries
 import "@quasar/extras/material-symbols-sharp/material-symbols-sharp.css";
+// Self-hosted, so no request goes to Google Fonts
+import "@fontsource-variable/lexend";
 
 // Import Quasar css
 import "quasar/dist/quasar.css";

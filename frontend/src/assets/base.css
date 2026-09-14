@@ -34,6 +34,9 @@
     --color-text: var(--vt-c-text-light-1);
 
     --section-gap: 160px;
+
+    /* Keep in sync with FONT_FAMILY in components/chart/NiceChart.vue (Plotly needs a literal) */
+    --app-font: "Lexend Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /*
@@ -73,7 +76,8 @@
     font-weight: normal;
 }
 
-body {
+/* `html body`, not `body`: quasar.css is imported after this file and sets its own body font */
+html body {
     min-height: 100vh;
     min-width: 100vw;
     color: var(--color-text);
@@ -82,21 +86,14 @@ body {
         color 0.5s,
         background-color 0.5s;
     line-height: 1.6;
-    font-family:
-        Inter,
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        Roboto,
-        Oxygen,
-        Ubuntu,
-        Cantarell,
-        "Fira Sans",
-        "Droid Sans",
-        "Helvetica Neue",
-        sans-serif;
+    font-family: var(--app-font);
     font-size: 15px;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+}
+
+/* maplibre-gl.css gives the map (popups, attribution, controls) its own Helvetica stack */
+html .maplibregl-map {
+    font-family: var(--app-font);
 }
