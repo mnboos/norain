@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgis:
-        image: postgis/postgis:17-3.5
+        image: postgis/postgis:18-3.6
         env:
           POSTGRES_DB: norain
           POSTGRES_USER: norain
@@ -37,11 +37,10 @@ jobs:
       DB_USER: norain
       DB_PASSWORD: test-only
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: sudo apt-get update && sudo apt-get install -y binutils libproj-dev gdal-bin
@@ -58,14 +57,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # The production VPS (Oracle Ampere A1) is arm64; QEMU builds that on the amd64 runner.
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile
