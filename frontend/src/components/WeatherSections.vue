@@ -19,9 +19,9 @@ const CONDITION_COLORS: Record<string, string> = {
 </script>
 
 <template>
-    <div>
-        <div class="text-caption text-muted q-mb-xs">Streckenabschnitte · Einzelprognose</div>
-        <div class="row items-center q-gutter-xs">
+    <q-card flat class="transparent">
+        <q-card-section class="text-caption text-muted q-mb-xs q-pa-none">Wetter entlang der Strecke</q-card-section>
+        <q-card-section class="row items-center q-gutter-xs q-pa-none">
             <q-badge
                 v-for="(section, i) in sections"
                 :key="i"
@@ -29,17 +29,23 @@ const CONDITION_COLORS: Record<string, string> = {
                 class="q-pa-xs"
                 :color="CONDITION_COLORS[section.condition] || 'grey'"
             >
-                <span class="text-weight-medium">{{ CONDITION_LABELS[section.condition] || section.condition }}</span>
-                &nbsp;{{ section.startKm }}–{{ section.endKm }} km
+                <q-item-label class="text-weight-medium">
+                    {{ CONDITION_LABELS[section.condition] || section.condition }}
+                </q-item-label>
+                <q-item-label v-if="sections.length > 1" caption>
+                    &nbsp;{{ section.startKm }}–{{ section.endKm }} km
+                </q-item-label>
                 <q-tooltip>
                     {{ section.startTime }}–{{ section.endTime }} · {{ section.tempMin }}–{{ section.tempMax }}°C
                     <template v-if="section.maxRainMm > 0">· Regen: {{ section.maxRainMm }} mm</template>
                     <template v-if="section.maxHeadwind != null">· Gegenwind: {{ section.maxHeadwind }} km/h</template>
                 </q-tooltip>
             </q-badge>
-            <q-badge v-if="sections.length" color="grey" outline class="q-pa-xs">
-                {{ Math.min(...sections.map(s => s.tempMin)) }}–{{ Math.max(...sections.map(s => s.tempMax)) }}°C
+            <q-badge v-if="sections.length" color="primary" outline class="q-pa-xs">
+                <q-item-label>
+                    {{ Math.min(...sections.map(s => s.tempMin)) }} – {{ Math.max(...sections.map(s => s.tempMax)) }}°C
+                </q-item-label>
             </q-badge>
-        </div>
-    </div>
+        </q-card-section>
+    </q-card>
 </template>

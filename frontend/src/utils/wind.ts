@@ -1,4 +1,5 @@
 import type { WindArrow, WindDistribution } from "@norain/api/models";
+import { WIND_POWER_CURVE } from "@/utils/rideQuality";
 
 /** The ground-wind fields the arrow and its label read. Nullable so partial data is refused here too. */
 export interface GroundWind {
@@ -36,13 +37,30 @@ export function groundWindText(wind: GroundWind): string {
     return wind.bearing == null ? base : `${base}, ${relativeWindLabel(wind.windDir - wind.bearing)}`;
 }
 
-/** Extra watts to hold the planned speed against the wind; negative when the wind helps. */
-export function windPowerText(watts: number | null | undefined): string {
-    if (watts == null || !Number.isFinite(watts)) return "Windaufwand nicht verfügbar";
+/**
+ * The wind effort as a word instead of watts, which nobody can place and which would claim a
+ * precision the estimate does not have. The steps are the breakpoints of the ride-quality
+ * wind curve, so the word and the map colour agree about the same point.
+ */
+export function windEffortLevel(watts: number | null | undefined): string | null {
+    if (watts == null || !Number.isFinite(watts)) return null;
     const rounded = Math.round(watts);
-    if (rounded > 0) return `+${rounded} W Windaufwand (geschätzt)`;
-    if (rounded < 0) return `−${-rounded} W, Wind hilft (geschätzt)`;
-    return "Kein Windaufwand (geschätzt)";
+    if (rounded < 0) return "Wind hilft";
+    if (rounded === 0) return "keiner";
+    const [, [low], [medium], [high]] = WIND_POWER_CURVE;
+    if (rounded < low) return "niedrig";
+    if (rounded < medium) return "mittel";
+    if (rounded < high) return "hoch";
+    return "sehr hoch";
+}
+
+/** Extra effort to hold the planned speed against the wind, as a level. */
+export function windPowerText(watts: number | null | undefined): string {
+    const level = windEffortLevel(watts);
+    if (level == null) return "Windaufwand nicht verfügbar";
+    if (level === "Wind hilft") return "Wind hilft (geschätzt)";
+    if (level === "keiner") return "Kein Windaufwand (geschätzt)";
+    return `Windaufwand ${level} (geschätzt)`;
 }
 
 /** Arrow edge length in px: 20 at calm, tailwind or unknown effort, 32 from 230 W up. */

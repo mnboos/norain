@@ -3,14 +3,14 @@ import { computed } from "vue";
 import { QIcon, QTooltip } from "quasar";
 import { symSharpInfo } from "@quasar/extras/material-symbols-sharp";
 
-import { NO_DATA_COLOR, SPECTRAL_10 } from "@/utils/rideQuality";
+import { NO_DATA_COLOR, YLORRD_8 } from "@/utils/rideQuality";
 
 defineProps<{
     /** Show the grey swatch - only when some stretch really has no usable data. */
     showNoData?: boolean;
 }>();
 
-const barGradient = computed(() => `linear-gradient(to right, ${SPECTRAL_10.join(", ")})`);
+const barGradient = computed(() => `linear-gradient(to right, ${YLORRD_8.join(", ")})`);
 </script>
 
 <template>

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ForecastSampleOut } from "@norain/api/models";
 import {
     NO_DATA_COLOR,
-    SPECTRAL_10,
+    YLORRD_8,
     gradientStops,
     rideScore,
     rideScoreLabel,
@@ -150,24 +150,25 @@ describe("rideScore missing data", () => {
 });
 
 describe("scoreColor", () => {
-    it("hits the exact Spectral endpoints", () => {
-        expect(scoreColor(0)).toBe(at(SPECTRAL_10, 0));
-        expect(scoreColor(1)).toBe(at(SPECTRAL_10, SPECTRAL_10.length - 1));
+    it("hits the exact ramp endpoints", () => {
+        expect(scoreColor(0)).toBe(at(YLORRD_8, 0));
+        expect(scoreColor(1)).toBe(at(YLORRD_8, YLORRD_8.length - 1));
     });
 
     it("lands on the intermediate steps and interpolates between them", () => {
-        expect(scoreColor(1 / 9)).toBe(at(SPECTRAL_10, 1));
-        expect(scoreColor(4 / 9)).toBe(at(SPECTRAL_10, 4));
-        const mid = scoreColor(0.5 / 9);
-        expect(mid).not.toBe(at(SPECTRAL_10, 0));
-        expect(mid).not.toBe(at(SPECTRAL_10, 1));
+        const step = 1 / (YLORRD_8.length - 1);
+        expect(scoreColor(step)).toBe(at(YLORRD_8, 1));
+        expect(scoreColor(4 * step)).toBe(at(YLORRD_8, 4));
+        const mid = scoreColor(0.5 * step);
+        expect(mid).not.toBe(at(YLORRD_8, 0));
+        expect(mid).not.toBe(at(YLORRD_8, 1));
     });
 
-    it("returns the neutral grey - never a Spectral step - for unknown values", () => {
+    it("returns the neutral grey - never a ramp step - for unknown values", () => {
         for (const v of [null, undefined, Number.NaN]) expect(scoreColor(v)).toBe(NO_DATA_COLOR);
         // Widened on purpose: as literal types TS can already prove these never overlap,
         // and that proof is the point - the grey must never collide with a ramp step.
-        const ramp: readonly string[] = SPECTRAL_10;
+        const ramp: readonly string[] = YLORRD_8;
         expect(ramp.includes(NO_DATA_COLOR)).toBe(false);
     });
 });
@@ -245,19 +246,22 @@ describe("gradientStops", () => {
         expect(at(stops, stops.length - 1).p).toBeLessThanOrEqual(1);
     });
 
-    it("subdivides a big jump so the ramp passes through Spectral instead of chording across it", () => {
-        // 0.15 -> 0.75 is more than five Spectral steps. One stop per sample would hand
-        // maplibre #3288bd and #d53e4f and let it blend the chord between them, which stays
-        // muddy the whole way - it never goes green.
+    it("subdivides a big jump so the ramp passes through its steps instead of chording across it", () => {
+        // 0.15 -> 0.75 is more than four ramp steps. One stop per sample would hand maplibre
+        // two hexes and let it blend the straight sRGB chord between them.
         const stops = pairs(gradientStops([0, 1], [0.15, 0.75]));
         expect(stops.length).toBeGreaterThan(5);
 
-        // The real ramp passes through the green/yellow middle of Spectral; the chord cannot.
-        const greenDominant = stops.filter(s => {
-            const [r, g, b] = channels(s.color);
-            return g > r && g > b;
-        });
-        expect(greenDominant.length).toBeGreaterThan(0);
+        // The intermediate stops are sampled from the ramp itself, not just the endpoints.
+        const expected = [0.3, 0.45, 0.6].map(s => scoreColor(s));
+        for (const color of expected) {
+            const [r, g, b] = channels(color);
+            const near = stops.some(s => {
+                const [r1, g1, b1] = channels(s.color);
+                return Math.max(Math.abs(r1 - r), Math.abs(g1 - g), Math.abs(b1 - b)) < 20;
+            });
+            expect(near).toBe(true);
+        }
 
         // ...and it gets there gradually: no visible lurch between neighbouring stops.
         for (let i = 1; i < stops.length; i++) {
@@ -267,9 +271,9 @@ describe("gradientStops", () => {
         }
     });
 
-    it("never lets two adjacent known stops span more than one Spectral step", () => {
+    it("never lets two adjacent known stops span more than one ramp step", () => {
         const stops = pairs(gradientStops([0, 0.4, 1], [0, 1, 0.3]));
-        const onRamp = stops.map(s => SPECTRAL_10.findIndex(c => c === s.color)).filter(i => i >= 0);
+        const onRamp = stops.map(s => YLORRD_8.findIndex(c => c === s.color)).filter(i => i >= 0);
         expect(onRamp.length).toBeGreaterThan(8);
         for (let i = 1; i < onRamp.length; i++) {
             expect(Math.abs(at(onRamp, i) - at(onRamp, i - 1))).toBeLessThanOrEqual(1);
@@ -302,7 +306,7 @@ describe("gradientStops", () => {
 
     it("falls back sanely with no or one usable sample", () => {
         expect(gradientStops([], [])).toEqual([0, NO_DATA_COLOR, 1, NO_DATA_COLOR]);
-        expect(gradientStops([0.3], [0])).toEqual([0, at(SPECTRAL_10, 0), 1, at(SPECTRAL_10, 0)]);
+        expect(gradientStops([0.3], [0])).toEqual([0, at(YLORRD_8, 0), 1, at(YLORRD_8, 0)]);
         const allNull = pairs(gradientStops([0, 0.5, 1], [null, null, null]));
         expect(allNull.every(s => s.color === NO_DATA_COLOR)).toBe(true);
     });
@@ -325,7 +329,7 @@ describe("gradientStops", () => {
             [0.02, 0],
         ];
         const stops = pairs(gradientStops(sampleProgress(line, samples, 900), scoresOf(samples)));
-        expect(at(stops, 0).color).toBe(at(SPECTRAL_10, 0));
+        expect(at(stops, 0).color).toBe(at(YLORRD_8, 0));
         expect(at(stops, stops.length - 1).color).toBe(NO_DATA_COLOR);
     });
 });

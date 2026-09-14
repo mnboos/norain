@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { ForecastJobOutFromJSON, type WindArrow } from "@norain/api/models";
 import {
-    compassLabel, groundArrowBearing, groundWindText, relativeWindLabel, visibleWindArrows, windArrowSize, windPowerText,
+    compassLabel, groundArrowBearing, groundWindText, relativeWindLabel, visibleWindArrows, windArrowSize, windEffortLevel,
+    windPowerText,
 } from "../wind";
 import { rideScore } from "../rideQuality";
 
@@ -26,9 +27,18 @@ describe("wind presentation", () => {
         expect(groundWindText({ ...segment, windSpeed: null })).toContain("nicht verfügbar");
     });
     it("words and sizes the wind effort", () => {
-        expect(windPowerText(64.4)).toBe("+64 W Windaufwand (geschätzt)");
-        expect(windPowerText(-20)).toBe("−20 W, Wind hilft (geschätzt)");
+        expect(windPowerText(64.4)).toBe("Windaufwand mittel (geschätzt)");
+        expect(windPowerText(-20)).toBe("Wind hilft (geschätzt)");
+        expect(windPowerText(0.4)).toBe("Kein Windaufwand (geschätzt)");
         expect(windPowerText(null)).toContain("nicht verfügbar");
+        expect(windEffortLevel(1)).toBe("niedrig");
+        expect(windEffortLevel(49)).toBe("niedrig");
+        expect(windEffortLevel(50)).toBe("mittel");
+        expect(windEffortLevel(129)).toBe("mittel");
+        expect(windEffortLevel(130)).toBe("hoch");
+        expect(windEffortLevel(229)).toBe("hoch");
+        expect(windEffortLevel(230)).toBe("sehr hoch");
+        expect(windEffortLevel(Number.NaN)).toBeNull();
         expect(windArrowSize(null)).toBe(20);
         expect(windArrowSize(-50)).toBe(20);
         expect(windArrowSize(115)).toBe(26);

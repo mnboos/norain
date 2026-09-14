@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, ref } from "vue";
+import { computed, defineAsyncComponent } from "vue";
 import { useForecastFigures } from "@/queries/forecastParts";
+import type { TimedSample } from "@/utils/forecastSelection";
 
 // Loaded lazily so Plotly ends up in its own chunk, fetched only once a forecast is shown.
 defineEmits<{ selectSample: [index: number] }>();
 
 const NiceChart = defineAsyncComponent(() => import("./chart/NiceChart.vue"));
 
-const props = defineProps<{ jobId: string; version: string }>();
+const props = defineProps<{ jobId: string; version: string; selectedSample: number; samples: TimedSample[] }>();
 
 // The chart data is not part of the job result either: only pages that draw charts fetch it.
 const { data, isPending, isError } = useForecastFigures(
@@ -20,15 +21,14 @@ const figures = computed(() => data.value ?? []);
 
 /** The backend draws temperature, precipitation and wind; hold their places while loading. */
 const PLACEHOLDER_TILES = 3;
-const cardWidth = ref(432);
 </script>
 
 <template>
-    <div class="row q-col-gutter-md">
+    <q-card class="row q-col-gutter-md transparent" flat>
         <template v-if="isPending">
             <div v-for="i in PLACEHOLDER_TILES" :key="i" class="col-12 col-md-4">
                 <q-card flat bordered>
-                    <q-skeleton height="240px" square aria-label="Diagramm wird geladen" />
+                    <q-skeleton square aria-label="Diagramm wird geladen" />
                 </q-card>
             </div>
         </template>
@@ -38,15 +38,20 @@ const cardWidth = ref(432);
         <template v-else>
             <div v-for="(fig, i) in figures" :key="i" class="col-12 col-md-4">
                 <q-card flat bordered class="overflow-hidden">
-                    <q-resize-observer @resize="size => (cardWidth = size.width)" />
-                    <q-responsive :ratio="cardWidth / 260">
-                        <NiceChart :figure="fig" @select-sample="$emit('selectSample', $event)" />
-                    </q-responsive>
+                    <NiceChart
+                        :key="`${jobId}:${version}:${i}`"
+                        :figure="fig"
+                        :selected-sample="selectedSample"
+                        :samples="samples"
+                        :directional-wind="i === 2"
+                        :temperature="i === 0"
+                        @select-sample="$emit('selectSample', $event)"
+                    />
                 </q-card>
             </div>
         </template>
         <div v-if="!isPending && !isError && !figures.length" class="col-12">
             <q-banner dense>Keine Diagrammdaten verfügbar.</q-banner>
         </div>
-    </div>
+    </q-card>
 </template>

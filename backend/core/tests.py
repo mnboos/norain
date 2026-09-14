@@ -1,6 +1,8 @@
 import json
+import os
 from datetime import UTC, date, datetime, timedelta
 from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -17,6 +19,7 @@ from django.core.management import call_command
 from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils.http import urlsafe_base64_encode
 
+from backend import load_dotenv
 from backend.asgi import application
 from core.auth.tokens import email_verification_token_generator
 from core.claims import claim_cell
@@ -78,6 +81,17 @@ from core.weather import (
     forecast_days_for,
 )
 from core.wind import wind_components as _wind_components
+
+
+class LoadDotenvTests(SimpleTestCase):
+    def test_missing_default_dotenv_is_not_an_error(self):
+        # CI and the production containers have no .env; their variables come from the environment.
+        with patch.dict(os.environ, {"ENV_FILE": ""}):
+            load_dotenv(Path("does-not-exist/.env"))
+
+    def test_explicit_env_file_must_exist(self):
+        with patch.dict(os.environ, {"ENV_FILE": "does-not-exist/.env"}), self.assertRaises(RuntimeError):
+            load_dotenv()
 
 
 class GeometryTests(SimpleTestCase):

@@ -62,14 +62,14 @@ describe("forecast uncertainty presentation", () => {
     });
     it("distinguishes unavailable, zero and empty forecasts", () => {
         const f = forecast(null);
-        expect(peakRisk(f)).toBe("Keine Wahrscheinlichkeitsdaten");
+        expect(peakRisk(f)).toBe("Nicht verfügbar");
         expect(forecastHeadline(f.summary, [])).toBe("Keine Wetterdaten");
         f.summary.rainProbability = 0;
-        expect(forecastHeadline(f.summary, f.samples)).toContain("Keine nassen Ensemble-Mitglieder");
+        expect(forecastHeadline(f.summary, f.samples)).toContain("Voraussichtlich trocken");
         const sample = f.samples[0];
         if (!sample) throw new Error("Fixture must contain a weather sample.");
         sample.probabilitySource = "openweathermap";
-        expect(forecastHeadline(f.summary, f.samples)).toContain("0% Regenrisiko");
+        expect(forecastHeadline(f.summary, f.samples)).toContain("Voraussichtlich trocken");
     });
     it("does not invent ranges for one member", () => {
         expect(rangeText({ memberCount: 1 }, "°C")).toBe("Nicht verfügbar");

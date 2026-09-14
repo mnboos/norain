@@ -7,13 +7,15 @@ This page describes the checked-in configuration. Sources:
 
 ## Environment variables
 
-`manage.py` loads the repository-root `.env`, or the file selected by `ENV_FILE`.
-The ASGI entry point independently requires the root `.env`. Already exported
-process variables take precedence over values loaded by `python-dotenv`.
+`manage.py` and the settings package load the repository-root `.env`, or the file
+selected by `ENV_FILE`. The root `.env` is optional: CI and the production containers
+have none and pass every variable through the process environment. An `ENV_FILE` that
+is set but points to a missing file is an error. Already exported process variables
+take precedence over values loaded by `python-dotenv`.
 
 | Variable | Default / requirement | Consumer |
 | --- | --- | --- |
-| `ENV_FILE` | Root `.env` if unset | Management-command environment loader |
+| `ENV_FILE` | Root `.env` if unset and present | Management-command environment loader |
 | `DB_NAME`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | Required | Django PostgreSQL connection and Compose database initialization |
 | `GRAPHHOPPER_API_URL` | `http://localhost:8989` | Backend; base URL without `/route` |
 | `GEOCODER_API_URL` | Required for search; no default | Backend; full Photon endpoint, e.g. `http://localhost:2322/api` |

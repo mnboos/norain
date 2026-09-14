@@ -128,7 +128,7 @@ function planCaption(): string {
     const e = entitlements.value;
     if (!e) return "";
     const routes = maxRoutes.value == null ? "unbegrenzt viele Routen" : `${e.routeCount}/${maxRoutes.value} Routen`;
-    const spread = e.ensembleUncertainty ? "mit Unsicherheitsband" : "ohne Unsicherheitsband";
+    const spread = e.ensembleUncertainty ? "mit Wetterbereich" : "ohne Wetterbereich";
     return `${routes} · ${spread}`;
 }
 

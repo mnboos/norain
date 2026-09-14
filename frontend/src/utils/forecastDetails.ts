@@ -9,24 +9,20 @@ export function swissTime(iso: string): string {
 export function forecastHeadline(summary: RouteWeatherSummary, samples: ForecastSampleOut[]): string {
     if (!samples.length) return "Keine Wetterdaten";
     const p = summary.rainProbability;
-    if (p == null) return summary.willRain ? "Regen in der Einzelprognose" : "Kein Regen in der Einzelprognose";
-    if (p === 0) {
-        return samples.some(s => s.probabilitySource !== "open-meteo-ensemble" && s.pop != null)
-            ? "An verfügbaren Punkten: 0% Regenrisiko"
-            : "Keine nassen Ensemble-Mitglieder an verfügbaren Punkten";
-    }
+    if (p == null) return summary.willRain ? "Regen erwartet" : "Voraussichtlich trocken";
+    if (p === 0) return "Voraussichtlich trocken";
     const time = summary.firstRainEta ? ` ab ca. ${swissTime(summary.firstRainEta)} Uhr` : "";
     return `Regen möglich${time}`;
 }
 
 export function peakRisk(forecast: RouteForecastOut): string {
     const p = forecast.summary.rainProbability;
-    return p == null ? "Keine Wahrscheinlichkeitsdaten" : `${Math.round(p * 100)}%`;
+    return p == null ? "Nicht verfügbar" : `${Math.round(p * 100)}%`;
 }
 
 export function rangeText(range: EnsembleRange | undefined, unit: string): string {
     if (range?.median == null || range.p10 == null || range.p90 == null) return "Nicht verfügbar";
-    return `${range.p10.toFixed(1)}–${range.p90.toFixed(1)} ${unit} (Median ${range.median.toFixed(1)})`;
+    return `${range.p10.toFixed(1)}–${range.p90.toFixed(1)} ${unit}`;
 }
 
 export const metricLabels = [

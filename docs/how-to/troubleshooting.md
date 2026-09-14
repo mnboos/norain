@@ -5,7 +5,7 @@ commands from the repository root and Django commands from `backend/`.
 
 | Symptom | Action |
 | --- | --- |
-| `No .env file was found` or `Dotenv file not found` | Create the root `.env` using the [tutorial](../tutorials/first-forecast.md). ASGI reads that path even when management commands use `ENV_FILE`. |
+| `dotenv file not found` or `ENV_FILE does not point to a file` | `ENV_FILE` is set to a missing path: fix or unset it. Without `ENV_FILE` the root `.env` is optional; create it using the [tutorial](../tutorials/first-forecast.md) or export the variables. |
 | Compose cannot find a configuration file | Include `-f docker-compose.dev.yml`; the repository has no default `compose.yml`. |
 | Compose reports missing database/storage variables | Supply `DB_NAME`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `APP_STORAGE_PATH`. |
 | Django reports that a `DB_*` setting is missing | Copy `.env.template` to `.env` and start the Compose `db` service. SQLite is no longer supported. |

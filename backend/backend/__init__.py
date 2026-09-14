@@ -5,18 +5,27 @@ import dotenv
 from loguru import logger
 
 
-def load_dotenv(dotenv_default_path: str = "../.env") -> None:
+DEFAULT_DOTENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+
+
+def load_dotenv(dotenv_default_path: Path = DEFAULT_DOTENV_PATH) -> None:
     """
     Load the environment variables from the .env file specified in ENV_FILE.
+
+    Without ENV_FILE the repository-root .env is optional: CI and the production
+    containers get their variables from the process environment and have no such file.
+    An ENV_FILE that is set but points nowhere still fails.
 
     :return:
     """
 
     vars_before = {**os.environ}
-    _env_file: str = os.environ.get("ENV_FILE", dotenv_default_path)
+    _env_file = os.environ.get("ENV_FILE")
     if not _env_file:
-        _env_file = ".env"
-        logger.warning("ENV_FILE is not set and was defaulted to '.env")
+        if not dotenv_default_path.is_file():
+            logger.info("No dotenv file at {}; using the process environment", dotenv_default_path)
+            return
+        _env_file = str(dotenv_default_path)
 
     for i, env_file in enumerate(_env_file.split(",")):
         env_file_path = verify_path(env_file)

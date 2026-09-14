@@ -9,7 +9,7 @@
  *
  * The one thing the stroke still distinguishes is *data presence*: neutral grey means no
  * usable forecast for that stretch, which is a fact about the data rather than a reading
- * of the weather. The map route line keeps the Spectral ramp, where a legend, the popup's
+ * of the weather. The map route line keeps the YlOrRd ramp, where a legend, the popup's
  * Fahrqualität line and the section list back it up.
  */
 import { computed } from "vue";

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Map as MapLibreMap, Marker, Popup, LngLatBounds, GeoJSONSource, config as maplibreConfig } from "maplibre-gl";
-import type { ExpressionSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, MapMouseEvent } from "maplibre-gl";
 // maplibre-gl 6 is pure ESM and loads its worker as a sibling file resolved from
 // `import.meta.url`. Once the bundler inlines maplibre into a chunk that path no longer
 // exists, the worker dies silently and anything the worker parses (our GeoJSON route)
@@ -19,6 +19,7 @@ import MapLegend from "@/components/MapLegend.vue";
 import { useForecastMapDetail, type LineDetail } from "@/queries/forecastParts";
 import { finerDetail, lineDetailForZoom } from "@/utils/mapDetail";
 import { groundArrowBearing, groundWindText, visibleWindArrows, windArrowSize, windPowerText } from "@/utils/wind";
+import { lineProgress, sampleAtRoutePoint, type ScreenPoint } from "@/utils/forecastSelection";
 
 maplibreConfig.WORKER_URL = maplibreWorkerUrl;
 
@@ -101,12 +102,17 @@ watch([zielort, hasMap], () => {
     destMarker = placeMarker(destMarker, zielort.value, "#d24d78");
 });
 
-// The route line is colored by ride quality (see utils/rideQuality.ts). Spectral's middle
-// steps are very pale (#fee08b, #e6f598 sit near 1.2:1 against the light basemap), so a
-// white casing would let them vanish into CARTO Positron - the casing carries the ink
+// The route line is colored by ride quality (see utils/rideQuality.ts). The good end of the
+// YlOrRd ramp is very pale (#ffeda0, #fed976 sit near 1.2:1 against the light basemap), so a
+// white casing would let it vanish into CARTO Positron - the casing carries the ink
 // instead and flips with the theme. Same values NiceChart.vue uses for chart ink.
+// A 1 px, half-transparent edge is enough to hold the pale end; a solid 2 px one reads as a
+// heavy black outline next to yellow.
 const CASING_LIGHT = "#1b2733";
 const CASING_DARK = "#e8eef2";
+const CASING_OPACITY = 0.55;
+const ROUTE_LINE_WIDTH = 6;
+const CASING_WIDTH = ROUTE_LINE_WIDTH + 2;
 
 // --- map detail: the job result carries a coarse line and wind arrows ~2 km apart; finer
 // ones are fetched once the map is zoomed in far enough to show the difference. ---
@@ -121,6 +127,46 @@ const { data: fetchedDetail } = useForecastMapDetail(
 );
 const drawnLine = computed(() => loadedDetail.value?.line ?? routeWeather.value?.line ?? []);
 const drawnWindArrows = computed(() => loadedDetail.value?.windArrows ?? routeWeather.value?.windArrows ?? []);
+
+const routeProgress = computed(() => lineProgress(drawnLine.value));
+const routeSampleProgress = computed(() =>
+    sampleProgress(drawnLine.value, routeWeather.value?.samples ?? [], routeWeather.value?.totalSeconds ?? 0),
+);
+let projectedLine: ScreenPoint[] | undefined;
+let hoverFrame: number | undefined;
+let hoverPoint: ScreenPoint | undefined;
+function invalidateProjection() {
+    projectedLine = undefined;
+}
+watch(drawnLine, invalidateProjection);
+function selectRoutePoint(point: ScreenPoint) {
+    const map = mymap.value;
+    if (!map || !routeWeather.value?.samples.length) return;
+    projectedLine ??= drawnLine.value.map(c => map.project([c[0] ?? 0, c[1] ?? 0]));
+    const index = sampleAtRoutePoint(
+        point,
+        projectedLine,
+        routeProgress.value,
+        routeSampleProgress.value,
+        props.selectedSample,
+    );
+    if (index !== undefined && index !== props.selectedSample) emit("selectSample", index);
+}
+function hoverRoute(event: MapMouseEvent) {
+    if (mymap.value?.isMoving()) return;
+    hoverPoint = event.point;
+    if (hoverFrame !== undefined) return;
+    hoverFrame = requestAnimationFrame(() => {
+        hoverFrame = undefined;
+        if (hoverPoint) selectRoutePoint(hoverPoint);
+    });
+}
+function leaveRoute() {
+    if (hoverFrame !== undefined) cancelAnimationFrame(hoverFrame);
+    hoverFrame = undefined;
+    hoverPoint = undefined;
+    if (mymap.value) mymap.value.getCanvas().style.cursor = "";
+}
 
 watch(
     () => [routeWeather.value?.jobId, routeWeather.value?.version],
@@ -341,7 +387,7 @@ function samplePopupHtml(s: ForecastSampleOut): string {
         💨 ${s.windSpeed == null ? "Nicht verfügbar" : `${s.windSpeed.toFixed(0)} km/h über Grund`}${s.windGust ? ` (Böen ${s.windGust.toFixed(0)})` : ""}<br>
         <span class="${s.headwind != null && s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span><br>
         ${s.windPowerW != null ? `↳ ${windPowerText(s.windPowerW)}<br>` : ""}
-        ${s.windCoverage != null && s.windCoverage < 1 ? `Windabdeckung im Abschnitt: ${Math.round(s.windCoverage * 100)}%<br>` : ""}
+        ${s.windCoverage != null && s.windCoverage < 1 ? "Für Teile dieses Abschnitts fehlen Winddaten.<br>" : ""}
         <span class="wx-quality">
             <i style="background:${scoreColor(rq?.score ?? null)}"></i> Fahrqualität: ${rideScoreLabel(rq)}
         </span>
@@ -365,6 +411,8 @@ function createSampleMarker(map: MapLibreMap, s: ForecastSampleOut, index: numbe
         }
     });
     el.addEventListener("mouseenter", () => {
+        leaveRoute();
+        emit("selectSample", index);
         if (!entry.popup) {
             entry.popup = new Popup({ offset: 16, closeButton: false }).setHTML(samplePopupHtml(s));
             marker.setPopup(entry.popup);
@@ -394,7 +442,7 @@ async function renderLine() {
     // too - sampleProgress() does that by locating each sample's vertex on the polyline.
     // Every line level the backend serves keeps those vertices, so this works on whichever
     // line is drawn. gradientStops() then subdivides each span so the blend actually
-    // travels through the Spectral ramp, and hard-edges any stretch we have no data for.
+    // travels through the ramp, and hard-edges any stretch we have no data for.
     const stops = gradientStops(sampleProgress(line, rw.samples, rw.totalSeconds), scores.value);
     const gradient: ExpressionSpecification = ["interpolate", ["linear"], ["line-progress"], ...stops];
     const casing = $q.dark.isActive ? CASING_DARK : CASING_LIGHT;
@@ -416,7 +464,7 @@ async function renderLine() {
                 type: "line",
                 source: "route-source",
                 layout: { "line-cap": "round", "line-join": "round" },
-                paint: { "line-width": 10, "line-color": casing },
+                paint: { "line-width": CASING_WIDTH, "line-color": casing, "line-opacity": CASING_OPACITY },
             },
             labelsStartId,
         );
@@ -426,10 +474,17 @@ async function renderLine() {
                 type: "line",
                 source: "route-source",
                 layout: { "line-cap": "round", "line-join": "round" },
-                paint: { "line-width": 6 },
+                paint: { "line-width": ROUTE_LINE_WIDTH },
             },
             labelsStartId,
         );
+        map.addLayer({
+            id: "route-hit",
+            type: "line",
+            source: "route-source",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-width": 24, "line-opacity": 0 },
+        });
     }
     // Both outside the addSource branch: that only runs on the first render and after a
     // style swap, but the gradient and the casing change whenever the data or theme does.
@@ -505,6 +560,18 @@ onMounted(() => {
 
         map.on("load", () => {
             mymap.value = map;
+            map.on("move", invalidateProjection);
+            map.on("resize", invalidateProjection);
+            map.on("movestart", leaveRoute);
+            map.on("mousemove", "route-hit", hoverRoute);
+            map.on("click", "route-hit", event => {
+                leaveRoute();
+                selectRoutePoint(event.point);
+            });
+            map.on("mouseenter", "route-hit", () => {
+                map.getCanvas().style.cursor = "pointer";
+            });
+            map.on("mouseleave", "route-hit", leaveRoute);
             emitMapView(map);
             map.on("moveend", () => {
                 emitMapView(map);
@@ -530,6 +597,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+    leaveRoute();
     clearSampleMarkers();
     clearWindMarkers();
     mymap.value?.off("moveend", renderWindMarkers);
@@ -543,22 +611,22 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="fit flex justify-center">
+    <q-card flat class="transparent column col">
         <slot name="search"></slot>
-        <div v-if="webglError" class="fit flex column items-center justify-center text-center q-pa-xl">
+        <q-card-section v-if="webglError" class="fit flex column items-center justify-center text-center q-pa-xl">
             <div class="text-h6 q-mb-md">Karte konnte nicht geladen werden</div>
             <div class="text-body2">{{ webglError }}</div>
-        </div>
-        <div v-else class="wx-map-wrap" :style="{ height: height ?? '100vh' }">
-            <div id="map" ref="map"></div>
+        </q-card-section>
+        <q-card-section v-else class="col column q-pa-none">
+            <div id="map" ref="map" class="col"></div>
             <MapLegend v-if="hasRoute" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
             <div v-if="hasWindProfile" class="wx-wind-legend text-caption">
                 <span aria-hidden="true">➤</span>
                 Wind
                 <div>Pfeile zeigen, wohin der Wind weht. Grösse = Windaufwand (geschätzt).</div>
             </div>
-        </div>
-    </div>
+        </q-card-section>
+    </q-card>
 </template>
 
 <style scoped>

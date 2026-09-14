@@ -1,7 +1,7 @@
 <route lang="json5">
 {
-  name: "route-detail",
-  meta: { title: "Route", requiresAuth: true }
+    name: "route-detail",
+    meta: { title: "Route", requiresAuth: true },
 }
 </route>
 
@@ -15,11 +15,7 @@ import { useRecurringRoute } from "@/queries/recurringRoutes";
 const currentRoute = useRoute();
 const routeId = computed(() => String(currentRoute.params.id));
 
-const {
-    data: route,
-    isLoading,
-    error,
-} = useRecurringRoute(routeId);
+const { data: route, isLoading, error } = useRecurringRoute(routeId);
 
 const departureDate = computed(() => {
     const next = route.value?.nextDeparture;
@@ -33,7 +29,7 @@ const departureTime = computed(() => {
 </script>
 
 <template>
-    <q-page>
+    <q-page class="column">
         <!-- Once the route is loaded, the back button moves into the panel's one-line header. -->
         <q-btn v-if="!route" flat :icon="symSharpArrowBack" label="Zurück" to="/" class="q-ma-sm" />
 
@@ -41,15 +37,14 @@ const departureTime = computed(() => {
             <q-spinner-dots size="3rem" />
         </div>
 
-        <q-banner v-else-if="error || !route" class="bg-tint-error q-ma-md" rounded>
-            Route nicht gefunden.
-        </q-banner>
+        <q-banner v-else-if="error || !route" class="bg-tint-error q-ma-md" rounded>Route nicht gefunden.</q-banner>
 
         <RouteDetailPanel
             v-else
             :route="route"
             :departure-date="departureDate"
             :departure-time="departureTime"
+            class="col"
         >
             <template #back>
                 <q-btn flat round dense :icon="symSharpArrowBack" to="/" aria-label="Zurück" />

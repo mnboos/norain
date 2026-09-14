@@ -94,6 +94,11 @@ PHOTON_IMAGE=ghcr.io/mnboos/norain-photon:COMMIT_SHA \
 ./deploy/release.sh
 ```
 
+From a workstation, `just deploy [COMMIT_SHA]` does the same over SSH (the SHA defaults
+to local `HEAD`, which CI must already have published) and then checks the health
+endpoint. It reads `VPS_USER`, `VPS_HOST`, and `VPS_PUBLIC_HEALTH_URL` from the local
+`.env`, and your SSH key must be accepted by the deployment user.
+
 The first Photon import can take a long time; GraphHopper only loads the copied graph.
 Follow both with
 `docker compose --env-file .env -f docker-compose.prod.yml logs -f graphhopper photon`.

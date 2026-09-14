@@ -1,5 +1,5 @@
 /**
- * Ride quality: one 0..1 score per weather sample, and the Spectral colour ramp the map
+ * Ride quality: one 0..1 score per weather sample, and the YlOrRd colour ramp the map
  * paints the route line with.
  *
  * Kept free of maplibre/vue imports so the pure parts stay unit-testable, same as
@@ -14,31 +14,29 @@
 import type { ForecastSampleOut } from "@norain/api/models";
 
 /**
- * ColorBrewer Spectral-10, reversed: violet = good ride, dark red = bad.
+ * ColorBrewer YlOrRd-9 without its palest step: pale yellow = good ride, dark red = bad.
  *
- * Spectral is a diverging palette carrying a sequential quantity here, and it is a
- * red-green ramp, so hue alone is not readable for everyone. The legend, the
- * "Fahrqualität" line in each popup and the section list all repeat the information in
- * text - never rely on the colour by itself.
+ * Sequential and monotone in lightness, so the order survives colour-vision deficiency and
+ * greyscale. `#ffffcc` is dropped because it vanishes into the light basemap. Even so, the
+ * legend, the "Fahrqualität" line in each popup and the section list all repeat the
+ * information in text - never rely on the colour by itself.
  */
-export const SPECTRAL_10 = [
-    "#5e4fa2",
-    "#3288bd",
-    "#66c2a5",
-    "#abdda4",
-    "#e6f598",
-    "#fee08b",
-    "#fdae61",
-    "#f46d43",
-    "#d53e4f",
-    "#9e0142",
+export const YLORRD_8 = [
+    "#ffeda0",
+    "#fed976",
+    "#feb24c",
+    "#fd8d3c",
+    "#fc4e2a",
+    "#e31a1c",
+    "#bd0026",
+    "#800026",
 ] as const;
 
-/** Neutral grey for "we don't know" - deliberately not a Spectral step. */
+/** Cool blue-grey for "we don't know" - deliberately off the warm ramp. */
 export const NO_DATA_COLOR = "#9aa5b1";
 
-/** One Spectral step. Gradient spans are subdivided so no two stops jump further than this. */
-const MAX_SCORE_STEP = 1 / (SPECTRAL_10.length - 1);
+/** One ramp step. Gradient spans are subdivided so no two stops jump further than this. */
+const MAX_SCORE_STEP = 1 / (YLORRD_8.length - 1);
 
 /** Smallest gap between two line-gradient stops - also what makes a "hard edge" hard. */
 const EPS = 1e-4;
@@ -108,7 +106,7 @@ const RAIN_CURVE = [
 // wind weighs more on a fast e-bike than on a slow bike. A tailwind is not "better than
 // calm" on this scale, it just isn't a penalty, so the curve starts at 0. Calibrated so that
 // at ~18 km/h it matches the headwind curve below (10/20/30 km/h ≈ 50/130/230 W).
-const WIND_POWER_CURVE = [
+export const WIND_POWER_CURVE = [
     [0, 0],
     [50, 0.3],
     [130, 0.65],
@@ -193,13 +191,13 @@ function rgbToHex(r: number, g: number, b: number): string {
     return `#${part(r)}${part(g)}${part(b)}`;
 }
 
-/** Spectral colour for a score, or the neutral grey for `null`/non-finite. */
+/** Ramp colour for a score, or the neutral grey for `null`/non-finite. */
 export function scoreColor(score: number | null | undefined): string {
     if (score == null || !Number.isFinite(score)) return NO_DATA_COLOR;
-    const t = clamp01(score) * (SPECTRAL_10.length - 1);
-    const i = Math.min(Math.floor(t), SPECTRAL_10.length - 2);
-    const lo = SPECTRAL_10[i];
-    const hi = SPECTRAL_10[i + 1];
+    const t = clamp01(score) * (YLORRD_8.length - 1);
+    const i = Math.min(Math.floor(t), YLORRD_8.length - 2);
+    const lo = YLORRD_8[i];
+    const hi = YLORRD_8[i + 1];
     if (!lo || !hi) return NO_DATA_COLOR;
     const f = t - i;
     const [r0, g0, b0] = hexToRgb(lo);
@@ -239,7 +237,7 @@ export function rideScoreLabel(rq: RideScore | null): string {
 
 const EARTH_R_M = 6371008.8;
 
-function haversineM(a: readonly number[], b: readonly number[]): number {
+export function haversineM(a: readonly number[], b: readonly number[]): number {
     const toRad = Math.PI / 180;
     const lon1 = (a[0] ?? 0) * toRad;
     const lat1 = (a[1] ?? 0) * toRad;
@@ -328,10 +326,10 @@ export function sampleProgress(
  * Two things this has to get right that one-stop-per-sample does not:
  *
  * 1. maplibre blends between the two hexes it is given, as a straight sRGB chord. Samples
- *    scoring 0.15 and 0.75 would blend #3288bd straight to #d53e4f, skipping every
- *    Spectral step between them and passing through mud. Headwind flips sign whenever the
+ *    scoring 0.15 and 0.75 would blend #fed976 straight to #bd0026, skipping every ramp
+ *    step between them and cutting the corner through sRGB. Headwind flips sign whenever the
  *    route turns, so jumps that size are routine. Each span is therefore subdivided until
- *    no two stops are more than one Spectral step apart.
+ *    no two stops are more than one ramp step apart.
  * 2. A span with an unknown endpoint is painted flat grey with hard edges. Letting grey
  *    gradate into a real colour would invent "partly known" weather over ground where the
  *    data is fine.

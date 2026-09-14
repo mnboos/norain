@@ -64,7 +64,7 @@ test("wind profile renders on desktop and mobile; felt chart does not select a w
     await expect(page.getByText("Gegenwind max.", { exact: true })).toBeVisible();
     await expect(page.getByText("Windaufwand max.", { exact: true })).toBeVisible();
     await expect(page.locator(".wx-wind-arrow").first()).toBeVisible();
-    await expect(page.locator(".wx-wind-arrow").first()).toHaveAttribute("aria-label", /^Wind: 15 km\/h aus NO, von vorne rechts · \+90 W Windaufwand/);
+    await expect(page.locator(".wx-wind-arrow").first()).toHaveAttribute("aria-label", /^Wind: 15 km\/h aus NO, von vorne rechts · Windaufwand mittel/);
     await page.getByText("Vorhersage-Details", { exact: true }).click();
     const slider = page.getByRole("slider", { name: "Streckenpunkt" });
     await slider.focus();

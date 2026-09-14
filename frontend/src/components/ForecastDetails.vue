@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, ref } from "vue";
 import type { RouteForecastOut } from "@norain/api/models";
-import { metricLabels, modelLabel, rangeText, swissTime } from "@/utils/forecastDetails";
+import { metricLabels, rangeText, swissTime } from "@/utils/forecastDetails";
 import { useEntitlements } from "@/composables/useEntitlements";
-import { useSampleUncertainty } from "@/queries/forecastParts";
 
 const props = defineProps<{ forecast: RouteForecastOut; selectedSample: number; showChartKey?: boolean }>();
 const emit = defineEmits<{ "update:selectedSample": [index: number] }>();
@@ -20,75 +19,34 @@ const { entitlements } = useEntitlements();
  * actually reports the tier — never infer a paywall from absent data.
  */
 const uncertaintyLocked = computed(() => entitlements.value?.ensembleUncertainty === false);
-const now = ref(Date.now());
-const timer = setInterval(() => {
-    now.value = Date.now();
-}, 60_000);
-onBeforeUnmount(() => {
-    clearInterval(timer);
-});
-const age = computed(() =>
-    uncertainty.value
-        ? Math.max(0, Math.floor((now.value - new Date(uncertainty.value.fetchedAt).getTime()) / 60000))
-        : null,
-);
-/** Computed by the server over every sample, which no longer carry their model lists here. */
 const partial = computed(() => props.forecast.uncertaintyPartial);
-
-// The per-model breakdown is most of a sample's size and only this table shows it, for one
-// point at a time - so it is fetched for the selected point, and only while the panel is open.
-const {
-    data: breakdown,
-    isCurrent: breakdownCurrent,
-    isError: breakdownError,
-} = useSampleUncertainty(
-    () => props.forecast.jobId,
-    () => props.forecast.version,
-    () => props.selectedSample,
-    () => expanded.value && !!uncertainty.value,
-);
-const modelRows = computed(() => {
-    const u = breakdownCurrent.value ? breakdown.value : null;
-    return u
-        ? [...new Set([...u.requestedModels, ...u.models.map(m => m.model)])].map(name => ({
-              name,
-              data: u.models.find(m => m.model === name),
-          }))
-        : [];
-});
 </script>
 
 <template>
-    <q-expansion-item
-        v-model="expanded"
-        label="Vorhersage-Details"
-        dense
-        class="forecast-details q-mb-sm"
-        data-testid="forecast-details"
-    >
+    <q-expansion-item v-model="expanded" dense class="forecast-details q-mb-sm" data-testid="forecast-details">
         <template #header>
-            <q-item-section>
-                <div class="row items-center q-gutter-x-sm">
-                    <span class="text-caption text-primary">Vorhersage-Details</span>
-                    <span v-if="showChartKey" class="text-caption text-muted">Schattierung: 10.–90. Perzentil · Linie: Median · Gepunktet: Einzelprognose. Punkt auswählen für Details.</span>
-                </div>
+            <q-item-section side class="">
+                <q-item-label overline class="">Details</q-item-label>
+                <!--                <div class="row items-center q-gutter-x-sm">-->
+                <!--                    <span class="text-caption text-primary">Details</span>-->
+                <!--                    <span v-if="showChartKey" class="text-caption text-muted">-->
+                <!--                        Fläche: erwarteter Bereich. Linie auswählen für Details.-->
+                <!--                    </span>-->
+                <!--                </div>-->
             </q-item-section>
         </template>
         <div class="q-pa-md">
             <p class="text-caption">
-                Die Bereiche zeigen das 10.–90. Perzentil der Ensemble-Mitglieder. Sie beschreiben die Modellstreuung,
-                keine garantierten Grenzen. Alle verfügbaren Mitglieder zählen gleich; Modelle mit mehr Mitgliedern
-                haben mehr Gewicht.
+                Die Fläche zeigt, wie stark das Wetter schwanken könnte. Auch Werte ausserhalb sind möglich.
             </p>
             <q-banner v-if="uncertaintyLocked" dense class="bg-tint-warn q-mb-md">
-                Das Unsicherheitsband ist eine Pro-Funktion. Regenwahrscheinlichkeit und Vorhersage bleiben im
-                Free-Tarif vollständig verfügbar.
+                Mögliche Wetterschwankungen siehst du mit Pro. Die Wettervorhersage und das Regenrisiko sind kostenlos.
                 <template #action>
                     <q-btn flat dense color="primary" label="Upgrade" to="/account" />
                 </template>
             </q-banner>
             <q-banner v-else-if="partial" dense class="bg-tint-warn q-mb-md">
-                Teilweise Ensemble-Abdeckung: Modelle oder Wettergrössen fehlen an einigen Punkten.
+                Für Teile der Strecke fehlen Angaben zu möglichen Wetterschwankungen.
             </q-banner>
             <template v-if="sample">
                 <label class="text-weight-medium">
@@ -107,26 +65,18 @@ const modelRows = computed(() => {
                 </label>
                 <p class="text-caption">
                     Regenrisiko am Punkt:
-                    {{ sample.pop == null ? "Nicht verfügbar" : `${Math.round(sample.pop * 100)}%` }} · Quelle:
-                    {{ sample.probabilitySource ?? "Keine Wahrscheinlichkeitsdaten" }}
+                    {{ sample.pop == null ? "Nicht verfügbar" : `${Math.round(sample.pop * 100)}%` }}
                 </p>
-                <p v-if="sample.stationCount" class="text-caption">
-                    Temperatur und Regenrisiko mit {{ sample.stationCount }} Messstationen in der Nähe abgeglichen.
-                </p>
-                <p v-if="uncertainty" class="text-caption">
-                    Ensemble-Zeitpunkt: {{ swissTime(uncertainty.forecastTime) }} Uhr · Abgerufen vor {{ age }} min.
-                    Niederschlag gilt für die vorhergehende Stunde. Ein nasses Mitglied meldet mindestens 0.1 mm.
-                </p>
-                <p v-else>Keine Ensemble-Bereiche für diesen Punkt verfügbar.</p>
+                <p v-if="!uncertainty && !uncertaintyLocked">Für diesen Punkt ist kein Wetterbereich verfügbar.</p>
                 <p v-if="sample.rainRateMmH != null" class="text-caption">
-                    Einzelprognose: {{ sample.rainRateMmH.toFixed(1) }} mm/h ({{ sample.rainMm.toFixed(1) }} mm in
+                    Regen: {{ sample.rainRateMmH.toFixed(1) }} mm/h ({{ sample.rainMm.toFixed(1) }} mm in
                     {{ (sample.precipitationIntervalS ?? 3600) / 60 }} min).
                 </p>
                 <p v-if="uncertainty?.rainIfWet != null" class="text-caption">
                     {{
                         uncertainty.pop === 0
-                            ? "Keine nassen Mitglieder."
-                            : `Wenn nass: im Mittel ${uncertainty.rainIfWet.toFixed(1)} mm/h.`
+                            ? "Voraussichtlich trocken."
+                            : `Falls es regnet: etwa ${uncertainty.rainIfWet.toFixed(1)} mm/h.`
                     }}
                 </p>
                 <dl v-if="!uncertaintyLocked" class="metric-grid">
@@ -134,48 +84,10 @@ const modelRows = computed(() => {
                         <dt>{{ metric.label }}</dt>
                         <dd>
                             {{ rangeText(uncertainty?.metrics[metric.key], metric.unit) }}
-                            <small>· {{ uncertainty?.metrics[metric.key]?.memberCount ?? 0 }} Mitglieder</small>
                         </dd>
                     </template>
                 </dl>
                 <p class="text-caption">Positiver Gegenwind bremst, negative Werte bedeuten Rückenwind.</p>
-                <p v-if="uncertainty && breakdownError" class="text-caption">
-                    Modellvergleich konnte nicht geladen werden.
-                </p>
-                <div v-else-if="uncertainty && !breakdownCurrent" class="text-center q-pa-sm">
-                    <q-spinner-dots size="1.5rem" />
-                </div>
-                <div
-                    v-else-if="modelRows.length"
-                    class="model-table"
-                    tabindex="0"
-                    aria-label="Modellvergleich, horizontal scrollbar"
-                >
-                    <table>
-                        <caption>Modellvergleich am ausgewählten Punkt · Bereiche und Median</caption>
-                        <thead>
-                            <tr>
-                                <th scope="col">Modell</th>
-                                <th scope="col">Regenrisiko</th>
-                                <th v-for="metric in metricLabels" :key="metric.key" scope="col">{{ metric.label }}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="row in modelRows" :key="row.name">
-                                <th scope="row">{{ modelLabel(row.name) }}</th>
-                                <td>
-                                    {{
-                                        row.data?.pop == null ? "Nicht verfügbar" : `${Math.round(row.data.pop * 100)}%`
-                                    }}
-                                </td>
-                                <td v-for="metric in metricLabels" :key="metric.key">
-                                    {{ rangeText(row.data?.metrics[metric.key], metric.unit) }}
-                                    <small>{{ row.data?.metrics[metric.key]?.memberCount ?? 0 }} Mitglieder</small>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
             </template>
             <p v-else>Keine Wetterdaten für diese Strecke verfügbar.</p>
         </div>
@@ -183,11 +95,6 @@ const modelRows = computed(() => {
 </template>
 
 <style scoped>
-.forecast-details {
-    min-width: 0;
-    width: 100%;
-    max-width: 100%;
-}
 .sample-slider {
     display: block;
     width: 100%;
@@ -196,33 +103,15 @@ const modelRows = computed(() => {
 }
 .metric-grid {
     display: grid;
-    grid-template-columns: minmax(100px, 1fr) 2fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 8px;
 }
 dd {
     margin: 0;
 }
-.model-table {
-    overflow-x: auto;
-    max-width: 100%;
-}
-table {
-    border-collapse: collapse;
-    font-size: 12px;
-    width: 100%;
-}
-caption {
-    text-align: left;
-    padding: 8px 0;
-}
-th,
-td {
-    text-align: left;
-    padding: 8px;
-    border-bottom: 1px solid #ddd;
-    min-width: 130px;
-}
-td small {
-    display: block;
+dt,
+dd {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 </style>

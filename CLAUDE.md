@@ -38,7 +38,7 @@ frontend/         Vue 3 + Quasar + @tanstack/vue-query
     services/        http.ts (shared fetch+CSRF), auth.ts, billing.ts — the plain-Django
                      endpoints; the ninja API goes through the generated @norain/api client
     composables/     useSession, useEntitlements
-    utils/rideQuality.ts   ride-quality scoring (single source; map + list) + the Spectral
+    utils/rideQuality.ts   ride-quality scoring (single source; map + list) + the YlOrRd
                            ramp (map route line only — the list glyph is not coloured)
     utils/routeThumbnail.ts  geographic path -> square viewBox projection
     components/RouteThumbnail.vue  the tiny route glyph in the list
@@ -188,12 +188,11 @@ Two rules hold this together:
   the list would disagree with the map about the same route.
 
 **The glyph carries no quality colour** — only the route's shape. At 40 px it has no
-legend, no hover and no axis, so a ramp there would be the sole channel; the Spectral ramp
-is also red–green and is dark at *both* ends (perfect `#5e4fa2` and awful `#9e0142` differ
-in lightness by 0.04, so they are indistinguishable in greyscale). The quality is text
+legend, no hover and no axis, so a ramp there would be the sole channel, and its pale good
+end (`#ffeda0`) all but disappears at that size. The quality is text
 instead: `RouteListPanel.qualityLabel` beside the glyph, and the `aria-label`. That caption
-is the only channel in the list — do not remove it. The Spectral ramp stays on the **map
-route line**, where the legend, the popup's Fahrqualität line and `WeatherSections` back it.
+is the only channel in the list — do not remove it. The YlOrRd ramp (`YLORRD_8`) stays on the
+**map route line**, where the legend, the popup's Fahrqualität line and `WeatherSections` back it.
 
 The stroke still distinguishes *data presence*, which is a fact about the data rather than
 a reading of the weather: a sample point with no warm cell stays `null` and is painted

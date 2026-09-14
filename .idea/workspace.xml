@@ -4,35 +4,39 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="feat(web): improve ux">
+    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="feat(web): refactor route detail view">
+      <change afterPath="$PROJECT_DIR$/frontend/src/utils/forecastSelection.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.env.template" beforeDir="false" afterPath="$PROJECT_DIR$/.env.template" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.justfile" beforeDir="false" afterPath="$PROJECT_DIR$/.justfile" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/api/recurring_route.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/recurring_route.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/api/route_weather.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/route_weather.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/auth/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/auth/views.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/grid.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/grid.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/jobs.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/jobs.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/plotting.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/plotting.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/sections.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/sections.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/tasks.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/tasks.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/test_stations.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/test_stations.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/test_uncertainty.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/test_uncertainty.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/test_wind.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/test_wind.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/backend/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/backend/__init__.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/core/tests.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/tests.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/uncertainty.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/uncertainty.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/weather.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/weather.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/how-to/deploy-vps.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/deploy-vps.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/how-to/troubleshooting.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/troubleshooting.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/reference/configuration.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/reference/configuration.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/e2e/forecast-layout.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/e2e/forecast-layout.spec.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/e2e/uncertainty.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/e2e/uncertainty.spec.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/e2e/wind.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/e2e/wind.spec.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/App.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/App.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/assets/base.css" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/assets/base.css" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/components/ForecastDetails.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/ForecastDetails.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/MapLegend.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/MapLegend.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/components/RouteDetailPanel.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/RouteDetailPanel.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/RouteThumbnail.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/RouteThumbnail.vue" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/components/WeatherCharts.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/WeatherCharts.vue" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/components/WeatherSections.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/WeatherSections.vue" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/components/WeatherSummaryCard.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/WeatherSummaryCard.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/WindDistributionBar.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/WindDistributionBar.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/__tests__/WindDistributionBar.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/__tests__/WindDistributionBar.spec.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/components/chart/NiceChart.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/chart/NiceChart.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/chart/plotly.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/chart/plotly.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/account.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/account.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/routes/[id].vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/routes/[id].vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/utils/__tests__/forecastDetails.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/utils/__tests__/forecastDetails.spec.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/utils/__tests__/rideQuality.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/utils/__tests__/rideQuality.spec.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/utils/__tests__/wind.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/utils/__tests__/wind.spec.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/utils/forecastDetails.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/utils/forecastDetails.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/utils/rideQuality.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/utils/rideQuality.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/utils/wind.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/utils/wind.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/tsconfig.vitest.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/tsconfig.vitest.json" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -81,61 +85,61 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.0000000123578243" />
-      <entry key="MS500" value="1.026205255763779" />
-      <entry key="S2" value="1.4023436029773781" />
-      <entry key="S5" value="1.6947706634718123" />
-      <entry key="S10" value="1.8368439694810856" />
-      <entry key="S30" value="2.3168611474248166" />
-      <entry key="S60" value="3.390772169713818" />
-      <entry key="M2" value="4.984475137840274" />
-      <entry key="M5" value="7.443057478594231" />
-      <entry key="M10" value="11.580746523592408" />
-      <entry key="M15" value="16.489164315504098" />
-      <entry key="M30" value="32.656893603408705" />
-      <entry key="H1" value="60.27358334771078" />
-      <entry key="H2" value="93.61012303645107" />
-      <entry key="H4" value="124.55445143597869" />
-      <entry key="D1" value="381.20421010777795" />
-      <entry key="W1" value="753.199175793503" />
+      <entry key="MS100" value="2.365646115754223E-5" />
+      <entry key="MS500" value="0.3953066340988712" />
+      <entry key="S2" value="2.9906734617387345" />
+      <entry key="S5" value="4.537304619366668" />
+      <entry key="S10" value="5.375252562582635" />
+      <entry key="S30" value="8.726393707516314" />
+      <entry key="S60" value="12.108766042643072" />
+      <entry key="M2" value="15.115317980963207" />
+      <entry key="M5" value="20.2002991106637" />
+      <entry key="M10" value="28.402007685086158" />
+      <entry key="M15" value="37.854601476746204" />
+      <entry key="M30" value="68.4665184566958" />
+      <entry key="H1" value="119.26702053560165" />
+      <entry key="H2" value="184.9756335225123" />
+      <entry key="H4" value="250.93233244090732" />
+      <entry key="D1" value="549.0668091642647" />
+      <entry key="W1" value="943.260129287526" />
     </decayedCancelled>
     <decayedSelected>
-      <entry key="MS100" value="7.097706184118507E-9" />
-      <entry key="MS500" value="0.023460388435526235" />
-      <entry key="S2" value="0.4408905045337738" />
-      <entry key="S5" value="0.9877252267609808" />
-      <entry key="S10" value="1.3802904760194725" />
-      <entry key="S30" value="2.110005901690519" />
-      <entry key="S60" value="3.2887525861892275" />
-      <entry key="M2" value="4.990142619407691" />
-      <entry key="M5" value="6.960762735194027" />
-      <entry key="M10" value="7.8878956503454285" />
-      <entry key="M15" value="8.236223911860078" />
-      <entry key="M30" value="8.606430251251915" />
-      <entry key="H1" value="8.800197903413192" />
-      <entry key="H2" value="8.900181643676389" />
-      <entry key="H4" value="9.047046718845133" />
-      <entry key="D1" value="22.824864938584298" />
-      <entry key="W1" value="53.133512544116265" />
+      <entry key="MS100" value="1.0" />
+      <entry key="MS500" value="1.0" />
+      <entry key="S2" value="1.0" />
+      <entry key="S5" value="1.0" />
+      <entry key="S10" value="1.0" />
+      <entry key="S30" value="1.0000000002860394" />
+      <entry key="S60" value="1.0000169127364542" />
+      <entry key="M2" value="1.0041184084512036" />
+      <entry key="M5" value="1.1209933427610421" />
+      <entry key="M10" value="1.5679430655859523" />
+      <entry key="M15" value="2.37468564393755" />
+      <entry key="M30" value="5.976358380810604" />
+      <entry key="H1" value="12.497635965480036" />
+      <entry key="H2" value="19.499803316546423" />
+      <entry key="H4" value="24.889535873290637" />
+      <entry key="D1" value="43.5903458144906" />
+      <entry key="W1" value="75.51966422179257" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="0.9012504737508974" />
-      <entry key="MS500" value="1.0098971578452247" />
-      <entry key="S2" value="1.6947474562153169" />
-      <entry key="S5" value="2.5432105140363466" />
-      <entry key="S10" value="3.118487434519742" />
-      <entry key="S30" value="4.353574976938858" />
-      <entry key="S60" value="6.594049523436121" />
-      <entry key="M2" value="9.895927969393176" />
-      <entry key="M5" value="14.354984722751821" />
-      <entry key="M10" value="19.438591626215416" />
-      <entry key="M15" value="24.703171986335867" />
-      <entry key="M30" value="41.250411471788944" />
-      <entry key="H1" value="69.06652435262593" />
-      <entry key="H2" value="102.50633998265195" />
-      <entry key="H4" value="133.59937215297145" />
-      <entry key="D1" value="404.02804076854045" />
-      <entry key="W1" value="806.3323218299994" />
+      <entry key="MS100" value="1.290922966828762E-4" />
+      <entry key="MS500" value="0.5528897242748104" />
+      <entry key="S2" value="3.6181879834157993" />
+      <entry key="S5" value="5.366828518181594" />
+      <entry key="S10" value="6.2858979057531625" />
+      <entry key="S30" value="9.695347207157395" />
+      <entry key="S60" value="13.092958742702594" />
+      <entry key="M2" value="16.11130318110785" />
+      <entry key="M5" value="21.316525135396876" />
+      <entry key="M10" value="29.956788688567464" />
+      <entry key="M15" value="40.198594436181686" />
+      <entry key="M30" value="74.37326608081035" />
+      <entry key="H1" value="131.68510336856542" />
+      <entry key="H2" value="204.41426455450016" />
+      <entry key="H4" value="275.78372590502306" />
+      <entry key="D1" value="592.6488749722893" />
+      <entry key="W1" value="1018.7783533525416" />
     </decayedShown>
   </component>
   <component name="ProjectColorInfo">{
@@ -377,7 +381,7 @@
       <workItem from="1789218070853" duration="14439000" />
       <workItem from="1789290431437" duration="114000" />
       <workItem from="1789290563463" duration="12797000" />
-      <workItem from="1789389896116" duration="4228000" />
+      <workItem from="1789389896116" duration="11616000" />
     </task>
     <task id="LOCAL-00001" summary="chore(ide): update settings">
       <option name="closed" value="true" />
@@ -467,7 +471,15 @@
       <option name="project" value="LOCAL" />
       <updated>1789392635420</updated>
     </task>
-    <option name="localTasksCounter" value="12" />
+    <task id="LOCAL-00012" summary="feat(web): refactor route detail view">
+      <option name="closed" value="true" />
+      <created>1789394757794</created>
+      <option name="number" value="00012" />
+      <option name="presentableId" value="LOCAL-00012" />
+      <option name="project" value="LOCAL" />
+      <updated>1789394757794</updated>
+    </task>
+    <option name="localTasksCounter" value="13" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -492,9 +504,10 @@
     <MESSAGE value="refactor: refactor auth and subscription" />
     <MESSAGE value="feat(wind): use more advanced logic for impact of wind" />
     <MESSAGE value="feat(web): improve ux" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(web): improve ux" />
+    <MESSAGE value="feat(web): refactor route detail view" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(web): refactor route detail view" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1789390916028" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
+    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1789398822557" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
   </component>
 </project>
