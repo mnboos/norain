@@ -12,8 +12,9 @@ commands from the repository root and Django commands from `backend/`.
 | GeoDjango cannot find GEOS or GDAL | Install the host GIS libraries documented in the development guide, or correct `GEOS_LIBRARY_PATH` / `GDAL_LIBRARY_PATH`. |
 | Missing database table | Run `uv run python manage.py migrate` against the same environment as the server and worker. |
 | Search fails | Set `GEOCODER_API_URL=http://localhost:2322/api`, restart the backend, and inspect Photon logs and import completion. |
-| Routing fails or times out | Inspect GraphHopper logs; confirm import is complete, both points are covered, and the profile is enabled. |
-| **Fuss** routing fails | The UI offers `foot`, but that profile is commented out in the checked-in GraphHopper configuration. Use an enabled profile or configure and rebuild routing data for `foot`. |
+| Routing fails or times out | Inspect GraphHopper logs; confirm import is complete and both points are covered. Only `bike`, `ebike` and `fast_ebike` are configured; the API answers 422 for any other profile. |
+| Production GraphHopper exits with `No imported graph` | The VPS does not import. [Build the graph elsewhere](build-routing-graph.md) and copy it into `graphhopper/cache`. |
+| GraphHopper refuses to load a copied graph | It was built with a different configuration or jar version. Rebuild from the commit deployed on the VPS. |
 | **Route wird berechnet…** persists, or forecast returns HTTP 409 | Run the `default` worker; inspect routing failures and [retry geometry](background-jobs.md). |
 | A forecast stays `pending` or `fetching` forever | No worker is consuming that queue. All three of `cells`, `forecasts` and `default` must run — see [background jobs](background-jobs.md). |
 | Forecast fails with *Noch keine Wetterdaten verfügbar* | Every cell was still cold at assembly. Check the `cells` worker log for `NOT stored` warnings — usually the Open-Meteo rate limit; retry, or run fewer `cells` replicas. |

@@ -16,13 +16,18 @@ const stats = computed(() => [
     { label: "Max. Intensität", value: peakRate.value },
     { label: "Max. Gegenwind im Abschnitt", value: props.forecast.summary.maxHeadwind == null
         ? "Nicht verfügbar" : `${props.forecast.summary.maxHeadwind} km/h` },
+    { label: "Max. Windaufwand (geschätzt)", value: props.forecast.summary.maxWindPowerW == null
+        ? "Nicht verfügbar" : props.forecast.summary.maxWindPowerW > 0
+            ? `+${Math.round(props.forecast.summary.maxWindPowerW)} W` : "Kein Mehraufwand" },
     { label: "Dauer", value: `${Math.round(props.forecast.totalSeconds / 60)} min` },
     { label: "Distanz", value: `${(props.forecast.totalDistanceM / 1000).toFixed(1)} km` },
 ]);
 const note =
     "Das Regenrisiko gilt am jeweils riskantesten verfügbaren Punkt und dessen Vorhersagestunde. Es ist keine " +
     "Wahrscheinlichkeit für Regen irgendwo auf der gesamten Fahrt. Die Intensität stammt aus der Einzelprognose. " +
-    "Max. Gegenwind ist der höchste mittlere Wert eines Wetterabschnitts. Gefühlter Wind nutzt das geschätzte Fahrtempo; örtlicher Windschutz wird nicht berücksichtigt.";
+    "Max. Gegenwind ist der höchste mittlere Wert eines Wetterabschnitts. Gefühlter Wind nutzt das geschätzte Fahrtempo; örtlicher Windschutz wird nicht berücksichtigt. " +
+    "Der Windaufwand schätzt die zusätzliche Leistung, um das geplante Tempo des Routenprofils gegen den Wind zu halten " +
+    "(aufrechte Sitzposition, CdA 0,5 m²). Je schneller man fährt, desto mehr kostet derselbe Wind.";
 </script>
 
 <template>

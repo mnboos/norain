@@ -99,6 +99,10 @@ export interface ForecastSampleOut {
     /**
      * 
      */
+    windPowerW?: number | null;
+    /**
+     * 
+     */
     sampleIndex?: number | null;
     /**
      * 
@@ -159,6 +163,7 @@ export function ForecastSampleOutFromJSONTyped(json: any, ignoreDiscriminator: b
         'windDir': json['wind_dir'] === undefined ? undefined : json['wind_dir'] === null ? null : json['wind_dir'],
         'headwind': json['headwind'] === undefined ? undefined : json['headwind'] === null ? null : json['headwind'],
         'crosswind': json['crosswind'] === undefined ? undefined : json['crosswind'] === null ? null : json['crosswind'],
+        'windPowerW': json['wind_power_w'] === undefined ? undefined : json['wind_power_w'] === null ? null : json['wind_power_w'],
         'sampleIndex': json['sample_index'] === undefined ? undefined : json['sample_index'] === null ? null : json['sample_index'],
         'windCoverage': json['wind_coverage'] === undefined ? undefined : json['wind_coverage'] === null ? null : json['wind_coverage'],
         'weatherCode': json['weather_code'] === undefined ? undefined : json['weather_code'] === null ? null : json['weather_code'],
@@ -195,6 +200,7 @@ export function ForecastSampleOutToJSONTyped(value?: ForecastSampleOut | null, i
         'wind_dir': value['windDir'],
         'headwind': value['headwind'],
         'crosswind': value['crosswind'],
+        'wind_power_w': value['windPowerW'],
         'sample_index': value['sampleIndex'],
         'wind_coverage': value['windCoverage'],
         'weather_code': value['weatherCode'],

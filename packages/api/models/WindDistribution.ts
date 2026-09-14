@@ -55,6 +55,14 @@ export interface WindDistribution {
     /**
      * 
      */
+    meanWindPowerW?: number | null;
+    /**
+     * 
+     */
+    maxWindPowerW?: number | null;
+    /**
+     * 
+     */
     timingSource: WindDistributionTimingSourceEnum;
 }
 
@@ -101,6 +109,8 @@ export function WindDistributionFromJSONTyped(json: any, ignoreDiscriminator: bo
         'meanFeltSpeed': json['mean_felt_speed'] === undefined ? undefined : json['mean_felt_speed'] === null ? null : json['mean_felt_speed'],
         'maxFeltSpeed': json['max_felt_speed'] === undefined ? undefined : json['max_felt_speed'] === null ? null : json['max_felt_speed'],
         'feltCoveredM': json['felt_covered_m'],
+        'meanWindPowerW': json['mean_wind_power_w'] === undefined ? undefined : json['mean_wind_power_w'] === null ? null : json['mean_wind_power_w'],
+        'maxWindPowerW': json['max_wind_power_w'] === undefined ? undefined : json['max_wind_power_w'] === null ? null : json['max_wind_power_w'],
         'timingSource': json['timing_source'],
     };
 }
@@ -124,6 +134,8 @@ export function WindDistributionToJSONTyped(value?: WindDistribution | null, ign
         'mean_felt_speed': value['meanFeltSpeed'],
         'max_felt_speed': value['maxFeltSpeed'],
         'felt_covered_m': value['feltCoveredM'],
+        'mean_wind_power_w': value['meanWindPowerW'],
+        'max_wind_power_w': value['maxWindPowerW'],
         'timing_source': value['timingSource'],
     };
 }

@@ -1,7 +1,7 @@
 services:
 
   db:
-    image: postgis/postgis:17-3.5
+    image: postgis/postgis:18-3.6
     restart: unless-stopped
     command: -c config_file=/etc/postgresql/postgresql.conf
     shm_size: 4gb
@@ -18,7 +18,7 @@ services:
     container_name: db
     volumes:
       - ./postgresql.conf:/etc/postgresql/postgresql.conf:z
-      - ${APP_STORAGE_PATH:?err}/db/app/data:/var/lib/postgresql/data:z
+      - ${APP_STORAGE_PATH:?err}/db:/var/lib/postgresql:z
 
   graphhopper:
     build:
@@ -28,8 +28,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 8g
-    memswap_limit: 8g
+          memory: ${GRAPHHOPPER_MEM_LIMIT:-8g}
+    memswap_limit: ${GRAPHHOPPER_MEM_LIMIT:-8g}
 
     volumes:
       - ./data/graphhopper/osm:/osm_data:z
@@ -40,8 +40,16 @@ services:
       - OSM_DATA_DIR=/osm_data
       # Coverage area: any Geofabrik .osm.pbf (country/continent/planet). See .env.
       - OSM_DATA_URL=${OSM_DATA_URL:-https://download.geofabrik.de/europe/switzerland-latest.osm.pbf}
-      # JVM heap; raise for larger extracts (e.g. 16g for a continent, more for planet).
+      # Serving JVM heap (maximum). With RAM_STORE it must hold the whole graph.
       - GRAPHHOPPER_HEAP=${GRAPHHOPPER_HEAP:-6g}
+      # Import heap, when this container imports; defaults to GRAPHHOPPER_HEAP.
+      - GRAPHHOPPER_IMPORT_HEAP=${GRAPHHOPPER_IMPORT_HEAP:-}
+      # RAM_STORE (graph in heap) or MMAP (graph paged in from disk, small heap).
+      - GRAPHHOPPER_DATAACCESS=${GRAPHHOPPER_DATAACCESS:-RAM_STORE}
+      # false: refuse to import when /graph-cache is empty (production). See the entrypoint.
+      - GRAPHHOPPER_ALLOW_IMPORT=${GRAPHHOPPER_ALLOW_IMPORT:-true}
+      # true: import and exit, for building a graph to copy to another machine.
+      - GRAPHHOPPER_IMPORT_ONLY=${GRAPHHOPPER_IMPORT_ONLY:-false}
     restart: unless-stopped
 
   photon:

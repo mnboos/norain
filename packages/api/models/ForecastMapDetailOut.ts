@@ -23,7 +23,7 @@ import {
 } from './WindArrow';
 
 /**
- * The route line and felt-wind arrows at one detail level.
+ * The route line and wind arrows at one detail level.
  * @export
  * @interface ForecastMapDetailOut
  */

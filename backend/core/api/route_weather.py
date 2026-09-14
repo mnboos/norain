@@ -10,6 +10,17 @@ from ..schemas import CamelSchema
 
 router = Router(tags=["Route weather"])
 
+# The profiles GraphHopper is configured with (data/graphhopper/graphhopper-config.yaml). Checked on
+# input so an unknown one is a 422 here rather than a failed routing call on a worker. Defined in
+# this module, not weather.py, because weather.py imports this one (see the import cycle notes).
+ROUTING_PROFILES = ("bike", "ebike", "fast_ebike")
+
+
+def check_routing_profile(profile: str) -> str:
+    if profile not in ROUTING_PROFILES:
+        raise ValueError(f"unknown profile {profile!r}; expected one of {', '.join(ROUTING_PROFILES)}")
+    return profile
+
 
 class EnsembleRange(CamelSchema):
     member_count: int
@@ -72,6 +83,8 @@ class WeatherSample(CamelSchema):
     wind_dir: float | None = None  # meteorological wind-from direction
     headwind: float | None = None  # distance-weighted support mean, positive against rider
     crosswind: float | None = None  # support mean of absolute local crosswind
+    # Extra watts to hold the planned speed against the wind vs. calm air; negative = helps.
+    wind_power_w: float | None = None
     sample_index: int | None = None  # original sample_points index, stable across missing cells
     wind_coverage: float | None = Field(default=None, ge=0, le=1)
 
@@ -96,6 +109,7 @@ class WindSegment(CamelSchema):
     crosswind: float | None = None  # signed midpoint value: positive from rider's right
     felt_speed: float | None = None
     felt_angle: float | None = None
+    wind_power_w: float | None = None
     wind_coverage: float = Field(ge=0, le=1)
     felt_coverage: float = Field(ge=0, le=1)
 
@@ -109,6 +123,8 @@ class WindDistribution(CamelSchema):
     mean_felt_speed: float | None = None
     max_felt_speed: float | None = None
     felt_covered_m: float = Field(ge=0)
+    mean_wind_power_w: float | None = None  # distance-weighted, tailwind counted as 0
+    max_wind_power_w: float | None = None
     timing_source: Literal["routing", "sample-interpolation", "unavailable"]
 
 
@@ -120,6 +136,7 @@ class RouteWeatherSummary(CamelSchema):
     rain_probability: float | None = None  # 0..1 peak probability
     rain_amount: float  # "if it rains" mm at the peak-risk point
     max_headwind: float | None = None
+    max_wind_power_w: float | None = None  # largest sample wind effort, W
     wind_distribution: WindDistribution | None = None
     source: str  # "open-meteo" or "openweathermap"
     station_corrected: bool = False  # some samples were corrected with station readings
@@ -151,13 +168,14 @@ class ForecastSampleOut(WeatherSample):
 
 
 class WindArrow(CamelSchema):
-    """One felt-wind arrow for the map: only segments with complete felt-wind data."""
+    """One real-wind arrow for the map: only segments with complete ground-wind data."""
 
     lat: float
     lon: float
     bearing: float  # direction of travel, degrees clockwise from north
-    felt_speed: float  # km/h
-    felt_angle: float  # relative to the rider, degrees; positive from the right
+    wind_speed: float  # km/h over ground
+    wind_dir: float  # degrees, direction the wind comes FROM
+    wind_power_w: float | None = None  # extra watts at the planned speed; negative = helps
 
 
 class RouteForecastOut(CamelSchema):
@@ -185,7 +203,7 @@ class RouteForecastOut(CamelSchema):
 
 
 class ForecastMapDetailOut(CamelSchema):
-    """The route line and felt-wind arrows at one detail level."""
+    """The route line and wind arrows at one detail level."""
 
     line: list[list[float]]  # [[lon, lat], ...]
     wind_arrows: list[WindArrow]
@@ -230,6 +248,11 @@ async def route_weather(
     from ..models import ForecastJob
     from ..tasks import start_forecast_job
 
+    try:
+        check_routing_profile(profile)
+    except ValueError as exc:
+        raise HttpError(422, str(exc)) from None
+
     job = await start_forecast_job(
         ForecastJob.Kind.ADHOC,
         getattr(request, "auth", None) or None,
@@ -266,7 +289,7 @@ async def forecast_job_figures(request: HttpRequest, job_id: UUID):
 
 @router.get("/forecast_jobs/{job_id}/map_detail", response=ForecastMapDetailOut)
 async def forecast_job_map_detail(request: HttpRequest, job_id: UUID, detail: Literal["medium", "full"]):
-    """The route line and felt-wind arrows at more detail than the job result carries.
+    """The route line and wind arrows at more detail than the job result carries.
 
     The map asks for this only once it is zoomed in far enough to show the difference.
     """

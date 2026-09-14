@@ -42,7 +42,7 @@ export function useForecastFigures(jobId: MaybeRefOrGetter<string>, version: May
     });
 }
 
-/** The route line and felt-wind arrows at one detail level finer than the job result's. */
+/** The route line and wind arrows at one detail level finer than the job result's. */
 export function useForecastMapDetail(
     jobId: MaybeRefOrGetter<string | undefined>,
     version: MaybeRefOrGetter<string | undefined>,

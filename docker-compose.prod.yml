@@ -20,7 +20,7 @@ x-routing-deps: &routing-deps
   <<: *app-deps
   graphhopper: *healthy
 
-# Graphhopper and photon download and import their data on first boot.
+# Photon downloads and imports its data on first boot.
 x-slow-start: &slow-start
   interval: 30s
   timeout: 10s
@@ -101,7 +101,7 @@ services:
       service: db
       file: docker-compose.base.yml
     volumes:
-      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/postgres:/var/lib/postgresql/data
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/postgres:/var/lib/postgresql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
       interval: 10s
@@ -116,12 +116,19 @@ services:
       file: docker-compose.base.yml
     image: ${GRAPHHOPPER_IMAGE:?GRAPHHOPPER_IMAGE must be set}
     environment:
-      OSM_DATA_URL: ${OSM_DATA_URL:?OSM_DATA_URL must be set}
+      # The VPS only serves: the graph is imported elsewhere and copied into graphhopper/cache
+      # (docs/how-to/build-routing-graph.md). An empty cache fails fast instead of importing.
+      GRAPHHOPPER_ALLOW_IMPORT: "false"
     volumes:
+      # Unused while serving; mapped so the base file's relative ./data path is not used.
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/graphhopper/osm:/osm_data
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/graphhopper/cache:/graph-cache
     healthcheck:
-      <<: *slow-start
+      # Loading a prebuilt graph takes seconds to a few minutes, not an import's hours.
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 3m
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8989/info" ]
     networks:
       - internal

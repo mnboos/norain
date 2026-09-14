@@ -15,7 +15,7 @@
 
 import { mapValues } from '../runtime';
 /**
- * One felt-wind arrow for the map: only segments with complete felt-wind data.
+ * One real-wind arrow for the map: only segments with complete ground-wind data.
  * @export
  * @interface WindArrow
  */
@@ -35,11 +35,15 @@ export interface WindArrow {
     /**
      * 
      */
-    feltSpeed: number;
+    windSpeed: number;
     /**
      * 
      */
-    feltAngle: number;
+    windDir: number;
+    /**
+     * 
+     */
+    windPowerW?: number | null;
 }
 
 /**
@@ -49,8 +53,8 @@ export function instanceOfWindArrow(value: object): value is WindArrow {
     if (!('lat' in value) || value['lat'] === undefined) return false;
     if (!('lon' in value) || value['lon'] === undefined) return false;
     if (!('bearing' in value) || value['bearing'] === undefined) return false;
-    if ((!('feltSpeed' in (value as Record<string, any>)) && !('felt_speed' in (value as Record<string, any>))) || ((value as Record<string, any>)['feltSpeed'] === undefined && (value as Record<string, any>)['felt_speed'] === undefined)) return false;
-    if ((!('feltAngle' in (value as Record<string, any>)) && !('felt_angle' in (value as Record<string, any>))) || ((value as Record<string, any>)['feltAngle'] === undefined && (value as Record<string, any>)['felt_angle'] === undefined)) return false;
+    if ((!('windSpeed' in (value as Record<string, any>)) && !('wind_speed' in (value as Record<string, any>))) || ((value as Record<string, any>)['windSpeed'] === undefined && (value as Record<string, any>)['wind_speed'] === undefined)) return false;
+    if ((!('windDir' in (value as Record<string, any>)) && !('wind_dir' in (value as Record<string, any>))) || ((value as Record<string, any>)['windDir'] === undefined && (value as Record<string, any>)['wind_dir'] === undefined)) return false;
     return true;
 }
 
@@ -67,8 +71,9 @@ export function WindArrowFromJSONTyped(json: any, ignoreDiscriminator: boolean):
         'lat': json['lat'],
         'lon': json['lon'],
         'bearing': json['bearing'],
-        'feltSpeed': json['felt_speed'],
-        'feltAngle': json['felt_angle'],
+        'windSpeed': json['wind_speed'],
+        'windDir': json['wind_dir'],
+        'windPowerW': json['wind_power_w'] === undefined ? undefined : json['wind_power_w'] === null ? null : json['wind_power_w'],
     };
 }
 
@@ -86,8 +91,9 @@ export function WindArrowToJSONTyped(value?: WindArrow | null, ignoreDiscriminat
         'lat': value['lat'],
         'lon': value['lon'],
         'bearing': value['bearing'],
-        'felt_speed': value['feltSpeed'],
-        'felt_angle': value['feltAngle'],
+        'wind_speed': value['windSpeed'],
+        'wind_dir': value['windDir'],
+        'wind_power_w': value['windPowerW'],
     };
 }
 

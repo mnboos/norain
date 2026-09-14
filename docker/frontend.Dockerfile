@@ -1,4 +1,5 @@
-FROM node:22-bookworm-slim AS build
+# The build output is static files, so build natively instead of under QEMU for arm64.
+FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS build
 
 WORKDIR /app
 

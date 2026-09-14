@@ -238,6 +238,7 @@ def _summarize(samples: list[WeatherSample], source: str) -> RouteWeatherSummary
         rain_probability=rain_probability,
         rain_amount=rain_amount,
         max_headwind=max((s.headwind for s in samples if s.headwind is not None), default=None),
+        max_wind_power_w=max((s.wind_power_w for s in samples if s.wind_power_w is not None), default=None),
         source=source,
     )
 
@@ -397,6 +398,7 @@ async def compute_route_weather(
                 station_count = correction.station_count
 
         headwind, crosswind = wind.samples[i].headwind, wind.samples[i].cross_abs_mean
+        wind_power_w = wind.samples[i].wind_power_w
 
         samples.append(
             WeatherSample(
@@ -419,6 +421,7 @@ async def compute_route_weather(
                 wind_dir=round(forecast["wind_dir"], 0) % 360 if forecast["wind_dir"] is not None else None,
                 headwind=round(headwind, 1) if headwind is not None else None,
                 crosswind=round(crosswind, 1) if crosswind is not None else None,
+                wind_power_w=round(wind_power_w) if wind_power_w is not None else None,
                 weather_code=forecast["weather_code"],
                 weather_desc=WMO_DE.get(forecast["weather_code"], "") if forecast["weather_code"] is not None else "",
                 station_count=station_count,

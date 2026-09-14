@@ -111,7 +111,7 @@ by then and stores it. Progress reaches the browser over a WebSocket, with polli
 fallback.
 
 The job stores the complete payload but sends the browser a slim view of it: a route line
-simplified to about 50 m, felt-wind arrows about 2 km apart instead of up to 500 wind
+simplified to about 50 m, wind arrows about 2 km apart instead of up to 500 wind
 segments, and no chart figures or per-model ensemble breakdown. Those parts
 are fetched from their own endpoints by the components that show them — the charts on the
 route page, a finer line and denser wind arrows once the map is zoomed in, the model table once the details panel

@@ -20,10 +20,11 @@ local setup and enough storage and memory for the new import.
    GraphHopper must rebuild its graph; Photon only imports when its index directory
    is absent. Changing URLs alone does not replace these indexes. Keep the old OSM
    file if desired, but move it aside too if the new URL has the same filename.
-4. Adjust `GRAPHHOPPER_HEAP` and `PHOTON_IMPORT_HEAP` as needed. If increasing
-   GraphHopper's heap beyond the current budget, also adjust its 8 GB container
-   memory and swap limits in `docker-compose.base.yml`, leaving room for non-heap
-   memory.
+4. Adjust `GRAPHHOPPER_HEAP` (or `GRAPHHOPPER_IMPORT_HEAP` for the import alone) and
+   `PHOTON_IMPORT_HEAP` as needed. If increasing GraphHopper's heap beyond the current
+   budget, also raise `GRAPHHOPPER_MEM_LIMIT` (default 8 GB), leaving room for non-heap
+   memory. Production never imports: build the graph as described in
+   [build the routing graph elsewhere](build-routing-graph.md) and copy it over.
 5. Recreate the services and monitor the import:
 
    ```bash

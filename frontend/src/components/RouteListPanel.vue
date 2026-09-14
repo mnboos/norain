@@ -59,8 +59,6 @@ function profileLabel(profile: string): string {
         bike: "Velo",
         ebike: "E-Bike",
         fast_ebike: "S-Pedelec",
-        car: "Auto",
-        foot: "Fuss",
     };
     return labels[profile] ?? profile;
 }

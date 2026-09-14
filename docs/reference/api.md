@@ -35,7 +35,7 @@ for current restrictions.
 | GET | `/api/routes/{route_id}/forecast` | Start (or join) a saved-route forecast; returns a job |
 | GET | `/api/forecast_jobs/{job_id}` | Poll one forecast job (WebSocket fallback) |
 | GET | `/api/forecast_jobs/{job_id}/figures` | Plotly chart figures of a finished job |
-| GET | `/api/forecast_jobs/{job_id}/map_detail?detail=medium\|full` | Route line and felt-wind arrows at more detail than the job result's |
+| GET | `/api/forecast_jobs/{job_id}/map_detail?detail=medium\|full` | Route line and wind arrows at more detail than the job result's |
 | GET | `/api/forecast_jobs/{job_id}/samples/{index}/uncertainty` | One sample's full ensemble spread, with the per-model breakdown |
 | GET | `/api/billing/entitlements` | Current tier, its limits, and how much of them is used |
 | POST | `/api/billing/checkout` | Start a Stripe Checkout session; returns a hosted URL |
@@ -72,7 +72,7 @@ ask Photon for up to five city/locality features.
 | --- | --- | --- |
 | `start_lat`, `start_lon` | number | Required |
 | `dest_lat`, `dest_lon` | number | Required |
-| `profile` | string | Required; must be enabled in GraphHopper |
+| `profile` | string | Required; `bike`, `ebike` or `fast_ebike`, otherwise 422 |
 | `departure_time` | string | Required; local ISO datetime |
 | `interval_seconds` | integer | Optional, 300; effective minimum 60 |
 
@@ -235,7 +235,7 @@ Handled events: `checkout.session.completed`, `customer.subscription.created`,
 ## Route list thumbnails
 
 `RecurringRouteOut.thumbnail` carries a simplified route path (at most 64 vertices) plus
-the five weather fields per sample that `frontend/src/utils/rideQuality.ts` scores. It is
+the six weather fields per sample that `frontend/src/utils/rideQuality.ts` scores. It is
 precomputed by the `refresh_route_thumbnail` background task and only read from the
 database by the list endpoint, which never parses a forecast cell or fetches from an
 upstream API.
@@ -244,13 +244,15 @@ Scoring stays in TypeScript so the glyph and the full route map cannot disagree 
 same route. A sample point with no warm forecast cell is `null` — never an invented
 value — and the frontend paints it neutral grey.
 
-## Route-relative and felt wind
+## Route-relative wind, felt wind and wind effort
 
 Finished jobs store `wind_segments` (at most 500 chunks) and `summary.wind_distribution`.
-The job `result` and `map_detail` serve the segments as `wind_arrows`: only segments with
-full wind and felt coverage, known elapsed time, felt speed, felt angle and bearing, reduced
-to `lat`, `lon` (5 decimals), `bearing`, `felt_speed` and `felt_angle` (1 decimal each), and
-spaced along the route by detail level (see the table above). The full segment fields below
+The job `result` and `map_detail` serve the segments as `wind_arrows`, which show the
+**real (ground) wind**, not the felt wind: only segments with full wind coverage, known
+`wind_speed`, `wind_dir` and bearing (calm air has no direction and gets no arrow), reduced
+to `lat`, `lon` (5 decimals), `bearing`, `wind_speed`, `wind_dir` (1 decimal each) and
+`wind_power_w` (whole watts, null without timing), and spaced along the route by detail
+level (see the table above). The full segment fields below
 are what the job stores and what the wind chart is drawn from. They use the original cached weather anchors; finer geometry
 does not trigger extra provider requests. These fields are available on both tiers.
 Older stored results may omit them: clients should treat arrows as `[]` and distribution
@@ -262,6 +264,15 @@ distance midpoints to adjacent original samples. Positive is headwind, negative 
 fraction (0..1); `sample_index` identifies the original anchor even when cells are missing.
 An isolated valid anchor may have a local point value with coverage 0. `max_headwind` is
 the maximum available section average, not instantaneous maximum exposure.
+
+Each sample's `wind_power_w` (whole watts) is the **wind effort**: the extra power needed to
+hold the planned speed against the wind, compared with calm air, distance-weighted over the
+same section. Negative means the wind helps. It is
+`k·v·(hypot(v+h, c)·(v+h) − v²)` with `k = ½·1.2 kg/m³·0.5 m²` (upright rider) and `v` the
+section's average routing-model speed. The per-edge speed is not used, so a fast descent does
+not read as hundreds of watts. The same headwind costs more the faster the profile rides.
+It is null without timing. The ride score reads it in preference to `headwind`.
+`summary.max_wind_power_w` is the largest sample value.
 
 Wind speed, direction, head/crosswind, thumbnail headwind and summary/section maxima may
 be null. North (0°), calm (0 km/h) and unavailable data are distinct. Missing wind does
@@ -277,6 +288,7 @@ Segment fields:
 | `wind_speed`, `wind_dir` | Interpolated ground wind; direction is where wind comes from |
 | `headwind`, `crosswind` | Signed midpoint components; segment crosswind is positive from the right |
 | `felt_speed`, `felt_angle` | Apparent speed in km/h and angle relative to travel, positive right |
+| `wind_power_w` | Wind effort in W at the section's average speed; negative when the wind helps |
 | `wind_coverage`, `felt_coverage` | Fractions known within the whole chunk, independently of its midpoint |
 
 Midpoint wind/speed/angle values may be null. A zero apparent vector has no angle. Apparent
@@ -291,5 +303,7 @@ Curves and out-and-back routes remain part of the distance totals.
 
 `mean_felt_speed` averages only locally available apparent speeds over `felt_covered_m`;
 `max_felt_speed` is the largest evaluated local value. Both are null without apparent data.
+`mean_wind_power_w` averages the wind effort with tailwind counted as 0, and
+`max_wind_power_w` is its largest local value (at least 0). Both are null without timing.
 `timing_source` is `routing`, `sample-interpolation` for legacy geometry, or `unavailable`.
 Display-chunk count and map zoom do not affect these route totals.

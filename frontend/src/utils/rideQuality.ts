@@ -48,14 +48,14 @@ export type RideFactor = "rain" | "wind" | "temp";
 /**
  * The subset of a sample the scorer actually reads.
  *
- * The route-list thumbnails ship only these five fields per point instead of a whole
+ * The route-list thumbnails ship only these six fields per point instead of a whole
  * `ForecastSampleOut` (a list of routes would otherwise carry every forecast in full). Taking
  * the narrow type here lets both callers share one implementation - porting the curves
  * anywhere else would let the thumbnail and the map drift apart on the same route.
  */
 export type RideInput = Pick<
     ForecastSampleOut,
-    "rainMm" | "precipitationIntervalS" | "rainRateMmH" | "temp" | "headwind"
+    "rainMm" | "precipitationIntervalS" | "rainRateMmH" | "temp" | "headwind" | "windPowerW"
 >;
 
 export interface RideScore {
@@ -104,8 +104,19 @@ const RAIN_CURVE = [
     [5, 1],
 ] as const;
 
-// Headwind only. A tailwind is not "better than calm" on this scale, it just isn't a
-// penalty, so the curve starts at 0.
+// Wind effort in watts: what it costs *this* rider to hold the planned speed, so the same
+// wind weighs more on a fast e-bike than on a slow bike. A tailwind is not "better than
+// calm" on this scale, it just isn't a penalty, so the curve starts at 0. Calibrated so that
+// at ~18 km/h it matches the headwind curve below (10/20/30 km/h ≈ 50/130/230 W).
+const WIND_POWER_CURVE = [
+    [0, 0],
+    [50, 0.3],
+    [130, 0.65],
+    [230, 1],
+] as const;
+
+// Ground-relative headwind in km/h: the fallback when the effort is unknown - jobs and
+// thumbnails from before the metric, or a route without timing.
 const WIND_CURVE = [
     [0, 0],
     [10, 0.3],
@@ -138,15 +149,24 @@ export function rainRateMmH(sample: RideInput): number | null {
 }
 
 /**
- * Combined ride quality, or null when rain or ground-relative headwind is unknown.
- * Keep the wind curve ground-relative; apparent wind would need a different calibration.
+ * Combined ride quality, or null when rain or the wind is unknown.
+ * The wind factor reads the wind effort (`windPowerW`) and falls back to the ground-relative
+ * headwind when there is none. Never feed apparent wind into either curve: it is mostly
+ * the rider's own speed and would need a different calibration.
  */
 export function rideScore(sample: RideInput): RideScore | null {
     const rate = rainRateMmH(sample);
-    if (rate == null || sample.headwind == null || !Number.isFinite(sample.headwind)) return null;
+    if (rate == null) return null;
+    let wind: number;
+    if (sample.windPowerW != null && Number.isFinite(sample.windPowerW)) {
+        wind = clamp01(piecewise(sample.windPowerW, WIND_POWER_CURVE));
+    } else if (sample.headwind != null && Number.isFinite(sample.headwind)) {
+        wind = clamp01(piecewise(sample.headwind, WIND_CURVE));
+    } else {
+        return null;
+    }
 
     const rain = clamp01(piecewise(rate, RAIN_CURVE));
-    const wind = clamp01(piecewise(sample.headwind, WIND_CURVE));
     const temp = clamp01(piecewise(sample.temp, TEMP_CURVE));
 
     const weighted: Record<RideFactor, number> = {

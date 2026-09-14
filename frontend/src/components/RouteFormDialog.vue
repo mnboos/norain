@@ -2,9 +2,7 @@
 import { computed, ref, type Ref } from "vue";
 import { QSelect } from "quasar";
 import {
-    symSharpDirectionsWalk,
     symSharpElectricBike,
-    symSharpElectricCar,
     symSharpElectricMoped,
     symSharpPedalBike,
     symSharpSchedule,
@@ -82,11 +80,9 @@ const scheduleCron = computed(() => {
 });
 
 const profileOptions = [
-    { label: "Fuss", value: "foot", icon: symSharpDirectionsWalk },
     { label: "Velo", value: "bike", icon: symSharpPedalBike },
     { label: "E-Bike", value: "ebike", icon: symSharpElectricBike },
     { label: "S-Pedelec", value: "fast_ebike", icon: symSharpElectricMoped },
-    { label: "Auto", value: "car", icon: symSharpElectricCar },
 ];
 
 const isValid = computed(

@@ -27,7 +27,9 @@ from .weather import compute_route_weather
 MAX_THUMBNAIL_VERTICES = 64
 
 # The fields rideScore() reads, and nothing else.
-_SAMPLE_FIELDS = ("rain_mm", "precipitation_interval_s", "rain_rate_mm_h", "temp", "headwind")
+_SAMPLE_FIELDS = (
+    "rain_mm", "precipitation_interval_s", "rain_rate_mm_h", "temp", "headwind", "wind_power_w",
+)
 
 
 def simplify_path(

@@ -7,14 +7,14 @@ from django.db.models import Q
 from django.http import HttpRequest
 from ninja import Router
 from ninja.errors import HttpError
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from ..auth.backend import session_auth
 from ..entitlements import entitlements_for
 from ..models import ForecastJob, RecurringRoute, route_point
 from ..schedule import forecast_available_at, next_departure
 from ..schemas import CamelSchema
-from .route_weather import ForecastJobOut, job_out
+from .route_weather import ForecastJobOut, check_routing_profile, job_out
 
 router = Router(auth=session_auth, tags=["Recurring routes"])
 
@@ -33,6 +33,8 @@ class RecurringRouteIn(CamelSchema):
     schedule_description: str
     active: bool = True
 
+    _profile = field_validator("profile")(check_routing_profile)
+
 
 class RouteThumbnailSample(CamelSchema):
     """Weather inputs for one point in a route-list thumbnail."""
@@ -41,6 +43,7 @@ class RouteThumbnailSample(CamelSchema):
     rain_mm: float
     temp: float
     headwind: float | None = None
+    wind_power_w: float | None = None
     precipitation_interval_s: int | None = None
     rain_rate_mm_h: float | None = None
 

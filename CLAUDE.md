@@ -167,7 +167,7 @@ first — a worker, daphne, the shell command in the background-jobs guide — d
 
 ### Route-list thumbnails
 
-`RecurringRoute.thumbnail` is a precomputed blob (simplified path ≤ 64 vertices + the five
+`RecurringRoute.thumbnail` is a precomputed blob (simplified path ≤ 64 vertices + the six
 weather fields per sample that the frontend scorer reads), written by the
 `refresh_route_thumbnail` task and only *read* by `list_routes`.
 
@@ -256,6 +256,15 @@ process a Plotly render in a request coroutine stalls every other request. When
 `forecast.samples` is empty it returns placeholder figures with a "Keine Wetterdaten"
 annotation instead of crashing, though a job that assembles no samples fails before it
 gets that far.
+
+### Routing graph
+
+GraphHopper is bike-only (`bike`, `ebike`, `fast_ebike`, each with CH); `ROUTING_PROFILES`
+in `api/route_weather.py` must list the same names. Production never imports: the graph is
+built on another machine (`GRAPHHOPPER_IMPORT_ONLY=true`) and `graph-cache` is copied over
+(`docs/how-to/build-routing-graph.md`). GraphHopper refuses a graph built with a different
+config or jar, so any change to `graphhopper-config.yaml` or `data/graphhopper/models/` means
+re-importing and re-shipping.
 
 ### Recurring routes
 

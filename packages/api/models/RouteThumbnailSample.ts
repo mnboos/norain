@@ -39,6 +39,10 @@ export interface RouteThumbnailSample {
     /**
      * 
      */
+    windPowerW?: number | null;
+    /**
+     * 
+     */
     precipitationIntervalS?: number | null;
     /**
      * 
@@ -70,6 +74,7 @@ export function RouteThumbnailSampleFromJSONTyped(json: any, ignoreDiscriminator
         'rainMm': json['rain_mm'],
         'temp': json['temp'],
         'headwind': json['headwind'] === undefined ? undefined : json['headwind'] === null ? null : json['headwind'],
+        'windPowerW': json['wind_power_w'] === undefined ? undefined : json['wind_power_w'] === null ? null : json['wind_power_w'],
         'precipitationIntervalS': json['precipitation_interval_s'] === undefined ? undefined : json['precipitation_interval_s'] === null ? null : json['precipitation_interval_s'],
         'rainRateMmH': json['rain_rate_mm_h'] === undefined ? undefined : json['rain_rate_mm_h'] === null ? null : json['rain_rate_mm_h'],
     };
@@ -90,6 +95,7 @@ export function RouteThumbnailSampleToJSONTyped(value?: RouteThumbnailSample | n
         'rain_mm': value['rainMm'],
         'temp': value['temp'],
         'headwind': value['headwind'],
+        'wind_power_w': value['windPowerW'],
         'precipitation_interval_s': value['precipitationIntervalS'],
         'rain_rate_mm_h': value['rainRateMmH'],
     };

@@ -5,6 +5,7 @@ data/graphhopper/osm
 node_modules
 .env
 .env.*
+!.env.template
 db
 
 photon-dump-*.zst

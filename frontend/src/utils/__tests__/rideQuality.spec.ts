@@ -91,6 +91,26 @@ describe("rideScore", () => {
         expect(rideScore(sample({ headwind: -30 }))?.score).toBe(rideScore(sample({ headwind: 0 }))?.score);
     });
 
+    it("scores the wind effort when it is known, whatever the raw headwind says", () => {
+        // 10 km/h into a fast e-bike costs more than 20 km/h into a slow bike.
+        const fast = rideScore(sample({ headwind: 10, windPowerW: 231 }));
+        const slow = rideScore(sample({ headwind: 20, windPowerW: 90 }));
+        expect(fast?.wind).toBe(1);
+        expect(slow?.wind).toBeLessThan(fast?.wind ?? 0);
+        expect(rideScore(sample({ headwind: 30, windPowerW: 0 }))?.wind).toBe(0);
+    });
+
+    it("gives no penalty for a helping wind effort", () => {
+        expect(rideScore(sample({ windPowerW: -80 }))?.score).toBe(rideScore(sample({ windPowerW: 0 }))?.score);
+    });
+
+    it("falls back to the headwind curve without an effort, and matches it at ~18 km/h", () => {
+        expect(rideScore(sample({ headwind: 20, windPowerW: null }))?.wind).toBe(0.65);
+        expect(rideScore(sample({ headwind: 20, windPowerW: 130 }))?.wind).toBe(0.65);
+        expect(rideScore(sample({ headwind: null, windPowerW: 130 }))?.wind).toBe(0.65);
+        expect(rideScore(sample({ headwind: null, windPowerW: null }))).toBeNull();
+    });
+
     it("names the dominant weighted factor", () => {
         expect(rideScore(sample({ rainRateMmH: 4 }))?.worst).toBe("rain");
         expect(rideScore(sample({ rainRateMmH: 0, headwind: 28 }))?.worst).toBe("wind");

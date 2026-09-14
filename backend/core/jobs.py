@@ -118,37 +118,41 @@ def line_at_detail(result: dict, detail: str) -> list[list[float]]:
     return [line[i] for i in simplify_line(line, keep, tolerance)]
 
 
-def _complete_felt_wind(segment: dict) -> bool:
-    """Whether a wind segment can be drawn as an arrow: fully covered, speed and angle known."""
+def _complete_ground_wind(segment: dict) -> bool:
+    """Whether a wind segment can be drawn as an arrow: fully covered, speed and direction known.
+
+    Calm air has no direction (``wind_dir`` is None) and gets no arrow.
+    """
     return (
         segment.get("wind_coverage", 0) >= 1 - 1e-9
-        and segment.get("felt_coverage", 0) >= 1 - 1e-9
-        and segment.get("elapsed_s") is not None
-        and segment.get("felt_speed") is not None
-        and segment.get("felt_angle") is not None
+        and segment.get("wind_speed") is not None
+        and segment.get("wind_dir") is not None
         and segment.get("bearing") is not None
     )
 
 
 def wind_arrows_at_detail(result: dict, detail: str) -> list[dict]:
-    """The stored wind segments as map arrows, at most one per ``WIND_ARROW_SPACING``.
+    """The stored wind segments as real-wind map arrows, at most one per ``WIND_ARROW_SPACING``.
 
-    Only the fields the map draws, rounded to what it can show: ~1 m for position and a
-    tenth of a unit for the rest. A segment with partial data is never an arrow; showing it
-    would claim a felt wind the forecast does not have for that stretch.
+    Only the fields the map draws, rounded to what it can show: ~1 m for position, a tenth
+    of a unit for speed and angles, whole watts. A segment with partial data is never an
+    arrow; showing it would claim a wind the forecast does not have for that stretch. The
+    wind effort needs timing and stays None without it -- the arrow is still drawn.
     """
     spacing = WIND_ARROW_SPACING[detail]
     arrows: list[dict] = []
     next_start = float("-inf")
     for segment in result.get("wind_segments") or []:
-        if not _complete_felt_wind(segment) or segment.get("start_m", 0) < next_start:
+        if not _complete_ground_wind(segment) or segment.get("start_m", 0) < next_start:
             continue
+        power = segment.get("wind_power_w")
         arrows.append({
             "lat": round(segment["lat"], 5),
             "lon": round(segment["lon"], 5),
             "bearing": round(segment["bearing"], 1),
-            "felt_speed": round(segment["felt_speed"], 1),
-            "felt_angle": round(segment["felt_angle"], 1),
+            "wind_speed": round(segment["wind_speed"], 1),
+            "wind_dir": round(segment["wind_dir"], 1),
+            "wind_power_w": round(power) if power is not None else None,
         })
         if spacing is not None:
             next_start = segment.get("start_m", 0) + spacing

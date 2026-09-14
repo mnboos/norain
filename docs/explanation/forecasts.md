@@ -111,6 +111,29 @@ The code converts the angle to radians. Positive headwind is wind against the ri
 negative headwind is tailwind. Crosswind is an absolute magnitude without a left/right
 sign. Wind speed and gusts are in km/h; OWM values are converted from m/s.
 
+## Wind effort: the same wind costs more the faster you ride
+
+The map arrows show the real wind: where it blows, over ground. They do not show the felt
+(apparent) wind. At riding speed that is mostly your own airflow, so felt-wind arrows would
+point at the rider almost everywhere.
+
+How hard a wind hits depends on the rider's speed, so NoRain estimates the **wind effort**:
+the extra power needed to hold the routing profile's planned speed `v` against headwind `h`
+and crosswind `c`, compared with calm air:
+
+```text
+wind_power = ½·ρ·CdA · v · (|v+h, c| · (v+h) − v²)     ρ = 1.2 kg/m³, CdA = 0.5 m²
+```
+
+Aerodynamic drag acts along the apparent wind; this is its component along travel, times
+ground speed. Rolling resistance and mass cancel out of the difference. A 10 km/h headwind
+costs about +64 W at 20 km/h but about +231 W at 40 km/h. So a `fast_ebike` route scores
+worse in the same wind than a `bike` route, even though a motor supplies part of the power.
+`v` is the average speed over each sample's section, so descents do not inflate it. The
+arrow size and the ride score use the wind effort. Where it is unknown (no timing, older
+results) the score falls back to the plain headwind. It is an estimate: no shelter, no
+real rider position, no motor model.
+
 ## Time-zone limitations
 
 Open-Meteo requests use `Europe/Zurich`; the parsers compare its naive local timestamps

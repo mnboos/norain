@@ -20,8 +20,13 @@ process variables take precedence over values loaded by `python-dotenv`.
 | `OPENWEATHERMAP_API_KEY` | Optional | Enables OWM fallback when primary fetching fails |
 | `WEATHERUNDERGROUND_API_KEY` | Optional | Pro only: corrects temperature and rain risk near now with nearby personal weather stations. Budgeted for the free PWS owner key (1500 calls/day, 30/min) |
 | `REDIS_URL` | `redis://localhost:6379` | In-flight grid-cell claims (DB 1) and the forecast-progress channel layer (DB 2); needed by the web process and every worker |
-| `OSM_DATA_URL` | `https://download.geofabrik.de/europe/switzerland-latest.osm.pbf` | GraphHopper import |
-| `GRAPHHOPPER_HEAP` | `6g` | GraphHopper JVM initial and maximum heap |
+| `OSM_DATA_URL` | `https://download.geofabrik.de/europe/switzerland-latest.osm.pbf` | GraphHopper import; not used by production, which does not import |
+| `GRAPHHOPPER_HEAP` | `6g` | GraphHopper serving JVM maximum heap; with `RAM_STORE` it must hold the whole graph |
+| `GRAPHHOPPER_IMPORT_HEAP` | `GRAPHHOPPER_HEAP` | JVM maximum heap for an import |
+| `GRAPHHOPPER_DATAACCESS` | `RAM_STORE` | `RAM_STORE` keeps the graph in the heap; `MMAP` pages it in from disk with a small heap |
+| `GRAPHHOPPER_ALLOW_IMPORT` | `true`; `false` in production Compose | `false` makes an empty `/graph-cache` an error instead of an import |
+| `GRAPHHOPPER_IMPORT_ONLY` | `false` | `true` exits after importing, for [building a graph to ship](../how-to/build-routing-graph.md) |
+| `GRAPHHOPPER_MEM_LIMIT` | `8g` | GraphHopper container memory and swap limit |
 | `PHOTON_INDEX_URL` | `https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst` | Photon import |
 | `PHOTON_IMPORT_HEAP` | `4g` | Photon import JVM heap |
 | `APP_STORAGE_PATH` | Required by Compose interpolation | PostgreSQL bind-mount root |
@@ -57,15 +62,15 @@ CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` with credentials
 | Path | Contents |
 | --- | --- |
 | `${APP_STORAGE_PATH}/db/app/data/` | Development PostgreSQL/PostGIS data |
-| `data/graphhopper/osm/` | Downloaded OSM extract |
-| `data/graphhopper/cache/` | Imported routing graph and elevation cache |
+| `data/graphhopper/osm/` | Downloaded OSM extract and elevation tiles (import only) |
+| `data/graphhopper/cache/` | Imported routing graph; the directory copied to production |
 | `data/graphhopper/graphhopper-config.yaml` | Mounted routing configuration |
 | `data/graphhopper/models/` | Custom e-bike routing models |
 | `data/photon/` | Photon search data; inner `photon_data/` indicates an existing index |
 | `${APP_STORAGE_PATH}/postgres/` | Production PostgreSQL/PostGIS data bind mount |
 | `${APP_STORAGE_PATH}/caddy/{data,config}/` | Production Caddy certificates and configuration |
 | `${APP_STORAGE_PATH}/django/static/` | Collected Django static files |
-| `${APP_STORAGE_PATH}/graphhopper/{osm,cache}/` | Production GraphHopper source/cache bind mounts |
+| `${APP_STORAGE_PATH}/graphhopper/cache/` | Production routing graph, built elsewhere and copied in |
 | `${APP_STORAGE_PATH}/photon/` | Production Photon index bind mount |
 
 Stopping processes preserves these paths. Django routes and caches are persistent,
@@ -87,8 +92,9 @@ despite older comments in Compose referring to a model-free application.
 | Forecast availability | Today through today + 15 days | Calendar window used for scheduled departures |
 | `ENSEMBLE_MODELS` | `icon_seamless_eps,meteoswiss_icon_ch1_ensemble,meteoswiss_icon_ch2_ensemble` | Models requested by the application |
 
-Enabled routing profiles are `bike`, `ebike`, `fast_ebike`, and `car`. The UI also
-lists `foot`, which is commented out in the routing configuration.
+Enabled routing profiles are `bike`, `ebike`, and `fast_ebike`, each with a CH
+preparation. `ROUTING_PROFILES` in `core/api/route_weather.py` must list the same
+names; the API rejects any other profile with 422.
 
 ## Deployment boundary
 

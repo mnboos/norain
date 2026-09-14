@@ -13,9 +13,7 @@ import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
 import { QSelect } from "quasar";
 import { computed, ref, watchEffect, watch } from "vue";
 import {
-    symSharpDirectionsWalk,
     symSharpElectricBike,
-    symSharpElectricCar,
     symSharpElectricMoped,
     symSharpPedalBike,
 } from "@quasar/extras/material-symbols-sharp";
@@ -49,11 +47,9 @@ function departureDateOptions(d: string): boolean {
 }
 
 const profiles = [
-    { label: "Fuss", value: "foot", icon: symSharpDirectionsWalk },
     { label: "Velo", value: "bike", icon: symSharpPedalBike },
     { label: "E-Bike", value: "ebike", icon: symSharpElectricBike },
     { label: "S-Pedelec", value: "fast_ebike", icon: symSharpElectricMoped },
-    { label: "Auto", value: "car", icon: symSharpElectricCar },
 ];
 
 const routeIdParam = computed(() => (typeof route.query.route === "string" ? route.query.route : null));

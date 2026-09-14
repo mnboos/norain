@@ -11,9 +11,12 @@ HTTPS (443) in the VPS firewall. Install Docker Engine, the Docker Compose plugi
 Git, and Restic. Create a non-root `norain` deployment user in the `docker` group,
 then clone this repository at `/srv/norain`.
 
-The default Swiss map import may use 6 GB for GraphHopper and 4 GB while Photon
-imports. Select RAM, disk, and the `GRAPHHOPPER_HEAP`/`PHOTON_IMPORT_HEAP`
-values before the first start; larger extracts need more of both. Do not expose
+GraphHopper does not import on the VPS: [build the routing graph on another
+machine](build-routing-graph.md) and copy it into `graphhopper/cache` before the first
+start. Serving Switzerland needs a heap of about 3 GB; DACH roughly 10–14 GB, or a
+3 GB heap with `GRAPHHOPPER_DATAACCESS=MMAP`. Photon still imports its index on first
+boot, using `PHOTON_IMPORT_HEAP` (4 GB by default). The published images are built for
+both amd64 and arm64, so ARM hosts such as Oracle's Ampere A1 work. Do not expose
 GraphHopper, Photon, PostgreSQL, or Django directly.
 
 ## Configure the server
@@ -91,7 +94,8 @@ PHOTON_IMAGE=ghcr.io/mnboos/norain-photon:COMMIT_SHA \
 ./deploy/release.sh
 ```
 
-The first geographic imports can take a long time. Follow them with
+The first Photon import can take a long time; GraphHopper only loads the copied graph.
+Follow both with
 `docker compose --env-file .env -f docker-compose.prod.yml logs -f graphhopper photon`.
 After they are ready, verify `https://YOUR_DOMAIN/healthz`, sign up, verify the
 email, create a route, and confirm the worker computes its geometry.

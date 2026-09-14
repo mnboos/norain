@@ -891,6 +891,10 @@ class AuthApiTests(TestCase):
         response = self.post_json("/api/routes", invalid)
         self.assertEqual(response.status_code, 422)
 
+        # GraphHopper is configured bike-only; car and foot would only fail later, on a worker.
+        response = self.post_json("/api/routes", {**data, "profile": "car"})
+        self.assertEqual(response.status_code, 422)
+
         response = self.client.delete(f"/api/routes/{owned_route.id}")
         self.assertEqual(response.status_code, 403)
         response = self.client.delete(f"/api/routes/{other_route.id}", **self.csrf_headers())
@@ -1052,6 +1056,7 @@ class RouteThumbnailTests(TestCase):
             # The vertex index must address a real point on the reduced path.
             self.assertLess(entry["i"], len(thumb["path"]))
             self.assertIn("headwind", entry)
+            self.assertIn("wind_power_w", entry)
 
     def test_cold_cells_stay_none_rather_than_guessed(self):
         # Warm only the first sample point; the rest have no data at all.
@@ -1604,6 +1609,21 @@ class ForecastJobTests(TestCase):
             )
         self.assertEqual(response.status_code, 202)
 
+    def test_route_weather_rejects_unconfigured_profile(self):
+        enqueue = AsyncMock()
+        with patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=enqueue)):
+            response = self.client.get(
+                "/api/route_weather",
+                {
+                    "start_lat": 47.0, "start_lon": 9.0,
+                    "dest_lat": 47.01, "dest_lon": 9.01,
+                    "profile": "foot",
+                    "departure_time": f"{self.departure.date().isoformat()}T08:00",
+                },
+            )
+        self.assertEqual(response.status_code, 422)
+        enqueue.assert_not_awaited()
+
     def test_finished_job_is_served_directly(self):
         """An identical request inside the cell lifetime reuses the stored payload."""
         self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
@@ -1983,8 +2003,8 @@ def _wind_segment(start_m: float, **overrides) -> dict:
     segment = {
         "start_m": start_m, "end_m": start_m + 100, "lat": 47.123456789, "lon": 9.0 + start_m / 100_000,
         "elapsed_s": start_m / 5, "bearing": 90.04, "rider_speed": 18.0, "wind_speed": 12.0,
-        "wind_dir": 270.0, "headwind": -10.0, "crosswind": 1.0, "felt_speed": 8.26, "felt_angle": -12.34,
-        "wind_coverage": 1.0, "felt_coverage": 1.0,
+        "wind_dir": 270.04, "headwind": -10.0, "crosswind": 1.0, "felt_speed": 8.26, "felt_angle": -12.34,
+        "wind_power_w": -33.6, "wind_coverage": 1.0, "felt_coverage": 1.0,
     }
     return {**segment, **overrides}
 
@@ -2102,8 +2122,11 @@ class ForecastViewTests(TestCase):
 
         # 10 km of 100 m segments: every 2 km, every 500 m, all of them.
         self.assertEqual((len(coarse), len(medium), len(full)), (5, 20, 100))
-        self.assertEqual(coarse[0], {"lat": 47.12346, "lon": 9.0, "bearing": 90.0, "felt_speed": 8.3, "felt_angle": -12.3})
-        self.assertEqual(set(medium[0]), {"lat", "lon", "bearing", "felt_speed", "felt_angle"})
+        self.assertEqual(
+            coarse[0],
+            {"lat": 47.12346, "lon": 9.0, "bearing": 90.0, "wind_speed": 12.0, "wind_dir": 270.0, "wind_power_w": -34},
+        )
+        self.assertEqual(set(medium[0]), {"lat", "lon", "bearing", "wind_speed", "wind_dir", "wind_power_w"})
         self.assertNotIn("wind_segments", forecast_view(job))
 
         job.refresh_from_db()
@@ -2112,17 +2135,21 @@ class ForecastViewTests(TestCase):
     def test_wind_arrows_skip_incomplete_segments_without_losing_the_spacing(self):
         result = _long_payload(vertices=10, every=5)
         result["wind_segments"] = [
-            _wind_segment(0.0, felt_coverage=0.5),
-            _wind_segment(100.0, felt_angle=None),
-            _wind_segment(200.0, elapsed_s=None),
-            _wind_segment(300.0),
-            _wind_segment(400.0, wind_coverage=0.99),
-            _wind_segment(2300.0),
+            _wind_segment(0.0, wind_coverage=0.5),
+            _wind_segment(100.0, wind_dir=None),  # calm: no direction to draw
+            _wind_segment(200.0, wind_speed=None),
+            _wind_segment(300.0, bearing=None),
+            # No timing: no felt wind and no effort, but the real wind is still an arrow.
+            _wind_segment(400.0, elapsed_s=None, felt_speed=None, felt_angle=None, felt_coverage=0.0,
+                          wind_power_w=None),
+            _wind_segment(500.0),
+            _wind_segment(2300.0, wind_coverage=0.99),
             _wind_segment(2400.0),
         ]
         arrows = forecast_view(self._job(result))["wind_arrows"]
-        # The first complete one is at 300 m, so the next may not start before 2300 m.
-        self.assertEqual([a["lon"] for a in arrows], [0.003 + 9.0, 0.023 + 9.0])
+        # The first complete one is at 400 m, so the next may not start before 2400 m.
+        self.assertEqual([a["lon"] for a in arrows], [0.004 + 9.0, 0.024 + 9.0])
+        self.assertIsNone(arrows[0]["wind_power_w"])
 
     def test_sample_uncertainty_endpoint(self):
         job = self._job()

@@ -18,7 +18,7 @@ import { gradientStops, rideScore, rideScoreLabel, sampleProgress, scoreBand, sc
 import MapLegend from "@/components/MapLegend.vue";
 import { useForecastMapDetail, type LineDetail } from "@/queries/forecastParts";
 import { finerDetail, lineDetailForZoom } from "@/utils/mapDetail";
-import { apparentArrowBearing, feltWindText, visibleWindArrows } from "@/utils/wind";
+import { groundArrowBearing, groundWindText, visibleWindArrows, windArrowSize, windPowerText } from "@/utils/wind";
 
 maplibreConfig.WORKER_URL = maplibreWorkerUrl;
 
@@ -173,7 +173,7 @@ function sampleMarkerEl(sample: ForecastSampleOut): HTMLDivElement {
 interface SampleMarker { marker: Marker; popup?: Popup }
 /** Markers exist only for the chips currently shown, keyed by sample index. */
 let sampleMarkers = new Map<number, SampleMarker>();
-/** A shown felt-wind arrow. Its popup is built on first open. */
+/** A shown wind arrow. Its popup is built on first open. */
 interface WindMarker { marker: Marker; popup?: Popup }
 /** Markers exist only for the arrows currently shown, keyed by position. */
 let windMarkers = new Map<string, WindMarker>();
@@ -184,17 +184,19 @@ function clearWindMarkers() {
 }
 
 function windArrowLabel(arrow: WindArrow): string {
-    return `Gefühlter Wind (geschätzt): ${feltWindText(arrow)}`;
+    return `Wind: ${groundWindText(arrow)} · ${windPowerText(arrow.windPowerW)}`;
 }
 
+/** The real wind, pointing where it blows; the bigger the arrow, the more it costs to hold the planned speed. */
 function createWindMarker(map: MapLibreMap, arrow: WindArrow): WindMarker {
     const element = document.createElement("div");
-    element.className = "wx-felt-arrow";
+    element.className = "wx-wind-arrow";
     element.tabIndex = 0;
     element.setAttribute("role", "button");
     element.setAttribute("aria-label", windArrowLabel(arrow));
-    element.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 L20 17 L12 13 L4 17 Z" fill="#2f7fd8" stroke="white" stroke-width="1.5"/></svg>';
-    const marker = new Marker({ element, rotation: apparentArrowBearing(arrow) ?? 0,
+    const size = windArrowSize(arrow.windPowerW);
+    element.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 L20 17 L12 13 L4 17 Z" fill="#2f7fd8" stroke="white" stroke-width="1.5"/></svg>`;
+    const marker = new Marker({ element, rotation: groundArrowBearing(arrow) ?? 0,
         rotationAlignment: "map", pitchAlignment: "map" })
         .setLngLat([arrow.lon, arrow.lat])
         .addTo(map);
@@ -313,6 +315,7 @@ function samplePopupHtml(s: ForecastSampleOut): string {
         Regenrisiko: ${s.pop == null ? "Nicht verfügbar" : `${Math.round(s.pop * 100)}%`}<br>
         💨 ${s.windSpeed == null ? "Nicht verfügbar" : `${s.windSpeed.toFixed(0)} km/h über Grund`}${s.windGust ? ` (Böen ${s.windGust.toFixed(0)})` : ""}<br>
         <span class="${s.headwind != null && s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span><br>
+        ${s.windPowerW != null ? `↳ ${windPowerText(s.windPowerW)}<br>` : ""}
         ${s.windCoverage != null && s.windCoverage < 1 ? `Windabdeckung im Abschnitt: ${Math.round(s.windCoverage * 100)}%<br>` : ""}
         <span class="wx-quality">
             <i style="background:${scoreColor(rq?.score ?? null)}"></i> Fahrqualität: ${rideScoreLabel(rq)}
@@ -374,8 +377,12 @@ async function renderLine() {
         await existing.setData(lineGeojson);
     } else {
         map.addSource("route-source", { type: "geojson", data: lineGeojson, lineMetrics: true });
-        // Slip the route underneath the basemap's labels so place names stay readable.
-        const firstSymbolId = map.getStyle().layers.find(l => l.type === "symbol")?.id;
+        // Slip the route under the basemap's labels, but above every road, rail and boundary.
+        // Not simply the first symbol: Positron has waterway_label early, below all the roads.
+        const layers = map.getStyle().layers;
+        let labelsStart = layers.length;
+        while (labelsStart > 0 && layers[labelsStart - 1]?.type === "symbol") labelsStart--;
+        const labelsStartId = layers[labelsStart]?.id; // undefined -> top of the stack
         map.addLayer(
             {
                 id: "route-line-casing",
@@ -384,7 +391,7 @@ async function renderLine() {
                 layout: { "line-cap": "round", "line-join": "round" },
                 paint: { "line-width": 10, "line-color": casing },
             },
-            firstSymbolId,
+            labelsStartId,
         );
         map.addLayer(
             {
@@ -394,7 +401,7 @@ async function renderLine() {
                 layout: { "line-cap": "round", "line-join": "round" },
                 paint: { "line-width": 6 },
             },
-            firstSymbolId,
+            labelsStartId,
         );
     }
     // Both outside the addSource branch: that only runs on the first render and after a
@@ -417,7 +424,7 @@ async function renderRoute() {
     drawnLine.value.forEach(c => bounds.extend([c[0] ?? 0, c[1] ?? 0]));
     if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60 });
     map.once("idle", applyMarkerThinning);
-    // A new forecast can put a different felt wind at the same spot, so no arrow carries over.
+    // A new forecast can put a different wind at the same spot, so no arrow carries over.
     clearWindMarkers();
     renderWindMarkers();
     highlightSample();
@@ -514,8 +521,8 @@ onBeforeUnmount(() => {
             <div id="map" ref="map"></div>
             <MapLegend v-if="hasRoute" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
             <div v-if="hasWindProfile" class="wx-wind-legend text-caption">
-                <span aria-hidden="true">➤</span> Gefühlter Wind (geschätzt)
-                <div>Pfeile zeigen die Luftbewegung relativ zur Fahrt.</div>
+                <span aria-hidden="true">➤</span> Wind
+                <div>Pfeile zeigen, wohin der Wind weht. Grösse = Windaufwand (geschätzt).</div>
             </div>
         </div>
     </div>
@@ -598,7 +605,7 @@ body.body--dark .maplibregl-popup-anchor-right .maplibregl-popup-tip {
     gap: 2px;
     cursor: pointer;
 }
-.wx-felt-arrow { cursor: pointer; }
+.wx-wind-arrow { cursor: pointer; }
 
 .wx-selected {
     width: 24px;

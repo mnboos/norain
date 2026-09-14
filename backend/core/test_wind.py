@@ -16,6 +16,7 @@ from .wind import (
     project_wind,
     resolve_vertex_times,
     valid_vertex_times,
+    wind_power,
 )
 
 
@@ -196,6 +197,41 @@ class WindTests(SimpleTestCase):
         result = compute_wind_profile(coords, points, wind, resolve_vertex_times(coords, points, times), 1000)
         self.assertGreater(result.samples[1].headwind, 25)
         self.assertGreater(result.distribution["tailwind_m"], 0)
+
+    def test_wind_power_grows_with_rider_speed(self):
+        self.assertEqual(wind_power(20, 0, 0), 0)
+        self.assertAlmostEqual(wind_power(20, 10, 0), 64.3, delta=0.1)
+        self.assertAlmostEqual(wind_power(40, 10, 0), 231.5, delta=0.1)
+        self.assertLess(wind_power(20, -10, 0), 0)
+        self.assertGreater(wind_power(20, 0, 10), 0)
+
+    def test_profile_wind_power_uses_support_speed_not_edge_speed(self):
+        coords = [[0, 0], [0, 0.005], [0, 0.01]]
+        distances = vertex_distances(coords)
+        # First half at 10 km/h, second half at 50 km/h: the sample supports average both.
+        times = [0.0, distances[1] * 3.6 / 10, distances[1] * 3.6 / 10 + (distances[2] - distances[1]) * 3.6 / 50]
+        points = [{"idx": i, "elapsed_s": times[i]} for i in range(3)]
+        wind = [normalize_wind(10, 0) for _ in points]
+        result = compute_wind_profile(coords, points, wind, resolve_vertex_times(coords, points, times), distances[-1])
+        middle = result.samples[1]
+        lo, hi = distances[1] / 2, (distances[1] + distances[2]) / 2
+        t_lo, t_hi = times[1] / 2, times[1] + (times[2] - times[1]) / 2
+        expected = wind_power((hi - lo) * 3.6 / (t_hi - t_lo), 10, 0)
+        self.assertAlmostEqual(middle.wind_power_w, expected, delta=0.5)
+        self.assertLess(middle.wind_power_w, wind_power(50, 10, 0))
+        self.assertAlmostEqual(result.distribution["max_wind_power_w"], max(s.wind_power_w for s in result.samples))
+        self.assertTrue(all(s["wind_power_w"] is not None for s in result.segments))
+
+    def test_wind_power_is_none_without_timing(self):
+        coords = [[0, 0], [0, 0.001], [0, 0.002]]
+        points, wind, _ = fixture(coords, anchor_indices=[0, 2])
+        for point in points:
+            point["elapsed_s"] = 0
+        result = compute_wind_profile(coords, points, wind, resolve_vertex_times(coords, points), 200)
+        self.assertTrue(all(s.wind_power_w is None for s in result.samples))
+        self.assertIsNotNone(result.samples[0].headwind)
+        self.assertIsNone(result.distribution["max_wind_power_w"])
+        self.assertTrue(all(s["wind_power_w"] is None for s in result.segments))
 
     def test_display_cap_convergence_conservation_and_disabled_segments(self):
         coords = [[0, 0], [0, 0.9]]

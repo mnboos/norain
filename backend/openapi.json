@@ -218,7 +218,7 @@
                         }
                     }
                 },
-                "description": "The route line and felt-wind arrows at more detail than the job result carries.\n\nThe map asks for this only once it is zoomed in far enough to show the difference.",
+                "description": "The route line and wind arrows at more detail than the job result carries.\n\nThe map asks for this only once it is zoomed in far enough to show the difference.",
                 "tags": [
                     "Route weather"
                 ]
@@ -804,6 +804,17 @@
                         ],
                         "title": "Crosswind"
                     },
+                    "wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Power W"
+                    },
                     "sample_index": {
                         "anyOf": [
                             {
@@ -1132,6 +1143,17 @@
                         ],
                         "title": "Max Headwind"
                     },
+                    "max_wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Wind Power W"
+                    },
                     "wind_distribution": {
                         "anyOf": [
                             {
@@ -1162,7 +1184,7 @@
                 "type": "object"
             },
             "WindArrow": {
-                "description": "One felt-wind arrow for the map: only segments with complete felt-wind data.",
+                "description": "One real-wind arrow for the map: only segments with complete ground-wind data.",
                 "properties": {
                     "lat": {
                         "title": "Lat",
@@ -1176,21 +1198,32 @@
                         "title": "Bearing",
                         "type": "number"
                     },
-                    "felt_speed": {
-                        "title": "Felt Speed",
+                    "wind_speed": {
+                        "title": "Wind Speed",
                         "type": "number"
                     },
-                    "felt_angle": {
-                        "title": "Felt Angle",
+                    "wind_dir": {
+                        "title": "Wind Dir",
                         "type": "number"
+                    },
+                    "wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Power W"
                     }
                 },
                 "required": [
                     "lat",
                     "lon",
                     "bearing",
-                    "felt_speed",
-                    "felt_angle"
+                    "wind_speed",
+                    "wind_dir"
                 ],
                 "title": "WindArrow",
                 "type": "object"
@@ -1249,6 +1282,28 @@
                         "title": "Felt Covered M",
                         "type": "number"
                     },
+                    "mean_wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Mean Wind Power W"
+                    },
+                    "max_wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Wind Power W"
+                    },
                     "timing_source": {
                         "enum": [
                             "routing",
@@ -1272,7 +1327,7 @@
                 "type": "object"
             },
             "ForecastMapDetailOut": {
-                "description": "The route line and felt-wind arrows at one detail level.",
+                "description": "The route line and wind arrows at one detail level.",
                 "properties": {
                     "line": {
                         "items": {
@@ -1644,6 +1699,17 @@
                             }
                         ],
                         "title": "Headwind"
+                    },
+                    "wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Power W"
                     },
                     "precipitation_interval_s": {
                         "anyOf": [

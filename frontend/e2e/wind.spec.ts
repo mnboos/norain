@@ -18,11 +18,16 @@ const fallback = {
     wind_segments: fixture.samples.map((s, i) => ({
         start_m: i * 100, end_m: (i + 1) * 100, lat: s.lat, lon: s.lon,
         elapsed_s: s.elapsed_s, bearing: 30, rider_speed: 20, wind_speed: 15, wind_dir: 60,
-        headwind: 13, crosswind: 7.5, felt_speed: 34, felt_angle: 13, wind_coverage: 1, felt_coverage: 1,
+        headwind: 13, crosswind: 7.5, felt_speed: 34, felt_angle: 13, wind_power_w: 90, wind_coverage: 1,
+        felt_coverage: 1,
     })),
-    summary: { ...fixture.summary, wind_distribution: {
+    wind_arrows: fixture.samples.map(s => ({
+        lat: s.lat, lon: s.lon, bearing: 30, wind_speed: 15, wind_dir: 60, wind_power_w: 90,
+    })),
+    summary: { ...fixture.summary, max_wind_power_w: 90, wind_distribution: {
         headwind_m: 2000, crosswind_m: 1500, tailwind_m: 1000, calm_m: 300, unknown_m: 200,
-        mean_felt_speed: 28, max_felt_speed: 34, felt_covered_m: 4800, timing_source: "routing",
+        mean_felt_speed: 28, max_felt_speed: 34, felt_covered_m: 4800, mean_wind_power_w: 60, max_wind_power_w: 90,
+        timing_source: "routing",
     } },
 };
 
@@ -66,8 +71,9 @@ test("wind profile renders on desktop and mobile; felt chart does not select a w
     await page.goto(`/routes/${id}`);
     await expect(page.getByTestId("wind-distribution")).toBeVisible();
     await expect(page.getByText("Max. Gegenwind im Abschnitt", { exact: true })).toBeVisible();
-    await expect(page.locator(".wx-felt-arrow").first()).toBeVisible();
-    await expect(page.locator(".wx-felt-arrow").first()).toHaveAttribute("aria-label", /Gefühlter Wind/);
+    await expect(page.getByText("Max. Windaufwand (geschätzt)", { exact: true })).toBeVisible();
+    await expect(page.locator(".wx-wind-arrow").first()).toBeVisible();
+    await expect(page.locator(".wx-wind-arrow").first()).toHaveAttribute("aria-label", /^Wind: 15 km\/h aus NO, von vorne rechts · \+90 W Windaufwand/);
     await page.getByText("Vorhersage-Details", { exact: true }).click();
     const slider = page.getByRole("slider", { name: "Streckenpunkt" });
     await slider.focus();

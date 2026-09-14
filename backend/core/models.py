@@ -127,7 +127,7 @@ class RecurringRoute(models.Model):
     profile = models.CharField(
         max_length=50,
         default="bike",
-        help_text="GraphHopper routing profile: bike, ebike, fast_ebike, car, foot",
+        help_text="GraphHopper routing profile: bike, ebike, fast_ebike",
     )
 
     schedule_cron = models.CharField(max_length=100, help_text="5-field cron expression")

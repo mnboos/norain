@@ -1,23 +1,38 @@
 import { describe, expect, it } from "vitest";
 import { ForecastJobOutFromJSON, type WindArrow } from "@norain/api/models";
-import { apparentArrowBearing, feltWindText, relativeWindLabel, visibleWindArrows } from "../wind";
+import {
+    compassLabel, groundArrowBearing, groundWindText, relativeWindLabel, visibleWindArrows, windArrowSize, windPowerText,
+} from "../wind";
 import { rideScore } from "../rideQuality";
 
-const segment: WindArrow = { lon: 9, lat: 47, bearing: 0, feltAngle: 45, feltSpeed: 20 };
+// Wind from the east while riding north.
+const segment: WindArrow = { lon: 9, lat: 47, bearing: 0, windDir: 90, windSpeed: 12, windPowerW: 40 };
 
-describe("felt wind presentation", () => {
-    it("uses relative direction with the correct geographic arrow", () => {
-        expect(apparentArrowBearing(segment)).toBe(225);
-        expect(apparentArrowBearing({ ...segment, bearing: 350, feltAngle: 30 })).toBe(200);
+describe("wind presentation", () => {
+    it("points the arrow where the real wind blows, whatever the direction of travel", () => {
+        expect(groundArrowBearing(segment)).toBe(270);
+        expect(groundArrowBearing({ ...segment, bearing: 180 })).toBe(270);
+        expect(groundArrowBearing({ ...segment, windDir: 350 })).toBe(170);
         expect(relativeWindLabel(-45)).toBe("von vorne links");
         expect(relativeWindLabel(180)).toBe("von hinten");
         expect(relativeWindLabel(-180)).toBe("von hinten");
-        expect(feltWindText(segment)).toContain("20 km/h von vorne rechts");
+        expect(compassLabel(225)).toBe("SW");
+        expect(groundWindText(segment)).toBe("12 km/h aus O, von rechts");
+        expect(groundWindText({ ...segment, bearing: 90 })).toBe("12 km/h aus O, von vorne");
     });
-    it("does not invent direction for zero apparent wind or unknown data", () => {
-        expect(apparentArrowBearing({ ...segment, feltAngle: null })).toBeNull();
-        expect(feltWindText({ ...segment, feltAngle: null, feltSpeed: 0 })).toContain("kein gerichteter Luftzug");
-        expect(feltWindText({ ...segment, feltSpeed: null })).toContain("nicht verfügbar");
+    it("does not invent a direction for calm or unknown data", () => {
+        expect(groundArrowBearing({ ...segment, windDir: null })).toBeNull();
+        expect(groundWindText({ ...segment, windDir: null, windSpeed: 0 })).toContain("keine Richtung");
+        expect(groundWindText({ ...segment, windSpeed: null })).toContain("nicht verfügbar");
+    });
+    it("words and sizes the wind effort", () => {
+        expect(windPowerText(64.4)).toBe("+64 W Windaufwand (geschätzt)");
+        expect(windPowerText(-20)).toBe("−20 W, Wind hilft (geschätzt)");
+        expect(windPowerText(null)).toContain("nicht verfügbar");
+        expect(windArrowSize(null)).toBe(20);
+        expect(windArrowSize(-50)).toBe(20);
+        expect(windArrowSize(115)).toBe(26);
+        expect(windArrowSize(1000)).toBe(32);
     });
     it("thins in screen space, caps arrows, and skips arrows it cannot place", () => {
         const all = Array.from({ length: 220 }, (_, i) => ({ ...segment, lon: i }));

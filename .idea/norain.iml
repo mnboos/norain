@@ -23,7 +23,7 @@
       <excludeFolder url="file://$MODULE_DIR$/frontend/node_modules" />
       <excludeFolder url="file://$MODULE_DIR$/packages/api/node_modules" />
     </content>
-    <orderEntry type="jdk" jdkName="~/src/norain/backend/.venv" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="uv (norain)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">

@@ -17,6 +17,8 @@ MAX_SEGMENTS = 500
 TIME_EPS = 1e-6
 SPEED_EPS = 1e-6
 CALM_SPEED = 0.1
+AIR_DENSITY = 1.2  # kg/m³
+RIDER_CDA = 0.5  # m², upright rider
 
 
 def finite_number(value, *, nonnegative=False) -> float | None:
@@ -48,6 +50,7 @@ class ResolvedTimes:
 class SampleWind:
     headwind: float | None = None
     cross_abs_mean: float | None = None
+    wind_power_w: float | None = None
     coverage: float = 0.0
     support: list[WeightedDirection] = field(default_factory=list)
 
@@ -75,6 +78,18 @@ def project_wind(wind: WindVector, bearing: float) -> tuple[float, float]:
     angle = math.radians(bearing)
     east, north = math.sin(angle), math.cos(angle)
     return wind.east * east + wind.north * north, wind.east * north - wind.north * east
+
+
+def wind_power(rider_kmh: float, head_kmh: float, cross_kmh: float) -> float:
+    """Extra watts needed to hold ``rider_kmh`` against this wind, compared with calm air.
+
+    Drag acts along the apparent wind, so its component along travel is
+    ``k·|va|·(v+h)``; power is that times ground speed. Rolling resistance and mass cancel
+    out of the difference. Negative when the wind helps.
+    """
+    k = 0.5 * AIR_DENSITY * RIDER_CDA
+    v, h, c = rider_kmh / 3.6, head_kmh / 3.6, cross_kmh / 3.6
+    return k * v * (math.hypot(v + h, c) * (v + h) - v * v)
 
 
 def wind_components(speed: float, direction: float, bearing: float) -> tuple[float, float]:
@@ -180,6 +195,8 @@ def compute_wind_profile(
             "mean_felt_speed": None,
             "max_felt_speed": None,
             "felt_covered_m": 0.0,
+            "mean_wind_power_w": None,
+            "max_wind_power_w": None,
             "timing_source": resolved_times.source,
         }
     if length <= LENGTH_EPS:
@@ -196,14 +213,30 @@ def compute_wind_profile(
     edge_starts = [distances[i] for i in edges]
     support_bounds = [0.0] + [(a + b) / 2 for a, b in pairwise(anchor_d)] + [length]
 
-    def evaluate(distance):
+    def locate(distance):
         edge = edges[min(max(bisect_right(edge_starts, distance) - 1, 0), len(edges) - 1)]
         edge_len = distances[edge + 1] - distances[edge]
         fraction = min(1.0, max(0.0, (distance - distances[edge]) / edge_len))
+        a, b = resolved_times.values[edge : edge + 2]
+        elapsed = a + (b - a) * fraction if a is not None and b is not None else None
+        return edge, edge_len, fraction, elapsed
+
+    # The wind effort uses the average speed over each sample's support, not the edge speed:
+    # a fast descent edge, where nobody pedals, would otherwise read as hundreds of watts.
+    support_speeds = []
+    for lo, hi in pairwise(support_bounds[: len(positions) + 1]):
+        t_lo, t_hi = locate(lo)[3], locate(hi)[3]
+        usable = t_lo is not None and t_hi is not None and t_hi - t_lo > TIME_EPS and hi - lo > LENGTH_EPS
+        support_speeds.append((hi - lo) * 3.6 / (t_hi - t_lo) if usable else None)
+
+    def support_index(distance):
+        return min(max(bisect_right(support_bounds, distance) - 1, 0), len(positions) - 1)
+
+    def evaluate(distance):
+        edge, edge_len, fraction, elapsed = locate(distance)
         lon, lat = interpolate_coord(coords[edge], coords[edge + 1], fraction)
         bearing = bearing_deg(*coords[edge][:2], *coords[edge + 1][:2])
         a, b = resolved_times.values[edge : edge + 2]
-        elapsed = a + (b - a) * fraction if a is not None and b is not None else None
         speed = edge_len * 3.6 / (b - a) if a is not None and b is not None and b - a > TIME_EPS else None
         wind = None
         bracket = min(bisect_right(anchor_d, distance) - 1, len(positions) - 2)
@@ -233,15 +266,18 @@ def compute_wind_profile(
             "crosswind": None,
             "felt_speed": None,
             "felt_angle": None,
+            "wind_power_w": None,
         }
         if wind is not None:
             head, cross = project_wind(wind, bearing)
             w = math.hypot(wind.east, wind.north)
+            support_speed = support_speeds[support_index(distance)] if support_speeds else None
             values.update(
                 wind_speed=w,
                 wind_dir=math.degrees(math.atan2(wind.east, wind.north)) % 360 if w > SPEED_EPS else None,
                 headwind=head,
                 crosswind=cross,
+                wind_power_w=wind_power(support_speed, head, cross) if support_speed is not None else None,
             )
             if include_segments and speed is not None:
                 felt = math.hypot(speed + head, cross)
@@ -259,9 +295,12 @@ def compute_wind_profile(
         boundaries.update(start + (end - start) * j / count for j in range(count + 1))
     boundaries = sorted(boundaries)
     sums = [[0.0, 0.0, 0.0] for _ in sample_points]
+    power_sums = [[0.0, 0.0] for _ in sample_points]
     covered_intervals = []
     felt_weighted = felt_length = 0.0
     max_felt = None
+    power_weighted = power_length = 0.0
+    max_power = None
     for start, end in pairwise(boundaries):
         piece_length = end - start
         if piece_length <= 0:
@@ -277,6 +316,13 @@ def compute_wind_profile(
             sums[n][0] += head * piece_length
             sums[n][1] += abs(cross) * piece_length
             sums[n][2] += piece_length
+            power = values["wind_power_w"]
+            if power is not None:
+                power_sums[n][0] += power * piece_length
+                power_sums[n][1] += piece_length
+                power_weighted += max(0.0, power) * piece_length
+                power_length += piece_length
+                max_power = power if max_power is None else max(max_power, power)
             rad = math.radians(values["bearing"])
             support = result.samples[n].support
             direction = WeightedDirection(math.sin(rad), math.cos(rad), piece_length)
@@ -301,10 +347,14 @@ def compute_wind_profile(
             sample.headwind, sample.cross_abs_mean = h / covered, c / covered
             support_length = support_bounds[p + 1] - support_bounds[p]
             sample.coverage = min(1.0, covered / support_length) if support_length > 0 else 0.0
+            power, power_covered = power_sums[n]
+            sample.wind_power_w = power / power_covered if power_covered > 0 else None
         elif aligned_wind[n] is not None:
             bearing = evaluate(distance)["bearing"]
             h, c = project_wind(aligned_wind[n], bearing)
             sample.headwind, sample.cross_abs_mean = h, abs(c)
+            if support_speeds[p] is not None:
+                sample.wind_power_w = wind_power(support_speeds[p], h, c)
             rad = math.radians(bearing)
             sample.support = [WeightedDirection(math.sin(rad), math.cos(rad), 1.0)]
 
@@ -315,6 +365,8 @@ def compute_wind_profile(
         mean_felt_speed=felt_weighted / felt_length if felt_length else None,
         max_felt_speed=max_felt,
         felt_covered_m=felt_length * scale,
+        mean_wind_power_w=power_weighted / power_length if power_length else None,
+        max_wind_power_w=max(0.0, max_power) if max_power is not None else None,
     )
     count = min(max_segments, math.ceil(total / SEGMENT_STEP_M))
     step = max(SEGMENT_STEP_M, total / max_segments)

@@ -59,6 +59,10 @@ export interface RouteWeatherSummary {
     /**
      * 
      */
+    maxWindPowerW?: number | null;
+    /**
+     * 
+     */
     windDistribution?: WindDistribution | null;
     /**
      * 
@@ -98,6 +102,7 @@ export function RouteWeatherSummaryFromJSONTyped(json: any, ignoreDiscriminator:
         'rainProbability': json['rain_probability'] === undefined ? undefined : json['rain_probability'] === null ? null : json['rain_probability'],
         'rainAmount': json['rain_amount'],
         'maxHeadwind': json['max_headwind'] === undefined ? undefined : json['max_headwind'] === null ? null : json['max_headwind'],
+        'maxWindPowerW': json['max_wind_power_w'] === undefined ? undefined : json['max_wind_power_w'] === null ? null : json['max_wind_power_w'],
         'windDistribution': json['wind_distribution'] === undefined ? undefined : json['wind_distribution'] === null ? null : WindDistributionFromJSON(json['wind_distribution']),
         'source': json['source'],
         'stationCorrected': json['station_corrected'] == null ? undefined : json['station_corrected'],
@@ -122,6 +127,7 @@ export function RouteWeatherSummaryToJSONTyped(value?: RouteWeatherSummary | nul
         'rain_probability': value['rainProbability'],
         'rain_amount': value['rainAmount'],
         'max_headwind': value['maxHeadwind'],
+        'max_wind_power_w': value['maxWindPowerW'],
         'wind_distribution': WindDistributionToJSON(value['windDistribution']),
         'source': value['source'],
         'station_corrected': value['stationCorrected'],

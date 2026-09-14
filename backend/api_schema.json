@@ -142,7 +142,7 @@
                 "type": "object"
             },
             "ForecastMapDetailOut": {
-                "description": "The route line and felt-wind arrows at one detail level.",
+                "description": "The route line and wind arrows at one detail level.",
                 "properties": {
                     "line": {
                         "items": {
@@ -353,6 +353,17 @@
                             }
                         ],
                         "title": "Wind Gust"
+                    },
+                    "wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Power W"
                     },
                     "wind_speed": {
                         "anyOf": [
@@ -1078,6 +1089,17 @@
                     "temp": {
                         "title": "Temp",
                         "type": "number"
+                    },
+                    "wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Power W"
                     }
                 },
                 "required": [
@@ -1126,6 +1148,17 @@
                     "max_rain_mm": {
                         "title": "Max Rain Mm",
                         "type": "number"
+                    },
+                    "max_wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Wind Power W"
                     },
                     "rain_amount": {
                         "title": "Rain Amount",
@@ -1176,18 +1209,10 @@
                 "type": "object"
             },
             "WindArrow": {
-                "description": "One felt-wind arrow for the map: only segments with complete felt-wind data.",
+                "description": "One real-wind arrow for the map: only segments with complete ground-wind data.",
                 "properties": {
                     "bearing": {
                         "title": "Bearing",
-                        "type": "number"
-                    },
-                    "felt_angle": {
-                        "title": "Felt Angle",
-                        "type": "number"
-                    },
-                    "felt_speed": {
-                        "title": "Felt Speed",
                         "type": "number"
                     },
                     "lat": {
@@ -1197,14 +1222,33 @@
                     "lon": {
                         "title": "Lon",
                         "type": "number"
+                    },
+                    "wind_dir": {
+                        "title": "Wind Dir",
+                        "type": "number"
+                    },
+                    "wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Power W"
+                    },
+                    "wind_speed": {
+                        "title": "Wind Speed",
+                        "type": "number"
                     }
                 },
                 "required": [
                     "lat",
                     "lon",
                     "bearing",
-                    "felt_speed",
-                    "felt_angle"
+                    "wind_speed",
+                    "wind_dir"
                 ],
                 "title": "WindArrow",
                 "type": "object"
@@ -1242,6 +1286,17 @@
                         ],
                         "title": "Max Felt Speed"
                     },
+                    "max_wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Wind Power W"
+                    },
                     "mean_felt_speed": {
                         "anyOf": [
                             {
@@ -1252,6 +1307,17 @@
                             }
                         ],
                         "title": "Mean Felt Speed"
+                    },
+                    "mean_wind_power_w": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Mean Wind Power W"
                     },
                     "tailwind_m": {
                         "minimum": 0,
@@ -1369,7 +1435,7 @@
         },
         "/api/forecast_jobs/{job_id}/map_detail": {
             "get": {
-                "description": "The route line and felt-wind arrows at more detail than the job result carries.\n\nThe map asks for this only once it is zoomed in far enough to show the difference.",
+                "description": "The route line and wind arrows at more detail than the job result carries.\n\nThe map asks for this only once it is zoomed in far enough to show the difference.",
                 "operationId": "core_api_route_weather_forecast_job_map_detail",
                 "parameters": [
                     {
