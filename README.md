@@ -31,7 +31,8 @@ Start at the [documentation index](docs/README.md), organized using Diátaxis:
 - `backend/`: Django ASGI application, models, migrations, and tests.
 - `frontend/`: Vue application with MapLibre maps and Plotly charts.
 - `packages/api/`: TypeScript API client imported by the frontend.
-- `docker/`: GraphHopper and Photon images and startup scripts.
+- `Dockerfile`: every image (`backend`, `frontend`, `graphhopper`, `photon`) as a build stage.
+- `docker/`: GraphHopper and Photon startup scripts and build certificates.
 - `data/graphhopper/`: routing configuration, custom models, and local data mounts.
 - `docs/`: project documentation in Markdown.
 

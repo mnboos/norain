@@ -1,7 +1,7 @@
 ﻿<script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, toRaw, toRefs, useTemplateRef, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, toRaw, toRefs, useTemplateRef, watch } from "vue";
 import Plotly from "./plotly";
-import type { Config, Data, Layout, PlotMouseEvent, PlotRestyleEvent } from "plotly.js";
+import type { Config, Data, Layout, PlotMouseEvent } from "plotly.js";
 import { useQuasar } from "quasar";
 import { nearestSampleByTime, selectedSeriesPoint, type TimedSample } from "@/utils/forecastSelection";
 
@@ -239,78 +239,84 @@ const config = ref<Partial<Config>>({
     displayModeBar: false,
 });
 
-// Separate point traces leave the source lines, isolated values and uncertainty bands intact.
-let selectionSources: number[] = [];
+// The selected sample is an SVG overlay, not extra Plotly traces: moving a trace's x/y is a
+// calc-level restyle (supplyDefaults, calcdata, a redraw of the whole figure), and with three
+// charts following every map hover that stalled the page.
+const selectionDots = ref<{ cx: number; cy: number; color: string }[]>([]);
+const selectionStroke = computed(() => ($q.dark.isActive ? "#e8eef2" : "#1b2733"));
 let selectionFrame: number | undefined;
 let ready = false;
 let disposed = false;
-let updatingSelection = false;
-let selectionPending = false;
-
-function buildRenderData(): Data[] {
-    const sources = data.value.flatMap((trace, index) =>
-        isScatter(trace) && trace.hoverinfo !== "skip" && trace.line?.width !== 0 ? [{ trace, index }] : [],
-    );
-    selectionSources = sources.map(source => source.index);
-    const markers: Data[] = sources.map(({ trace, index }) => {
-        return {
-            type: "scatter", mode: "markers", x: [], y: [],
-            uid: `selection-${index}`, meta: { selectionMarker: true },
-            xaxis: trace.xaxis, yaxis: trace.yaxis,
-            legendgroup: trace.legendgroup, showlegend: false, hoverinfo: "skip",
-            marker: {
-                size: 10,
-                color: trace.line?.color ?? "#2f7fd8",
-                line: { width: 2, color: $q.dark.isActive ? "#e8eef2" : "#1b2733" },
-            },
-        };
-    });
-    return [...data.value, ...markers];
-}
-
-function scheduleSelection() {
-    if (disposed) return;
-    selectionPending = true;
-    if (!ready || updatingSelection || selectionFrame !== undefined) return;
-    selectionFrame = requestAnimationFrame(() => {
-        selectionFrame = undefined;
-        // Cleared here, not in updateSelection: a schedule during its await sets it again.
-        selectionPending = false;
-        void updateSelection();
-    });
-}
-
 // A getter, so the checks after an await are not narrowed away by the check before it.
 const isDisposed = () => disposed;
 
-async function updateSelection() {
-    const el = chart.value;
-    if (!el || !ready || disposed || !selectionSources.length) return;
-    updatingSelection = true;
-    const index = props.selectedSample ?? -1;
-    const sample = props.samples?.[index];
-    const points = selectionSources.map(sourceIndex => {
-        const trace = el.data[sourceIndex];
-        if (!trace || !isScatter(trace) || trace.visible === false || trace.visible === "legendonly" || !sample) return undefined;
-        return selectedSeriesPoint(trace, index, sample.elapsedS / 60);
-    });
-    try {
-        await Plotly.restyle(el, {
-            x: points.map(point => point ? [point.x] : []),
-            y: points.map(point => point ? [point.y] : []),
-            // The legend can toggle a whole group, including these non-legend marker traces;
-            // a marker without a point has no data, so it draws nothing while visible.
-            visible: true,
-        }, selectionSources.map((_, i) => data.value.length + i));
-    } finally {
-        updatingSelection = false;
-        if (selectionPending) scheduleSelection();
-    }
+/** The laid-out axis fields the overlay needs. Plotly has no public data -> pixel API, so these
+ *  come from `_fullLayout`; should an upgrade move them, the dots vanish rather than misplace. */
+interface PlotAxis {
+    _offset: number;
+    _length: number;
+    c2p: (value: number) => number;
+}
+function isPlotAxis(value: unknown): value is PlotAxis {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        typeof Reflect.get(value, "_offset") === "number" &&
+        typeof Reflect.get(value, "_length") === "number" &&
+        typeof Reflect.get(value, "c2p") === "function"
+    );
+}
+/** A trace's axis id ("x", "y2" or unset) -> its laid-out axis ("xaxis", "yaxis2"). */
+function plotAxis(el: HTMLElement, letter: "x" | "y", id: unknown): PlotAxis | undefined {
+    const fullLayout: unknown = Reflect.get(el, "_fullLayout");
+    if (typeof fullLayout !== "object" || fullLayout === null) return undefined;
+    const axis: unknown = Reflect.get(fullLayout, `${letter}axis${typeof id === "string" ? id.slice(1) : ""}`);
+    return isPlotAxis(axis) ? axis : undefined;
+}
+/** Pixel position inside the chart, or undefined outside the plot area. */
+function toPixel(axis: PlotAxis, value: number): number | undefined {
+    const offset = axis.c2p(value);
+    return Number.isFinite(offset) && offset >= 0 && offset <= axis._length ? axis._offset + offset : undefined;
 }
 
-function onRestyle([, indices]: PlotRestyleEvent) {
-    if (indices.some(index => index < data.value.length)) scheduleSelection();
+function scheduleSelection() {
+    if (disposed || selectionFrame !== undefined) return;
+    selectionFrame = requestAnimationFrame(() => {
+        selectionFrame = undefined;
+        updateSelection();
+    });
 }
+
+function updateSelection() {
+    const el = chart.value;
+    const index = props.selectedSample ?? -1;
+    const sample = props.samples?.[index];
+    if (!el || !ready || disposed || !sample) {
+        selectionDots.value = [];
+        return;
+    }
+    // Sources are the drawn lines only; bands and invisible helper traces carry no dot.
+    selectionDots.value = el.data.flatMap(trace => {
+        if (
+            !isScatter(trace) ||
+            trace.hoverinfo === "skip" ||
+            trace.line?.width === 0 ||
+            trace.visible === false ||
+            trace.visible === "legendonly"
+        ) {
+            return [];
+        }
+        const point = selectedSeriesPoint(trace, index, sample.elapsedS / 60);
+        const xaxis = plotAxis(el, "x", trace.xaxis);
+        const yaxis = plotAxis(el, "y", trace.yaxis);
+        if (!point || !xaxis || !yaxis) return [];
+        const cx = toPixel(xaxis, point.x);
+        const cy = toPixel(yaxis, point.y);
+        const color = typeof trace.line?.color === "string" ? trace.line.color : "#2f7fd8";
+        return cx === undefined || cy === undefined ? [] : [{ cx, cy, color }];
+    });
+}
+
 watch([() => props.selectedSample, () => props.samples], scheduleSelection);
 
 async function render() {
@@ -319,11 +325,13 @@ async function render() {
     // (jsdom has no document.fonts)
     const fontDocument: Partial<Document> = document;
     ready = false;
+    // The old dots sit at the old figure's pixels; drop them until the new layout exists.
+    selectionDots.value = [];
     await fontDocument.fonts?.ready;
     if (disposed) return;
     const el = chart.value;
     if (el) {
-        await Plotly.react(el, buildRenderData(), layout.value, config.value);
+        await Plotly.react(el, data.value, layout.value, config.value);
         if (isDisposed()) return;
         ready = true;
         Plotly.Plots.resize(el);
@@ -345,7 +353,8 @@ onMounted(async () => {
     chart.value?.on("plotly_hover", showPoint);
     chart.value?.on("plotly_click", showPoint);
     chart.value?.on("plotly_unhover", hideTooltip);
-    chart.value?.on("plotly_restyle", onRestyle);
+    // After every react, resize, re-theme and legend toggle: the axes (and visibility) may have moved.
+    chart.value?.on("plotly_afterplot", scheduleSelection);
 });
 
 watch(
@@ -377,7 +386,7 @@ onBeforeUnmount(() => {
         chart.value.removeAllListeners("plotly_hover");
         chart.value.removeAllListeners("plotly_click");
         chart.value.removeAllListeners("plotly_unhover");
-        chart.value.removeAllListeners("plotly_restyle");
+        chart.value.removeAllListeners("plotly_afterplot");
         Plotly.purge(chart.value);
     }
 });
@@ -386,6 +395,19 @@ onBeforeUnmount(() => {
 <template>
     <div class="chart-shell" @pointermove="moveTooltip" @pointerleave="hideTooltip" @keydown.esc="hideTooltip">
         <div ref="chartRef" class="chart-container" />
+        <svg class="chart-selection" aria-hidden="true">
+            <circle
+                v-for="(dot, i) in selectionDots"
+                :key="i"
+                data-testid="chart-selection-point"
+                :cx="dot.cx"
+                :cy="dot.cy"
+                r="5"
+                :fill="dot.color"
+                :stroke="selectionStroke"
+                stroke-width="2"
+            />
+        </svg>
         <Transition name="chart-tooltip">
             <div
                 v-if="tooltip"
@@ -411,6 +433,15 @@ onBeforeUnmount(() => {
 .chart-container {
     width: 100%;
     height: 100%;
+}
+/* Plotly's SVG starts at the container's top-left, so plot pixels are overlay pixels. */
+.chart-selection {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
 }
 .chart-tooltip {
     position: absolute;

@@ -9,7 +9,7 @@ IMPORT_HEAP="${PHOTON_IMPORT_HEAP:-4g}"
 # manually-prepared index in the mounted volume is left untouched.
 #
 # Two artifact types are supported (browse https://download1.graphhopper.com/public/ — the version
-# token must be 1.0 to match the photon-1.0.1.jar in photon.Dockerfile):
+# token must be 1.0 to match the photon-1.0.1.jar in the Dockerfile's photon stage):
 #   * country/region:   photon-dump-<region>-1.0-latest.jsonl.zst  -> imported here (builds the index)
 #   * continent/planet: photon-db-<region>-1.0-latest.tar.bz2      -> extracted here (prebuilt index)
 if [ ! -d "${PHOTON_DATA_DIR}/photon_data" ]; then

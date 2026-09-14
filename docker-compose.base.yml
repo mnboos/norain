@@ -23,7 +23,8 @@ services:
   graphhopper:
     build:
       context: .
-      dockerfile: docker/graphhopper.Dockerfile
+      dockerfile: Dockerfile
+      target: graphhopper
     container_name: graphhopper
     deploy:
       resources:
@@ -55,7 +56,8 @@ services:
   photon:
     build:
       context: .
-      dockerfile: docker/photon.Dockerfile
+      dockerfile: Dockerfile
+      target: photon
     container_name: photon
     environment:
       # Photon dump/index matching OSM_DATA_URL's area. See .env. A *.jsonl.zst URL is imported,

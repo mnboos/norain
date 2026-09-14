@@ -1,4 +1,0 @@
-FROM debian:bookworm-slim
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends osmium-tool \
-    && rm -rf /var/lib/apt/lists/*

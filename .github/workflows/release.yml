@@ -53,15 +53,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - image: backend
-            file: docker/backend.Dockerfile
-          - image: frontend
-            file: docker/frontend.Dockerfile
-          - image: graphhopper
-            file: docker/graphhopper.Dockerfile
-          - image: photon
-            file: docker/photon.Dockerfile
+        # Each image is a stage of the same Dockerfile.
+        image: [backend, frontend, graphhopper, photon]
     steps:
       - uses: actions/checkout@v4
       # The production VPS (Oracle Ampere A1) is arm64; QEMU builds that on the amd64 runner.
@@ -75,7 +68,8 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ matrix.file }}
+          file: Dockerfile
+          target: ${{ matrix.image }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}:${{ github.sha }}

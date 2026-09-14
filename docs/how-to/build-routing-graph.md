@@ -12,7 +12,7 @@ GraphHopper stores its profiles, encoded values and CH preparations with the gra
 refuses to load a graph built with a different configuration. Build with:
 
 - the same image, or at least the same GraphHopper jar version (pinned in
-  `docker/graphhopper.Dockerfile`), and
+  the `graphhopper` stage of `Dockerfile`), and
 - the same `data/graphhopper/graphhopper-config.yaml` and `data/graphhopper/models/`
   as the commit deployed on the VPS.
 

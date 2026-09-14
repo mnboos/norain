@@ -1,15 +1,15 @@
 .git
 .github
 .idea
-.venv
-node_modules
-frontend/node_modules
-packages/api/node_modules
+# `**/`: a bare name only matches at the context root, and backend/.venv would overwrite
+# the image's venv on `COPY backend/`.
+**/.venv
+**/node_modules
 data
 db
 backend/db.sqlite3
 .env
 .env.*
 *.sqlite3
-__pycache__
-.pytest_cache
+**/__pycache__
+**/.pytest_cache
