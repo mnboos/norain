@@ -4,6 +4,9 @@ x-healthy: &healthy
 # Shared by every service built from BACKEND_IMAGE. `<<:` merges shallowly: a service that
 # sets environment/depends_on/networks itself REPLACES these, so re-include what it needs.
 x-app: &app
+  extends:
+    service: backend
+    file: docker-compose.base.yml
   image: ${BACKEND_IMAGE:?BACKEND_IMAGE must be set}
   restart: unless-stopped
   env_file: .env
@@ -29,6 +32,9 @@ x-slow-start: &slow-start
 
 services:
   caddy:
+    extends:
+      service: caddy
+      file: docker-compose.base.yml
     image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE must be set}
     restart: unless-stopped
     depends_on:

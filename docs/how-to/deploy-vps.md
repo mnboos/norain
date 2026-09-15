@@ -105,7 +105,38 @@ Follow both with
 After they are ready, verify `https://YOUR_DOMAIN/healthz`, sign up, verify the
 email, create a route, and confirm the worker computes its geometry.
 
-To roll back, run the same command with the prior known-good immutable SHA. The
+### Build images on the VPS
+
+The production services inherit their build definitions from `docker-compose.base.yml`.
+To build from the checked-out source, set `COMPOSE_FILE=docker-compose.prod.yml` in
+the VPS `.env` (included in the production template). Set the image variables to
+local tags such as `BACKEND_IMAGE=norain-backend:local`,
+`FRONTEND_IMAGE=norain-frontend:local`, `GRAPHHOPPER_IMAGE=norain-graphhopper:local`,
+and `PHOTON_IMAGE=norain-photon:local`, then run:
+
+```bash
+cd /srv/norain
+just deploy-local
+```
+
+This recipe explicitly selects the production Compose file, builds the application
+images, pulls PostGIS and Redis, runs migrations, collects static files, and starts
+the services. If Just is not installed, the equivalent commands are:
+
+```bash
+cd /srv/norain
+docker compose build
+docker compose pull db redis
+docker compose run --rm --pull never backend python manage.py migrate --noinput
+docker compose run --rm --pull never --user root backend python manage.py collectstatic --noinput
+docker compose up -d --pull never --remove-orphans
+```
+
+`deploy/release.sh` pulls published images; use `just deploy-local` for local
+builds. Building the GraphHopper image still requires a separately prepared routing
+graph as described above.
+
+To roll back a published-image deployment, run the release command with the prior known-good immutable SHA. The
 configured bind-mount directories persist PostgreSQL, Caddy certificates, and
 imported geographic data across releases.
 
