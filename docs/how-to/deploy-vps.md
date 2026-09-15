@@ -52,9 +52,11 @@ GEOCODER_API_URL=http://photon:2322/api
 GRAPHHOPPER_API_URL=http://graphhopper:8989
 ```
 
-Set `DOMAIN`, `ACME_EMAIL`, `FRONTEND_URL`, all Django/PostgreSQL/SMTP secrets,
+Set `DOMAIN`, `ACME_EMAIL`, all Django/PostgreSQL/SMTP secrets,
 and the desired map-data URLs. Use a transactional SMTP provider with a domain
 sender: sign-up is deliberately blocked until email verification is complete.
+The template derives `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, and
+`FRONTEND_URL` from `DOMAIN`.
 
 Create `/etc/norain/restic-password`, restrict it to root and the `norain` user,
 and set `RESTIC_REPOSITORY` plus `RESTIC_PASSWORD_FILE` in the server
