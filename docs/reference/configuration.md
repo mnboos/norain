@@ -33,6 +33,9 @@ take precedence over values loaded by `python-dotenv`.
 | `GRAPHHOPPER_IMPORT_ONLY` | `false` | `true` exits after importing, for [building a graph to ship](../how-to/build-routing-graph.md) |
 | `GRAPHHOPPER_MEM_LIMIT` | `8g` | GraphHopper container memory and swap limit |
 | `PHOTON_INDEX_URL` | `https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst` | Photon import |
+| `PHOTON_INDEX_FILE` | Empty | Local artifact path inside the container; takes precedence over the URL |
+| `PHOTON_ALLOW_DOWNLOAD` | `true`; production forces `false` | Permit downloading a missing index |
+| `PHOTON_IMPORT_ONLY` | `false` | Prepare/reuse the index and exit without serving |
 | `PHOTON_IMPORT_HEAP` | `4g` | Photon import JVM heap |
 | `APP_STORAGE_PATH` | Required by Compose interpolation | PostgreSQL bind-mount root |
 | `TZ` | No Compose default | Passed to the PostgreSQL service; does not configure every service |

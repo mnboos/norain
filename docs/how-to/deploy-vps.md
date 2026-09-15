@@ -14,8 +14,8 @@ then clone this repository at `/srv/norain`.
 GraphHopper does not import on the VPS: [build the routing graph on another
 machine](build-routing-graph.md) and copy it into `graphhopper/cache` before the first
 start. Serving Switzerland needs a heap of about 3 GB; DACH roughly 10–14 GB, or a
-3 GB heap with `GRAPHHOPPER_DATAACCESS=MMAP`. Photon still imports its index on first
-boot, using `PHOTON_IMPORT_HEAP` (4 GB by default). The published images are built for
+3 GB heap with `GRAPHHOPPER_DATAACCESS=MMAP`. Prepare Photon with a manual import before first startup (see below), using
+`PHOTON_IMPORT_HEAP` (4 GB by default). The published images are built for
 both amd64 and arm64, so ARM hosts such as Oracle's Ampere A1 work. Do not expose
 GraphHopper, Photon, PostgreSQL, or Django directly.
 
@@ -70,6 +70,44 @@ to the image packages:
 echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin
 ```
 
+## Import Photon manually
+
+Photon runs on an isolated Docker network in production. It cannot download an
+index there; changing DNS servers does not provide Internet access. Normal startup
+reuses the index at `${APP_STORAGE_PATH}/photon/photon_data` and fails with instructions
+if it is missing.
+
+Download the Photon **1.0** artifact matching your region on a machine with Internet
+access and copy it to the VPS. For the default region:
+
+```bash
+wget -O photon-dump.jsonl.zst https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst
+scp photon-dump.jsonl.zst norain@YOUR_VPS:/srv/norain-data/photon/dump.jsonl.zst
+```
+
+Use your actual `APP_STORAGE_PATH` if it differs from `/srv/norain-data`. On the VPS,
+pull a Photon image containing the local-import entrypoint, or build it from this
+checkout (`docker compose -f docker-compose.prod.yml build photon`), then import:
+
+```bash
+cd /srv/norain
+docker compose -f docker-compose.prod.yml stop photon
+docker compose -f docker-compose.prod.yml run --rm --no-deps \
+  -e PHOTON_INDEX_FILE=/photon_data/dump.jsonl.zst \
+  -e PHOTON_IMPORT_ONLY=true photon
+docker compose -f docker-compose.prod.yml up -d photon
+```
+
+The import runs without network access and exits when complete. The source dump is
+kept; you can remove it after success. Plain `.jsonl` dumps and prebuilt `.tar.bz2`
+indexes are also supported. Failed imports clean up their temporary index so a
+retry can start cleanly. Do not run multiple imports against the same data directory.
+
+An existing `photon_data` directory is always reused. To replace an index, stop
+Photon and move that directory to a backup location before importing. You can also
+copy a completed `photon_data` directory from another machine using the same Photon
+version; stop Photon on both machines during the copy.
+
 ## First deployment and updates
 
 This release uses a fresh PostGIS schema and does not import SQLite data. Before its
@@ -101,7 +139,7 @@ to local `HEAD`, which CI must already have published) and then checks the healt
 endpoint. It reads `VPS_USER`, `VPS_HOST`, and `VPS_PUBLIC_HEALTH_URL` from the local
 `.env`, and your SSH key must be accepted by the deployment user.
 
-The first Photon import can take a long time; GraphHopper only loads the copied graph.
+Photon and GraphHopper load the indexes prepared above.
 Follow both with
 `docker compose --env-file .env -f docker-compose.prod.yml logs -f graphhopper photon`.
 After they are ready, verify `https://YOUR_DOMAIN/healthz`, sign up, verify the

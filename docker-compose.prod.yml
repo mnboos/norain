@@ -23,7 +23,7 @@ x-routing-deps: &routing-deps
   <<: *app-deps
   graphhopper: *healthy
 
-# Photon downloads and imports its data on first boot.
+# Allow time for Photon to load its prepared index.
 x-slow-start: &slow-start
   interval: 30s
   timeout: 10s
@@ -147,7 +147,8 @@ services:
       file: docker-compose.base.yml
     image: ${PHOTON_IMAGE:?PHOTON_IMAGE must be set}
     environment:
-      PHOTON_INDEX_URL: ${PHOTON_INDEX_URL:?PHOTON_INDEX_URL must be set}
+      # Import a local artifact explicitly before startup; this network has no Internet access.
+      PHOTON_ALLOW_DOWNLOAD: "false"
     volumes:
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/photon:/photon_data
     healthcheck:

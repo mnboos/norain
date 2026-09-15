@@ -67,7 +67,7 @@ COPY docker/photon-entrypoint.sh /entrypoint.sh
 COPY import-photon-dump.sh import-photon-dump.sh
 RUN chmod +x /entrypoint.sh
 
-# The entrypoint downloads the index named by $PHOTON_INDEX_URL (if absent) then starts photon.
+# The entrypoint reuses a prepared index, or imports an artifact when configured.
 ENTRYPOINT ["/entrypoint.sh"]
 
 
