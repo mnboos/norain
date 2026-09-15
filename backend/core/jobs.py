@@ -19,6 +19,7 @@ from .entitlements import entitlements_for
 from .geo import simplify_line
 from .grid import MAX_CELL_AGE
 from .models import ForecastJob
+from .ride_quality import score_sample, wind_effort, wind_effort_level
 from .stations import api_key, ride_in_window
 from .uncertainty import METRICS
 
@@ -162,6 +163,8 @@ def wind_arrows_at_detail(result: dict, detail: str) -> list[dict]:
                 "wind_speed": round(segment["wind_speed"], 1),
                 "wind_dir": round(segment["wind_dir"], 1),
                 "wind_power_w": round(power) if power is not None else None,
+                "wind_effort_level": wind_effort_level(power),
+                "wind_effort": round(wind_effort(power), 3),
             }
         )
         if spacing is not None:
@@ -199,9 +202,11 @@ def forecast_view(job: ForecastJob) -> dict:
     view["line"] = line_at_detail(result, "coarse")
     view["wind_arrows"] = wind_arrows_at_detail(result, "coarse")
     samples = result.get("samples") or []
+    # Ride quality is scored here, on read, so a change to RIDE_QUALITY shows on the next
+    # request rather than after every stored job has been rebuilt.
     view["samples"] = [
         {
-            **sample,
+            **score_sample(sample),
             "uncertainty": (
                 {k: v for k, v in sample["uncertainty"].items() if k not in ("models", "requested_models")}
                 if sample.get("uncertainty")
@@ -210,6 +215,11 @@ def forecast_view(job: ForecastJob) -> dict:
         }
         for sample in samples
     ]
+    if isinstance(result.get("summary"), dict):
+        view["summary"] = {
+            **result["summary"],
+            "max_wind_effort_level": wind_effort_level(result["summary"].get("max_wind_power_w")),
+        }
     view["uncertainty_partial"] = uncertainty_partial(samples)
     view["job_id"] = str(job.id)
     view["version"] = job.updated_at.isoformat() if job.updated_at else ""

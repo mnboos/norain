@@ -8,6 +8,7 @@ import {
     symSharpSchedule,
 } from "@quasar/extras/material-symbols-sharp";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
+import { placeLabel } from "@/utils/placeLabel";
 import type { PlacesSearchResult, RecurringRouteIn } from "@norain/api/models";
 import { usePlaceSearch } from "@/queries/places";
 
@@ -54,6 +55,11 @@ function makeOnFilter(filter: Ref<string>) {
 
 const onFilterStart = makeOnFilter(filterStart);
 const onFilterDest = makeOnFilter(filterDest);
+
+// Select the chosen place's name on focus, so typing replaces it instead of appending to it.
+function selectInputText(e: Event) {
+    if (e.target instanceof HTMLInputElement) e.target.select();
+}
 
 function toggleDay(day: number) {
     const idx = days.value.indexOf(day);
@@ -139,24 +145,18 @@ function onClose() {
                     use-input
                     type="search"
                     hide-dropdown-icon
+                    hide-selected
+                    fill-input
+                    :option-label="placeLabel"
                     :input-debounce="100"
                     :options="placesStart ?? []"
                     @filter="onFilterStart"
+                    @focus="selectInputText"
                 >
-                    <template #selected-item="scope">
-                        <PlaceSearchItem
-                            v-if="scope.opt"
-                            :feature="scope.opt"
-                            :focused="false"
-                            inline
-                            :clickable="false"
-                        />
-                    </template>
                     <template #option="scope">
                         <PlaceSearchItem
                             :feature="scope.opt"
                             :focused="scope.focused"
-                            :inline="false"
                             clickable
                             @click="scope.toggleOption(scope.opt)"
                         />
@@ -171,24 +171,18 @@ function onClose() {
                     use-input
                     type="search"
                     hide-dropdown-icon
+                    hide-selected
+                    fill-input
+                    :option-label="placeLabel"
                     :input-debounce="100"
                     :options="placesDest ?? []"
                     @filter="onFilterDest"
+                    @focus="selectInputText"
                 >
-                    <template #selected-item="scope">
-                        <PlaceSearchItem
-                            v-if="scope.opt"
-                            :feature="scope.opt"
-                            :focused="false"
-                            inline
-                            :clickable="false"
-                        />
-                    </template>
                     <template #option="scope">
                         <PlaceSearchItem
                             :feature="scope.opt"
                             :focused="scope.focused"
-                            :inline="false"
                             clickable
                             @click="scope.toggleOption(scope.opt)"
                         />

@@ -14,20 +14,19 @@
  */
 
 import { mapValues } from '../runtime';
-import type { RouteThumbnailSample } from './RouteThumbnailSample';
-import {
-    RouteThumbnailSampleFromJSON,
-    RouteThumbnailSampleFromJSONTyped,
-    RouteThumbnailSampleToJSON,
-    RouteThumbnailSampleToJSONTyped,
-} from './RouteThumbnailSample';
-
 /**
+ * The route-list glyph: the simplified path and the ride quality of its worst sample.
  * 
+ * The stored blob keeps the raw sample weather; only the verdict leaves the server, scored
+ * when the list is served (see ``core.ride_quality``).
  * @export
  * @interface RouteThumbnail
  */
 export interface RouteThumbnail {
+    /**
+     * 
+     */
+    computedAt?: string | null;
     /**
      * 
      */
@@ -39,11 +38,11 @@ export interface RouteThumbnail {
     /**
      * 
      */
-    samples?: Array<RouteThumbnailSample | null>;
+    rideLabel?: string | null;
     /**
      * 
      */
-    computedAt?: string | null;
+    rideScore?: number | null;
 }
 
 /**
@@ -63,10 +62,11 @@ export function RouteThumbnailFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
+        'computedAt': json['computed_at'] === undefined ? undefined : json['computed_at'] === null ? null : json['computed_at'],
         'departure': json['departure'] === undefined ? undefined : json['departure'] === null ? null : json['departure'],
         'path': json['path'] == null ? undefined : json['path'],
-        'samples': json['samples'] == null ? undefined : ((json['samples'] as Array<any>).map(RouteThumbnailSampleFromJSON)),
-        'computedAt': json['computed_at'] === undefined ? undefined : json['computed_at'] === null ? null : json['computed_at'],
+        'rideLabel': json['ride_label'] === undefined ? undefined : json['ride_label'] === null ? null : json['ride_label'],
+        'rideScore': json['ride_score'] === undefined ? undefined : json['ride_score'] === null ? null : json['ride_score'],
     };
 }
 
@@ -81,10 +81,11 @@ export function RouteThumbnailToJSONTyped(value?: RouteThumbnail | null, ignoreD
 
     return {
         
+        'computed_at': value['computedAt'],
         'departure': value['departure'],
         'path': value['path'],
-        'samples': value['samples'] == null ? undefined : ((value['samples'] as Array<any>).map(RouteThumbnailSampleToJSON)),
-        'computed_at': value['computedAt'],
+        'ride_label': value['rideLabel'],
+        'ride_score': value['rideScore'],
     };
 }
 

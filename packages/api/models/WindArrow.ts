@@ -23,6 +23,10 @@ export interface WindArrow {
     /**
      * 
      */
+    bearing: number;
+    /**
+     * 
+     */
     lat: number;
     /**
      * 
@@ -31,30 +35,34 @@ export interface WindArrow {
     /**
      * 
      */
-    bearing: number;
-    /**
-     * 
-     */
-    windSpeed: number;
-    /**
-     * 
-     */
     windDir: number;
     /**
      * 
      */
+    windEffort?: number;
+    /**
+     * 
+     */
+    windEffortLevel?: string | null;
+    /**
+     * 
+     */
     windPowerW?: number | null;
+    /**
+     * 
+     */
+    windSpeed: number;
 }
 
 /**
  * Check if a given object implements the WindArrow interface.
  */
 export function instanceOfWindArrow(value: object): value is WindArrow {
+    if (!('bearing' in value) || value['bearing'] === undefined) return false;
     if (!('lat' in value) || value['lat'] === undefined) return false;
     if (!('lon' in value) || value['lon'] === undefined) return false;
-    if (!('bearing' in value) || value['bearing'] === undefined) return false;
-    if ((!('windSpeed' in (value as Record<string, any>)) && !('wind_speed' in (value as Record<string, any>))) || ((value as Record<string, any>)['windSpeed'] === undefined && (value as Record<string, any>)['wind_speed'] === undefined)) return false;
     if ((!('windDir' in (value as Record<string, any>)) && !('wind_dir' in (value as Record<string, any>))) || ((value as Record<string, any>)['windDir'] === undefined && (value as Record<string, any>)['wind_dir'] === undefined)) return false;
+    if ((!('windSpeed' in (value as Record<string, any>)) && !('wind_speed' in (value as Record<string, any>))) || ((value as Record<string, any>)['windSpeed'] === undefined && (value as Record<string, any>)['wind_speed'] === undefined)) return false;
     return true;
 }
 
@@ -68,12 +76,14 @@ export function WindArrowFromJSONTyped(json: any, ignoreDiscriminator: boolean):
     }
     return {
         
+        'bearing': json['bearing'],
         'lat': json['lat'],
         'lon': json['lon'],
-        'bearing': json['bearing'],
-        'windSpeed': json['wind_speed'],
         'windDir': json['wind_dir'],
+        'windEffort': json['wind_effort'] == null ? undefined : json['wind_effort'],
+        'windEffortLevel': json['wind_effort_level'] === undefined ? undefined : json['wind_effort_level'] === null ? null : json['wind_effort_level'],
         'windPowerW': json['wind_power_w'] === undefined ? undefined : json['wind_power_w'] === null ? null : json['wind_power_w'],
+        'windSpeed': json['wind_speed'],
     };
 }
 
@@ -88,12 +98,14 @@ export function WindArrowToJSONTyped(value?: WindArrow | null, ignoreDiscriminat
 
     return {
         
+        'bearing': value['bearing'],
         'lat': value['lat'],
         'lon': value['lon'],
-        'bearing': value['bearing'],
-        'wind_speed': value['windSpeed'],
         'wind_dir': value['windDir'],
+        'wind_effort': value['windEffort'],
+        'wind_effort_level': value['windEffortLevel'],
         'wind_power_w': value['windPowerW'],
+        'wind_speed': value['windSpeed'],
     };
 }
 

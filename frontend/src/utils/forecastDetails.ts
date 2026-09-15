@@ -6,13 +6,36 @@ export function swissTime(iso: string): string {
     return new Date(iso).toLocaleTimeString("de-CH", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" });
 }
 
+// Largest rain rate of the deterministic main run, rounded the way the card displays it.
+function mainRunPeakRate(samples: ForecastSampleOut[]): number | null {
+    const rates = samples.flatMap(s => (s.rainRateMmH == null ? [] : [s.rainRateMmH]));
+    return rates.length ? Math.round(Math.max(...rates) * 10) / 10 : null;
+}
+
 export function forecastHeadline(summary: RouteWeatherSummary, samples: ForecastSampleOut[]): string {
     if (!samples.length) return "Keine Wetterdaten";
     const p = summary.rainProbability;
     if (p == null) return summary.willRain ? "Regen erwartet" : "Voraussichtlich trocken";
-    if (p === 0) return "Voraussichtlich trocken";
+    // `willRain` is the backend's ensemble verdict (POP_VERDICT). A few wet members below it
+    // are shown as the risk percentage, not as a headline next to a dry "Regen max.". The
+    // main run raining still counts, or the headline would say dry beside a non-zero rate.
+    if (!summary.willRain && !(mainRunPeakRate(samples) ?? 0)) return "Voraussichtlich trocken";
     const time = summary.firstRainEta ? ` ab ca. ${swissTime(summary.firstRainEta)} Uhr` : "";
     return `Regen möglich${time}`;
+}
+
+/**
+ * The "Regen max." figure, from the same forecast as the headline: when the ensemble expects
+ * rain, the amount its wet members predict (`rainAmount`, mm/h at the peak-risk point) —
+ * the main run is a single scenario and is often dry exactly where the members are not.
+ */
+export function peakRain(forecast: RouteForecastOut): string | null {
+    const { summary, samples } = forecast;
+    const mainRun = mainRunPeakRate(samples);
+    if (summary.rainProbability != null && summary.willRain) {
+        return Math.max(summary.rainAmount, mainRun ?? 0).toFixed(1);
+    }
+    return mainRun == null ? null : mainRun.toFixed(1);
 }
 
 export function peakRisk(forecast: RouteForecastOut): string {

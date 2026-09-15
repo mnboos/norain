@@ -24,7 +24,7 @@ export function useIsLocalhost() {
  */
 export function useBackendHost(protocol?: string  ) {
     const isLocalhost = useIsLocalhost();
-    const host = isLocalhost ? `${location.hostname}:8000` : location.host;
+    const host = isLocalhost ? `${location.hostname}:${import.meta.env.VITE_BACKEND_PORT}` : location.host;
     protocol = protocol ?? location.protocol;
     return `${protocol}//${host}`;
 }

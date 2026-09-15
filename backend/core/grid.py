@@ -371,15 +371,17 @@ async def get_or_fetch_forecast_cell(
     source = "open-meteo"
     try:
         data = await _fetch_open_meteo(lat_r, lon_r, forecast_days, day_key.isoformat())
-    except (httpx.HTTPError, KeyError, ValueError):
-        pass
+    except (httpx.HTTPError, KeyError, ValueError) as exc:
+        # Logged: the calling task still reports success, so a TLS, DNS or rate-limit
+        # failure is otherwise visible only as a failed job.
+        logger.warning("get_or_fetch_forecast_cell: Open-Meteo fetch failed for ({}, {}): {}", lat_r, lon_r, exc)
 
     if data is None:
         source = "openweathermap"
         try:
             data = await _fetch_owm(lat_r, lon_r)
-        except (httpx.HTTPError, KeyError, ValueError):
-            pass
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            logger.warning("get_or_fetch_forecast_cell: OWM fetch failed for ({}, {}): {}", lat_r, lon_r, exc)
 
     if data is None:
         logger.warning(

@@ -5,10 +5,9 @@ must never spend an API request: everything is read from already-warm grid cells
 sample point whose cell is cold stays ``None`` rather than being guessed at. The frontend
 paints those spans neutral grey.
 
-Scoring deliberately does *not* happen here. ``frontend/src/utils/rideQuality.ts`` owns the
-rain/wind/temperature curves and the colour ramp, and the full route map already uses them;
-a second implementation in Python would drift and the thumbnail would eventually disagree
-with the map about the same route. So this module ships the raw numbers the scorer reads.
+Scoring deliberately does *not* happen here. The blob stores the raw numbers
+``core.ride_quality`` reads, and the route list scores them when it is served - so a change
+to the scoring config shows at once instead of after every thumbnail has been rebuilt.
 """
 
 from datetime import datetime
@@ -26,9 +25,10 @@ from .weather import compute_route_weather
 # A ~40 px glyph cannot show more than this, and the blob travels with every list response.
 MAX_THUMBNAIL_VERTICES = 64
 
-# The fields rideScore() reads, and nothing else.
+# The fields core.ride_quality.ride_score() reads, and nothing else.
 _SAMPLE_FIELDS = (
-    "rain_mm", "precipitation_interval_s", "rain_rate_mm_h", "temp", "headwind", "wind_power_w",
+    "rain_mm", "precipitation_interval_s", "rain_rate_mm_h", "pop", "rain_if_wet", "temp", "headwind",
+    "wind_power_w",
 )
 
 
@@ -107,7 +107,10 @@ async def compute_route_thumbnail(route: RecurringRoute) -> dict | None:
         total_seconds=route.total_seconds,
         total_distance_m=route.total_distance_m,
         cache_only=True,
-        include_uncertainty=False,
+        # The rain score combines the ensemble's chance and amount (`pop`, `rain_if_wet`), so
+        # the list reads warm ensemble cells too - cache-only, like the forecast cells - or it
+        # would score the main run alone and disagree with the map.
+        include_uncertainty=True,
         vertex_times=route.vertex_times,
         include_segments=False,
         station_correction_enabled=limits.station_correction,

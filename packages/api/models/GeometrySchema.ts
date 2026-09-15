@@ -23,11 +23,11 @@ export interface GeometrySchema {
     /**
      * 
      */
-    type?: string;
+    coordinates: Array<number>;
     /**
      * 
      */
-    coordinates: Array<number>;
+    type?: string;
 }
 
 /**
@@ -48,8 +48,8 @@ export function GeometrySchemaFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
-        'type': json['type'] == null ? undefined : json['type'],
         'coordinates': json['coordinates'],
+        'type': json['type'] == null ? undefined : json['type'],
     };
 }
 
@@ -64,8 +64,8 @@ export function GeometrySchemaToJSONTyped(value?: GeometrySchema | null, ignoreD
 
     return {
         
-        'type': value['type'],
         'coordinates': value['coordinates'],
+        'type': value['type'],
     };
 }
 

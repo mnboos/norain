@@ -3,7 +3,6 @@ import { symSharpAdd, symSharpDelete, symSharpRoute } from "@quasar/extras/mater
 import type { RecurringRouteOut } from "@norain/api/models";
 
 import RouteThumbnail from "@/components/RouteThumbnail.vue";
-import { rideScore, rideScoreLabel } from "@/utils/rideQuality";
 
 withDefaults(
     defineProps<{
@@ -38,9 +37,9 @@ function relativeTime(iso: string | null | undefined): string {
 }
 
 /**
- * The ride-quality wording for a route. The glyph beside it is deliberately shape-only, so
- * this caption is the *sole* channel carrying the forecast in the list - it must never be
- * dropped to save a line, and it must stay non-empty wherever a forecast exists.
+ * The ride-quality wording for a route. The glyph beside it is coloured, but at 40 px with no
+ * legend, so this caption is the only place the list says the quality - and why - in words.
+ * It must never be dropped to save a line, and it must stay non-empty wherever a forecast exists.
  */
 function qualityLabel(route: RecurringRouteOut): string {
     if (!route.hasGeometry) return "Route wird berechnet …";
@@ -49,9 +48,8 @@ function qualityLabel(route: RecurringRouteOut): string {
     if (!thumbnail || (thumbnail.departure && thumbnail.departure !== route.nextDeparture)) {
         return "Noch keine Prognose";
     }
-    const scored = (thumbnail.samples ?? []).flatMap(s => (s ? (rideScore(s) ?? []) : []));
-    if (!scored.length) return "Noch keine Prognose";
-    return rideScoreLabel(scored.reduce((a, b) => (b.score > a.score ? b : a)));
+    // The server scores the worst sample; no label means nothing could be scored yet.
+    return thumbnail.rideLabel ?? "Noch keine Prognose";
 }
 
 function profileLabel(profile: string): string {

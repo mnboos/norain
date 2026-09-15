@@ -32,7 +32,9 @@ APP_STORAGE_PATH=./data
 ```
 
 The `DB_*` settings are required by Django in every environment and initialize the
-development PostGIS container. Open-Meteo needs no API key.
+development PostGIS container. Open-Meteo needs no API key. If another program already uses
+one of the default ports (5432, 6379, 8989, 2322, 8000, 3000), set the matching `*_PORT`
+variable from `.env.template` in `.env`; the commands and URLs below then use that port instead.
 
 Start PostGIS and the two geographic services:
 
@@ -60,7 +62,7 @@ In a new terminal, starting at the repository root:
 cd backend
 uv sync
 uv run python manage.py migrate
-uv run python manage.py runserver 127.0.0.1:8000
+uv run python manage.py runserver   # 127.0.0.1:$BACKEND_PORT (8000); or: just backend
 ```
 
 Keep this terminal running. Open <http://127.0.0.1:8000/api/docs> to see the
@@ -79,8 +81,8 @@ uv run python manage.py db_worker --queue-name default
 ```
 
 Keep this terminal running too. They also need Redis; if you are not running the Compose
-stack, start one with `docker run -p 6379:6379 redis:7-alpine` and leave `REDIS_URL` at its
-default.
+stack, start it with `docker compose -f docker-compose.dev.yml up -d redis` (or `just services`);
+it is published on `REDIS_PORT`, which `REDIS_URL` in `.env.template` already follows.
 
 ## 4. Start the frontend
 

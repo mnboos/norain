@@ -23,7 +23,7 @@ export interface WindDistribution {
     /**
      * 
      */
-    headwindM: number;
+    calmM: number;
     /**
      * 
      */
@@ -31,19 +31,11 @@ export interface WindDistribution {
     /**
      * 
      */
-    tailwindM: number;
+    feltCoveredM: number;
     /**
      * 
      */
-    calmM: number;
-    /**
-     * 
-     */
-    unknownM: number;
-    /**
-     * 
-     */
-    meanFeltSpeed?: number | null;
+    headwindM: number;
     /**
      * 
      */
@@ -51,7 +43,11 @@ export interface WindDistribution {
     /**
      * 
      */
-    feltCoveredM: number;
+    maxWindPowerW?: number | null;
+    /**
+     * 
+     */
+    meanFeltSpeed?: number | null;
     /**
      * 
      */
@@ -59,35 +55,40 @@ export interface WindDistribution {
     /**
      * 
      */
-    maxWindPowerW?: number | null;
+    tailwindM: number;
     /**
      * 
      */
     timingSource: WindDistributionTimingSourceEnum;
+    /**
+     * 
+     */
+    unknownM: number;
 }
 
+
 /**
-* @export
-* @enum {string}
-*/
-export enum WindDistributionTimingSourceEnum {
-    Routing = 'routing',
-    SampleInterpolation = 'sample-interpolation',
-    Unavailable = 'unavailable'
-}
+ * @export
+ */
+export const WindDistributionTimingSourceEnum = {
+    Routing: 'routing',
+    SampleInterpolation: 'sample-interpolation',
+    Unavailable: 'unavailable',
+} as const;
+export type WindDistributionTimingSourceEnum = typeof WindDistributionTimingSourceEnum[keyof typeof WindDistributionTimingSourceEnum];
 
 
 /**
  * Check if a given object implements the WindDistribution interface.
  */
 export function instanceOfWindDistribution(value: object): value is WindDistribution {
-    if ((!('headwindM' in (value as Record<string, any>)) && !('headwind_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['headwindM'] === undefined && (value as Record<string, any>)['headwind_m'] === undefined)) return false;
-    if ((!('crosswindM' in (value as Record<string, any>)) && !('crosswind_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['crosswindM'] === undefined && (value as Record<string, any>)['crosswind_m'] === undefined)) return false;
-    if ((!('tailwindM' in (value as Record<string, any>)) && !('tailwind_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['tailwindM'] === undefined && (value as Record<string, any>)['tailwind_m'] === undefined)) return false;
     if ((!('calmM' in (value as Record<string, any>)) && !('calm_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['calmM'] === undefined && (value as Record<string, any>)['calm_m'] === undefined)) return false;
-    if ((!('unknownM' in (value as Record<string, any>)) && !('unknown_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['unknownM'] === undefined && (value as Record<string, any>)['unknown_m'] === undefined)) return false;
+    if ((!('crosswindM' in (value as Record<string, any>)) && !('crosswind_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['crosswindM'] === undefined && (value as Record<string, any>)['crosswind_m'] === undefined)) return false;
     if ((!('feltCoveredM' in (value as Record<string, any>)) && !('felt_covered_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['feltCoveredM'] === undefined && (value as Record<string, any>)['felt_covered_m'] === undefined)) return false;
+    if ((!('headwindM' in (value as Record<string, any>)) && !('headwind_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['headwindM'] === undefined && (value as Record<string, any>)['headwind_m'] === undefined)) return false;
+    if ((!('tailwindM' in (value as Record<string, any>)) && !('tailwind_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['tailwindM'] === undefined && (value as Record<string, any>)['tailwind_m'] === undefined)) return false;
     if ((!('timingSource' in (value as Record<string, any>)) && !('timing_source' in (value as Record<string, any>))) || ((value as Record<string, any>)['timingSource'] === undefined && (value as Record<string, any>)['timing_source'] === undefined)) return false;
+    if ((!('unknownM' in (value as Record<string, any>)) && !('unknown_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['unknownM'] === undefined && (value as Record<string, any>)['unknown_m'] === undefined)) return false;
     return true;
 }
 
@@ -101,17 +102,17 @@ export function WindDistributionFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'headwindM': json['headwind_m'],
-        'crosswindM': json['crosswind_m'],
-        'tailwindM': json['tailwind_m'],
         'calmM': json['calm_m'],
-        'unknownM': json['unknown_m'],
-        'meanFeltSpeed': json['mean_felt_speed'] === undefined ? undefined : json['mean_felt_speed'] === null ? null : json['mean_felt_speed'],
-        'maxFeltSpeed': json['max_felt_speed'] === undefined ? undefined : json['max_felt_speed'] === null ? null : json['max_felt_speed'],
+        'crosswindM': json['crosswind_m'],
         'feltCoveredM': json['felt_covered_m'],
-        'meanWindPowerW': json['mean_wind_power_w'] === undefined ? undefined : json['mean_wind_power_w'] === null ? null : json['mean_wind_power_w'],
+        'headwindM': json['headwind_m'],
+        'maxFeltSpeed': json['max_felt_speed'] === undefined ? undefined : json['max_felt_speed'] === null ? null : json['max_felt_speed'],
         'maxWindPowerW': json['max_wind_power_w'] === undefined ? undefined : json['max_wind_power_w'] === null ? null : json['max_wind_power_w'],
+        'meanFeltSpeed': json['mean_felt_speed'] === undefined ? undefined : json['mean_felt_speed'] === null ? null : json['mean_felt_speed'],
+        'meanWindPowerW': json['mean_wind_power_w'] === undefined ? undefined : json['mean_wind_power_w'] === null ? null : json['mean_wind_power_w'],
+        'tailwindM': json['tailwind_m'],
         'timingSource': json['timing_source'],
+        'unknownM': json['unknown_m'],
     };
 }
 
@@ -126,17 +127,17 @@ export function WindDistributionToJSONTyped(value?: WindDistribution | null, ign
 
     return {
         
-        'headwind_m': value['headwindM'],
-        'crosswind_m': value['crosswindM'],
-        'tailwind_m': value['tailwindM'],
         'calm_m': value['calmM'],
-        'unknown_m': value['unknownM'],
-        'mean_felt_speed': value['meanFeltSpeed'],
-        'max_felt_speed': value['maxFeltSpeed'],
+        'crosswind_m': value['crosswindM'],
         'felt_covered_m': value['feltCoveredM'],
-        'mean_wind_power_w': value['meanWindPowerW'],
+        'headwind_m': value['headwindM'],
+        'max_felt_speed': value['maxFeltSpeed'],
         'max_wind_power_w': value['maxWindPowerW'],
+        'mean_felt_speed': value['meanFeltSpeed'],
+        'mean_wind_power_w': value['meanWindPowerW'],
+        'tailwind_m': value['tailwindM'],
         'timing_source': value['timingSource'],
+        'unknown_m': value['unknownM'],
     };
 }
 

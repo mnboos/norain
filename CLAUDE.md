@@ -27,6 +27,7 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     auth/            backend.py (session_auth, IdentityBackend), views.py, tokens.py
     entitlements.py  every tier limit, in one place
     thumbnails.py    route-list glyph: path simplification + cache-only weather
+    ride_quality.py  ride-quality curves + RIDE_QUALITY config (secret; scored on read)
     schedule.py      croniter-based next_departure / forecast_available_at
     tasks.py         every heavy operation: geometry, cells, job planning/assembly, scans
     sections.py      route sectioning by weather condition
@@ -38,8 +39,8 @@ frontend/         Vue 3 + Quasar + @tanstack/vue-query
     services/        http.ts (shared fetch+CSRF), auth.ts, billing.ts — the plain-Django
                      endpoints; the ninja API goes through the generated @norain/api client
     composables/     useSession, useEntitlements
-    utils/rideQuality.ts   ride-quality scoring (single source; map + list) + the YlOrRd
-                           ramp (map route line only — the list glyph is not coloured)
+    utils/rideQuality.ts   score -> YlOrRd colour + its casing, line placement; no scoring
+                           (that is core/ride_quality.py, server-only)
     utils/routeThumbnail.ts  geographic path -> square viewBox projection
     components/RouteThumbnail.vue  the tiny route glyph in the list
 packages/api/     generated TypeScript client (see "Regenerating the client")
@@ -174,8 +175,9 @@ dies on import. Don't paper over a new cycle with a function-level import; fix t
 ### Route-list thumbnails
 
 `RecurringRoute.thumbnail` is a precomputed blob (simplified path ≤ 64 vertices + the six
-weather fields per sample that the frontend scorer reads), written by the
-`refresh_route_thumbnail` task and only *read* by `list_routes`.
+weather fields per sample that `core.ride_quality` reads), written by the
+`refresh_route_thumbnail` task and only *read* by `list_routes`, which serves the path plus
+the worst sample's `ride_score` / `ride_label` — never the raw samples.
 
 Two rules hold this together:
 
@@ -183,21 +185,47 @@ Two rules hold this together:
   `compute_route_weather(cache_only=True)`, which uses `get_cached_forecast_cell` instead
   of `get_or_fetch_*`. The list polls every 60 s; the fetching accessor would hammer
   Open-Meteo once per cold cell per poll.
-- **Never port the scoring to Python.** `frontend/src/utils/rideQuality.ts` owns the
-  curves, and the map and the list both call it. A second implementation would drift and
-  the list would disagree with the map about the same route.
+- **Ride-quality scoring is server-only.** See "Ride quality" below.
 
-**The glyph carries no quality colour** — only the route's shape. At 40 px it has no
-legend, no hover and no axis, so a ramp there would be the sole channel, and its pale good
-end (`#ffeda0`) all but disappears at that size. The quality is text
-instead: `RouteListPanel.qualityLabel` beside the glyph, and the `aria-label`. That caption
-is the only channel in the list — do not remove it. The YlOrRd ramp (`YLORRD_8`) stays on the
-**map route line**, where the legend, the popup's Fahrqualität line and `WeatherSections` back it.
+**The glyph is one colour: the worst sample's.** The whole line is painted
+`scoreColor(thumbnail.rideScore)` — the same YlOrRd ramp as the map route line, for the
+sample whose `rideLabel` `RouteListPanel.qualityLabel` shows, so glyph and caption always
+agree. Where along the route it changes is the map's job. At 40 px the ramp's pale good end
+(`#ffeda0`) all but disappears, so the line sits on the theme-flipping casing the map uses
+(`CASING_*` in `rideQuality.ts`, shared by both — change them there). The glyph has no legend
+or hover, so the colour is never the only channel: the caption and the `aria-label` say the
+quality in words. Do not remove that caption.
 
-The stroke still distinguishes *data presence*, which is a fact about the data rather than
-a reading of the weather: a sample point with no warm cell stays `null` and is painted
-neutral grey, and a thumbnail whose `departure` no longer matches the route's live
-`nextDeparture` is greyed out entirely, rather than showing yesterday's weather as today's.
+Grey is *data presence*, which is a fact about the data rather than a reading of the
+weather, and it is deliberately off the warm ramp: a thumbnail with no sample the server
+could score, or whose `departure` no longer matches the route's live `nextDeparture`, is
+greyed out, rather than showing yesterday's weather as today's.
+
+### Ride quality
+
+`core/ride_quality.py` is the **only** implementation of the ride-quality score: the rain,
+wind and temperature curves, and `RIDE_QUALITY` (`weights` per factor, `sensitivity` — how
+fast the score climbs the colour ramp). It is the app's own judgement and stays secret, so:
+
+- **Nothing derived from the curves ships to the browser.** The API serves results only:
+  per sample `ride_score` (0..1), `ride_label` and `wind_effort_level`; per wind arrow
+  `wind_effort_level` and `wind_effort` (0..1, arrow size); `summary.max_wind_effort_level`;
+  the thumbnail's worst `ride_score` / `ride_label`. `frontend/src/utils/rideQuality.ts` only
+  maps a score to a colour and places samples along the line. Never add a curve, weight or
+  breakpoint to the frontend — a threshold in the bundle gives the curve away.
+- **Score on read, never store.** `core.jobs.forecast_view`, `wind_arrows_at_detail` and
+  `recurring_route._thumbnail_out` score the stored raw weather when serving, so a change to
+  `RIDE_QUALITY` shows on the next request without rebuilding jobs or thumbnails. It is plain
+  arithmetic, cheap enough for the 60 s list poll.
+- **Rain combines chance and amount** (`rain_impact`): the worse of the main run's rate through
+  `RAIN_CURVE` and `curve(rain_if_wet) × pop ** (1 / rain_risk_aversion)`. The main run counts
+  at face value; the ensemble adds the risk where it is dry. That is why thumbnails store `pop`
+  / `rain_if_wet` and `compute_route_thumbnail` passes `include_uncertainty=True` (still
+  `cache_only`) — without them the list would score the main run alone and disagree with the map.
+- The weights need not sum to 1 (the score is clamped), so the rain weight is also how far rain
+  alone can reach. Tests that check curve *shape* derive from or pin the config, so tuning
+  `RIDE_QUALITY` does not break them. The frontend's `NiceChart` comfort band (14–22 °C)
+  mirrors `TEMP_CURVE`'s flat part.
 
 ### Weather-station correction
 

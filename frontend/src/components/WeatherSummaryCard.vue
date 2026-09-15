@@ -2,10 +2,9 @@
 import { computed, ref, toRefs } from "vue";
 import { symSharpInfo } from "@quasar/extras/material-symbols-sharp";
 import type { RouteForecastOut } from "@norain/api/models";
-import { forecastHeadline, swissTime } from "@/utils/forecastDetails";
+import { forecastHeadline, peakRain, swissTime } from "@/utils/forecastDetails";
 import WeatherSections from "@/components/WeatherSections.vue";
 import WindDistributionBar from "@/components/WindDistributionBar.vue";
-import { windEffortLevel } from "@/utils/wind";
 const props = defineProps<{ forecast: RouteForecastOut }>();
 const { forecast } = toRefs(props);
 const showExplanation = ref(false);
@@ -25,10 +24,7 @@ const explanation = computed(() => {
     if (p < 0.1) return "";
     return `Höchstes Regenrisiko entlang der Strecke: ${Math.round(p * 100)} %`;
 });
-const peakRate = computed(() => {
-    const rates = forecast.value.samples.flatMap(s => (s.rainRateMmH == null ? [] : [s.rainRateMmH]));
-    return rates.length ? Math.max(...rates).toFixed(1) : null;
-});
+const peakRate = computed(() => peakRain(forecast.value));
 // One compact row of key figures; the fine print lives in the info dialog to keep the card short.
 const stats = computed(() => [
     {
@@ -41,13 +37,14 @@ const stats = computed(() => [
     },
     { label: "Regen max.", value: peakRate.value, unit: "mm/h" },
     { label: "Gegenwind max.", value: forecast.value.summary.maxHeadwind, unit: "km/h" },
-    { label: "Windaufwand max.", value: windEffortLevel(forecast.value.summary.maxWindPowerW), unit: "" },
+    { label: "Windaufwand max.", value: forecast.value.summary.maxWindEffortLevel ?? null, unit: "" },
     { label: "Dauer", value: Math.round(forecast.value.totalSeconds / 60), unit: "min" },
     { label: "Distanz", value: (forecast.value.totalDistanceM / 1000).toFixed(1), unit: "km" },
 ]);
 const note =
     "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Fahrt. " +
     "Regen und Gegenwind zeigen die höchsten erwarteten Werte. " +
+    "Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. " +
     "Der Windaufwand zeigt als Stufe (niedrig bis sehr hoch), wie viel zusätzliche Kraft du für dein Tempo brauchst. Er ist geschätzt.";
 </script>
 

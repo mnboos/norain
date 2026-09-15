@@ -16,7 +16,10 @@ take precedence over values loaded by `python-dotenv`.
 | Variable | Default / requirement | Consumer |
 | --- | --- | --- |
 | `ENV_FILE` | Root `.env` if unset and present | Management-command environment loader |
-| `DB_NAME`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | Required | Django PostgreSQL connection and Compose database initialization |
+| `DB_NAME`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | Required | Django PostgreSQL connection and Compose database initialization; in development `DB_PORT` is also the host port Compose publishes PostGIS on |
+| `REDIS_PORT`, `GRAPHHOPPER_PORT`, `PHOTON_PORT` | `6379`, `8989`, `2322` | Development only: host ports Compose publishes Redis, GraphHopper and Photon on. `.env.template` builds `REDIS_URL`, `GRAPHHOPPER_API_URL` and `GEOCODER_API_URL` from them |
+| `BACKEND_PORT` | `8000` | Development only: `manage.py runserver` without an address listens on it, Vite proxies to it, and the localhost SPA calls it directly |
+| `FRONTEND_PORT` | `3000` | Development only: Vite's port (strict — a taken port is an error), the allowed CORS/CSRF origin, the default `FRONTEND_URL`, and Playwright's local server |
 | `GRAPHHOPPER_API_URL` | `http://localhost:8989` | Backend; base URL without `/route` |
 | `GEOCODER_API_URL` | Required for search; no default | Backend; full Photon endpoint, e.g. `http://localhost:2322/api` |
 | `OPENWEATHERMAP_API_KEY` | Optional | Enables OWM fallback when primary fetching fails |
@@ -33,7 +36,7 @@ take precedence over values loaded by `python-dotenv`.
 | `PHOTON_IMPORT_HEAP` | `4g` | Photon import JVM heap |
 | `APP_STORAGE_PATH` | Required by Compose interpolation | PostgreSQL bind-mount root |
 | `TZ` | No Compose default | Passed to the PostgreSQL service; does not configure every service |
-| `FRONTEND_URL` | `http://localhost:3000` in development; required in production | Base URL used to build email verification, password-reset and Stripe return links |
+| `FRONTEND_URL` | `http://localhost:$FRONTEND_PORT` in development; required in production | Base URL used to build email verification, password-reset and Stripe return links |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL` | Required in production | Outgoing mail. Development prints messages to the console instead |
 | `STRIPE_SECRET_KEY` | Empty in development; required in production | Stripe API key. When empty, the billing endpoints answer 503 and tiers are set in the Django admin |
 | `STRIPE_WEBHOOK_SECRET` | Empty in development; required in production | Verifies the `Stripe-Signature` on `/api/billing/webhook`. Without it the webhook is refused |
@@ -46,18 +49,21 @@ in [grid.py](../../backend/core/grid.py), not environment settings.
 
 | Service | Local endpoint | Started by |
 | --- | --- | --- |
-| Frontend | `http://127.0.0.1:3000` | `npm run dev` in `frontend/` |
-| Django API | `http://127.0.0.1:8000/api/` | `python manage.py runserver` in `backend/` |
+| Frontend | `http://127.0.0.1:3000` (`FRONTEND_PORT`) | `just frontend`, or `npm run dev` in `frontend/` |
+| Django API | `http://127.0.0.1:8000/api/` (`BACKEND_PORT`) | `just backend`, or `python manage.py runserver` in `backend/` (listens on `BACKEND_PORT`) |
 | Task workers | No HTTP port | `python manage.py db_worker --queue-name {cells,forecasts,default}` in `backend/` |
-| Redis | Port 6379 | Cell claims and the WebSocket channel layer (`REDIS_URL`) |
-| GraphHopper | `http://localhost:8989` | Development Compose `graphhopper` |
-| Photon | `http://localhost:2322/api` | Development Compose `photon` |
-| PostgreSQL/PostGIS | Port 5432 | Development Compose `db` |
+| Redis | Port 6379 (`REDIS_PORT`) | Cell claims and the WebSocket channel layer (`REDIS_URL`) |
+| GraphHopper | `http://localhost:8989` (`GRAPHHOPPER_PORT`) | Development Compose `graphhopper` |
+| Photon | `http://localhost:2322/api` (`PHOTON_PORT`) | Development Compose `photon` |
+| PostgreSQL/PostGIS | Port 5432 (`DB_PORT`) | Development Compose `db` |
 | MOTIS | Port 8080 | Optional Compose `motis`; not used by the weather flow |
 
-The localhost frontend client calls port 8000 directly. Vite also defines backend
+If a default port is already taken on your machine, change its variable in the root `.env`
+and restart; `just services` starts the Compose services on those ports.
+
+The localhost frontend client calls `BACKEND_PORT` directly. Vite also defines backend
 proxies. For a non-localhost hostname, the client uses the current page origin.
-CORS allows `http://localhost:3000` and `http://127.0.0.1:3000` with credentials.
+CORS allows `http://localhost:$FRONTEND_PORT` and `http://127.0.0.1:$FRONTEND_PORT` with credentials.
 
 ## Storage
 

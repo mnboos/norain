@@ -13,6 +13,7 @@ from ..auth.backend import session_auth
 from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut
 from ..models import ForecastJob, RecurringRoute, route_point
+from ..ride_quality import worst_ride_score
 from ..schedule import forecast_available_at, next_departure
 from ..schemas import CamelSchema
 from ..tasks import refresh_route_geometry, start_forecast_job
@@ -38,23 +39,31 @@ class RecurringRouteIn(CamelSchema):
     _profile = field_validator("profile")(check_routing_profile)
 
 
-class RouteThumbnailSample(CamelSchema):
-    """Weather inputs for one point in a route-list thumbnail."""
-
-    i: int
-    rain_mm: float
-    temp: float
-    headwind: float | None = None
-    wind_power_w: float | None = None
-    precipitation_interval_s: int | None = None
-    rain_rate_mm_h: float | None = None
-
-
 class RouteThumbnail(CamelSchema):
+    """The route-list glyph: the simplified path and the ride quality of its worst sample.
+
+    The stored blob keeps the raw sample weather; only the verdict leaves the server, scored
+    when the list is served (see ``core.ride_quality``).
+    """
+
     departure: str | None = None
     path: list[list[float]] = Field(default_factory=list)
-    samples: list[RouteThumbnailSample | None] = Field(default_factory=list)
     computed_at: str | None = None
+    ride_score: float | None = Field(default=None, ge=0, le=1)  # None: no sample could be scored
+    ride_label: str | None = None
+
+
+def _thumbnail_out(blob: dict | None) -> RouteThumbnail | None:
+    if not blob:
+        return None
+    worst = worst_ride_score(blob.get("samples") or [])
+    return RouteThumbnail(
+        departure=blob.get("departure"),
+        path=blob.get("path") or [],
+        computed_at=blob.get("computed_at"),
+        ride_score=round(worst.score, 4) if worst else None,
+        ride_label=worst.label if worst else None,
+    )
 
 
 class RecurringRouteOut(CamelSchema):
@@ -127,8 +136,8 @@ def _route_to_out(route: RecurringRoute) -> RecurringRouteOut:
         created_at=route.created_at,
         updated_at=route.updated_at,
         # Read straight from the stored blob: the list endpoint must not parse forecast
-        # cells. refresh_route_thumbnail keeps it current.
-        thumbnail=route.thumbnail,
+        # cells. refresh_route_thumbnail keeps it current; scoring it is cheap arithmetic.
+        thumbnail=_thumbnail_out(route.thumbnail),
     )
 
 

@@ -1,6 +1,7 @@
 
 # RouteThumbnail
 
+The route-list glyph: the simplified path and the ride quality of its worst sample.  The stored blob keeps the raw sample weather; only the verdict leaves the server, scored when the list is served (see ``core.ride_quality``).
 
 ## Properties
 
@@ -9,7 +10,8 @@ Name | Type
 `computedAt` | string
 `departure` | string
 `path` | Array&lt;Array&lt;number&gt;&gt;
-`samples` | [Array&lt;RouteThumbnailSample | null&gt;](RouteThumbnailSample.md)
+`rideLabel` | string
+`rideScore` | number
 
 ## Example
 
@@ -21,7 +23,8 @@ const example = {
   "computedAt": null,
   "departure": null,
   "path": null,
-  "samples": null,
+  "rideLabel": null,
+  "rideScore": null,
 } satisfies RouteThumbnail
 
 console.log(example)

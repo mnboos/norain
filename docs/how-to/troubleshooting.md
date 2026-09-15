@@ -24,7 +24,7 @@ commands from the repository root and Django commands from `backend/`.
 | **Keine Wetterdaten** appears in charts | Inspect backend logs for failed providers or extraction. Check network access and optional OWM credentials. Empty samples mean unavailable data. |
 | Forecast time is wrong or datetime comparison fails | Supply local date/time without a UTC offset; review [time-zone limitations](../explanation/forecasts.md). |
 | UI route fields are missing despite a successful API response | Compare response JSON with the live OpenAPI schema and generated client; response alias serialization may differ from schema aliases. |
-| Playwright waits for a server | Align its local 5173 configuration with Vite on 3000; see [development](development.md). |
+| `port is already allocated`, `address already in use`, or Vite's `Port 3000 is already in use` | Another program holds that port. Set the matching `DB_PORT`, `REDIS_PORT`, `GRAPHHOPPER_PORT`, `PHOTON_PORT`, `BACKEND_PORT` or `FRONTEND_PORT` in the root `.env` and restart the services, backend and frontend. Vite does not fall back to the next port, because CORS only allows `FRONTEND_PORT`; Playwright's web server fails the same way. |
 
 To inspect geographic service startup:
 

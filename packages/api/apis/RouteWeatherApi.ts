@@ -29,21 +29,21 @@ import {
     ForecastUncertaintyToJSON,
 } from '../models/ForecastUncertainty';
 
-export interface RouteWeatherApiCoreApiRouteWeatherForecastJobRequest {
+export interface CoreApiRouteWeatherForecastJobRequest {
     /**
      * 
      */
     jobId: string;
 }
 
-export interface RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest {
+export interface CoreApiRouteWeatherForecastJobFiguresRequest {
     /**
      * 
      */
     jobId: string;
 }
 
-export interface RouteWeatherApiCoreApiRouteWeatherForecastJobMapDetailRequest {
+export interface CoreApiRouteWeatherForecastJobMapDetailRequest {
     /**
      * 
      */
@@ -54,7 +54,7 @@ export interface RouteWeatherApiCoreApiRouteWeatherForecastJobMapDetailRequest {
     detail: CoreApiRouteWeatherForecastJobMapDetailDetailEnum;
 }
 
-export interface RouteWeatherApiCoreApiRouteWeatherForecastJobSampleUncertaintyRequest {
+export interface CoreApiRouteWeatherForecastJobSampleUncertaintyRequest {
     /**
      * 
      */
@@ -65,7 +65,7 @@ export interface RouteWeatherApiCoreApiRouteWeatherForecastJobSampleUncertaintyR
     index: number;
 }
 
-export interface RouteWeatherApiCoreApiRouteWeatherRouteWeatherRequest {
+export interface CoreApiRouteWeatherRouteWeatherRequest {
     /**
      * 
      */
@@ -104,7 +104,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
     /**
      * Creates request options for coreApiRouteWeatherForecastJob without sending the request
      */
-    async coreApiRouteWeatherForecastJobRequestOpts(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobRequest): Promise<runtime.RequestOpts> {
+    async coreApiRouteWeatherForecastJobRequestOpts(requestParameters: CoreApiRouteWeatherForecastJobRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['jobId'] == null) {
             throw new runtime.RequiredError(
                 'jobId',
@@ -132,7 +132,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
      * Poll one forecast job.  The WebSocket is the primary channel; this exists so a client behind a proxy that drops upgrades still makes progress, and so tests can assert without a socket.
      * Forecast Job
      */
-    async coreApiRouteWeatherForecastJobRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastJobOut>> {
+    async coreApiRouteWeatherForecastJobRaw(requestParameters: CoreApiRouteWeatherForecastJobRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastJobOut>> {
         const requestOptions = await this.coreApiRouteWeatherForecastJobRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -143,7 +143,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
      * Poll one forecast job.  The WebSocket is the primary channel; this exists so a client behind a proxy that drops upgrades still makes progress, and so tests can assert without a socket.
      * Forecast Job
      */
-    async coreApiRouteWeatherForecastJob(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
+    async coreApiRouteWeatherForecastJob(requestParameters: CoreApiRouteWeatherForecastJobRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
         const response = await this.coreApiRouteWeatherForecastJobRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -151,7 +151,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
     /**
      * Creates request options for coreApiRouteWeatherForecastJobFigures without sending the request
      */
-    async coreApiRouteWeatherForecastJobFiguresRequestOpts(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest): Promise<runtime.RequestOpts> {
+    async coreApiRouteWeatherForecastJobFiguresRequestOpts(requestParameters: CoreApiRouteWeatherForecastJobFiguresRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['jobId'] == null) {
             throw new runtime.RequiredError(
                 'jobId',
@@ -179,7 +179,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
      * The Plotly chart figures of a finished job, for the pages that draw charts.
      * Forecast Job Figures
      */
-    async coreApiRouteWeatherForecastJobFiguresRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<{ [key: string]: any | null; }>>> {
+    async coreApiRouteWeatherForecastJobFiguresRaw(requestParameters: CoreApiRouteWeatherForecastJobFiguresRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<{ [key: string]: any | null; }>>> {
         const requestOptions = await this.coreApiRouteWeatherForecastJobFiguresRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -190,7 +190,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
      * The Plotly chart figures of a finished job, for the pages that draw charts.
      * Forecast Job Figures
      */
-    async coreApiRouteWeatherForecastJobFigures(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<{ [key: string]: any | null; }>> {
+    async coreApiRouteWeatherForecastJobFigures(requestParameters: CoreApiRouteWeatherForecastJobFiguresRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<{ [key: string]: any | null; }>> {
         const response = await this.coreApiRouteWeatherForecastJobFiguresRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -198,7 +198,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
     /**
      * Creates request options for coreApiRouteWeatherForecastJobMapDetail without sending the request
      */
-    async coreApiRouteWeatherForecastJobMapDetailRequestOpts(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobMapDetailRequest): Promise<runtime.RequestOpts> {
+    async coreApiRouteWeatherForecastJobMapDetailRequestOpts(requestParameters: CoreApiRouteWeatherForecastJobMapDetailRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['jobId'] == null) {
             throw new runtime.RequiredError(
                 'jobId',
@@ -237,7 +237,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
      * The route line and wind arrows at more detail than the job result carries.  The map asks for this only once it is zoomed in far enough to show the difference.
      * Forecast Job Map Detail
      */
-    async coreApiRouteWeatherForecastJobMapDetailRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobMapDetailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastMapDetailOut>> {
+    async coreApiRouteWeatherForecastJobMapDetailRaw(requestParameters: CoreApiRouteWeatherForecastJobMapDetailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastMapDetailOut>> {
         const requestOptions = await this.coreApiRouteWeatherForecastJobMapDetailRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -248,7 +248,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
      * The route line and wind arrows at more detail than the job result carries.  The map asks for this only once it is zoomed in far enough to show the difference.
      * Forecast Job Map Detail
      */
-    async coreApiRouteWeatherForecastJobMapDetail(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobMapDetailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastMapDetailOut> {
+    async coreApiRouteWeatherForecastJobMapDetail(requestParameters: CoreApiRouteWeatherForecastJobMapDetailRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastMapDetailOut> {
         const response = await this.coreApiRouteWeatherForecastJobMapDetailRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -256,7 +256,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
     /**
      * Creates request options for coreApiRouteWeatherForecastJobSampleUncertainty without sending the request
      */
-    async coreApiRouteWeatherForecastJobSampleUncertaintyRequestOpts(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobSampleUncertaintyRequest): Promise<runtime.RequestOpts> {
+    async coreApiRouteWeatherForecastJobSampleUncertaintyRequestOpts(requestParameters: CoreApiRouteWeatherForecastJobSampleUncertaintyRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['jobId'] == null) {
             throw new runtime.RequiredError(
                 'jobId',
@@ -292,7 +292,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
      * One sample\'s full ensemble spread, including the per-model breakdown.  ``null`` when the sample has none -- which includes every sample of a free account, since the stored result is stripped before storage.
      * Forecast Job Sample Uncertainty
      */
-    async coreApiRouteWeatherForecastJobSampleUncertaintyRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobSampleUncertaintyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastUncertainty>> {
+    async coreApiRouteWeatherForecastJobSampleUncertaintyRaw(requestParameters: CoreApiRouteWeatherForecastJobSampleUncertaintyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastUncertainty>> {
         const requestOptions = await this.coreApiRouteWeatherForecastJobSampleUncertaintyRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -303,7 +303,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
      * One sample\'s full ensemble spread, including the per-model breakdown.  ``null`` when the sample has none -- which includes every sample of a free account, since the stored result is stripped before storage.
      * Forecast Job Sample Uncertainty
      */
-    async coreApiRouteWeatherForecastJobSampleUncertainty(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobSampleUncertaintyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastUncertainty> {
+    async coreApiRouteWeatherForecastJobSampleUncertainty(requestParameters: CoreApiRouteWeatherForecastJobSampleUncertaintyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastUncertainty> {
         const response = await this.coreApiRouteWeatherForecastJobSampleUncertaintyRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -311,7 +311,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
     /**
      * Creates request options for coreApiRouteWeatherRouteWeather without sending the request
      */
-    async coreApiRouteWeatherRouteWeatherRequestOpts(requestParameters: RouteWeatherApiCoreApiRouteWeatherRouteWeatherRequest): Promise<runtime.RequestOpts> {
+    async coreApiRouteWeatherRouteWeatherRequestOpts(requestParameters: CoreApiRouteWeatherRouteWeatherRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['startLat'] == null) {
             throw new runtime.RequiredError(
                 'startLat',
@@ -401,7 +401,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
      * Start (or join) the forecast for an ad-hoc route.  Returns 200 with the payload when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. The routing call and every provider fetch happen on workers -- this endpoint never blocks on them.
      * Route Weather
      */
-    async coreApiRouteWeatherRouteWeatherRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherRouteWeatherRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastJobOut>> {
+    async coreApiRouteWeatherRouteWeatherRaw(requestParameters: CoreApiRouteWeatherRouteWeatherRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastJobOut>> {
         const requestOptions = await this.coreApiRouteWeatherRouteWeatherRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -412,7 +412,7 @@ export class RouteWeatherApi extends runtime.BaseAPI {
      * Start (or join) the forecast for an ad-hoc route.  Returns 200 with the payload when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. The routing call and every provider fetch happen on workers -- this endpoint never blocks on them.
      * Route Weather
      */
-    async coreApiRouteWeatherRouteWeather(requestParameters: RouteWeatherApiCoreApiRouteWeatherRouteWeatherRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
+    async coreApiRouteWeatherRouteWeather(requestParameters: CoreApiRouteWeatherRouteWeatherRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
         const response = await this.coreApiRouteWeatherRouteWeatherRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -420,10 +420,10 @@ export class RouteWeatherApi extends runtime.BaseAPI {
 }
 
 /**
-  * @export
-  * @enum {string}
-  */
-export enum CoreApiRouteWeatherForecastJobMapDetailDetailEnum {
-    Medium = 'medium',
-    Full = 'full',
-}
+ * @export
+ */
+export const CoreApiRouteWeatherForecastJobMapDetailDetailEnum = {
+    Medium: 'medium',
+    Full: 'full',
+} as const;
+export type CoreApiRouteWeatherForecastJobMapDetailDetailEnum = typeof CoreApiRouteWeatherForecastJobMapDetailDetailEnum[keyof typeof CoreApiRouteWeatherForecastJobMapDetailDetailEnum];

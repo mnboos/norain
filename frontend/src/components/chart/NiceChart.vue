@@ -67,8 +67,8 @@ const chart = useTemplateRef<Plotly.PlotlyHTMLElement | null>("chartRef");
 let resizeObserver: ResizeObserver | null = null;
 
 // Background bands for the temperature chart, at fixed temperatures so a colour means the same
-// thing on every route. 14-22 °C is the flat zero-penalty stretch of TEMP_CURVE in
-// utils/rideQuality.ts - keep them in step. Series keep the backend's single colour: colouring
+// thing on every route. 14-22 °C is the flat zero-penalty stretch of TEMP_CURVE in the
+// backend's core/ride_quality.py - keep them in step. Series keep the backend's single colour: colouring
 // the line by temperature only repeated the y-axis, and a chart-relative ramp lied about it.
 const COMFORT_BAND: [number, number] = [14, 22];
 const FROST_LIMIT = 0;

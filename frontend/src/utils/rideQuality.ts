@@ -1,14 +1,14 @@
 /**
- * Ride quality: one 0..1 score per weather sample, and the YlOrRd colour ramp the map
- * paints the route line with.
+ * Ride quality *presentation*: the YlOrRd colour ramp for a server-computed score, and where
+ * along the drawn line each sample sits.
+ *
+ * The scoring itself - curves, weights, sensitivity - lives only in the backend
+ * (`core/ride_quality.py`) and never ships to the browser: samples arrive with `rideScore`
+ * and `rideLabel` already set. Do not add a curve, weight or threshold here.
  *
  * Kept free of maplibre/vue imports so the pure parts stay unit-testable, same as
- * `weatherIcons.ts`.
- *
- * The score is *derived* - it has no physical unit. Everything that shows it (the legend,
- * the popup) has to say so, and anything we can't compute stays `null` rather than
- * guessing: a stretch with no usable precipitation data is painted neutral grey, never a
- * colour from the ramp.
+ * `weatherIcons.ts`. Anything the server could not score is `null` and painted neutral
+ * grey, never a colour from the ramp.
  */
 
 import type { ForecastSampleOut } from "@norain/api/models";
@@ -35,147 +35,23 @@ export const YLORRD_8 = [
 /** Cool blue-grey for "we don't know" - deliberately off the warm ramp. */
 export const NO_DATA_COLOR = "#9aa5b1";
 
+// The casing under every ramp-coloured line: the map route line and the list glyph. The good
+// end of the ramp is very pale (#ffeda0, #fed976 sit near 1.2:1 against a light background),
+// so a white casing would let it vanish - the casing carries the ink instead and flips with
+// the theme. Same values NiceChart.vue uses for chart ink. A thin, half-transparent edge is
+// enough to hold the pale end; a solid one reads as a heavy black outline next to yellow.
+export const CASING_LIGHT = "#1b2733";
+export const CASING_DARK = "#e8eef2";
+export const CASING_OPACITY = 0.55;
+
 /** One ramp step. Gradient spans are subdivided so no two stops jump further than this. */
 const MAX_SCORE_STEP = 1 / (YLORRD_8.length - 1);
 
 /** Smallest gap between two line-gradient stops - also what makes a "hard edge" hard. */
 const EPS = 1e-4;
 
-export type RideFactor = "rain" | "wind" | "temp";
-
-/**
- * The subset of a sample the scorer actually reads.
- *
- * The route-list thumbnails ship only these six fields per point instead of a whole
- * `ForecastSampleOut` (a list of routes would otherwise carry every forecast in full). Taking
- * the narrow type here lets both callers share one implementation - porting the curves
- * anywhere else would let the thumbnail and the map drift apart on the same route.
- */
-export type RideInput = Pick<
-    ForecastSampleOut,
-    "rainMm" | "precipitationIntervalS" | "rainRateMmH" | "temp" | "headwind" | "windPowerW"
->;
-
-export interface RideScore {
-    /** 0 = bestes Wetter, 1 = schlechtestes. Derived, unitless. */
-    score: number;
-    /** The three penalties, each 0..1, before weighting. */
-    rain: number;
-    wind: number;
-    temp: number;
-    /** Largest *weighted* contributor - what the popup names as the reason. */
-    worst: RideFactor;
-}
-
-const FACTORS: readonly RideFactor[] = ["rain", "wind", "temp"];
-const WEIGHTS: Record<RideFactor, number> = { rain: 0.55, wind: 0.25, temp: 0.2 };
-
 function clamp01(x: number): number {
     return x < 0 ? 0 : x > 1 ? 1 : x;
-}
-
-/** Linear interpolation through a sorted (x, y) table, flat outside the ends. */
-function piecewise(x: number, points: readonly (readonly [number, number])[]): number {
-    const first = points[0];
-    const last = points[points.length - 1];
-    if (!first || !last) return 0;
-    if (x <= first[0]) return first[1];
-    for (let i = 1; i < points.length; i++) {
-        const lo = points[i - 1];
-        const hi = points[i];
-        if (!lo || !hi) break;
-        if (x <= hi[0]) {
-            const span = hi[0] - lo[0];
-            return span === 0 ? hi[1] : lo[1] + ((x - lo[0]) / span) * (hi[1] - lo[1]);
-        }
-    }
-    return last[1];
-}
-
-// Rain dominates - the app is called NoRain. Drizzle is a nuisance, 5 mm/h is the worst
-// it gets for scoring purposes.
-const RAIN_CURVE = [
-    [0, 0],
-    [0.2, 0.15],
-    [1, 0.5],
-    [2.5, 0.8],
-    [5, 1],
-] as const;
-
-// Wind effort in watts: what it costs *this* rider to hold the planned speed, so the same
-// wind weighs more on a fast e-bike than on a slow bike. A tailwind is not "better than
-// calm" on this scale, it just isn't a penalty, so the curve starts at 0. Calibrated so that
-// at ~18 km/h it matches the headwind curve below (10/20/30 km/h ≈ 50/130/230 W).
-export const WIND_POWER_CURVE = [
-    [0, 0],
-    [50, 0.3],
-    [130, 0.65],
-    [230, 1],
-] as const;
-
-// Ground-relative headwind in km/h: the fallback when the effort is unknown - jobs and
-// thumbnails from before the metric, or a route without timing.
-const WIND_CURVE = [
-    [0, 0],
-    [10, 0.3],
-    [20, 0.65],
-    [30, 1],
-] as const;
-
-// Comfortable riding band is 14-22 °C; it gets worse in both directions.
-const TEMP_CURVE = [
-    [-2, 1],
-    [14, 0],
-    [22, 0],
-    [34, 1],
-] as const;
-
-/**
- * Precipitation rate in mm/h, or `null` when it cannot be derived.
- *
- * `rainMm` is an accumulation over `precipitationIntervalS`, so without the interval it
- * is not a rate and we must not pretend it is one - an hourly assumption would silently
- * turn a 15-minute bucket into a quarter of the real intensity.
- */
-export function rainRateMmH(sample: RideInput): number | null {
-    if (sample.rainRateMmH != null && Number.isFinite(sample.rainRateMmH)) return sample.rainRateMmH;
-    const interval = sample.precipitationIntervalS;
-    if (interval != null && interval > 0 && Number.isFinite(sample.rainMm)) {
-        return (sample.rainMm * 3600) / interval;
-    }
-    return null;
-}
-
-/**
- * Combined ride quality, or null when rain or the wind is unknown.
- * The wind factor reads the wind effort (`windPowerW`) and falls back to the ground-relative
- * headwind when there is none. Never feed apparent wind into either curve: it is mostly
- * the rider's own speed and would need a different calibration.
- */
-export function rideScore(sample: RideInput): RideScore | null {
-    const rate = rainRateMmH(sample);
-    if (rate == null) return null;
-    let wind: number;
-    if (sample.windPowerW != null && Number.isFinite(sample.windPowerW)) {
-        wind = clamp01(piecewise(sample.windPowerW, WIND_POWER_CURVE));
-    } else if (sample.headwind != null && Number.isFinite(sample.headwind)) {
-        wind = clamp01(piecewise(sample.headwind, WIND_CURVE));
-    } else {
-        return null;
-    }
-
-    const rain = clamp01(piecewise(rate, RAIN_CURVE));
-    const temp = clamp01(piecewise(sample.temp, TEMP_CURVE));
-
-    const weighted: Record<RideFactor, number> = {
-        rain: rain * WEIGHTS.rain,
-        wind: wind * WEIGHTS.wind,
-        temp: temp * WEIGHTS.temp,
-    };
-    let worst: RideFactor = "rain";
-    for (const f of FACTORS) if (weighted[f] > weighted[worst]) worst = f;
-
-    return { score: clamp01(weighted.rain + weighted.wind + weighted.temp), rain, wind, temp, worst };
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -205,15 +81,8 @@ export function scoreColor(score: number | null | undefined): string {
     return rgbToHex(r0 + (r1 - r0) * f, g0 + (g1 - g0) * f, b0 + (b1 - b0) * f);
 }
 
-const BAND_LABELS = ["sehr gut", "gut", "mässig", "schlecht", "sehr schlecht"] as const;
-
-const FACTOR_LABELS: Record<RideFactor, string> = { rain: "Regen", wind: "Wind", temp: "Temperatur" };
-
-/**
- * Naming a single cause is only honest when one factor actually dominates. Below this
- * share of the total the ride is simply "mixed", and the label stays silent about why.
- */
-const MIN_WORST_SHARE = 0.5;
+/** How many "sehr gut … sehr schlecht" bands the server's `rideLabel` uses. */
+const BAND_COUNT = 5;
 
 /**
  * Which of the five quality bands a score falls in (0 = sehr gut .. 4 = sehr schlecht),
@@ -222,17 +91,7 @@ const MIN_WORST_SHARE = 0.5;
  */
 export function scoreBand(score: number | null | undefined): number | null {
     if (score == null || !Number.isFinite(score)) return null;
-    return Math.min(BAND_LABELS.length - 1, Math.floor(clamp01(score) * BAND_LABELS.length));
-}
-
-/** German wording for the popup, e.g. "mässig · v. a. Regen". */
-export function rideScoreLabel(rq: RideScore | null): string {
-    const band = rq ? scoreBand(rq.score) : null;
-    if (!rq || band === null) return "Nicht verfügbar";
-    const label = BAND_LABELS[band] ?? "";
-    if (band === 0) return label;
-    const share = rq.score > 0 ? (rq[rq.worst] * WEIGHTS[rq.worst]) / rq.score : 0;
-    return share >= MIN_WORST_SHARE ? `${label} · v. a. ${FACTOR_LABELS[rq.worst]}` : label;
+    return Math.min(BAND_COUNT - 1, Math.floor(clamp01(score) * BAND_COUNT));
 }
 
 const EARTH_R_M = 6371008.8;

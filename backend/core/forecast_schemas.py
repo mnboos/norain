@@ -127,6 +127,9 @@ class RouteWeatherSummary(CamelSchema):
     rain_amount: float  # "if it rains" mm at the peak-risk point
     max_headwind: float | None = None
     max_wind_power_w: float | None = None  # largest sample wind effort, W
+    # "niedrig" … "sehr hoch" for max_wind_power_w. Filled when served (core.jobs.forecast_view),
+    # never stored, like every field derived from the ride-quality curves.
+    max_wind_effort_level: str | None = None
     wind_distribution: WindDistribution | None = None
     source: str  # "open-meteo" or "openweathermap"
     station_corrected: bool = False  # some samples were corrected with station readings
@@ -155,6 +158,10 @@ class RouteSection(CamelSchema):
 
 class ForecastSampleOut(WeatherSample):
     uncertainty: ForecastUncertaintySummary | None = None
+    # Served from core.ride_quality when the forecast is read; None where it cannot be scored.
+    ride_score: float | None = Field(default=None, ge=0, le=1)  # 0 = best ride, 1 = worst
+    ride_label: str | None = None  # e.g. "mässig · v. a. Regen"
+    wind_effort_level: str | None = None  # "Wind hilft", "keiner", "niedrig" … "sehr hoch"
 
 
 class WindArrow(CamelSchema):
@@ -166,6 +173,8 @@ class WindArrow(CamelSchema):
     wind_speed: float  # km/h over ground
     wind_dir: float  # degrees, direction the wind comes FROM
     wind_power_w: float | None = None  # extra watts at the planned speed; negative = helps
+    wind_effort_level: str | None = None  # the effort as a word; see core.ride_quality
+    wind_effort: float = Field(default=0, ge=0, le=1)  # 0..1, sizes the arrow
 
 
 class RouteForecastOut(CamelSchema):

@@ -23,23 +23,11 @@ export interface RecurringRouteIn {
     /**
      * 
      */
-    name: string;
+    active?: boolean;
     /**
      * 
      */
     description?: string;
-    /**
-     * 
-     */
-    startLat: number;
-    /**
-     * 
-     */
-    startLon: number;
-    /**
-     * 
-     */
-    startName: string;
     /**
      * 
      */
@@ -55,6 +43,10 @@ export interface RecurringRouteIn {
     /**
      * 
      */
+    name: string;
+    /**
+     * 
+     */
     profile?: string;
     /**
      * 
@@ -67,22 +59,30 @@ export interface RecurringRouteIn {
     /**
      * 
      */
-    active?: boolean;
+    startLat: number;
+    /**
+     * 
+     */
+    startLon: number;
+    /**
+     * 
+     */
+    startName: string;
 }
 
 /**
  * Check if a given object implements the RecurringRouteIn interface.
  */
 export function instanceOfRecurringRouteIn(value: object): value is RecurringRouteIn {
-    if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('startLat' in value) || value['startLat'] === undefined) return false;
-    if (!('startLon' in value) || value['startLon'] === undefined) return false;
-    if (!('startName' in value) || value['startName'] === undefined) return false;
     if (!('destLat' in value) || value['destLat'] === undefined) return false;
     if (!('destLon' in value) || value['destLon'] === undefined) return false;
     if (!('destName' in value) || value['destName'] === undefined) return false;
+    if (!('name' in value) || value['name'] === undefined) return false;
     if (!('scheduleCron' in value) || value['scheduleCron'] === undefined) return false;
     if (!('scheduleDescription' in value) || value['scheduleDescription'] === undefined) return false;
+    if (!('startLat' in value) || value['startLat'] === undefined) return false;
+    if (!('startLon' in value) || value['startLon'] === undefined) return false;
+    if (!('startName' in value) || value['startName'] === undefined) return false;
     return true;
 }
 
@@ -96,18 +96,18 @@ export function RecurringRouteInFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'name': json['name'],
+        'active': json['active'] == null ? undefined : json['active'],
         'description': json['description'] == null ? undefined : json['description'],
-        'startLat': json['startLat'],
-        'startLon': json['startLon'],
-        'startName': json['startName'],
         'destLat': json['destLat'],
         'destLon': json['destLon'],
         'destName': json['destName'],
+        'name': json['name'],
         'profile': json['profile'] == null ? undefined : json['profile'],
         'scheduleCron': json['scheduleCron'],
         'scheduleDescription': json['scheduleDescription'],
-        'active': json['active'] == null ? undefined : json['active'],
+        'startLat': json['startLat'],
+        'startLon': json['startLon'],
+        'startName': json['startName'],
     };
 }
 
@@ -122,18 +122,18 @@ export function RecurringRouteInToJSONTyped(value?: RecurringRouteIn | null, ign
 
     return {
         
-        'name': value['name'],
+        'active': value['active'],
         'description': value['description'],
-        'startLat': value['startLat'],
-        'startLon': value['startLon'],
-        'startName': value['startName'],
         'destLat': value['destLat'],
         'destLon': value['destLon'],
         'destName': value['destName'],
+        'name': value['name'],
         'profile': value['profile'],
         'scheduleCron': value['scheduleCron'],
         'scheduleDescription': value['scheduleDescription'],
-        'active': value['active'],
+        'startLat': value['startLat'],
+        'startLon': value['startLon'],
+        'startName': value['startName'],
     };
 }
 

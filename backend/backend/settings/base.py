@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -49,7 +50,7 @@ CSRF_COOKIE_SAMESITE = "Lax"
 PASSWORD_RESET_TIMEOUT = 60 * 60 * 24
 
 DEFAULT_FROM_EMAIL = "norain@localhost"
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", f"http://localhost:{os.environ.get('FRONTEND_PORT') or '3000'}")
 
 # Stripe. Empty in development: the billing endpoints then report 503 rather than
 # failing obscurely, and every entitlement can still be set by hand in the admin.
@@ -60,6 +61,9 @@ STRIPE_PRICE_ID_PRO = os.environ.get("STRIPE_PRICE_ID_PRO", "")
 # Application definition
 
 INSTALLED_APPS = [
+    # Above daphne: the first app wins a management command name, and core's runserver
+    # extends daphne's with a default port from BACKEND_PORT.
+    "core",
     "daphne",
     "ninja",
     "corsheaders",
@@ -71,7 +75,6 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.gis",
     "channels",
-    "core",
     "django_tasks_db",
 ]
 
@@ -170,9 +173,20 @@ DATABASES = {
     }
 }
 
-if gdal_library_path := os.environ.get("GDAL_LIBRARY_PATH"):
+
+def homebrew_library(filename: str) -> str | None:
+    """Django's find_library never searches Homebrew's lib dirs on macOS; look there ourselves."""
+    if sys.platform != "darwin":
+        return None
+    for prefix in ("/opt/homebrew/lib", "/usr/local/lib"):
+        if (candidate := Path(prefix) / filename).exists():
+            return str(candidate)
+    return None
+
+
+if gdal_library_path := os.environ.get("GDAL_LIBRARY_PATH") or homebrew_library("libgdal.dylib"):
     GDAL_LIBRARY_PATH = gdal_library_path
-if geos_library_path := os.environ.get("GEOS_LIBRARY_PATH"):
+if geos_library_path := os.environ.get("GEOS_LIBRARY_PATH") or homebrew_library("libgeos_c.dylib"):
     GEOS_LIBRARY_PATH = geos_library_path
 
 

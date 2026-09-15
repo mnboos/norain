@@ -4,8 +4,11 @@ Use the [tutorial](../tutorials/first-forecast.md) to install dependencies and c
 `.env` first. Run each command group from its stated directory.
 
 GeoDjango requires GEOS, PROJ, and GDAL on the host. On Debian/Ubuntu install
-`binutils libproj-dev gdal-bin`; on Windows, set `GDAL_LIBRARY_PATH` and
-`GEOS_LIBRARY_PATH` to the corresponding OSGeo4W DLLs. Start PostGIS before Django:
+`binutils libproj-dev gdal-bin`; on macOS, `brew install gdal` (or `just setup`, which
+also creates the backend virtual environment) — the settings find Homebrew's libraries on
+their own; on Windows, set `GDAL_LIBRARY_PATH` and `GEOS_LIBRARY_PATH` to the
+corresponding OSGeo4W DLLs. The geodata recipes in the justfile use `docker` (Windows:
+`podman`); set `CONTAINER_ENGINE` to override. Start PostGIS before Django:
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d db
@@ -41,9 +44,8 @@ The build includes TypeScript checking and a Vite production build. `npm run lin
 runs ESLint with automatic fixes; `npm run format` rewrites formatting under `src/`.
 Review their diffs before committing.
 
-Playwright is configured in `frontend/playwright.config.ts`. Before using
-`npm run test:e2e`, align its local `baseURL` and `webServer.port` with Vite's port
-3000: they currently refer to 5173. Install browsers with `npx playwright install`.
+Playwright is configured in `frontend/playwright.config.ts`; locally it uses Vite on
+`FRONTEND_PORT` from the root `.env`. Install browsers with `npx playwright install`.
 The CI branch uses preview on 4173 and requires `npm run build` first. Start the
 backend, worker, and geographic services for tests that exercise real forecasts.
 
@@ -113,6 +115,6 @@ hidden and the billing endpoints answer 503.
 To exercise the real flow, run Stripe in test mode:
 
 ```bash
-stripe listen --forward-to localhost:8000/api/billing/webhook   # prints STRIPE_WEBHOOK_SECRET
+stripe listen --forward-to localhost:${BACKEND_PORT:-8000}/api/billing/webhook   # prints STRIPE_WEBHOOK_SECRET
 stripe trigger customer.subscription.deleted                     # confirm the downgrade
 ```

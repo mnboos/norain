@@ -34,6 +34,14 @@ export interface ForecastUncertaintySummary {
     /**
      * 
      */
+    fetchedAt: string;
+    /**
+     * 
+     */
+    forecastTime: string;
+    /**
+     * 
+     */
     metrics: { [key: string]: EnsembleRange; };
     /**
      * 
@@ -42,32 +50,24 @@ export interface ForecastUncertaintySummary {
     /**
      * 
      */
+    precipitationIntervalS?: number;
+    /**
+     * 
+     */
     rainIfWet?: number | null;
     /**
      * 
      */
-    forecastTime: string;
-    /**
-     * 
-     */
-    fetchedAt: string;
-    /**
-     * 
-     */
     source?: string;
-    /**
-     * 
-     */
-    precipitationIntervalS?: number;
 }
 
 /**
  * Check if a given object implements the ForecastUncertaintySummary interface.
  */
 export function instanceOfForecastUncertaintySummary(value: object): value is ForecastUncertaintySummary {
-    if (!('metrics' in value) || value['metrics'] === undefined) return false;
-    if ((!('forecastTime' in (value as Record<string, any>)) && !('forecast_time' in (value as Record<string, any>))) || ((value as Record<string, any>)['forecastTime'] === undefined && (value as Record<string, any>)['forecast_time'] === undefined)) return false;
     if ((!('fetchedAt' in (value as Record<string, any>)) && !('fetched_at' in (value as Record<string, any>))) || ((value as Record<string, any>)['fetchedAt'] === undefined && (value as Record<string, any>)['fetched_at'] === undefined)) return false;
+    if ((!('forecastTime' in (value as Record<string, any>)) && !('forecast_time' in (value as Record<string, any>))) || ((value as Record<string, any>)['forecastTime'] === undefined && (value as Record<string, any>)['forecast_time'] === undefined)) return false;
+    if (!('metrics' in value) || value['metrics'] === undefined) return false;
     return true;
 }
 
@@ -81,13 +81,13 @@ export function ForecastUncertaintySummaryFromJSONTyped(json: any, ignoreDiscrim
     }
     return {
         
+        'fetchedAt': json['fetched_at'],
+        'forecastTime': json['forecast_time'],
         'metrics': (mapValues(json['metrics'], EnsembleRangeFromJSON)),
         'pop': json['pop'] === undefined ? undefined : json['pop'] === null ? null : json['pop'],
-        'rainIfWet': json['rain_if_wet'] === undefined ? undefined : json['rain_if_wet'] === null ? null : json['rain_if_wet'],
-        'forecastTime': json['forecast_time'],
-        'fetchedAt': json['fetched_at'],
-        'source': json['source'] == null ? undefined : json['source'],
         'precipitationIntervalS': json['precipitation_interval_s'] == null ? undefined : json['precipitation_interval_s'],
+        'rainIfWet': json['rain_if_wet'] === undefined ? undefined : json['rain_if_wet'] === null ? null : json['rain_if_wet'],
+        'source': json['source'] == null ? undefined : json['source'],
     };
 }
 
@@ -102,13 +102,13 @@ export function ForecastUncertaintySummaryToJSONTyped(value?: ForecastUncertaint
 
     return {
         
+        'fetched_at': value['fetchedAt'],
+        'forecast_time': value['forecastTime'],
         'metrics': (mapValues(value['metrics'], EnsembleRangeToJSON)),
         'pop': value['pop'],
-        'rain_if_wet': value['rainIfWet'],
-        'forecast_time': value['forecastTime'],
-        'fetched_at': value['fetchedAt'],
-        'source': value['source'],
         'precipitation_interval_s': value['precipitationIntervalS'],
+        'rain_if_wet': value['rainIfWet'],
+        'source': value['source'],
     };
 }
 

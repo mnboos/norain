@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 
 import RouteThumbnail, { type ThumbnailRoute } from "../RouteThumbnail.vue";
-import { NO_DATA_COLOR } from "@/utils/rideQuality";
+import { NO_DATA_COLOR, scoreColor } from "@/utils/rideQuality";
 
 const DEPARTURE = "2026-09-14T08:00:00+02:00";
 
@@ -15,91 +15,65 @@ const PATH = [
     [9.02, 47.02],
 ];
 
-function sample(i: number, rainRateMmH: number, temp = 16, headwind = 4) {
-    return { i, rainMm: rainRateMmH, precipitationIntervalS: 3600, rainRateMmH, temp, headwind };
-}
-
-function route(overrides: Partial<ThumbnailRoute> = {}): ThumbnailRoute {
+/** A route whose thumbnail is served the way the API does: the worst sample already scored. */
+function route(
+    overrides: Partial<ThumbnailRoute> = {},
+    rideScore: number | null = 0.1,
+    rideLabel: string | null = "sehr gut",
+): ThumbnailRoute {
     return {
         hasGeometry: true,
         nextDeparture: DEPARTURE,
-        thumbnail: { departure: DEPARTURE, path: PATH, samples: [sample(0, 0), sample(2, 0), sample(4, 0)] },
+        thumbnail: { departure: DEPARTURE, path: PATH, rideScore, rideLabel },
         ...overrides,
     };
 }
 
-const strokes = (wrapper: ReturnType<typeof mount>) => wrapper.findAll("polyline").map(p => p.attributes("stroke"));
+/** The coloured line's strokes, without the casing underneath it. */
+const strokes = (wrapper: ReturnType<typeof mount>) =>
+    wrapper.findAll("polyline:not([data-casing])").map(p => p.attributes("stroke"));
 
 describe("RouteThumbnail", () => {
-    it("draws one span per sample gap, in the theme ink", () => {
+    it("strokes the whole line in the ramp colour of the server's score", () => {
+        const wrapper = mount(RouteThumbnail, { props: { route: route({}, 0.1) } });
+        expect(scoreColor(0.1)).not.toBe(NO_DATA_COLOR);
+        expect(strokes(wrapper)).toEqual([scoreColor(0.1)]);
+    });
+
+    it("strokes a bad ride differently and still says it in text", () => {
+        const good = mount(RouteThumbnail, { props: { route: route({}, 0.1, "sehr gut") } });
+        const bad = mount(RouteThumbnail, { props: { route: route({}, 0.9, "sehr schlecht · v. a. Regen") } });
+        expect(strokes(bad)).not.toEqual(strokes(good));
+        // The colour has no legend at this size, so the label must keep naming the quality.
+        expect(bad.attributes("aria-label")).toBe("Fahrqualität: sehr schlecht · v. a. Regen");
+    });
+
+    it("is grey when the server could not score any sample", () => {
+        const wrapper = mount(RouteThumbnail, { props: { route: route({}, null, null) } });
+        expect(strokes(wrapper)).toEqual([NO_DATA_COLOR]);
+        expect(wrapper.attributes("aria-label")).toContain("Nicht verfügbar");
+    });
+
+    it("draws the casing under the coloured line", () => {
         const wrapper = mount(RouteThumbnail, { props: { route: route() } });
-        const colors = strokes(wrapper);
-        expect(colors).toHaveLength(2);
-        // Dry, mild, light wind — a known forecast, so nothing is the no-data grey.
-        for (const c of colors) expect(c).toBe("currentColor");
-    });
-
-    it("paints a span grey when either endpoint has no data", () => {
-        const wrapper = mount(RouteThumbnail, {
-            props: {
-                route: route({
-                    thumbnail: { departure: DEPARTURE, path: PATH, samples: [sample(0, 0), null, sample(4, 0)] },
-                }),
-            },
-        });
-        expect(strokes(wrapper)).toEqual([NO_DATA_COLOR, NO_DATA_COLOR]);
-    });
-
-    it("says a wet ride in text, not in colour", () => {
-        const dry = mount(RouteThumbnail, {
-            props: {
-                route: route({
-                    thumbnail: { departure: DEPARTURE, path: PATH, samples: [sample(0, 0), sample(4, 0)] },
-                }),
-            },
-        });
-        const wet = mount(RouteThumbnail, {
-            props: {
-                route: route({
-                    thumbnail: { departure: DEPARTURE, path: PATH, samples: [sample(0, 0), sample(4, 5)] },
-                }),
-            },
-        });
-        // The glyph is shape only - a soaking and a dry ride stroke identically...
-        expect(strokes(wet)).toEqual(strokes(dry));
-        // ...so the label is the only channel that separates them, and it must.
-        expect(wet.attributes("aria-label")).toContain("Regen");
-        expect(wet.attributes("aria-label")).not.toBe(dry.attributes("aria-label"));
-    });
-
-    it("never varies the stroke across a wide quality range", () => {
-        // Guards against reintroducing a per-span ramp: perfect at one end, awful at the
-        // other, and every known span still strokes the same ink.
-        const wrapper = mount(RouteThumbnail, {
-            props: {
-                route: route({
-                    thumbnail: {
-                        departure: DEPARTURE,
-                        path: PATH,
-                        samples: [sample(0, 0), sample(2, 0), sample(4, 9)],
-                    },
-                }),
-            },
-        });
-        expect(new Set(strokes(wrapper))).toEqual(new Set(["currentColor"]));
+        const lines = wrapper.findAll("polyline");
+        expect(lines).toHaveLength(2);
+        expect(lines[0]?.attributes("data-casing")).toBeDefined();
+        expect(lines[0]?.attributes("stroke")).toBe("currentColor");
+        expect(lines[1]?.attributes("points")).toBe(lines[0]?.attributes("points"));
     });
 
     it("greys out a thumbnail computed for a departure that has already passed", () => {
         const wrapper = mount(RouteThumbnail, {
-            props: { route: route({ nextDeparture: "2026-09-15T08:00:00+02:00" }) },
+            props: { route: route({ nextDeparture: "2026-09-15T08:00:00+02:00" }, 0.9) },
         });
-        expect(strokes(wrapper).every(c => c === NO_DATA_COLOR)).toBe(true);
+        expect(strokes(wrapper)).toEqual([NO_DATA_COLOR]);
         expect(wrapper.attributes("aria-label")).toContain("Noch keine Prognose");
     });
 
     it("greys out a route that has no upcoming departure at all", () => {
         const wrapper = mount(RouteThumbnail, { props: { route: route({ nextDeparture: null }) } });
-        expect(strokes(wrapper).every(c => c === NO_DATA_COLOR)).toBe(true);
+        expect(strokes(wrapper)).toEqual([NO_DATA_COLOR]);
     });
 
     it("never relies on colour alone — the label repeats the quality as text", () => {
@@ -114,12 +88,5 @@ describe("RouteThumbnail", () => {
         expect(wrapper.findAll("polyline")).toHaveLength(0);
         expect(wrapper.find("circle").exists()).toBe(true);
         expect(wrapper.attributes("aria-label")).toContain("berechnet");
-    });
-
-    it("still draws the shape when no sample has data", () => {
-        const wrapper = mount(RouteThumbnail, {
-            props: { route: route({ thumbnail: { departure: DEPARTURE, path: PATH, samples: [null, null] } }) },
-        });
-        expect(strokes(wrapper)).toEqual([NO_DATA_COLOR]);
     });
 });

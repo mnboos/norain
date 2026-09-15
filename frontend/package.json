@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "vite --port 3000",
+        "dev": "vite",
         "build": "npm run type-check && npm run build-only",
         "preview": "vite preview",
         "test:unit": "vitest",

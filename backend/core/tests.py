@@ -27,6 +27,7 @@ from core.entitlements import FREE, PRO, entitlements_for_sync, strip_uncertaint
 from core.forecast_schemas import ForecastUncertainty, RouteWeatherOut, RouteWeatherSummary, WeatherSample
 from core.geo import bearing_deg as _bearing_deg
 from core.grid import (
+    ENSEMBLE_REQUEST_VERSION,
     _ensemble_at,
     _from_open_meteo,
     _from_owm,
@@ -1098,6 +1099,37 @@ class RouteThumbnailTests(TestCase):
             self.assertLess(entry["i"], len(thumb["path"]))
             self.assertIn("headwind", entry)
             self.assertIn("wind_power_w", entry)
+
+    def test_warm_ensemble_cells_carry_the_rain_chance_and_amount(self):
+        """The rain score combines chance and amount, so the blob must carry both - read cache-only."""
+        times = [f"{self.departure.date().isoformat()}T{h:02d}:00" for h in range(24)]
+        for sp in self.sample_points:
+            self._warm_cell(sp)
+            EnsembleCell.objects.update_or_create(
+                lat_r=sp["lat_r"],
+                lon_r=sp["lon_r"],
+                day_key=self.departure.date(),
+                defaults={
+                    "forecast_days": 16,
+                    "data": {
+                        "_norain_request_version": ENSEMBLE_REQUEST_VERSION,
+                        "hourly": {
+                            "time": times,
+                            # One wet member of four: 25% chance of 2 mm.
+                            "precipitation_member01": [2.0] * 24,
+                            "precipitation_member02": [0.0] * 24,
+                            "precipitation_member03": [0.0] * 24,
+                            "precipitation_member04": [0.0] * 24,
+                        },
+                    },
+                },
+            )
+
+        thumb = self._compute()
+
+        for entry in thumb["samples"]:
+            self.assertEqual(entry["pop"], 0.25)
+            self.assertEqual(entry["rain_if_wet"], 2.0)
 
     def test_cold_cells_stay_none_rather_than_guessed(self):
         # Warm only the first sample point; the rest have no data at all.
@@ -2206,9 +2238,15 @@ class ForecastViewTests(TestCase):
         self.assertEqual((len(coarse), len(medium), len(full)), (5, 20, 100))
         self.assertEqual(
             coarse[0],
-            {"lat": 47.12346, "lon": 9.0, "bearing": 90.0, "wind_speed": 12.0, "wind_dir": 270.0, "wind_power_w": -34},
+            {
+                "lat": 47.12346, "lon": 9.0, "bearing": 90.0, "wind_speed": 12.0, "wind_dir": 270.0,
+                "wind_power_w": -34, "wind_effort_level": "Wind hilft", "wind_effort": 0.0,
+            },
         )
-        self.assertEqual(set(medium[0]), {"lat", "lon", "bearing", "wind_speed", "wind_dir", "wind_power_w"})
+        self.assertEqual(
+            set(medium[0]),
+            {"lat", "lon", "bearing", "wind_speed", "wind_dir", "wind_power_w", "wind_effort_level", "wind_effort"},
+        )
         self.assertNotIn("wind_segments", forecast_view(job))
 
         job.refresh_from_db()

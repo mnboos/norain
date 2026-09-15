@@ -268,6 +268,30 @@
                         ],
                         "title": "Rain Rate Mm H"
                     },
+                    "ride_label": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Label"
+                    },
+                    "ride_score": {
+                        "anyOf": [
+                            {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Score"
+                    },
                     "sample_index": {
                         "anyOf": [
                             {
@@ -342,6 +366,17 @@
                             }
                         ],
                         "title": "Wind Dir"
+                    },
+                    "wind_effort_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Effort Level"
                     },
                     "wind_gust": {
                         "anyOf": [
@@ -991,6 +1026,7 @@
                 "type": "object"
             },
             "RouteThumbnail": {
+                "description": "The route-list glyph: the simplified path and the ride quality of its worst sample.\n\nThe stored blob keeps the raw sample weather; only the verdict leaves the server, scored\nwhen the list is served (see ``core.ride_quality``).",
                 "properties": {
                     "computed_at": {
                         "anyOf": [
@@ -1024,90 +1060,32 @@
                         "title": "Path",
                         "type": "array"
                     },
-                    "samples": {
-                        "items": {
-                            "anyOf": [
-                                {
-                                    "$ref": "#/components/schemas/RouteThumbnailSample"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ]
-                        },
-                        "title": "Samples",
-                        "type": "array"
+                    "ride_label": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Label"
+                    },
+                    "ride_score": {
+                        "anyOf": [
+                            {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Score"
                     }
                 },
                 "title": "RouteThumbnail",
-                "type": "object"
-            },
-            "RouteThumbnailSample": {
-                "description": "Weather inputs for one point in a route-list thumbnail.",
-                "properties": {
-                    "headwind": {
-                        "anyOf": [
-                            {
-                                "type": "number"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Headwind"
-                    },
-                    "i": {
-                        "title": "I",
-                        "type": "integer"
-                    },
-                    "precipitation_interval_s": {
-                        "anyOf": [
-                            {
-                                "type": "integer"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Precipitation Interval S"
-                    },
-                    "rain_mm": {
-                        "title": "Rain Mm",
-                        "type": "number"
-                    },
-                    "rain_rate_mm_h": {
-                        "anyOf": [
-                            {
-                                "type": "number"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Rain Rate Mm H"
-                    },
-                    "temp": {
-                        "title": "Temp",
-                        "type": "number"
-                    },
-                    "wind_power_w": {
-                        "anyOf": [
-                            {
-                                "type": "number"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Wind Power W"
-                    }
-                },
-                "required": [
-                    "i",
-                    "rain_mm",
-                    "temp"
-                ],
-                "title": "RouteThumbnailSample",
                 "type": "object"
             },
             "RouteWeatherSummary": {
@@ -1148,6 +1126,17 @@
                     "max_rain_mm": {
                         "title": "Max Rain Mm",
                         "type": "number"
+                    },
+                    "max_wind_effort_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Wind Effort Level"
                     },
                     "max_wind_power_w": {
                         "anyOf": [
@@ -1226,6 +1215,24 @@
                     "wind_dir": {
                         "title": "Wind Dir",
                         "type": "number"
+                    },
+                    "wind_effort": {
+                        "default": 0,
+                        "maximum": 1,
+                        "minimum": 0,
+                        "title": "Wind Effort",
+                        "type": "number"
+                    },
+                    "wind_effort_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Effort Level"
                     },
                     "wind_power_w": {
                         "anyOf": [

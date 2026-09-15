@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ForecastJobOutFromJSON, type WindArrow } from "@norain/api/models";
 import {
-    compassLabel, groundArrowBearing, groundWindText, relativeWindLabel, visibleWindArrows, windArrowSize, windEffortLevel,
+    compassLabel, groundArrowBearing, groundWindText, relativeWindLabel, visibleWindArrows, windArrowSize,
     windPowerText,
 } from "../wind";
-import { rideScore } from "../rideQuality";
 
 // Wind from the east while riding north.
 const segment: WindArrow = { lon: 9, lat: 47, bearing: 0, windDir: 90, windSpeed: 12, windPowerW: 40 };
@@ -26,23 +25,15 @@ describe("wind presentation", () => {
         expect(groundWindText({ ...segment, windDir: null, windSpeed: 0 })).toContain("keine Richtung");
         expect(groundWindText({ ...segment, windSpeed: null })).toContain("nicht verfügbar");
     });
-    it("words and sizes the wind effort", () => {
-        expect(windPowerText(64.4)).toBe("Windaufwand mittel (geschätzt)");
-        expect(windPowerText(-20)).toBe("Wind hilft (geschätzt)");
-        expect(windPowerText(0.4)).toBe("Kein Windaufwand (geschätzt)");
+    it("words and sizes the wind effort the server chose", () => {
+        expect(windPowerText("mittel")).toBe("Windaufwand mittel (geschätzt)");
+        expect(windPowerText("Wind hilft")).toBe("Wind hilft (geschätzt)");
+        expect(windPowerText("keiner")).toBe("Kein Windaufwand (geschätzt)");
         expect(windPowerText(null)).toContain("nicht verfügbar");
-        expect(windEffortLevel(1)).toBe("niedrig");
-        expect(windEffortLevel(49)).toBe("niedrig");
-        expect(windEffortLevel(50)).toBe("mittel");
-        expect(windEffortLevel(129)).toBe("mittel");
-        expect(windEffortLevel(130)).toBe("hoch");
-        expect(windEffortLevel(229)).toBe("hoch");
-        expect(windEffortLevel(230)).toBe("sehr hoch");
-        expect(windEffortLevel(Number.NaN)).toBeNull();
         expect(windArrowSize(null)).toBe(20);
-        expect(windArrowSize(-50)).toBe(20);
-        expect(windArrowSize(115)).toBe(26);
-        expect(windArrowSize(1000)).toBe(32);
+        expect(windArrowSize(0)).toBe(20);
+        expect(windArrowSize(0.5)).toBe(26);
+        expect(windArrowSize(1)).toBe(32);
     });
     it("thins in screen space, caps arrows, and skips arrows it cannot place", () => {
         const all = Array.from({ length: 220 }, (_, i) => ({ ...segment, lon: i }));
@@ -50,12 +41,6 @@ describe("wind presentation", () => {
         expect(visible).toHaveLength(100);
         expect(visible[1]?.lon).toBe(2);
         expect(visibleWindArrows([segment], () => ({ x: NaN, y: 0 }))).toEqual([]);
-    });
-    it("keeps unknown wind out of the ride score, but calm remains valid", () => {
-        const input = { rainMm: 0, rainRateMmH: 0, temp: 18, headwind: null };
-        expect(rideScore(input)).toBeNull();
-        expect(rideScore({ ...input, headwind: 0 })?.score).toBe(0);
-        expect(rideScore({ ...input, headwind: NaN })).toBeNull();
     });
     it("reads old raw WebSocket jobs without new wind properties", () => {
         const job = ForecastJobOutFromJSON({ job_id: "old", status: "done", result: {

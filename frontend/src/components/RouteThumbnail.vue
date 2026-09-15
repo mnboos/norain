@@ -1,21 +1,29 @@
 <script setup lang="ts">
 /**
- * The tiny route-shape glyph in the route list: the shape of the ride, and nothing else.
+ * The tiny route-shape glyph in the route list: the shape of the ride in a single colour,
+ * the YlOrRd ramp colour (`scoreColor`) of the server's `rideScore` for its worst sample -
+ * the one the caption names. The scoring itself never reaches the browser.
+ * At 40 px a per-stretch ramp is too small to read; one verdict per ride is what the list
+ * is for, and the map shows where along the route it changes.
  *
- * It deliberately carries **no quality colour**. It is a glyph, not a chart - no axes, no
- * legend, no hover layer - so a colour ramp here would be the only channel, at 40 px, for
- * a reader who has to tell "fine" from "soaked" at a glance. The quality is text instead:
- * the caption beside the glyph (`RouteListPanel.qualityLabel`) and the `aria-label` here.
+ * The ramp's pale good end (`#ffeda0`) all but disappears at this size, so the line sits on
+ * the same theme-flipping casing the map uses (`CASING_*`). The glyph has no legend and no
+ * hover, so the colour is never the only channel: the caption beside it
+ * (`RouteListPanel.qualityLabel`) and the `aria-label` here say the quality in words.
  *
- * The one thing the stroke still distinguishes is *data presence*: neutral grey means no
- * usable forecast for that stretch, which is a fact about the data rather than a reading
- * of the weather. The map route line keeps the YlOrRd ramp, where a legend, the popup's
- * Fahrqualität line and the section list back it up.
+ * Neutral grey means no usable forecast - a fact about the data, not a reading of the
+ * weather - and it is deliberately off the warm ramp.
  */
 import { computed } from "vue";
 import type { RecurringRouteOut } from "@norain/api/models";
 
-import { NO_DATA_COLOR, rideScore, rideScoreLabel } from "@/utils/rideQuality";
+import {
+    CASING_DARK,
+    CASING_LIGHT,
+    CASING_OPACITY,
+    NO_DATA_COLOR,
+    scoreColor,
+} from "@/utils/rideQuality";
 import { pointsAttr, projectPath } from "@/utils/routeThumbnail";
 
 /** Only the three fields the glyph reads, so callers and tests need not build a whole route. */
@@ -38,56 +46,22 @@ const stale = computed(() => {
     return !!t?.departure && t.departure !== props.route.nextDeparture;
 });
 
-const points = computed(() => projectPath(thumbnail.value?.path ?? [], props.size));
-
-/** One `<polyline>` per span between consecutive samples: theme ink, or grey where unknown. */
-const spans = computed(() => {
-    const t = thumbnail.value;
-    const pts = points.value;
-    const samples = t?.samples ?? [];
-    if (pts.length < 2) return [];
-
-    // No samples at all: still draw the shape, in the neutral "no data" grey.
-    if (samples.length < 2) {
-        return [{ points: pointsAttr(pts), color: NO_DATA_COLOR }];
-    }
-
-    const scores = samples.map(s => (s ? (rideScore(s)?.score ?? null) : null));
-    const out: { points: string; color: string }[] = [];
-
-    for (let k = 0; k < samples.length - 1; k++) {
-        const a = samples[k];
-        const b = samples[k + 1];
-        const from = a?.i ?? 0;
-        // A missing sample has no vertex of its own; span to the next known one.
-        const to = b?.i ?? pts.length - 1;
-        if (to <= from) continue;
-
-        const s0 = scores[k] ?? null;
-        const s1 = scores[k + 1] ?? null;
-        // The score decides only whether this stretch is *known*, not what colour it gets.
-        // Grey the moment either end is unknown, rather than implying weather we don't have.
-        const known = !stale.value && s0 != null && s1 != null;
-        const color = known ? "currentColor" : NO_DATA_COLOR;
-
-        // Slice inclusive of both endpoints so consecutive spans share a vertex and the
-        // line has no gaps at the joins.
-        out.push({ points: pointsAttr(pts.slice(from, to + 1)), color });
-    }
-    return out;
+/** `"x,y x,y ..."` of the projected path, or `null` when there is no line to draw. */
+const line = computed(() => {
+    const pts = projectPath(thumbnail.value?.path ?? [], props.size);
+    return pts.length < 2 ? null : pointsAttr(pts);
 });
 
-/** The worst scoring sample - what the label names, since that is what spoils a ride. */
-const worst = computed(() => {
-    if (stale.value) return null;
-    const scored = (thumbnail.value?.samples ?? []).flatMap(s => (s ? (rideScore(s) ?? []) : []));
-    return scored.reduce<(typeof scored)[number] | null>((a, b) => (a == null || b.score > a.score ? b : a), null);
-});
+/**
+ * One colour for the whole line: the server's score for the worst sample, the one the caption
+ * names. Grey when nothing is known - stale, or no sample the server could score.
+ */
+const color = computed(() => (stale.value ? NO_DATA_COLOR : scoreColor(thumbnail.value?.rideScore)));
 
 const label = computed(() => {
     if (!props.route.hasGeometry) return "Route wird noch berechnet";
     if (!thumbnail.value || stale.value) return "Fahrqualität: Noch keine Prognose";
-    return `Fahrqualität: ${rideScoreLabel(worst.value)}`;
+    return `Fahrqualität: ${thumbnail.value.rideLabel ?? "Nicht verfügbar"}`;
 });
 
 defineExpose({ label });
@@ -103,12 +77,21 @@ defineExpose({ label });
         class="route-thumbnail"
     >
         <title>{{ label }}</title>
-        <template v-if="spans.length">
+        <template v-if="line">
+            <!-- Casing under the line, so the pale good end stays visible. -->
             <polyline
-                v-for="(span, i) in spans"
-                :key="i"
-                :points="span.points"
-                :stroke="span.color"
+                data-casing
+                :points="line"
+                stroke="currentColor"
+                :stroke-opacity="CASING_OPACITY"
+                fill="none"
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+            />
+            <polyline
+                :points="line"
+                :stroke="color"
                 fill="none"
                 stroke-width="2"
                 stroke-linecap="round"
@@ -124,8 +107,11 @@ defineExpose({ label });
 .route-thumbnail {
     display: block;
     overflow: visible;
-    /* The known-forecast spans stroke `currentColor`, so the ink follows the Quasar theme
-       var and flips with dark mode on its own - no second JS path watching $q.dark. */
-    color: var(--q-primary);
+    /* The casing strokes `currentColor`, so its ink flips with Quasar's dark mode here in CSS -
+       no second JS path watching $q.dark. */
+    color: v-bind(CASING_LIGHT);
+}
+:global(.body--dark) .route-thumbnail {
+    color: v-bind(CASING_DARK);
 }
 </style>

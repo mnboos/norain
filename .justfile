@@ -7,12 +7,15 @@ gdal_path := localappdata + "\\Programs\\OSGeo4W"
 
 # Export these so that uv and the compiler can see them
 
-export GDAL_HOME := gdal_path
-export INCLUDE := gdal_path + "\\include"
-export LIB := gdal_path + "\\lib"
+export GDAL_HOME := if os_family() == "windows" { gdal_path } else { env("GDAL_HOME", "") }
+export INCLUDE := if os_family() == "windows" { gdal_path + "\\include" } else { env("INCLUDE", "") }
+export LIB := if os_family() == "windows" { gdal_path + "\\lib" } else { env("LIB", "") }
 export GDAL_VERSION := "3.13.1"
 
 image_prefix := "ghcr.io/mnboos/norain"
+
+# podman on Windows, docker elsewhere; override with CONTAINER_ENGINE.
+container := env("CONTAINER_ENGINE", if os_family() == "windows" { "podman" } else { "docker" })
 
 # List the recipes by group.
 default:
@@ -27,17 +30,42 @@ setup:
     uv venv --clear
     uv sync
 
+[group('setup')]
+[unix]
+[working-directory("backend")]
+setup:
+    if [ "{{ os() }}" = "macos" ]; then brew list gdal >/dev/null 2>&1 || brew install gdal; fi
+    uv venv --clear
+    uv sync
+
+[doc("Start PostGIS, Redis, GraphHopper and Photon on the host ports set in .env.")]
+[group('dev')]
+services:
+    {{ container }} compose -f docker-compose.dev.yml up -d db redis graphhopper photon
+
+[doc("Run Django on BACKEND_PORT from .env (default 8000).")]
+[group('dev')]
+[working-directory("backend")]
+backend:
+    uv run python manage.py runserver
+
+[doc("Run Vite on FRONTEND_PORT from .env (default 3000).")]
+[group('dev')]
+[working-directory("frontend")]
+frontend:
+    npm run dev
+
 [doc("Import a ready-to-use index that you can download from the Graphhopper page.")]
 [group('geodata')]
 setup-geocoder:
     # wget https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst
-    podman compose run --entrypoint bash -v ./photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst:/photon-dump.jsonl.zst photon -c /import-photon-dump.sh
+    {{ container }} compose run --entrypoint bash -v ./photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst:/photon-dump.jsonl.zst photon -c /import-photon-dump.sh
     #podman compose run --entrypoint bash -v ./photon-dump-austria-1.0-latest.jsonl.zst:/photon-dump.jsonl.zst photon -c /import-photon-dump.sh
 
 [doc("Import the Switzerland OSM PBF into Photon for geocoding. This is a one-time setup step. Use this only if you want to re-import the PBF into Photon, e.g. after an OSM update. If possible, use the exported index from the Graphhopper page.")]
 [group('geodata')]
 photon-import-pbf:
-    podman compose run --entrypoint bash -v ./data/switzerland-latest.osm.pbf:/switzerland-latest.osm.pbf photon -osm-pbf=switzerland-latest.osm.pbf -country-codes="CH" -languages=de,fr,it,en
+    {{ container }} compose run --entrypoint bash -v ./data/switzerland-latest.osm.pbf:/switzerland-latest.osm.pbf photon -osm-pbf=switzerland-latest.osm.pbf -country-codes="CH" -languages=de,fr,it,en
 
 [group('api')]
 [working-directory("backend")]
@@ -47,7 +75,7 @@ export-openapi-schema:
 # (Re)generate the API client for the frontend from the schema.
 
 [group('api')]
-[linux]
+[unix]
 [working-directory("packages/api")]
 delete-api:
     rm -rf apis/

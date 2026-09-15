@@ -23,7 +23,7 @@ export interface RouteSection {
     /**
      * 
      */
-    startKm: number;
+    condition: string;
     /**
      * 
      */
@@ -31,19 +31,7 @@ export interface RouteSection {
     /**
      * 
      */
-    startTime: string;
-    /**
-     * 
-     */
     endTime: string;
-    /**
-     * 
-     */
-    condition: string;
-    /**
-     * 
-     */
-    maxRainMm: number;
     /**
      * 
      */
@@ -51,25 +39,37 @@ export interface RouteSection {
     /**
      * 
      */
-    tempMin: number;
+    maxRainMm: number;
+    /**
+     * 
+     */
+    startKm: number;
+    /**
+     * 
+     */
+    startTime: string;
     /**
      * 
      */
     tempMax: number;
+    /**
+     * 
+     */
+    tempMin: number;
 }
 
 /**
  * Check if a given object implements the RouteSection interface.
  */
 export function instanceOfRouteSection(value: object): value is RouteSection {
-    if ((!('startKm' in (value as Record<string, any>)) && !('start_km' in (value as Record<string, any>))) || ((value as Record<string, any>)['startKm'] === undefined && (value as Record<string, any>)['start_km'] === undefined)) return false;
-    if ((!('endKm' in (value as Record<string, any>)) && !('end_km' in (value as Record<string, any>))) || ((value as Record<string, any>)['endKm'] === undefined && (value as Record<string, any>)['end_km'] === undefined)) return false;
-    if ((!('startTime' in (value as Record<string, any>)) && !('start_time' in (value as Record<string, any>))) || ((value as Record<string, any>)['startTime'] === undefined && (value as Record<string, any>)['start_time'] === undefined)) return false;
-    if ((!('endTime' in (value as Record<string, any>)) && !('end_time' in (value as Record<string, any>))) || ((value as Record<string, any>)['endTime'] === undefined && (value as Record<string, any>)['end_time'] === undefined)) return false;
     if (!('condition' in value) || value['condition'] === undefined) return false;
+    if ((!('endKm' in (value as Record<string, any>)) && !('end_km' in (value as Record<string, any>))) || ((value as Record<string, any>)['endKm'] === undefined && (value as Record<string, any>)['end_km'] === undefined)) return false;
+    if ((!('endTime' in (value as Record<string, any>)) && !('end_time' in (value as Record<string, any>))) || ((value as Record<string, any>)['endTime'] === undefined && (value as Record<string, any>)['end_time'] === undefined)) return false;
     if ((!('maxRainMm' in (value as Record<string, any>)) && !('max_rain_mm' in (value as Record<string, any>))) || ((value as Record<string, any>)['maxRainMm'] === undefined && (value as Record<string, any>)['max_rain_mm'] === undefined)) return false;
-    if ((!('tempMin' in (value as Record<string, any>)) && !('temp_min' in (value as Record<string, any>))) || ((value as Record<string, any>)['tempMin'] === undefined && (value as Record<string, any>)['temp_min'] === undefined)) return false;
+    if ((!('startKm' in (value as Record<string, any>)) && !('start_km' in (value as Record<string, any>))) || ((value as Record<string, any>)['startKm'] === undefined && (value as Record<string, any>)['start_km'] === undefined)) return false;
+    if ((!('startTime' in (value as Record<string, any>)) && !('start_time' in (value as Record<string, any>))) || ((value as Record<string, any>)['startTime'] === undefined && (value as Record<string, any>)['start_time'] === undefined)) return false;
     if ((!('tempMax' in (value as Record<string, any>)) && !('temp_max' in (value as Record<string, any>))) || ((value as Record<string, any>)['tempMax'] === undefined && (value as Record<string, any>)['temp_max'] === undefined)) return false;
+    if ((!('tempMin' in (value as Record<string, any>)) && !('temp_min' in (value as Record<string, any>))) || ((value as Record<string, any>)['tempMin'] === undefined && (value as Record<string, any>)['temp_min'] === undefined)) return false;
     return true;
 }
 
@@ -83,15 +83,15 @@ export function RouteSectionFromJSONTyped(json: any, ignoreDiscriminator: boolea
     }
     return {
         
-        'startKm': json['start_km'],
-        'endKm': json['end_km'],
-        'startTime': json['start_time'],
-        'endTime': json['end_time'],
         'condition': json['condition'],
-        'maxRainMm': json['max_rain_mm'],
+        'endKm': json['end_km'],
+        'endTime': json['end_time'],
         'maxHeadwind': json['max_headwind'] === undefined ? undefined : json['max_headwind'] === null ? null : json['max_headwind'],
-        'tempMin': json['temp_min'],
+        'maxRainMm': json['max_rain_mm'],
+        'startKm': json['start_km'],
+        'startTime': json['start_time'],
         'tempMax': json['temp_max'],
+        'tempMin': json['temp_min'],
     };
 }
 
@@ -106,15 +106,15 @@ export function RouteSectionToJSONTyped(value?: RouteSection | null, ignoreDiscr
 
     return {
         
-        'start_km': value['startKm'],
-        'end_km': value['endKm'],
-        'start_time': value['startTime'],
-        'end_time': value['endTime'],
         'condition': value['condition'],
-        'max_rain_mm': value['maxRainMm'],
+        'end_km': value['endKm'],
+        'end_time': value['endTime'],
         'max_headwind': value['maxHeadwind'],
-        'temp_min': value['tempMin'],
+        'max_rain_mm': value['maxRainMm'],
+        'start_km': value['startKm'],
+        'start_time': value['startTime'],
         'temp_max': value['tempMax'],
+        'temp_min': value['tempMin'],
     };
 }
 

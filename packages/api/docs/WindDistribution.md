@@ -11,7 +11,9 @@ Name | Type
 `feltCoveredM` | number
 `headwindM` | number
 `maxFeltSpeed` | number
+`maxWindPowerW` | number
 `meanFeltSpeed` | number
+`meanWindPowerW` | number
 `tailwindM` | number
 `timingSource` | string
 `unknownM` | number
@@ -28,7 +30,9 @@ const example = {
   "feltCoveredM": null,
   "headwindM": null,
   "maxFeltSpeed": null,
+  "maxWindPowerW": null,
   "meanFeltSpeed": null,
+  "meanWindPowerW": null,
   "tailwindM": null,
   "timingSource": null,
   "unknownM": null,

@@ -16,7 +16,6 @@ export * from './RecurringRouteOut';
 export * from './RouteForecastOut';
 export * from './RouteSection';
 export * from './RouteThumbnail';
-export * from './RouteThumbnailSample';
 export * from './RouteWeatherSummary';
 export * from './WindArrow';
 export * from './WindDistribution';

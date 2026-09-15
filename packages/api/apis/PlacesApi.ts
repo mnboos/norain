@@ -19,7 +19,7 @@ import {
     PlacesSearchResultToJSON,
 } from '../models/PlacesSearchResult';
 
-export interface PlacesApiCoreApiPlacesSearchRequest {
+export interface CoreApiPlacesSearchRequest {
     /**
      * 
      */
@@ -46,7 +46,7 @@ export class PlacesApi extends runtime.BaseAPI {
     /**
      * Creates request options for coreApiPlacesSearch without sending the request
      */
-    async coreApiPlacesSearchRequestOpts(requestParameters: PlacesApiCoreApiPlacesSearchRequest): Promise<runtime.RequestOpts> {
+    async coreApiPlacesSearchRequestOpts(requestParameters: CoreApiPlacesSearchRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['query'] == null) {
             throw new runtime.RequiredError(
                 'query',
@@ -109,7 +109,7 @@ export class PlacesApi extends runtime.BaseAPI {
     /**
      * Search
      */
-    async coreApiPlacesSearchRaw(requestParameters: PlacesApiCoreApiPlacesSearchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<PlacesSearchResult>>> {
+    async coreApiPlacesSearchRaw(requestParameters: CoreApiPlacesSearchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<PlacesSearchResult>>> {
         const requestOptions = await this.coreApiPlacesSearchRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -119,7 +119,7 @@ export class PlacesApi extends runtime.BaseAPI {
     /**
      * Search
      */
-    async coreApiPlacesSearch(requestParameters: PlacesApiCoreApiPlacesSearchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<PlacesSearchResult>> {
+    async coreApiPlacesSearch(requestParameters: CoreApiPlacesSearchRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<PlacesSearchResult>> {
         const response = await this.coreApiPlacesSearchRaw(requestParameters, initOverrides);
         return await response.value();
     }

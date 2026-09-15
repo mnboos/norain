@@ -5,8 +5,6 @@ import {
     NO_DATA_COLOR,
     YLORRD_8,
     gradientStops,
-    rideScore,
-    rideScoreLabel,
     sampleProgress,
     scoreBand,
     scoreColor,
@@ -37,8 +35,8 @@ function at<T>(list: readonly T[], i: number): T {
     return v;
 }
 
-/** Score of a sample, or null when it has no usable data - what gradientStops consumes. */
-const scoresOf = (ss: ForecastSampleOut[]) => ss.map(s => rideScore(s)?.score ?? null);
+/** The server's score of each sample, or null where it could not score one - what gradientStops consumes. */
+const scoresOf = (ss: ForecastSampleOut[]) => ss.map(s => s.rideScore ?? null);
 
 /** Unpack the flat maplibre stop list, checking it really is [number, string, ...]. */
 function pairs(stops: (number | string)[]): { p: number; color: string }[] {
@@ -57,97 +55,6 @@ const channels = (hex: string): [number, number, number] => [
     Number.parseInt(hex.slice(3, 5), 16),
     Number.parseInt(hex.slice(5, 7), 16),
 ];
-
-describe("rideScore", () => {
-    it("is 0 for a dry, mild, tailwind ride and 1 for the worst case", () => {
-        expect(rideScore(sample({ rainRateMmH: 0, temp: 18, headwind: -12 }))?.score).toBe(0);
-        expect(rideScore(sample({ rainRateMmH: 8, temp: -10, headwind: 45 }))?.score).toBe(1);
-    });
-
-    it("rises monotonically with rain", () => {
-        const at_ = (mm: number) => rideScore(sample({ rainRateMmH: mm }))?.score ?? Number.NaN;
-        const series = [0, 0.2, 1, 2.5, 5, 9].map(at_);
-        for (let i = 1; i < series.length; i++) expect(at(series, i)).toBeGreaterThanOrEqual(at(series, i - 1));
-        expect(at_(3)).toBeGreaterThan(at_(0.5));
-    });
-
-    it("rises monotonically with headwind", () => {
-        const at_ = (kmh: number) => rideScore(sample({ headwind: kmh }))?.score ?? Number.NaN;
-        const series = [-20, 0, 5, 10, 20, 30, 50].map(at_);
-        for (let i = 1; i < series.length; i++) expect(at(series, i)).toBeGreaterThanOrEqual(at(series, i - 1));
-    });
-
-    it("rises as the temperature leaves the comfortable band in either direction", () => {
-        const at_ = (c: number) => rideScore(sample({ temp: c }))?.score ?? Number.NaN;
-        expect(at_(18)).toBe(0);
-        expect(at_(14)).toBe(0);
-        expect(at_(22)).toBe(0);
-        expect(at_(5)).toBeGreaterThan(at_(12));
-        expect(at_(30)).toBeGreaterThan(at_(24));
-        expect(at_(-10)).toBeGreaterThan(at_(0));
-    });
-
-    it("does not reward a tailwind - it only removes the penalty", () => {
-        expect(rideScore(sample({ headwind: -30 }))?.score).toBe(rideScore(sample({ headwind: 0 }))?.score);
-    });
-
-    it("scores the wind effort when it is known, whatever the raw headwind says", () => {
-        // 10 km/h into a fast e-bike costs more than 20 km/h into a slow bike.
-        const fast = rideScore(sample({ headwind: 10, windPowerW: 231 }));
-        const slow = rideScore(sample({ headwind: 20, windPowerW: 90 }));
-        expect(fast?.wind).toBe(1);
-        expect(slow?.wind).toBeLessThan(fast?.wind ?? 0);
-        expect(rideScore(sample({ headwind: 30, windPowerW: 0 }))?.wind).toBe(0);
-    });
-
-    it("gives no penalty for a helping wind effort", () => {
-        expect(rideScore(sample({ windPowerW: -80 }))?.score).toBe(rideScore(sample({ windPowerW: 0 }))?.score);
-    });
-
-    it("falls back to the headwind curve without an effort, and matches it at ~18 km/h", () => {
-        expect(rideScore(sample({ headwind: 20, windPowerW: null }))?.wind).toBe(0.65);
-        expect(rideScore(sample({ headwind: 20, windPowerW: 130 }))?.wind).toBe(0.65);
-        expect(rideScore(sample({ headwind: null, windPowerW: 130 }))?.wind).toBe(0.65);
-        expect(rideScore(sample({ headwind: null, windPowerW: null }))).toBeNull();
-    });
-
-    it("names the dominant weighted factor", () => {
-        expect(rideScore(sample({ rainRateMmH: 4 }))?.worst).toBe("rain");
-        expect(rideScore(sample({ rainRateMmH: 0, headwind: 28 }))?.worst).toBe("wind");
-        expect(rideScore(sample({ rainRateMmH: 0, temp: -5 }))?.worst).toBe("temp");
-    });
-});
-
-describe("rideScore missing data", () => {
-    it("derives the rate from the accumulation when the interval is known", () => {
-        // 0.5 mm over 15 min == 2 mm/h
-        const derived = rideScore(sample({ rainRateMmH: null, rainMm: 0.5, precipitationIntervalS: 900 }));
-        expect(derived?.rain).toBeCloseTo(rideScore(sample({ rainRateMmH: 2 }))?.rain ?? Number.NaN, 10);
-    });
-
-    it("returns null rather than assuming an hourly bucket", () => {
-        expect(rideScore(sample({ rainRateMmH: null, rainMm: 0.5, precipitationIntervalS: null }))).toBeNull();
-        expect(rideScore(sample({ rainRateMmH: null, rainMm: 0.5, precipitationIntervalS: 0 }))).toBeNull();
-    });
-
-    it("only names a cause when one factor actually dominates", () => {
-        // Rain alone: worth naming.
-        expect(rideScoreLabel(rideScore(sample({ rainRateMmH: 3 })))).toContain("v. a. Regen");
-        // Drizzle, headwind and cold all pulling together: the largest weighted term is
-        // wind, but at well under half the total it is not an honest culprit, so the label
-        // reports the band alone rather than blaming one factor.
-        const mixed = rideScore(sample({ rainRateMmH: 0.5, headwind: 20, temp: 8 }));
-        expect(mixed?.worst).toBe("wind");
-        expect(rideScoreLabel(mixed)).not.toContain("v. a.");
-        expect(rideScoreLabel(mixed)).toBe("gut");
-    });
-
-    it("labels an unknown score instead of inventing a band", () => {
-        expect(rideScoreLabel(null)).toBe("Nicht verfügbar");
-        expect(rideScoreLabel(rideScore(sample()))).toBe("sehr gut");
-        expect(rideScoreLabel(rideScore(sample({ rainRateMmH: 6 })))).toContain("Regen");
-    });
-});
 
 describe("scoreColor", () => {
     it("hits the exact ramp endpoints", () => {
@@ -317,11 +224,11 @@ describe("gradientStops", () => {
         expect(at(stops, stops.length - 1).p).toBe(1);
     });
 
-    it("scores a real sample list end to end", () => {
+    it("colours a served sample list end to end", () => {
         const samples = [
-            sample({ lon: 0, lat: 0, rainRateMmH: 0 }),
-            sample({ lon: 0.01, lat: 0, rainRateMmH: 3, headwind: 20 }),
-            sample({ lon: 0.02, lat: 0, rainRateMmH: null, precipitationIntervalS: null }),
+            sample({ lon: 0, lat: 0, rideScore: 0 }),
+            sample({ lon: 0.01, lat: 0, rideScore: 0.6 }),
+            sample({ lon: 0.02, lat: 0, rideScore: null }),
         ];
         const line = [
             [0, 0],

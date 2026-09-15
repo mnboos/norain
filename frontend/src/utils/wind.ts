@@ -1,5 +1,4 @@
 import type { WindArrow, WindDistribution } from "@norain/api/models";
-import { WIND_POWER_CURVE } from "@/utils/rideQuality";
 
 /** The ground-wind fields the arrow and its label read. Nullable so partial data is refused here too. */
 export interface GroundWind {
@@ -38,35 +37,21 @@ export function groundWindText(wind: GroundWind): string {
 }
 
 /**
- * The wind effort as a word instead of watts, which nobody can place and which would claim a
- * precision the estimate does not have. The steps are the breakpoints of the ride-quality
- * wind curve, so the word and the map colour agree about the same point.
+ * Extra effort to hold the planned speed against the wind, as the word the server chose
+ * (`windEffortLevel`: "Wind hilft", "keiner", "niedrig" … "sehr hoch"). The thresholds are
+ * part of the ride-quality scoring and stay on the server.
  */
-export function windEffortLevel(watts: number | null | undefined): string | null {
-    if (watts == null || !Number.isFinite(watts)) return null;
-    const rounded = Math.round(watts);
-    if (rounded < 0) return "Wind hilft";
-    if (rounded === 0) return "keiner";
-    const [, [low], [medium], [high]] = WIND_POWER_CURVE;
-    if (rounded < low) return "niedrig";
-    if (rounded < medium) return "mittel";
-    if (rounded < high) return "hoch";
-    return "sehr hoch";
-}
-
-/** Extra effort to hold the planned speed against the wind, as a level. */
-export function windPowerText(watts: number | null | undefined): string {
-    const level = windEffortLevel(watts);
+export function windPowerText(level: string | null | undefined): string {
     if (level == null) return "Windaufwand nicht verfügbar";
     if (level === "Wind hilft") return "Wind hilft (geschätzt)";
     if (level === "keiner") return "Kein Windaufwand (geschätzt)";
     return `Windaufwand ${level} (geschätzt)`;
 }
 
-/** Arrow edge length in px: 20 at calm, tailwind or unknown effort, 32 from 230 W up. */
-export function windArrowSize(watts: number | null | undefined): number {
-    if (watts == null || !Number.isFinite(watts) || watts <= 0) return 20;
-    return Math.round(20 + 12 * Math.min(1, watts / 230));
+/** Arrow edge length in px from the server's 0..1 `windEffort`: 20 at calm, tailwind or unknown, 32 at the top. */
+export function windArrowSize(effort: number | null | undefined): number {
+    if (effort == null || !Number.isFinite(effort) || effort <= 0) return 20;
+    return Math.round(20 + 12 * Math.min(1, effort));
 }
 
 /**

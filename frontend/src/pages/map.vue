@@ -10,6 +10,7 @@ import WeatherSummaryCard from "@/components/WeatherSummaryCard.vue";
 import ForecastDetails from "@/components/ForecastDetails.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
+import { placeLabel } from "@/utils/placeLabel";
 import { QSelect } from "quasar";
 import { computed, ref, watchEffect, watch } from "vue";
 import {
@@ -128,6 +129,11 @@ function makeOnFilter(filter: ReturnType<typeof ref<string>>) {
 const onFilterStart = makeOnFilter(filterStart);
 const onFilterDest = makeOnFilter(filterDest);
 
+// Select the chosen place's name on focus, so typing replaces it instead of appending to it.
+function selectInputText(e: Event) {
+    if (e.target instanceof HTMLInputElement) e.target.select();
+}
+
 function onMapView(view: { zoom: number; lat: number; lng: number }) {
     mapView.value = view;
 }
@@ -156,27 +162,20 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             outlined
                             rounded
                             hide-dropdown-icon
+                            hide-selected
+                            fill-input
+                            :option-label="placeLabel"
                             use-input
                             type="search"
                             :input-debounce="100"
                             :options="placesStart"
                             @filter="onFilterStart"
+                            @focus="selectInputText"
                         >
-                            <template #selected-item="props">
-                                <PlaceSearchItem
-                                    v-if="props.opt"
-                                    :feature="props.opt"
-                                    :show-canton="false"
-                                    :focused="false"
-                                    inline
-                                    :clickable="false"
-                                />
-                            </template>
                             <template #option="props">
                                 <PlaceSearchItem
                                     :feature="props.opt"
                                     :focused="props.focused"
-                                    :inline="false"
                                     clickable
                                     @click="props.toggleOption(props.opt)"
                                 />
@@ -190,27 +189,20 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             outlined
                             rounded
                             hide-dropdown-icon
+                            hide-selected
+                            fill-input
+                            :option-label="placeLabel"
                             use-input
                             type="search"
                             :input-debounce="100"
                             :options="placesDest"
                             @filter="onFilterDest"
+                            @focus="selectInputText"
                         >
-                            <template #selected-item="props">
-                                <PlaceSearchItem
-                                    v-if="props.opt"
-                                    :feature="props.opt"
-                                    :show-canton="false"
-                                    :focused="false"
-                                    inline
-                                    :clickable="false"
-                                />
-                            </template>
                             <template #option="props">
                                 <PlaceSearchItem
                                     :feature="props.opt"
                                     :focused="props.focused"
-                                    :inline="false"
                                     clickable
                                     @click="props.toggleOption(props.opt)"
                                 />

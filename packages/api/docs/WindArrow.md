@@ -1,17 +1,20 @@
 
 # WindArrow
 
-One felt-wind arrow for the map: only segments with complete felt-wind data.
+One real-wind arrow for the map: only segments with complete ground-wind data.
 
 ## Properties
 
 Name | Type
 ------------ | -------------
 `bearing` | number
-`feltAngle` | number
-`feltSpeed` | number
 `lat` | number
 `lon` | number
+`windDir` | number
+`windEffort` | number
+`windEffortLevel` | string
+`windPowerW` | number
+`windSpeed` | number
 
 ## Example
 
@@ -21,10 +24,13 @@ import type { WindArrow } from ''
 // TODO: Update the object below with actual values
 const example = {
   "bearing": null,
-  "feltAngle": null,
-  "feltSpeed": null,
   "lat": null,
   "lon": null,
+  "windDir": null,
+  "windEffort": null,
+  "windEffortLevel": null,
+  "windPowerW": null,
+  "windSpeed": null,
 } satisfies WindArrow
 
 console.log(example)

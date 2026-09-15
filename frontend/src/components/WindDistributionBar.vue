@@ -36,10 +36,12 @@ const colors = ["negative", "primary", "secondary", "blue-grey-3", "grey-7"];
                 />
             </div>
             <div class="row q-gutter-x-md text-muted">
-                <span v-for="(part, index) in parts" :key="part.label">
-                    <q-badge :color="colors[index]" class="q-mr-xs" />
-                    {{ (part.meters / 1000).toFixed(1) }} km {{ part.label }}
-                </span>
+                <template v-for="(part, index) in parts" :key="part.label">
+                    <span v-if="part.meters > 0">
+                        <q-badge :color="colors[index]" class="q-mr-xs" />
+                        {{ (part.meters / 1000).toFixed(1) }} km {{ part.label }}
+                    </span>
+                </template>
             </div>
         </template>
         <div v-else>Keine Strecke</div>

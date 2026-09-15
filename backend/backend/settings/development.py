@@ -1,10 +1,13 @@
 """Local development and test settings."""
 
+import os
+
 from .base import *
 
 DEBUG = True
 
-CORS_ALLOWED_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+_frontend_port = os.environ.get("FRONTEND_PORT") or "3000"
+CORS_ALLOWED_ORIGINS = [f"http://localhost:{_frontend_port}", f"http://127.0.0.1:{_frontend_port}"]
 CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
 SESSION_COOKIE_SECURE = False

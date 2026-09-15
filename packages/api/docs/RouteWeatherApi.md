@@ -152,7 +152,7 @@ No authorization required
 
 Forecast Job Map Detail
 
-The route line and felt-wind arrows at more detail than the job result carries.  The map asks for this only once it is zoomed in far enough to show the difference.
+The route line and wind arrows at more detail than the job result carries.  The map asks for this only once it is zoomed in far enough to show the difference.
 
 ### Example
 

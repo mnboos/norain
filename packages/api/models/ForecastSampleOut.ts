@@ -31,11 +31,7 @@ export interface ForecastSampleOut {
     /**
      * 
      */
-    lat: number;
-    /**
-     * 
-     */
-    lon: number;
+    crosswind?: number | null;
     /**
      * 
      */
@@ -47,23 +43,15 @@ export interface ForecastSampleOut {
     /**
      * 
      */
-    rainMm: number;
+    headwind?: number | null;
     /**
      * 
      */
-    precipitationIntervalS?: number | null;
+    lat: number;
     /**
      * 
      */
-    rainRateMmH?: number | null;
-    /**
-     * 
-     */
-    probabilitySource?: string | null;
-    /**
-     * 
-     */
-    uncertainty?: ForecastUncertaintySummary | null;
+    lon: number;
     /**
      * 
      */
@@ -71,35 +59,31 @@ export interface ForecastSampleOut {
     /**
      * 
      */
+    precipitationIntervalS?: number | null;
+    /**
+     * 
+     */
+    probabilitySource?: string | null;
+    /**
+     * 
+     */
     rainIfWet?: number | null;
     /**
      * 
      */
-    temp: number;
+    rainMm: number;
     /**
      * 
      */
-    windSpeed?: number | null;
+    rainRateMmH?: number | null;
     /**
      * 
      */
-    windGust?: number | null;
+    rideLabel?: string | null;
     /**
      * 
      */
-    windDir?: number | null;
-    /**
-     * 
-     */
-    headwind?: number | null;
-    /**
-     * 
-     */
-    crosswind?: number | null;
-    /**
-     * 
-     */
-    windPowerW?: number | null;
+    rideScore?: number | null;
     /**
      * 
      */
@@ -107,7 +91,15 @@ export interface ForecastSampleOut {
     /**
      * 
      */
-    windCoverage?: number | null;
+    stationCount?: number | null;
+    /**
+     * 
+     */
+    temp: number;
+    /**
+     * 
+     */
+    uncertainty?: ForecastUncertaintySummary | null;
     /**
      * 
      */
@@ -119,17 +111,37 @@ export interface ForecastSampleOut {
     /**
      * 
      */
-    stationCount?: number | null;
+    windCoverage?: number | null;
+    /**
+     * 
+     */
+    windDir?: number | null;
+    /**
+     * 
+     */
+    windEffortLevel?: string | null;
+    /**
+     * 
+     */
+    windGust?: number | null;
+    /**
+     * 
+     */
+    windPowerW?: number | null;
+    /**
+     * 
+     */
+    windSpeed?: number | null;
 }
 
 /**
  * Check if a given object implements the ForecastSampleOut interface.
  */
 export function instanceOfForecastSampleOut(value: object): value is ForecastSampleOut {
-    if (!('lat' in value) || value['lat'] === undefined) return false;
-    if (!('lon' in value) || value['lon'] === undefined) return false;
     if ((!('elapsedS' in (value as Record<string, any>)) && !('elapsed_s' in (value as Record<string, any>))) || ((value as Record<string, any>)['elapsedS'] === undefined && (value as Record<string, any>)['elapsed_s'] === undefined)) return false;
     if (!('eta' in value) || value['eta'] === undefined) return false;
+    if (!('lat' in value) || value['lat'] === undefined) return false;
+    if (!('lon' in value) || value['lon'] === undefined) return false;
     if ((!('rainMm' in (value as Record<string, any>)) && !('rain_mm' in (value as Record<string, any>))) || ((value as Record<string, any>)['rainMm'] === undefined && (value as Record<string, any>)['rain_mm'] === undefined)) return false;
     if (!('temp' in value) || value['temp'] === undefined) return false;
     if ((!('weatherDesc' in (value as Record<string, any>)) && !('weather_desc' in (value as Record<string, any>))) || ((value as Record<string, any>)['weatherDesc'] === undefined && (value as Record<string, any>)['weather_desc'] === undefined)) return false;
@@ -146,29 +158,32 @@ export function ForecastSampleOutFromJSONTyped(json: any, ignoreDiscriminator: b
     }
     return {
         
-        'lat': json['lat'],
-        'lon': json['lon'],
+        'crosswind': json['crosswind'] === undefined ? undefined : json['crosswind'] === null ? null : json['crosswind'],
         'elapsedS': json['elapsed_s'],
         'eta': json['eta'],
-        'rainMm': json['rain_mm'],
-        'precipitationIntervalS': json['precipitation_interval_s'] === undefined ? undefined : json['precipitation_interval_s'] === null ? null : json['precipitation_interval_s'],
-        'rainRateMmH': json['rain_rate_mm_h'] === undefined ? undefined : json['rain_rate_mm_h'] === null ? null : json['rain_rate_mm_h'],
-        'probabilitySource': json['probability_source'] === undefined ? undefined : json['probability_source'] === null ? null : json['probability_source'],
-        'uncertainty': json['uncertainty'] === undefined ? undefined : json['uncertainty'] === null ? null : ForecastUncertaintySummaryFromJSON(json['uncertainty']),
-        'pop': json['pop'] === undefined ? undefined : json['pop'] === null ? null : json['pop'],
-        'rainIfWet': json['rain_if_wet'] === undefined ? undefined : json['rain_if_wet'] === null ? null : json['rain_if_wet'],
-        'temp': json['temp'],
-        'windSpeed': json['wind_speed'] === undefined ? undefined : json['wind_speed'] === null ? null : json['wind_speed'],
-        'windGust': json['wind_gust'] === undefined ? undefined : json['wind_gust'] === null ? null : json['wind_gust'],
-        'windDir': json['wind_dir'] === undefined ? undefined : json['wind_dir'] === null ? null : json['wind_dir'],
         'headwind': json['headwind'] === undefined ? undefined : json['headwind'] === null ? null : json['headwind'],
-        'crosswind': json['crosswind'] === undefined ? undefined : json['crosswind'] === null ? null : json['crosswind'],
-        'windPowerW': json['wind_power_w'] === undefined ? undefined : json['wind_power_w'] === null ? null : json['wind_power_w'],
+        'lat': json['lat'],
+        'lon': json['lon'],
+        'pop': json['pop'] === undefined ? undefined : json['pop'] === null ? null : json['pop'],
+        'precipitationIntervalS': json['precipitation_interval_s'] === undefined ? undefined : json['precipitation_interval_s'] === null ? null : json['precipitation_interval_s'],
+        'probabilitySource': json['probability_source'] === undefined ? undefined : json['probability_source'] === null ? null : json['probability_source'],
+        'rainIfWet': json['rain_if_wet'] === undefined ? undefined : json['rain_if_wet'] === null ? null : json['rain_if_wet'],
+        'rainMm': json['rain_mm'],
+        'rainRateMmH': json['rain_rate_mm_h'] === undefined ? undefined : json['rain_rate_mm_h'] === null ? null : json['rain_rate_mm_h'],
+        'rideLabel': json['ride_label'] === undefined ? undefined : json['ride_label'] === null ? null : json['ride_label'],
+        'rideScore': json['ride_score'] === undefined ? undefined : json['ride_score'] === null ? null : json['ride_score'],
         'sampleIndex': json['sample_index'] === undefined ? undefined : json['sample_index'] === null ? null : json['sample_index'],
-        'windCoverage': json['wind_coverage'] === undefined ? undefined : json['wind_coverage'] === null ? null : json['wind_coverage'],
+        'stationCount': json['station_count'] === undefined ? undefined : json['station_count'] === null ? null : json['station_count'],
+        'temp': json['temp'],
+        'uncertainty': json['uncertainty'] === undefined ? undefined : json['uncertainty'] === null ? null : ForecastUncertaintySummaryFromJSON(json['uncertainty']),
         'weatherCode': json['weather_code'] === undefined ? undefined : json['weather_code'] === null ? null : json['weather_code'],
         'weatherDesc': json['weather_desc'],
-        'stationCount': json['station_count'] === undefined ? undefined : json['station_count'] === null ? null : json['station_count'],
+        'windCoverage': json['wind_coverage'] === undefined ? undefined : json['wind_coverage'] === null ? null : json['wind_coverage'],
+        'windDir': json['wind_dir'] === undefined ? undefined : json['wind_dir'] === null ? null : json['wind_dir'],
+        'windEffortLevel': json['wind_effort_level'] === undefined ? undefined : json['wind_effort_level'] === null ? null : json['wind_effort_level'],
+        'windGust': json['wind_gust'] === undefined ? undefined : json['wind_gust'] === null ? null : json['wind_gust'],
+        'windPowerW': json['wind_power_w'] === undefined ? undefined : json['wind_power_w'] === null ? null : json['wind_power_w'],
+        'windSpeed': json['wind_speed'] === undefined ? undefined : json['wind_speed'] === null ? null : json['wind_speed'],
     };
 }
 
@@ -183,29 +198,32 @@ export function ForecastSampleOutToJSONTyped(value?: ForecastSampleOut | null, i
 
     return {
         
-        'lat': value['lat'],
-        'lon': value['lon'],
+        'crosswind': value['crosswind'],
         'elapsed_s': value['elapsedS'],
         'eta': value['eta'],
-        'rain_mm': value['rainMm'],
-        'precipitation_interval_s': value['precipitationIntervalS'],
-        'rain_rate_mm_h': value['rainRateMmH'],
-        'probability_source': value['probabilitySource'],
-        'uncertainty': ForecastUncertaintySummaryToJSON(value['uncertainty']),
-        'pop': value['pop'],
-        'rain_if_wet': value['rainIfWet'],
-        'temp': value['temp'],
-        'wind_speed': value['windSpeed'],
-        'wind_gust': value['windGust'],
-        'wind_dir': value['windDir'],
         'headwind': value['headwind'],
-        'crosswind': value['crosswind'],
-        'wind_power_w': value['windPowerW'],
+        'lat': value['lat'],
+        'lon': value['lon'],
+        'pop': value['pop'],
+        'precipitation_interval_s': value['precipitationIntervalS'],
+        'probability_source': value['probabilitySource'],
+        'rain_if_wet': value['rainIfWet'],
+        'rain_mm': value['rainMm'],
+        'rain_rate_mm_h': value['rainRateMmH'],
+        'ride_label': value['rideLabel'],
+        'ride_score': value['rideScore'],
         'sample_index': value['sampleIndex'],
-        'wind_coverage': value['windCoverage'],
+        'station_count': value['stationCount'],
+        'temp': value['temp'],
+        'uncertainty': ForecastUncertaintySummaryToJSON(value['uncertainty']),
         'weather_code': value['weatherCode'],
         'weather_desc': value['weatherDesc'],
-        'station_count': value['stationCount'],
+        'wind_coverage': value['windCoverage'],
+        'wind_dir': value['windDir'],
+        'wind_effort_level': value['windEffortLevel'],
+        'wind_gust': value['windGust'],
+        'wind_power_w': value['windPowerW'],
+        'wind_speed': value['windSpeed'],
     };
 }
 

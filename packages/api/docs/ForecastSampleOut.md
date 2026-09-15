@@ -18,6 +18,8 @@ Name | Type
 `rainIfWet` | number
 `rainMm` | number
 `rainRateMmH` | number
+`rideLabel` | string
+`rideScore` | number
 `sampleIndex` | number
 `stationCount` | number
 `temp` | number
@@ -26,7 +28,9 @@ Name | Type
 `weatherDesc` | string
 `windCoverage` | number
 `windDir` | number
+`windEffortLevel` | string
 `windGust` | number
+`windPowerW` | number
 `windSpeed` | number
 
 ## Example
@@ -48,6 +52,8 @@ const example = {
   "rainIfWet": null,
   "rainMm": null,
   "rainRateMmH": null,
+  "rideLabel": null,
+  "rideScore": null,
   "sampleIndex": null,
   "stationCount": null,
   "temp": null,
@@ -56,7 +62,9 @@ const example = {
   "weatherDesc": null,
   "windCoverage": null,
   "windDir": null,
+  "windEffortLevel": null,
   "windGust": null,
+  "windPowerW": null,
   "windSpeed": null,
 } satisfies ForecastSampleOut
 

@@ -14,7 +14,15 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { PlacesSearchResult, RouteForecastOut, ForecastSampleOut, WindArrow } from "@norain/api/models";
 import { isNightEta, pickVisibleSamples, weatherIconSvg } from "@/utils/weatherIcons";
 import { swissTime } from "@/utils/forecastDetails";
-import { gradientStops, rideScore, rideScoreLabel, sampleProgress, scoreBand, scoreColor } from "@/utils/rideQuality";
+import {
+    CASING_DARK,
+    CASING_LIGHT,
+    CASING_OPACITY,
+    gradientStops,
+    sampleProgress,
+    scoreBand,
+    scoreColor,
+} from "@/utils/rideQuality";
 import MapLegend from "@/components/MapLegend.vue";
 import { useForecastMapDetail, type LineDetail } from "@/queries/forecastParts";
 import { finerDetail, lineDetailForZoom } from "@/utils/mapDetail";
@@ -102,15 +110,8 @@ watch([zielort, hasMap], () => {
     destMarker = placeMarker(destMarker, zielort.value, "#d24d78");
 });
 
-// The route line is colored by ride quality (see utils/rideQuality.ts). The good end of the
-// YlOrRd ramp is very pale (#ffeda0, #fed976 sit near 1.2:1 against the light basemap), so a
-// white casing would let it vanish into CARTO Positron - the casing carries the ink
-// instead and flips with the theme. Same values NiceChart.vue uses for chart ink.
-// A 1 px, half-transparent edge is enough to hold the pale end; a solid 2 px one reads as a
-// heavy black outline next to yellow.
-const CASING_LIGHT = "#1b2733";
-const CASING_DARK = "#e8eef2";
-const CASING_OPACITY = 0.55;
+// The route line is colored by ride quality (see utils/rideQuality.ts), over a 1 px casing
+// that keeps the pale good end visible against CARTO Positron (CASING_* explains why).
 const ROUTE_LINE_WIDTH = 6;
 const CASING_WIDTH = ROUTE_LINE_WIDTH + 2;
 
@@ -184,7 +185,7 @@ watch(fetchedDetail, fetched => {
     renderWindMarkers();
 });
 
-const scores = computed(() => (routeWeather.value?.samples ?? []).map(s => rideScore(s)?.score ?? null));
+const scores = computed(() => (routeWeather.value?.samples ?? []).map(s => s.rideScore ?? null));
 const hasRoute = computed(() => (routeWeather.value?.samples.length ?? 0) > 0);
 /** Only claim a "Keine Daten" swatch when a stretch really is unknown. */
 const hasMissingScores = computed(() => scores.value.some(v => v === null));
@@ -212,7 +213,7 @@ function sampleMarkerEl(sample: ForecastSampleOut): HTMLDivElement {
         </svg>`
                 : ""
         }
-        <div class="wx-chip" style="border-color:${scoreColor(rideScore(sample)?.score ?? null)}">
+        <div class="wx-chip" style="border-color:${scoreColor(sample.rideScore)}">
             <svg width="20" height="20" viewBox="0 0 24 24">${glyph}</svg>
             <span>${Math.round(sample.temp)}°</span>
         </div>`;
@@ -243,7 +244,7 @@ function clearWindMarkers() {
 }
 
 function windArrowLabel(arrow: WindArrow): string {
-    return `Wind: ${groundWindText(arrow)} · ${windPowerText(arrow.windPowerW)}`;
+    return `Wind: ${groundWindText(arrow)} · ${windPowerText(arrow.windEffortLevel)}`;
 }
 
 /** The real wind, pointing where it blows; the bigger the arrow, the more it costs to hold the planned speed. */
@@ -253,7 +254,7 @@ function createWindMarker(map: MapLibreMap, arrow: WindArrow): WindMarker {
     element.tabIndex = 0;
     element.setAttribute("role", "button");
     element.setAttribute("aria-label", windArrowLabel(arrow));
-    const size = windArrowSize(arrow.windPowerW);
+    const size = windArrowSize(arrow.windEffort);
     element.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 L20 17 L12 13 L4 17 Z" fill="#2f7fd8" stroke="white" stroke-width="1.5"/></svg>`;
     const marker = new Marker({
         element,
@@ -379,17 +380,16 @@ function windText(s: ForecastSampleOut): string {
 }
 
 function samplePopupHtml(s: ForecastSampleOut): string {
-    const rq = rideScore(s);
     return `<div style="font:13px/1.4 var(--app-font);min-width:160px">
         <b>${fmtTime(s.eta)} Uhr</b> · ${s.weatherDesc || ""}<br>
         🌧️ ${s.rainRateMmH == null ? "—" : s.rainRateMmH.toFixed(1)} mm/h &nbsp; 🌡️ ${s.temp.toFixed(0)}°C<br>
         Regenrisiko: ${s.pop == null ? "Nicht verfügbar" : `${Math.round(s.pop * 100)}%`}<br>
         💨 ${s.windSpeed == null ? "Nicht verfügbar" : `${s.windSpeed.toFixed(0)} km/h über Grund`}${s.windGust ? ` (Böen ${s.windGust.toFixed(0)})` : ""}<br>
         <span class="${s.headwind != null && s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span><br>
-        ${s.windPowerW != null ? `↳ ${windPowerText(s.windPowerW)}<br>` : ""}
+        ${s.windEffortLevel != null ? `↳ ${windPowerText(s.windEffortLevel)}<br>` : ""}
         ${s.windCoverage != null && s.windCoverage < 1 ? "Für Teile dieses Abschnitts fehlen Winddaten.<br>" : ""}
         <span class="wx-quality">
-            <i style="background:${scoreColor(rq?.score ?? null)}"></i> Fahrqualität: ${rideScoreLabel(rq)}
+            <i style="background:${scoreColor(s.rideScore)}"></i> Fahrqualität: ${s.rideLabel ?? "Nicht verfügbar"}
         </span>
     </div>`;
 }

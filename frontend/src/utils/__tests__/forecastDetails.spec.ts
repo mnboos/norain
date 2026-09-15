@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forecastHeadline, peakRisk, rangeText, swissTime } from "../forecastDetails";
+import { forecastHeadline, peakRain, peakRisk, rangeText, swissTime } from "../forecastDetails";
 import { RouteForecastOutFromJSON } from "@norain/api/models";
 
 const wireSample = {
@@ -24,7 +24,7 @@ const wireSample = {
         fetched_at: "2026-09-10T09:00:00Z",
     },
 };
-function forecast(pop: number | null) {
+function forecast(pop: number | null, { rainAmount = 0, rainRate = 0 } = {}) {
     return RouteForecastOutFromJSON({
         job_id: "00000000-0000-0000-0000-000000000001",
         version: "2026-09-10T09:00:00+00:00",
@@ -32,13 +32,13 @@ function forecast(pop: number | null) {
         line: [],
         total_seconds: 0,
         total_distance_m: 0,
-        samples: [wireSample],
+        samples: [{ ...wireSample, rain_rate_mm_h: rainRate }],
         summary: {
             will_rain: pop != null && pop >= 0.25,
             rain_probability: pop,
-            first_rain_eta: "2026-09-10T12:00",
+            first_rain_eta: pop != null && pop >= 0.25 ? "2026-09-10T12:00" : null,
             max_rain_mm: 0,
-            rain_amount: 0,
+            rain_amount: rainAmount,
             max_headwind: 10,
             source: "open-meteo",
         },
@@ -53,12 +53,24 @@ describe("forecast uncertainty presentation", () => {
         expect(value?.probabilitySource).toBe("open-meteo-ensemble");
         expect(value?.rainRateMmH).toBe(0);
     });
-    it("does not describe 25% as likely or hide a lower nonzero risk", () => {
-        for (const p of [0.25, 0.1]) {
-            const f = forecast(p);
-            expect(forecastHeadline(f.summary, f.samples)).toContain("Regen möglich");
-            expect(peakRisk(f)).toBe(`${p * 100}%`);
-        }
+    it("says rain is possible from the ensemble verdict, not from any wet member", () => {
+        const likely = forecast(0.25);
+        expect(forecastHeadline(likely.summary, likely.samples)).toBe("Regen möglich ab ca. 12:00 Uhr");
+        const unlikely = forecast(0.1);
+        expect(forecastHeadline(unlikely.summary, unlikely.samples)).toBe("Voraussichtlich trocken");
+        // The low risk stays visible as a number.
+        expect(peakRisk(unlikely)).toBe("10%");
+    });
+    it("does not call a route dry while the main run rains", () => {
+        const f = forecast(0.1, { rainRate: 0.5 });
+        expect(forecastHeadline(f.summary, f.samples)).toContain("Regen möglich");
+        expect(peakRain(f)).toBe("0.5");
+    });
+    it("shows the wet members' amount when rain is expected", () => {
+        expect(peakRain(forecast(0.4, { rainAmount: 1.2 }))).toBe("1.2");
+        expect(peakRain(forecast(0.4, { rainAmount: 1.2, rainRate: 2 }))).toBe("2.0");
+        expect(peakRain(forecast(0.1, { rainAmount: 1.2 }))).toBe("0.0");
+        expect(peakRain(forecast(null, { rainAmount: 1.2, rainRate: 0.3 }))).toBe("0.3");
     });
     it("distinguishes unavailable, zero and empty forecasts", () => {
         const f = forecast(null);

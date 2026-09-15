@@ -10,6 +10,8 @@ Name | Type
 `firstRainPlace` | string
 `maxHeadwind` | number
 `maxRainMm` | number
+`maxWindEffortLevel` | string
+`maxWindPowerW` | number
 `rainAmount` | number
 `rainProbability` | number
 `source` | string
@@ -28,6 +30,8 @@ const example = {
   "firstRainPlace": null,
   "maxHeadwind": null,
   "maxRainMm": null,
+  "maxWindEffortLevel": null,
+  "maxWindPowerW": null,
   "rainAmount": null,
   "rainProbability": null,
   "source": null,
