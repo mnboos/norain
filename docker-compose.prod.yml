@@ -106,6 +106,8 @@ services:
     extends:
       service: db
       file: docker-compose.base.yml
+    # postgis/postgis publishes no arm64 image; ARM VPS hosts need amd64 emulation.
+    platform: linux/amd64
     volumes:
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/postgres:/var/lib/postgresql
     healthcheck:
