@@ -19,7 +19,10 @@ async function expectSeparate(page: Page, tiles: Locator, beside = false) {
     await expect(tiles).toHaveCount(3);
     await expect.poll(async () => {
         const map = await page.locator("#map").boundingBox();
-        const boxes = await tiles.evaluateAll(elements => elements.map(el => el.getBoundingClientRect().toJSON()));
+        const boxes = await tiles.evaluateAll(elements => elements.map(el => {
+            const { x, y, width, height } = el.getBoundingClientRect();
+            return { x, y, width, height };
+        }));
         return !!map && map.width > 0 && map.height >= 299 && boxes.every(box =>
             box.width > 0 && box.height > 0 &&
             (beside ? box.x >= map.x + map.width - 1 : box.y + box.height <= map.y + 1),

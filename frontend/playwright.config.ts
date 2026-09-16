@@ -5,7 +5,7 @@ import { loadEnv } from 'vite'
 
 /** The dev server's port: FRONTEND_PORT from the root .env, as vite.config.ts reads it. */
 const devPort = Number(
-  process.env.FRONTEND_PORT || loadEnv('development', fileURLToPath(new URL('..', import.meta.url)), '').FRONTEND_PORT || 3000,
+  process.env.FRONTEND_PORT ?? (loadEnv('development', fileURLToPath(new URL('..', import.meta.url)), '').FRONTEND_PORT || 3000),
 )
 
 /**
