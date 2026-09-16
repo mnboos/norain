@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, toRefs, watch } from "vue";
-import { useQuasar } from "quasar";
 import { symSharpCloudOff } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
 import WeatherSummaryCard from "@/components/WeatherSummaryCard.vue";
 import WeatherCharts from "@/components/WeatherCharts.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import { useRecurringRoute, useRecurringRouteForecast } from "@/queries/recurringRoutes";
-import { pathExtent } from "@/utils/routeThumbnail";
 
 const PROFILE_LABELS: Record<string, string> = {
     bike: "Velo",
@@ -48,16 +46,6 @@ const forecastProgressPercent = computed(() => {
     const progress = forecastProgress.value;
     if (!progress?.cellsTotal) return undefined;
     return Math.round((100 * progress.cellsSettled) / progress.cellsTotal);
-});
-
-// The map takes the route's shape. A north-south route gets a tall map with the charts stacked
-// beside it; everything else (and every phone, which is tall anyway) the charts in a row above a
-// wide map.
-const $q = useQuasar();
-const chartsBeside = computed(() => {
-    if (!$q.screen.gt.sm) return false;
-    const { width, height } = pathExtent(forecast.value?.line ?? []);
-    return height > width;
 });
 
 const selectedSample = ref(0);
@@ -109,31 +97,20 @@ watch(forecast, () => {
         <q-card-section v-if="forecast" class="no-padding">
             <WeatherSummaryCard :forecast="forecast" class="transparent" />
         </q-card-section>
-        <!-- Grid reserves the square charts' intrinsic height above the map; in a flex
-             column their wrapper can collapse to zero and let the map cover them.
-             col-grow lets short screens scroll instead of squeezing the forecast.
-             Beside a tall map, `reverse` puts the charts on the right while the markup keeps one order. -->
-        <q-card-section
-            v-if="forecast"
-            class="no-padding col-grow"
-            :class="chartsBeside ? 'row reverse no-wrap' : 'forecast-stacked'"
-        >
-            <q-card flat class="col-auto transparent" :class="{ 'q-ml-xs': chartsBeside }">
+        <q-card-section v-if="forecast" class="no-padding col forecast-stacked">
+            <q-card class="column forecast-map">
+                <NiceMap
+                    :route-weather="forecast"
+                    :selected-sample="selectedSample"
+                    @select-sample="selectedSample = $event"
+                />
+            </q-card>
+            <q-card flat class="transparent forecast-charts">
                 <WeatherCharts
                     :job-id="forecast.jobId"
                     :version="forecast.version"
                     :selected-sample="selectedSample"
                     :samples="forecast.samples"
-                    :vertical="chartsBeside"
-                    @select-sample="selectedSample = $event"
-                />
-            </q-card>
-            <!-- The map takes the rest, but never less than this: on a short screen the page
-                 scrolls rather than squeezing the map away. Beside the charts it stretches to their height. -->
-            <q-card class="col column" style="min-height: 300px">
-                <NiceMap
-                    :route-weather="forecast"
-                    :selected-sample="selectedSample"
                     @select-sample="selectedSample = $event"
                 />
             </q-card>
@@ -158,7 +135,13 @@ watch(forecast, () => {
 <style scoped>
 .forecast-stacked {
     display: grid;
-    grid-template-rows: auto minmax(300px, 1fr);
+    grid-template-rows: minmax(240px, 1fr) clamp(180px, 25dvh, 260px);
+    gap: 4px;
     grid-template-columns: minmax(0, 1fr);
+}
+.forecast-map,
+.forecast-charts {
+    min-width: 0;
+    min-height: 0;
 }
 </style>

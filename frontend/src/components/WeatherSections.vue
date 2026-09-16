@@ -21,7 +21,7 @@ const CONDITION_COLORS: Record<string, string> = {
 
 <template>
     <q-card flat class="transparent">
-        <q-card-section class="text-caption text-muted q-mb-xs q-pa-none">Wetter entlang der Strecke</q-card-section>
+        <!--        <q-card-section class="text-caption text-muted q-mb-xs q-pa-none">Wetter entlang der Strecke</q-card-section>-->
         <q-card-section class="row items-center q-gutter-xs q-pa-none">
             <q-badge
                 v-for="(section, i) in sections"

@@ -632,9 +632,11 @@ onBeforeUnmount(() => {
             <div id="map" ref="map" class="col"></div>
             <MapLegend v-if="hasRoute" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
             <div v-if="hasWindProfile" class="wx-wind-legend text-caption">
-                <span aria-hidden="true">➤</span>
-                Wind
-                <div>Pfeile zeigen, wohin der Wind weht. Grösse = Windaufwand (geschätzt).</div>
+                <q-item-label caption>
+                    <span aria-hidden="true">➤</span>
+                    Wind
+                </q-item-label>
+                <div>Pfeile zeigen Richtung und Stärke</div>
             </div>
         </q-card-section>
     </q-card>

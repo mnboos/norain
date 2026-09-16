@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, toRefs, useTemplateRef, watch } from "vue";
 import Plotly from "./plotly";
 import type { Config, Data, Layout, PlotMouseEvent } from "plotly.js";
@@ -221,9 +221,13 @@ function buildLayout(): Partial<Layout> {
  *  the map: the full layout's margins alone would fill it. The tooltip still names each series and its unit, so the legend, the axis titles
  *  and the band labels go. The temperature bands themselves stay. */
 function compactLayout(layout: Partial<Layout>, incoming: Partial<Layout>): Partial<Layout> {
+    // The backend's plotly_white template turns automargin on, which would grow the zero margins
+    // back to fit the tick labels. The labels go inside the plot instead.
     const axis = (base: Partial<Plotly.LayoutAxis> | undefined) => ({
         ...base,
         title: { text: "" },
+        automargin: false,
+        ticklabelposition: "inside" as const,
         tickfont: { ...base?.tickfont, size: 9 },
     });
     return {
@@ -234,7 +238,8 @@ function compactLayout(layout: Partial<Layout>, incoming: Partial<Layout>): Part
             ...(props.directionalWind ? { text: "Gegenwind" } : {}),
             font: { ...layout.title?.font, size: 11 },
         },
-        margin: { ...layout.margin, t: 24, b: 20, l: 28, r: incoming.yaxis2 ? 28 : 8 },
+        // No margins: the plot fills the whole tile, title and tick labels sit on top of it.
+        margin: { t: 0, b: 0, l: 0, r: 0, pad: 0 },
         annotations: incoming.annotations ?? [],
         xaxis: axis(layout.xaxis),
         yaxis: axis(layout.yaxis),
@@ -461,15 +466,16 @@ onBeforeUnmount(() => {
 
 <template>
     <q-card
+        flat
+        bordered
+        class="chart-shell"
         :class="{ 'chart-shell--compact': compact }"
         @pointermove="moveTooltip"
         @pointerleave="hideTooltip"
         @keydown.esc="hideTooltip"
     >
-        <q-card-section class="no-padding">
-            <!-- overflow hidden: otherwise the square could not get smaller than the pixel size
-                 Plotly last drew at, and a shrinking window would leave the charts too big. -->
-            <div ref="chartRef" style="aspect-ratio: 1/1; overflow: hidden" />
+        <q-card-section class="no-padding chart-body">
+            <div ref="chartRef" class="chart-plot" />
         </q-card-section>
         <svg class="chart-selection" aria-hidden="true">
             <circle
@@ -493,6 +499,17 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.chart-shell {
+    height: 100%;
+    min-width: 0;
+}
+.chart-body,
+.chart-plot {
+    height: 100%;
+    min-width: 0;
+    overflow: hidden;
+}
+
 /* Plotly's SVG starts at the container's top-left, so plot pixels are overlay pixels. */
 .chart-selection {
     position: absolute;

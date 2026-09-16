@@ -96,27 +96,54 @@ const note =
             <WeatherSections v-if="forecast.sections?.length" :sections="forecast.sections" />
         </q-card-section>
 
+        <q-separator class="full-width q-my-sm lt-md" />
         <q-card-section
-            class="col-12 col-md"
-            :class="compact ? 'q-px-sm q-py-xs' : 'q-pb-none'"
+            class="col-12 col-md q-pa-none row"
+            :class="compact ? 'q-px-sm q-py-none' : 'q-pb-none'"
             aria-label="Kennzahlen der Fahrt"
         >
-            <dl class="row q-mt-none" :class="compact ? 'q-col-gutter-xs q-mb-sm' : 'q-col-gutter-sm q-mb-lg'">
-                <div v-for="stat in stats" :key="stat.label" class="col-3 col-md-2">
-                    <dt class="text-caption text-uppercase text-muted" :class="{ 'stat-label--compact': compact }">
-                        {{ stat.label }}
-                    </dt>
-                    <dd
-                        v-if="stat.value != null"
-                        class="q-ma-none text-weight-medium"
-                        :class="compact ? 'text-subtitle2' : 'text-h6'"
-                    >
-                        {{ stat.value }}
-                        <small v-if="stat.unit" class="text-caption text-muted q-ml-xs">{{ stat.unit }}</small>
-                    </dd>
-                    <dd v-else class="q-ma-none text-caption">Nicht verfügbar</dd>
-                </div>
-            </dl>
+            <q-card class="col-12 stats-grid" flat>
+                <q-card-section v-for="stat in stats" :key="stat.label" class="q-px-none q-pt-none">
+                    <q-item-label caption>{{ stat.label }}</q-item-label>
+                    <q-item-label>
+                        <template v-if="stat.value != null">
+                            {{ stat.value }}
+                            <small v-if="stat.unit" class="text-caption text-muted q-ml-xs">{{ stat.unit }}</small>
+                        </template>
+                        <template v-else>Nicht verfügbar</template>
+                    </q-item-label>
+                </q-card-section>
+            </q-card>
+            <!--            <q-item-section v-for="stat in stats" :key="stat.label" class="col-6 q-pa-none">-->
+            <!--                <q-item-label caption>{{ stat.label }}</q-item-label>-->
+            <!--                <q-item-label>{{ stat.value }}</q-item-label>-->
+            <!--            </q-item-section>-->
+            <!--            <q-item-section v-for="stat in stats" :key="stat.label" class="col-6 q-pa-none">-->
+            <!--                <q-item-label caption>{{ stat.label }}</q-item-label>-->
+            <!--                <q-item-label>-->
+            <!--                    <template v-if="stat.value != null">-->
+            <!--                        {{ stat.value }}-->
+            <!--                        <small v-if="stat.unit" class="text-caption text-muted q-ml-xs">{{ stat.unit }}</small>-->
+            <!--                    </template>-->
+            <!--                    <template v-else>Nicht verfügbar</template>-->
+            <!--                </q-item-label>-->
+            <!--            </q-item-section>-->
+            <!--            <dl class="row q-mt-none" :class="compact ? 'q-col-gutter-xs q-mb-sm' : 'q-col-gutter-sm q-mb-lg'">-->
+            <!--                <div v-for="stat in stats" :key="stat.label" class="col-3 col-md-2">-->
+            <!--                    <dt class="text-caption text-uppercase text-muted" :class="{ 'stat-label&#45;&#45;compact': compact }">-->
+            <!--                        {{ stat.label }}-->
+            <!--                    </dt>-->
+            <!--                    <dd-->
+            <!--                        v-if="stat.value != null"-->
+            <!--                        class="q-ma-none text-weight-medium"-->
+            <!--                        :class="compact ? 'text-subtitle2' : 'text-h6'"-->
+            <!--                    >-->
+            <!--                        {{ stat.value }}-->
+            <!--                        <small v-if="stat.unit" class="text-caption text-muted q-ml-xs">{{ stat.unit }}</small>-->
+            <!--                    </dd>-->
+            <!--                    <dd v-else class="q-ma-none text-caption">Nicht verfügbar</dd>-->
+            <!--                </div>-->
+            <!--            </dl>-->
             <WindDistributionBar
                 v-if="forecast.summary.windDistribution"
                 :distribution="forecast.summary.windDistribution"
@@ -149,6 +176,17 @@ const note =
 </template>
 
 <style scoped>
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 8px;
+}
+@media (max-width: 1023px) {
+    .stats-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
 /* Four labels share a phone's width; "Windaufwand max." would otherwise wrap onto three lines. */
 .stat-label--compact {
     font-size: 10px;
