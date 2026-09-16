@@ -1,8 +1,12 @@
 {
-    email {$ACME_EMAIL}
+    # The outer proxy terminates HTTPS; preserve its forwarded scheme and client IP.
+    servers {
+        trusted_proxies static private_ranges
+        trusted_proxies_strict
+    }
 }
 
-{$DOMAIN} {
+:80 {
     encode zstd gzip
 
     header {

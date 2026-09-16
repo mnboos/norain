@@ -109,11 +109,11 @@ update-api: export-openapi-schema update-api--build-only
 [doc("Build and deploy the checked-out source on the current VPS. Requires production .env settings and local image tags.")]
 [group('deploy')]
 deploy-local:
-    {{ container }} compose --env-file .env -f docker-compose.prod.yml build
-    {{ container }} compose --env-file .env -f docker-compose.prod.yml pull db redis
-    {{ container }} compose --env-file .env -f docker-compose.prod.yml run --rm --pull never backend python manage.py migrate --noinput
-    {{ container }} compose --env-file .env -f docker-compose.prod.yml run --rm --pull never --user root backend python manage.py collectstatic --noinput
-    {{ container }} compose --env-file .env -f docker-compose.prod.yml up -d --pull never --remove-orphans
+    {{ container }} compose --env-file .env build
+    {{ container }} compose --env-file .env pull db redis
+    {{ container }} compose --env-file .env run --rm --pull never backend python manage.py migrate --noinput
+    {{ container }} compose --env-file .env run --rm --pull never --user root backend python manage.py collectstatic --noinput
+    {{ container }} compose --env-file .env up -d --pull never --remove-orphans
 
 # Mirrors the deploy job in .github/workflows/release.yml; the images must already be published.
 [doc("Release a commit's published images to the VPS over SSH, then check health. Needs VPS_USER, VPS_HOST, VPS_PUBLIC_HEALTH_URL. Roll back with an older sha.")]

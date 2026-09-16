@@ -17,6 +17,8 @@ x-app: &app
     redis: *healthy
   networks:
     - internal
+    # Workers need outbound access to weather providers and SMTP.
+    - egress
 
 # App deps + graphhopper, for everything that routes.
 x-routing-deps: &routing-deps
@@ -60,9 +62,9 @@ services:
       <<: *routing-deps
       photon: *healthy
     volumes:
-      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/django/static:/app/static
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/django/static:/app/backend/static
     healthcheck:
-      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5)" ]
+      test: [ "CMD", "python", "-c", "import os, urllib.request; request = urllib.request.Request('http://127.0.0.1:8000/healthz', headers={'Host': os.environ['DJANGO_ALLOWED_HOSTS'].split(',')[0].strip(), 'X-Forwarded-Proto': 'https'}); urllib.request.urlopen(request, timeout=5)" ]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -158,6 +160,7 @@ services:
       - internal
 
 networks:
+  egress:
   edge:
   internal:
     internal: true

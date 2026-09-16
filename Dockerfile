@@ -76,7 +76,7 @@ ENTRYPOINT ["/entrypoint.sh"]
 # ---------------------------------------------------------------------------------------------
 
 # Interpreter, system libraries, uv and the locked dependencies — everything but the source.
-FROM python:3.13-slim-bookworm AS python-base
+FROM python:3.14-slim-bookworm AS python-base
 
 ENV PATH="/app/backend/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
