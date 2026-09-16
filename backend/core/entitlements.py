@@ -6,7 +6,7 @@ means a tier set by hand in the Django admin behaves exactly like a paid one.
 
 Enforced at these places — miss any one and the limit is not real:
   * create_route / update_route (core/api/recurring_route.py) — the route count.
-  * assemble_forecast_job (core/tasks.py) — the ensemble spread is stripped before the
+  * compute_route_weather_job (core/tasks.py) — the ensemble spread is stripped before the
     result is stored, and the station correction is only computed for accounts that have it.
   * _prewarm_routes (core/tasks.py) — the pre-warm fan-out, which is what actually spends
     the Open-Meteo budget. It is nowhere near the HTTP layer, so it is the easy one to forget.

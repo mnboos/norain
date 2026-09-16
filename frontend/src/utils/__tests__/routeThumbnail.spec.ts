@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pointsAttr, projectPath } from "../routeThumbnail";
+import { pathExtent, pointsAttr, projectPath } from "../routeThumbnail";
 
 const SIZE = 40;
 const PAD = 2;
@@ -69,7 +69,13 @@ describe("projectPath", () => {
     });
 
     it("places a degenerate path at the centre without dividing by zero", () => {
-        for (const path of [[[9.0, 47.0]], [[9.0, 47.0], [9.0, 47.0]]]) {
+        for (const path of [
+            [[9.0, 47.0]],
+            [
+                [9.0, 47.0],
+                [9.0, 47.0],
+            ],
+        ]) {
             for (const p of projectPath(path, SIZE)) {
                 expect(Number.isFinite(p.x)).toBe(true);
                 expect(Number.isFinite(p.y)).toBe(true);
@@ -82,6 +88,41 @@ describe("projectPath", () => {
 
 describe("pointsAttr", () => {
     it("formats points for an SVG polyline", () => {
-        expect(pointsAttr([{ x: 1.234, y: 5.678 }, { x: 9, y: 10 }])).toBe("1.23,5.68 9.00,10.00");
+        expect(
+            pointsAttr([
+                { x: 1.234, y: 5.678 },
+                { x: 9, y: 10 },
+            ]),
+        ).toBe("1.23,5.68 9.00,10.00");
+    });
+});
+
+describe("pathExtent", () => {
+    it("is zero for an empty path", () => {
+        expect(pathExtent([])).toEqual({ width: 0, height: 0 });
+    });
+
+    it("tells an east-west route from a north-south one", () => {
+        const eastWest = pathExtent([
+            [8.9, 47.5],
+            [9.3, 47.55],
+        ]);
+        expect(eastWest.width).toBeGreaterThan(eastWest.height);
+        const northSouth = pathExtent([
+            [9.0, 47.3],
+            [9.05, 47.6],
+        ]);
+        expect(northSouth.height).toBeGreaterThan(northSouth.width);
+    });
+
+    it("compresses longitude by latitude", () => {
+        // Equal spans in degrees: at 47°N a degree of longitude is only cos(47°) ≈ 0.68 as wide.
+        const { width, height } = pathExtent([
+            [9.0, 47.0],
+            [9.2, 47.2],
+        ]);
+        expect(height).toBeCloseTo(0.2);
+        expect(width).toBeCloseTo(0.2 * Math.cos((47.1 * Math.PI) / 180));
+        expect(height).toBeGreaterThan(width);
     });
 });

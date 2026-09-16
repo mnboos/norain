@@ -1,0 +1,22 @@
+name: server-proxy
+
+services:
+  proxy:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sites:/etc/caddy/sites:ro
+      - ${PROXY_STORAGE_PATH:-/opt/apps/proxy}/data:/data
+      - ${PROXY_STORAGE_PATH:-/opt/apps/proxy}/config:/config
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    name: server-proxy
+    external: true

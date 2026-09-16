@@ -19,7 +19,7 @@ from .entitlements import entitlements_for
 from .geo import simplify_line
 from .grid import MAX_CELL_AGE
 from .models import ForecastJob
-from .ride_quality import score_sample, wind_effort, wind_effort_level
+from .ride_quality import score_sample, wind_effort, wind_effort_level, worst_frost_level
 from .stations import api_key, ride_in_window
 from .uncertainty import METRICS
 
@@ -187,6 +187,22 @@ def uncertainty_partial(samples: list[dict]) -> bool:
     return False
 
 
+def sections_with_frost(sections: list[dict], samples: list[dict]) -> list[dict]:
+    """The stored sections with each one's frost level scored from the samples it covers.
+
+    Scored here rather than in ``compute_sections`` so a change to ``RIDE_QUALITY`` shows on
+    the next request, like every other ride-quality verdict. Sections stored before they
+    carried their sample range keep ``frost_level`` at None, and the map simply draws no
+    marker for them - they are gone within the job's lifetime anyway.
+    """
+    out: list[dict] = []
+    for section in sections:
+        start, end = section.get("start_index"), section.get("end_index")
+        covered = samples[start : end + 1] if isinstance(start, int) and isinstance(end, int) else []
+        out.append({**section, "frost_level": worst_frost_level(covered)})
+    return out
+
+
 def forecast_view(job: ForecastJob) -> dict:
     """The finished forecast as the job endpoint and the WebSocket serve it.
 
@@ -219,7 +235,12 @@ def forecast_view(job: ForecastJob) -> dict:
         view["summary"] = {
             **result["summary"],
             "max_wind_effort_level": wind_effort_level(result["summary"].get("max_wind_power_w")),
+            "max_frost_level": worst_frost_level(samples),
         }
+    if result.get("sections"):
+        # Only when the stored result has them: this trims the payload, it never adds a key
+        # the job did not carry.
+        view["sections"] = sections_with_frost(result["sections"], samples)
     view["uncertainty_partial"] = uncertainty_partial(samples)
     view["job_id"] = str(job.id)
     view["version"] = job.updated_at.isoformat() if job.updated_at else ""
@@ -310,6 +331,7 @@ async def get_or_start_job(kind: str, owner, params: dict) -> tuple[ForecastJob,
     job.attempts = 0
     job.error = ""
     job.result = None
+    job.computed_weather = None
     job.geometry = None
     job.params = params
     await job.asave(
@@ -321,6 +343,7 @@ async def get_or_start_job(kind: str, owner, params: dict) -> tuple[ForecastJob,
             "attempts",
             "error",
             "result",
+            "computed_weather",
             "geometry",
             "params",
             "updated_at",

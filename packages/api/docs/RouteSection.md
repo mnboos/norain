@@ -7,10 +7,13 @@
 Name | Type
 ------------ | -------------
 `condition` | string
+`endIndex` | number
 `endKm` | number
 `endTime` | string
+`frostLevel` | string
 `maxHeadwind` | number
 `maxRainMm` | number
+`startIndex` | number
 `startKm` | number
 `startTime` | string
 `tempMax` | number
@@ -24,10 +27,13 @@ import type { RouteSection } from ''
 // TODO: Update the object below with actual values
 const example = {
   "condition": null,
+  "endIndex": null,
   "endKm": null,
   "endTime": null,
+  "frostLevel": null,
   "maxHeadwind": null,
   "maxRainMm": null,
+  "startIndex": null,
   "startKm": null,
   "startTime": null,
   "tempMax": null,

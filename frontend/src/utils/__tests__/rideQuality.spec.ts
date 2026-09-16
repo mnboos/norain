@@ -5,10 +5,20 @@ import {
     NO_DATA_COLOR,
     YLORRD_8,
     gradientStops,
+    rainLevelColor,
     sampleProgress,
     scoreBand,
     scoreColor,
 } from "@/utils/rideQuality";
+
+describe("rainLevelColor", () => {
+    it("uses only the rain severity", () => {
+        expect(rainLevelColor("stark")).toBe("#c10015");
+        expect(rainLevelColor("mässig")).toBe("#f2c037");
+        expect(rainLevelColor("leicht")).toBe("#3498db");
+        expect(rainLevelColor(null)).toBe(NO_DATA_COLOR);
+    });
+});
 
 function sample(over: Partial<ForecastSampleOut> = {}): ForecastSampleOut {
     return {

@@ -9,6 +9,7 @@ Name | Type
 `crosswind` | number
 `elapsedS` | number
 `eta` | string
+`frostLevel` | string
 `headwind` | number
 `lat` | number
 `lon` | number
@@ -43,6 +44,7 @@ const example = {
   "crosswind": null,
   "elapsedS": null,
   "eta": null,
+  "frostLevel": null,
   "headwind": null,
   "lat": null,
   "lon": null,

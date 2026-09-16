@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useQuasar } from "quasar";
-import { symSharpDarkMode, symSharpLightMode } from "@quasar/extras/material-symbols-sharp";
-import { VueQueryDevtools } from "@tanstack/vue-query-devtools";
+import { symSharpDarkMode, symSharpLightMode, symSharpSettings } from "@quasar/extras/material-symbols-sharp";
 import { toggleDark } from "@/utils/theme";
 import { useSession } from "@/composables/useSession";
 
@@ -14,25 +13,18 @@ const { isAuthenticated, session } = useSession();
         <!-- Brand blue in light mode; Quasar's dark surface in dark mode, where white text on
              the lighter dark-mode primary would be hard to read. -->
         <q-header :class="$q.dark.isActive ? 'bg-dark' : 'bg-primary'">
-            <q-toolbar class="q-px-lg">
-                <q-toolbar-title class="text-subtitle1 text-weight-bold">NoRain</q-toolbar-title>
-                <q-tabs v-if="!$q.screen.lt.sm" dense shrink>
-                    <q-route-tab to="/" label="Dashboard" />
-                    <q-route-tab to="/map" label="Karte" />
-                </q-tabs>
-                <q-btn
-                    flat
-                    dense
-                    no-caps
-                    size="sm"
-                    to="/account"
-                    :label="isAuthenticated ? session.user?.email : 'Anmelden'"
-                    class="q-mx-sm"
-                />
+            <q-toolbar class="q-px-xs-none q-px-md-sm q-py-none">
+                <q-toolbar-title class="text-subtitle1 text-weight-bold">Brisavia</q-toolbar-title>
+                <!--                <NavTabs v-if="!$q.screen.lt.sm" />-->
+                <q-btn flat dense no-caps size="sm" to="/account" :icon="symSharpSettings">
+                    <q-tooltip v-if="isAuthenticated">{{ session.user?.email }}</q-tooltip>
+                </q-btn>
                 <q-btn
                     flat
                     round
                     dense
+                    size="sm"
+                    class="q-ma-none q-pa-none"
                     :icon="$q.dark.isActive ? symSharpLightMode : symSharpDarkMode"
                     :aria-label="$q.dark.isActive ? 'Helles Design' : 'Dunkles Design'"
                     @click="toggleDark"
@@ -40,14 +32,15 @@ const { isAuthenticated, session } = useSession();
                     <q-tooltip>{{ $q.dark.isActive ? "Helles Design" : "Dunkles Design" }}</q-tooltip>
                 </q-btn>
             </q-toolbar>
-            <q-tabs v-if="$q.screen.lt.sm" dense>
-                <q-route-tab to="/" label="Dashboard" />
-                <q-route-tab to="/map" label="Karte" />
-            </q-tabs>
+            <!--            <NavTabs v-if="$q.screen.lt.sm" compact />-->
         </q-header>
-        <q-page-container>
+        <q-page-container class="">
             <router-view />
-            <VueQueryDevtools />
         </q-page-container>
     </q-layout>
 </template>
+
+<style lang="scss">
+@import "quasar/src/css/index.sass";
+@import "quasar/src/css/flex-addon.sass";
+</style>

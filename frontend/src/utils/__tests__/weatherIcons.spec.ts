@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isNightEta, pickVisibleSamples, rainCondition, weatherIconSvg } from "@/utils/weatherIcons";
+import { FROST_MARK, isNightEta, pickVisibleSamples, rainCondition, weatherGlyphName, weatherIconSvg } from "@/utils/weatherIcons";
 
 // Every code the backend's WMO_DE table (core/weather.py) can produce.
 const WMO_CODES = [
@@ -41,6 +41,16 @@ describe("weatherIconSvg", () => {
         expect(wet).not.toBe(dry);
     });
 
+    it("has an ice crystal to mark frost with, separate from every sky glyph", () => {
+        // Frost is what the road does; the glyph says what the sky does. The chip shows both,
+        // so a cold clear morning keeps its sun (see NiceMap `wx-frost`).
+        expect(FROST_MARK.trim()).not.toBe("");
+        for (const code of WMO_CODES) {
+            expect(weatherIconSvg(code, { rainMm: 0, night: false })).not.toBe(FROST_MARK);
+        }
+        expect(weatherGlyphName(0, { rainMm: 0, night: false })).toBe("clear_day");
+    });
+
     it("shows a moon at night but only when it is clear", () => {
         expect(weatherIconSvg(0, { rainMm: 0, night: true })).not.toBe(weatherIconSvg(0, { rainMm: 0, night: false }));
         expect(weatherIconSvg(63, { rainMm: 1, night: true })).toBe(weatherIconSvg(63, { rainMm: 1, night: false }));
@@ -56,6 +66,19 @@ describe("pickVisibleSamples", () => {
         expect(kept.has(10)).toBe(true);
 
         // Without the band there is nothing to hold that chip at this spacing.
+        const flat = samples.map(s => ({ rainMm: s.rainMm }));
+        expect(pickVisibleSamples(flat, i => ({ x: i * 30, y: 0 }), 64, 24).has(10)).toBe(false);
+    });
+
+    it("keeps a chip where the road turns icy", () => {
+        // Same reason as the band: a frosty stretch must not lose the only mark that says so.
+        const samples = Array.from({ length: 21 }, (_, i) => ({
+            rainMm: 0,
+            frost: i < 10 ? null : "stark",
+        }));
+        const kept = pickVisibleSamples(samples, i => ({ x: i * 30, y: 0 }), 64, 24);
+        expect(kept.has(10)).toBe(true);
+
         const flat = samples.map(s => ({ rainMm: s.rainMm }));
         expect(pickVisibleSamples(flat, i => ({ x: i * 30, y: 0 }), 64, 24).has(10)).toBe(false);
     });

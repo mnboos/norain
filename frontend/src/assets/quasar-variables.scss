@@ -1,0 +1,8 @@
+// Quasar's Sass variables, injected into every Quasar and app .sass/.scss file by
+// @quasar/vite-plugin (sassVariables in vite.config.ts). Variable definitions only.
+//
+// Brand colours are not set here: src/utils/theme.ts writes them at runtime with setCssVar,
+// so they follow dark mode. Override spacing, breakpoints and the like, e.g.:
+//
+// $breakpoint-xs: 599px;
+// $space-base: 16px;

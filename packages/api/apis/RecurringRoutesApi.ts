@@ -29,28 +29,28 @@ import {
     RecurringRouteOutToJSON,
 } from '../models/RecurringRouteOut';
 
-export interface CoreApiRecurringRouteCreateRouteRequest {
+export interface RecurringRoutesApiCoreApiRecurringRouteCreateRouteRequest {
     /**
      * 
      */
     recurringRouteIn: RecurringRouteIn;
 }
 
-export interface CoreApiRecurringRouteDeleteRouteRequest {
+export interface RecurringRoutesApiCoreApiRecurringRouteDeleteRouteRequest {
     /**
      * 
      */
     routeId: string;
 }
 
-export interface CoreApiRecurringRouteGetRouteRequest {
+export interface RecurringRoutesApiCoreApiRecurringRouteGetRouteRequest {
     /**
      * 
      */
     routeId: string;
 }
 
-export interface CoreApiRecurringRouteRouteForecastRequest {
+export interface RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest {
     /**
      * 
      */
@@ -65,7 +65,7 @@ export interface CoreApiRecurringRouteRouteForecastRequest {
     time: string;
 }
 
-export interface CoreApiRecurringRouteUpdateRouteRequest {
+export interface RecurringRoutesApiCoreApiRecurringRouteUpdateRouteRequest {
     /**
      * 
      */
@@ -84,7 +84,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
     /**
      * Creates request options for coreApiRecurringRouteCreateRoute without sending the request
      */
-    async coreApiRecurringRouteCreateRouteRequestOpts(requestParameters: CoreApiRecurringRouteCreateRouteRequest): Promise<runtime.RequestOpts> {
+    async coreApiRecurringRouteCreateRouteRequestOpts(requestParameters: RecurringRoutesApiCoreApiRecurringRouteCreateRouteRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['recurringRouteIn'] == null) {
             throw new runtime.RequiredError(
                 'recurringRouteIn',
@@ -114,7 +114,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
      * Create a new recurring route. Enqueues a background task to fetch route geometry.
      * Create Route
      */
-    async coreApiRecurringRouteCreateRouteRaw(requestParameters: CoreApiRecurringRouteCreateRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RecurringRouteOut>> {
+    async coreApiRecurringRouteCreateRouteRaw(requestParameters: RecurringRoutesApiCoreApiRecurringRouteCreateRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RecurringRouteOut>> {
         const requestOptions = await this.coreApiRecurringRouteCreateRouteRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -125,7 +125,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
      * Create a new recurring route. Enqueues a background task to fetch route geometry.
      * Create Route
      */
-    async coreApiRecurringRouteCreateRoute(requestParameters: CoreApiRecurringRouteCreateRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RecurringRouteOut> {
+    async coreApiRecurringRouteCreateRoute(requestParameters: RecurringRoutesApiCoreApiRecurringRouteCreateRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RecurringRouteOut> {
         const response = await this.coreApiRecurringRouteCreateRouteRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -133,7 +133,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
     /**
      * Creates request options for coreApiRecurringRouteDeleteRoute without sending the request
      */
-    async coreApiRecurringRouteDeleteRouteRequestOpts(requestParameters: CoreApiRecurringRouteDeleteRouteRequest): Promise<runtime.RequestOpts> {
+    async coreApiRecurringRouteDeleteRouteRequestOpts(requestParameters: RecurringRoutesApiCoreApiRecurringRouteDeleteRouteRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['routeId'] == null) {
             throw new runtime.RequiredError(
                 'routeId',
@@ -161,7 +161,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
      * Delete a recurring route.
      * Delete Route
      */
-    async coreApiRecurringRouteDeleteRouteRaw(requestParameters: CoreApiRecurringRouteDeleteRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
+    async coreApiRecurringRouteDeleteRouteRaw(requestParameters: RecurringRoutesApiCoreApiRecurringRouteDeleteRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
         const requestOptions = await this.coreApiRecurringRouteDeleteRouteRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -172,14 +172,14 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
      * Delete a recurring route.
      * Delete Route
      */
-    async coreApiRecurringRouteDeleteRoute(requestParameters: CoreApiRecurringRouteDeleteRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
+    async coreApiRecurringRouteDeleteRoute(requestParameters: RecurringRoutesApiCoreApiRecurringRouteDeleteRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
         await this.coreApiRecurringRouteDeleteRouteRaw(requestParameters, initOverrides);
     }
 
     /**
      * Creates request options for coreApiRecurringRouteGetRoute without sending the request
      */
-    async coreApiRecurringRouteGetRouteRequestOpts(requestParameters: CoreApiRecurringRouteGetRouteRequest): Promise<runtime.RequestOpts> {
+    async coreApiRecurringRouteGetRouteRequestOpts(requestParameters: RecurringRoutesApiCoreApiRecurringRouteGetRouteRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['routeId'] == null) {
             throw new runtime.RequiredError(
                 'routeId',
@@ -207,7 +207,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
      * Get a single recurring route by ID.
      * Get Route
      */
-    async coreApiRecurringRouteGetRouteRaw(requestParameters: CoreApiRecurringRouteGetRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RecurringRouteOut>> {
+    async coreApiRecurringRouteGetRouteRaw(requestParameters: RecurringRoutesApiCoreApiRecurringRouteGetRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RecurringRouteOut>> {
         const requestOptions = await this.coreApiRecurringRouteGetRouteRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -218,7 +218,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
      * Get a single recurring route by ID.
      * Get Route
      */
-    async coreApiRecurringRouteGetRoute(requestParameters: CoreApiRecurringRouteGetRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RecurringRouteOut> {
+    async coreApiRecurringRouteGetRoute(requestParameters: RecurringRoutesApiCoreApiRecurringRouteGetRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RecurringRouteOut> {
         const response = await this.coreApiRecurringRouteGetRouteRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -265,7 +265,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
     /**
      * Creates request options for coreApiRecurringRouteRouteForecast without sending the request
      */
-    async coreApiRecurringRouteRouteForecastRequestOpts(requestParameters: CoreApiRecurringRouteRouteForecastRequest): Promise<runtime.RequestOpts> {
+    async coreApiRecurringRouteRouteForecastRequestOpts(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['routeId'] == null) {
             throw new runtime.RequiredError(
                 'routeId',
@@ -315,7 +315,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
      * Start (or join) the forecast for one departure of a saved route.  Returns 200 with the finished payload -- weather, Plotly figures and sections -- when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither is allowed on this path.
      * Route Forecast
      */
-    async coreApiRecurringRouteRouteForecastRaw(requestParameters: CoreApiRecurringRouteRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastJobOut>> {
+    async coreApiRecurringRouteRouteForecastRaw(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastJobOut>> {
         const requestOptions = await this.coreApiRecurringRouteRouteForecastRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -326,7 +326,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
      * Start (or join) the forecast for one departure of a saved route.  Returns 200 with the finished payload -- weather, Plotly figures and sections -- when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither is allowed on this path.
      * Route Forecast
      */
-    async coreApiRecurringRouteRouteForecast(requestParameters: CoreApiRecurringRouteRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
+    async coreApiRecurringRouteRouteForecast(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
         const response = await this.coreApiRecurringRouteRouteForecastRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -334,7 +334,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
     /**
      * Creates request options for coreApiRecurringRouteUpdateRoute without sending the request
      */
-    async coreApiRecurringRouteUpdateRouteRequestOpts(requestParameters: CoreApiRecurringRouteUpdateRouteRequest): Promise<runtime.RequestOpts> {
+    async coreApiRecurringRouteUpdateRouteRequestOpts(requestParameters: RecurringRoutesApiCoreApiRecurringRouteUpdateRouteRequest): Promise<runtime.RequestOpts> {
         if (requestParameters['routeId'] == null) {
             throw new runtime.RequiredError(
                 'routeId',
@@ -372,7 +372,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
      * Update a recurring route. Re-fetches geometry if start, destination, or profile changed.
      * Update Route
      */
-    async coreApiRecurringRouteUpdateRouteRaw(requestParameters: CoreApiRecurringRouteUpdateRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RecurringRouteOut>> {
+    async coreApiRecurringRouteUpdateRouteRaw(requestParameters: RecurringRoutesApiCoreApiRecurringRouteUpdateRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RecurringRouteOut>> {
         const requestOptions = await this.coreApiRecurringRouteUpdateRouteRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
@@ -383,7 +383,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
      * Update a recurring route. Re-fetches geometry if start, destination, or profile changed.
      * Update Route
      */
-    async coreApiRecurringRouteUpdateRoute(requestParameters: CoreApiRecurringRouteUpdateRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RecurringRouteOut> {
+    async coreApiRecurringRouteUpdateRoute(requestParameters: RecurringRoutesApiCoreApiRecurringRouteUpdateRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RecurringRouteOut> {
         const response = await this.coreApiRecurringRouteUpdateRouteRaw(requestParameters, initOverrides);
         return await response.value();
     }

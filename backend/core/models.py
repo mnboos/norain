@@ -292,7 +292,8 @@ class ForecastJob(models.Model):
 
     The forecast endpoints do no work themselves: they create (or find) a job, enqueue
     ``plan_forecast_job`` and return. The job then accumulates progress as individual
-    cell tasks settle, and ``assemble_forecast_job`` writes the finished payload into
+    cell tasks settle, ``compute_route_weather_job`` stores intermediate weather,
+    and ``assemble_forecast_job`` writes the finished payload into
     ``result``. The browser watches a job over the WebSocket in ``core/consumers.py``.
     """
 
@@ -326,7 +327,7 @@ class ForecastJob(models.Model):
         related_name="forecast_jobs",
     )
     params = models.JSONField(help_text="The request that asked for this forecast")
-    # Resolved once by plan_forecast_job and reused by assemble_forecast_job, so the
+    # Resolved once by plan_forecast_job and reused by compute_route_weather_job, so the
     # GraphHopper call happens at most once per job even though the two tasks usually run
     # in different worker processes (the alru_cache in weather.py is per process).
     geometry = models.JSONField(
@@ -347,6 +348,8 @@ class ForecastJob(models.Model):
     # Bounds the re-defer loop in plan_forecast_job when route geometry never arrives.
     attempts = models.IntegerField(default=0)
 
+    # Internal handoff: JSON RouteWeatherOut plus the entitlements used to compute it.
+    computed_weather = models.JSONField(null=True, blank=True)
     result = models.JSONField(null=True, blank=True)
     error = models.TextField(blank=True, default="")
 

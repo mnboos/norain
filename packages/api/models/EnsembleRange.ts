@@ -23,15 +23,15 @@ export interface EnsembleRange {
     /**
      * 
      */
-    median?: number | null;
-    /**
-     * 
-     */
     memberCount: number;
     /**
      * 
      */
     p10?: number | null;
+    /**
+     * 
+     */
+    median?: number | null;
     /**
      * 
      */
@@ -56,9 +56,9 @@ export function EnsembleRangeFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
         
-        'median': json['median'] === undefined ? undefined : json['median'] === null ? null : json['median'],
         'memberCount': json['member_count'],
         'p10': json['p10'] === undefined ? undefined : json['p10'] === null ? null : json['p10'],
+        'median': json['median'] === undefined ? undefined : json['median'] === null ? null : json['median'],
         'p90': json['p90'] === undefined ? undefined : json['p90'] === null ? null : json['p90'],
     };
 }
@@ -74,9 +74,9 @@ export function EnsembleRangeToJSONTyped(value?: EnsembleRange | null, ignoreDis
 
     return {
         
-        'median': value['median'],
         'member_count': value['memberCount'],
         'p10': value['p10'],
+        'median': value['median'],
         'p90': value['p90'],
     };
 }

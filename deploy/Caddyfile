@@ -12,22 +12,24 @@
         -Server
     }
 
-    @health path /healthz
-    reverse_proxy @health backend:8000
-
     handle_path /static/* {
         root * /app/static
         file_server
     }
 
-    @backend path /api/* /admin/* /accounts/*
-    reverse_proxy @backend backend:8000 {
-        transport http {
-            read_timeout 120s
-            write_timeout 120s
+    @backend path /healthz /api/* /admin/* /accounts/* /ws/*
+    handle @backend {
+        reverse_proxy backend:8000 {
+            transport http {
+                read_timeout 120s
+                write_timeout 120s
+            }
         }
     }
 
-    try_files {path} /index.html
-    file_server
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
 }

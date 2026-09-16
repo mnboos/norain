@@ -8,6 +8,7 @@ Name | Type
 ------------ | -------------
 `firstRainEta` | string
 `firstRainPlace` | string
+`maxFrostLevel` | string
 `maxHeadwind` | number
 `maxRainMm` | number
 `maxWindEffortLevel` | string
@@ -28,6 +29,7 @@ import type { RouteWeatherSummary } from ''
 const example = {
   "firstRainEta": null,
   "firstRainPlace": null,
+  "maxFrostLevel": null,
   "maxHeadwind": null,
   "maxRainMm": null,
   "maxWindEffortLevel": null,

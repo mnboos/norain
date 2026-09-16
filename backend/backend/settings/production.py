@@ -48,6 +48,5 @@ EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "").lower() == "true"
 DEFAULT_FROM_EMAIL = required_env("DEFAULT_FROM_EMAIL")
 FRONTEND_URL = required_env("FRONTEND_URL").rstrip("/")
 
-STRIPE_SECRET_KEY = required_env("STRIPE_SECRET_KEY")
-STRIPE_WEBHOOK_SECRET = required_env("STRIPE_WEBHOOK_SECRET")
-STRIPE_PRICE_ID_PRO = required_env("STRIPE_PRICE_ID_PRO")
+# Stripe is optional, including in production. Keep the empty defaults from base;
+# billing endpoints report unavailable until credentials are configured.

@@ -18,6 +18,16 @@ refuses to load a graph built with a different configuration. Build with:
 
 CPU architecture does not matter: a graph built on an amd64 machine loads on the arm64 VPS.
 
+That is also when you need this page: a change to a ride speed, or to any other rule in
+`data/graphhopper/models/`, only takes effect through a new graph. Editing the files on the
+VPS alone does nothing — the running server keeps the weights baked into its graph, and
+after a restart it refuses to load it at all. The ride speeds themselves are described in
+[configuration](../reference/configuration.md#ride-speed).
+
+For a graph you only want locally — after a speed change, say — `just routing-import` does
+step 1 and starts the server again, with the heaps from `.env`. The rest of this page is
+the production route.
+
 ## 1. Import on the build machine
 
 From the repository root, with `OSM_DATA_URL` set to the extract you want (the default
@@ -72,9 +82,13 @@ Once `/info` answers, delete `cache.old`.
 
 ## 4. Refresh what depended on the old graph
 
-Restart the backend and workers so their in-memory route caches are dropped, and
-recompute saved route geometry with the [background-job guide](background-jobs.md).
-Routes outside a new coverage area can no longer be routed.
+Restart the backend and workers so their in-memory route caches are dropped, then
+recompute saved route geometry — `just routing-refresh-routes`, or the loop it runs in the
+[background-job guide](background-jobs.md). Routes outside a new coverage area can no
+longer be routed.
+
+After a speed change, `just routing-speeds` prints what each profile now rides, so you can
+see the new graph is the one you meant to build.
 
 Photon is separate: set `PHOTON_INDEX_URL` to a matching region, as described in
 [changing the geographic coverage](change-region.md).

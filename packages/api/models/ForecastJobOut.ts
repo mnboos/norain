@@ -31,6 +31,14 @@ export interface ForecastJobOut {
     /**
      * 
      */
+    jobId: string;
+    /**
+     * 
+     */
+    status: string;
+    /**
+     * 
+     */
     cellsSettled?: number;
     /**
      * 
@@ -43,15 +51,7 @@ export interface ForecastJobOut {
     /**
      * 
      */
-    jobId: string;
-    /**
-     * 
-     */
     result?: RouteForecastOut | null;
-    /**
-     * 
-     */
-    status: string;
     /**
      * WebSocket path that streams this job's progress
      */
@@ -77,12 +77,12 @@ export function ForecastJobOutFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
+        'jobId': json['job_id'],
+        'status': json['status'],
         'cellsSettled': json['cells_settled'] == null ? undefined : json['cells_settled'],
         'cellsTotal': json['cells_total'] == null ? undefined : json['cells_total'],
         'error': json['error'] == null ? undefined : json['error'],
-        'jobId': json['job_id'],
         'result': json['result'] === undefined ? undefined : json['result'] === null ? null : RouteForecastOutFromJSON(json['result']),
-        'status': json['status'],
         'wsUrl': json['ws_url'] == null ? undefined : json['ws_url'],
     };
 }
@@ -98,12 +98,12 @@ export function ForecastJobOutToJSONTyped(value?: ForecastJobOut | null, ignoreD
 
     return {
         
+        'job_id': value['jobId'],
+        'status': value['status'],
         'cells_settled': value['cellsSettled'],
         'cells_total': value['cellsTotal'],
         'error': value['error'],
-        'job_id': value['jobId'],
         'result': RouteForecastOutToJSON(value['result']),
-        'status': value['status'],
         'ws_url': value['wsUrl'],
     };
 }

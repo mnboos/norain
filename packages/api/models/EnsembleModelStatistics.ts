@@ -35,15 +35,15 @@ export interface EnsembleModelStatistics {
     /**
      * 
      */
-    model: string;
-    /**
-     * 
-     */
     pop?: number | null;
     /**
      * 
      */
     rainIfWet?: number | null;
+    /**
+     * 
+     */
+    model: string;
 }
 
 /**
@@ -66,9 +66,9 @@ export function EnsembleModelStatisticsFromJSONTyped(json: any, ignoreDiscrimina
     return {
         
         'metrics': (mapValues(json['metrics'], EnsembleRangeFromJSON)),
-        'model': json['model'],
         'pop': json['pop'] === undefined ? undefined : json['pop'] === null ? null : json['pop'],
         'rainIfWet': json['rain_if_wet'] === undefined ? undefined : json['rain_if_wet'] === null ? null : json['rain_if_wet'],
+        'model': json['model'],
     };
 }
 
@@ -84,9 +84,9 @@ export function EnsembleModelStatisticsToJSONTyped(value?: EnsembleModelStatisti
     return {
         
         'metrics': (mapValues(value['metrics'], EnsembleRangeToJSON)),
-        'model': value['model'],
         'pop': value['pop'],
         'rain_if_wet': value['rainIfWet'],
+        'model': value['model'],
     };
 }
 

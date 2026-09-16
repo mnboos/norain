@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { symSharpAcUnit } from "@quasar/extras/material-symbols-sharp";
 import type { RouteSection } from "@norain/api/models";
 
 defineProps<{
@@ -30,6 +31,10 @@ const CONDITION_COLORS: Record<string, string> = {
                 :color="CONDITION_COLORS[section.condition] || 'grey'"
             >
                 <q-item-label class="text-weight-medium">
+                    <!-- Sections are cut by rain; frost is a second reading on top of that,
+                         so it marks the badge instead of renaming it. The level is the
+                         server's word - the tooltip below says it in full. -->
+                    <q-icon v-if="section.frostLevel" :name="symSharpAcUnit" size="14px" class="q-mr-xs" />
                     {{ CONDITION_LABELS[section.condition] || section.condition }}
                 </q-item-label>
                 <q-item-label v-if="sections.length > 1" caption>
@@ -39,6 +44,7 @@ const CONDITION_COLORS: Record<string, string> = {
                     {{ section.startTime }}–{{ section.endTime }} · {{ section.tempMin }}–{{ section.tempMax }}°C
                     <template v-if="section.maxRainMm > 0">· Regen: {{ section.maxRainMm }} mm</template>
                     <template v-if="section.maxHeadwind != null">· Gegenwind: {{ section.maxHeadwind }} km/h</template>
+                    <template v-if="section.frostLevel">· Frost: {{ section.frostLevel }}</template>
                 </q-tooltip>
             </q-badge>
             <q-badge v-if="sections.length" color="primary" outline class="q-pa-xs">

@@ -1,0 +1,39 @@
+{
+    # The outer proxy terminates HTTPS; preserve its forwarded scheme and client IP.
+    servers {
+        trusted_proxies static private_ranges
+        trusted_proxies_strict
+    }
+}
+
+:80 {
+    encode zstd gzip
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    handle_path /static/* {
+        root * /app/static
+        file_server
+    }
+
+    @backend path /healthz /api/* /admin/* /accounts/* /ws/*
+    handle @backend {
+        reverse_proxy backend:8000 {
+            transport http {
+                read_timeout 120s
+                write_timeout 120s
+            }
+        }
+    }
+
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}

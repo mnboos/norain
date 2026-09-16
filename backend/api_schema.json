@@ -190,6 +190,17 @@
                         "title": "Eta",
                         "type": "string"
                     },
+                    "frost_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Frost Level"
+                    },
                     "headwind": {
                         "anyOf": [
                             {
@@ -972,6 +983,17 @@
                         "title": "Condition",
                         "type": "string"
                     },
+                    "end_index": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "End Index"
+                    },
                     "end_km": {
                         "title": "End Km",
                         "type": "number"
@@ -979,6 +1001,17 @@
                     "end_time": {
                         "title": "End Time",
                         "type": "string"
+                    },
+                    "frost_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Frost Level"
                     },
                     "max_headwind": {
                         "anyOf": [
@@ -994,6 +1027,17 @@
                     "max_rain_mm": {
                         "title": "Max Rain Mm",
                         "type": "number"
+                    },
+                    "start_index": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Start Index"
                     },
                     "start_km": {
                         "title": "Start Km",
@@ -1026,7 +1070,7 @@
                 "type": "object"
             },
             "RouteThumbnail": {
-                "description": "The route-list glyph: the simplified path and the ride quality of its worst sample.\n\nThe stored blob keeps the raw sample weather; only the verdict leaves the server, scored\nwhen the list is served (see ``core.ride_quality``).",
+                "description": "The route-list glyph: the simplified path, the ride quality of its worst sample, and\nthe rain and frost the row shows beside it.\n\nThe stored blob keeps the raw sample weather; only verdicts and two aggregates leave the\nserver, scored when the list is served (see ``core.ride_quality``). The rain and frost\nlevels are the *worst point of the ride*, not the worst-scoring sample: \"will it rain on\nmy ride\" is a different question from \"what spoils it\".",
                 "properties": {
                     "computed_at": {
                         "anyOf": [
@@ -1050,6 +1094,28 @@
                         ],
                         "title": "Departure"
                     },
+                    "frost_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Frost Level"
+                    },
+                    "max_rain_rate_mm_h": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Rain Rate Mm H"
+                    },
                     "path": {
                         "items": {
                             "items": {
@@ -1059,6 +1125,30 @@
                         },
                         "title": "Path",
                         "type": "array"
+                    },
+                    "rain_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain Level"
+                    },
+                    "rain_probability": {
+                        "anyOf": [
+                            {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain Probability"
                     },
                     "ride_label": {
                         "anyOf": [
@@ -1083,6 +1173,17 @@
                             }
                         ],
                         "title": "Ride Score"
+                    },
+                    "temp_min": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Temp Min"
                     }
                 },
                 "title": "RouteThumbnail",
@@ -1111,6 +1212,17 @@
                             }
                         ],
                         "title": "First Rain Place"
+                    },
+                    "max_frost_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Frost Level"
                     },
                     "max_headwind": {
                         "anyOf": [

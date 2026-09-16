@@ -36,8 +36,8 @@ def compute_sections(
 ) -> list[RouteSection]:
     """Group consecutive samples by weather condition.
 
-    Returns a list of RouteSection with start/end km, times, and per-section
-    max rain/wind and temp range.
+    Returns a list of RouteSection with start/end km, times, per-section max rain/wind and
+    temp range, and the range of sample indices it covers.
     """
     if not samples:
         return []
@@ -48,19 +48,21 @@ def compute_sections(
 
     current_cond = _condition(samples[0].rain_mm)
     section_samples = [samples[0]]
+    start_index = 0
 
-    for s in samples[1:]:
+    for offset, s in enumerate(samples[1:], start=1):
         cond = _condition(s.rain_mm)
         if cond == current_cond:
             section_samples.append(s)
         else:
-            sections.append(_build_section(section_samples, total_km, total_s))
+            sections.append(_build_section(section_samples, total_km, total_s, start_index))
             current_cond = cond
             section_samples = [s]
+            start_index = offset
 
     # Flush last section
     if section_samples:
-        sections.append(_build_section(section_samples, total_km, total_s))
+        sections.append(_build_section(section_samples, total_km, total_s, start_index))
 
     return sections
 
@@ -69,6 +71,7 @@ def _build_section(
     samples: list[WeatherSample],
     total_km: float,
     total_s: float,
+    start_index: int,
 ) -> RouteSection:
     first = samples[0]
     last = samples[-1]
@@ -86,6 +89,10 @@ def _build_section(
     temp_max = round(max(temps), 1)
 
     return RouteSection(
+        # Which samples this section covers, so the serving layer can score its frost on read
+        # instead of freezing a verdict into the stored job. See core.jobs.forecast_view.
+        start_index=start_index,
+        end_index=start_index + len(samples) - 1,
         start_km=start_km,
         end_km=end_km,
         start_time=start_time,

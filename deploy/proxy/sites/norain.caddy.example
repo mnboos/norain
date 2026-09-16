@@ -1,0 +1,5 @@
+# Rename to norain.caddy after choosing a hostname and setting its DNS record.
+# Also set DOMAIN and the Django public-origin settings in NoRain's .env.
+norain.example.com {
+    reverse_proxy norain-web:80
+}

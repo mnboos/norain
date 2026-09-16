@@ -35,7 +35,12 @@ from core.stations import (
     ride_in_window,
     station_correction,
 )
-from core.tasks import _assemble_forecast_job_async, _plan_forecast_job_async, _refresh_station_observations_async
+from core.tasks import (
+    _assemble_forecast_job_async,
+    _compute_route_weather_job_async,
+    _plan_forecast_job_async,
+    _refresh_station_observations_async,
+)
 from core.thumbnails import compute_route_thumbnail
 from core.weather import compute_route_weather
 
@@ -372,7 +377,7 @@ class StationJobTests(_NearNowRoute, TestCase):
         with patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=AsyncMock())), patch(
             "core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=AsyncMock())
         ), patch("core.tasks.refresh_station_observations", SimpleNamespace(aenqueue=station_enqueue)), patch(
-            "core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())
+            "core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())
         ):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
         job.refresh_from_db()
@@ -423,7 +428,7 @@ class StationJobTests(_NearNowRoute, TestCase):
         with patch.dict(os.environ, WITH_KEY), patch(
             "core.stations._fetch_nearby", AsyncMock(side_effect=AssertionError("looked up!"))
         ), patch("core.stations._fetch_observation", fetch_observation), patch(
-            "core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())
+            "core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())
         ):
             async_to_sync(_refresh_station_observations_async)(str(job.id))
 
@@ -437,7 +442,7 @@ class StationJobTests(_NearNowRoute, TestCase):
         job = self.make_job(status=ForecastJob.Status.FETCHING, cells_total=1)
         assemble = AsyncMock()
         with patch.dict(os.environ, WITH_KEY), patch(
-            "core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=assemble)
+            "core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=assemble)
         ), patch(
             "core.tasks.refresh_stations_for_ride", AsyncMock(side_effect=RuntimeError("boom"))
         ), self.assertRaises(RuntimeError):
@@ -450,6 +455,7 @@ class StationJobTests(_NearNowRoute, TestCase):
         job = self.make_job(status=ForecastJob.Status.ASSEMBLING)
         patches = _no_network()
         with patches[0], patches[1], patches[2], patches[3]:
+            async_to_sync(_compute_route_weather_job_async)(str(job.id))
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
         job.refresh_from_db()
         return job

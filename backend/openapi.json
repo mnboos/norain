@@ -864,6 +864,52 @@
                             }
                         ],
                         "title": "Station Count"
+                    },
+                    "ride_score": {
+                        "anyOf": [
+                            {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Score"
+                    },
+                    "ride_label": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Label"
+                    },
+                    "wind_effort_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Effort Level"
+                    },
+                    "frost_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Frost Level"
                     }
                 },
                 "required": [
@@ -1070,6 +1116,39 @@
                     "temp_max": {
                         "title": "Temp Max",
                         "type": "number"
+                    },
+                    "start_index": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Start Index"
+                    },
+                    "end_index": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "End Index"
+                    },
+                    "frost_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Frost Level"
                     }
                 },
                 "required": [
@@ -1154,6 +1233,28 @@
                         ],
                         "title": "Max Wind Power W"
                     },
+                    "max_wind_effort_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Wind Effort Level"
+                    },
+                    "max_frost_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Frost Level"
+                    },
                     "wind_distribution": {
                         "anyOf": [
                             {
@@ -1216,6 +1317,24 @@
                             }
                         ],
                         "title": "Wind Power W"
+                    },
+                    "wind_effort_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Wind Effort Level"
+                    },
+                    "wind_effort": {
+                        "default": 0,
+                        "maximum": 1,
+                        "minimum": 0,
+                        "title": "Wind Effort",
+                        "type": "number"
                     }
                 },
                 "required": [
@@ -1623,6 +1742,7 @@
                 "type": "object"
             },
             "RouteThumbnail": {
+                "description": "The route-list glyph: the simplified path, the ride quality of its worst sample, and\nthe rain and frost the row shows beside it.\n\nThe stored blob keeps the raw sample weather; only verdicts and two aggregates leave the\nserver, scored when the list is served (see ``core.ride_quality``). The rain and frost\nlevels are the *worst point of the ride*, not the worst-scoring sample: \"will it rain on\nmy ride\" is a different question from \"what spoils it\".",
                 "properties": {
                     "departure": {
                         "anyOf": [
@@ -1645,20 +1765,6 @@
                         "title": "Path",
                         "type": "array"
                     },
-                    "samples": {
-                        "items": {
-                            "anyOf": [
-                                {
-                                    "$ref": "#/components/schemas/RouteThumbnailSample"
-                                },
-                                {
-                                    "type": "null"
-                                }
-                            ]
-                        },
-                        "title": "Samples",
-                        "type": "array"
-                    },
                     "computed_at": {
                         "anyOf": [
                             {
@@ -1669,77 +1775,90 @@
                             }
                         ],
                         "title": "Computed At"
+                    },
+                    "ride_score": {
+                        "anyOf": [
+                            {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Score"
+                    },
+                    "ride_label": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Label"
+                    },
+                    "rain_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain Level"
+                    },
+                    "frost_level": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Frost Level"
+                    },
+                    "rain_probability": {
+                        "anyOf": [
+                            {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rain Probability"
+                    },
+                    "max_rain_rate_mm_h": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Rain Rate Mm H"
+                    },
+                    "temp_min": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Temp Min"
                     }
                 },
                 "title": "RouteThumbnail",
-                "type": "object"
-            },
-            "RouteThumbnailSample": {
-                "description": "Weather inputs for one point in a route-list thumbnail.",
-                "properties": {
-                    "i": {
-                        "title": "I",
-                        "type": "integer"
-                    },
-                    "rain_mm": {
-                        "title": "Rain Mm",
-                        "type": "number"
-                    },
-                    "temp": {
-                        "title": "Temp",
-                        "type": "number"
-                    },
-                    "headwind": {
-                        "anyOf": [
-                            {
-                                "type": "number"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Headwind"
-                    },
-                    "wind_power_w": {
-                        "anyOf": [
-                            {
-                                "type": "number"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Wind Power W"
-                    },
-                    "precipitation_interval_s": {
-                        "anyOf": [
-                            {
-                                "type": "integer"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Precipitation Interval S"
-                    },
-                    "rain_rate_mm_h": {
-                        "anyOf": [
-                            {
-                                "type": "number"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Rain Rate Mm H"
-                    }
-                },
-                "required": [
-                    "i",
-                    "rain_mm",
-                    "temp"
-                ],
-                "title": "RouteThumbnailSample",
                 "type": "object"
             },
             "RecurringRouteIn": {

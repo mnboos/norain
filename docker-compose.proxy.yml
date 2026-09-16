@@ -1,0 +1,18 @@
+# Use behind the server-wide proxy. Only the frontend joins the shared network.
+services:
+  caddy:
+    ports: !override []
+    environment:
+      DOMAIN: ":80"
+    volumes:
+      - ./deploy/Caddyfile.proxy:/etc/caddy/Caddyfile:ro
+    networks:
+      edge:
+      proxy:
+        aliases:
+          - norain-web
+
+networks:
+  proxy:
+    name: server-proxy
+    external: true

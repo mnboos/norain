@@ -69,6 +69,19 @@ const flakes = (xs: number[]) =>
 
 const BOLT = `<path d="M14 15.5l-4.5 5.5h2.8l-.8 3 4.5-5.6h-2.9z" fill="#f39c12"/>`;
 
+/**
+ * An ice crystal for the map chip. Frost is what the *road* does; the glyph beside it says
+ * what the sky does, and a cold clear morning must keep its sun. So this is an extra mark on
+ * the chip, never a replacement - the same way the dashboard puts frost next to rain instead
+ * of in place of it.
+ */
+export const FROST_MARK = `
+    <g stroke="#5dade2" stroke-width="2" stroke-linecap="round">
+        <path d="M12 3v18"/><path d="M4.2 7.5l15.6 9"/><path d="M19.8 7.5l-15.6 9"/>
+        <path d="M12 7l-2.6-2.6"/><path d="M12 7l2.6-2.6"/>
+        <path d="M12 17l-2.6 2.6"/><path d="M12 17l2.6 2.6"/>
+    </g>`;
+
 const GLYPHS = {
     clear_day: SUN,
     clear_night: MOON,
@@ -160,6 +173,12 @@ export interface ScreenPoint {
 export interface ThinnableSample {
     rainMm: number;
     /**
+     * The server's frost level, when the caller has it. A stretch that turns icy earns a chip
+     * at the transition for the same reason a band change does: the line's colour must never
+     * be the only cue that conditions shifted.
+     */
+    frost?: string | null;
+    /**
      * Optional ride-quality band (see utils/rideQuality.ts `scoreBand`). When the caller
      * supplies it, a band change counts as a transition too - otherwise a stretch that
      * turns bad through wind or cold alone could lose every chip next to it, leaving the
@@ -194,15 +213,19 @@ export function pickVisibleSamples(
     let lastKeptIndex = -1;
     let prevCondition: RainCondition | undefined;
     let prevBand: number | null | undefined;
+    let prevFrost: string | null | undefined;
 
     for (const [i, sample] of samples.entries()) {
         const cond = rainCondition(sample.rainMm);
         const band = sample.band;
+        const frost = sample.frost;
         const isTransition =
             (prevCondition !== undefined && cond !== prevCondition) ||
-            (prevBand !== undefined && band !== undefined && band !== prevBand);
+            (prevBand !== undefined && band !== undefined && band !== prevBand) ||
+            (prevFrost !== undefined && frost !== undefined && frost !== prevFrost);
         prevCondition = cond;
         prevBand = band;
+        prevFrost = frost;
 
         const required = i === 0 || i === last ? 0 : isTransition ? transitionMinPx : minPx;
         const point = project(i);

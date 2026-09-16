@@ -31,38 +31,6 @@ export interface RecurringRouteOut {
     /**
      * 
      */
-    active: boolean;
-    /**
-     * 
-     */
-    createdAt?: Date | null;
-    /**
-     * 
-     */
-    description: string;
-    /**
-     * 
-     */
-    destLat: number;
-    /**
-     * 
-     */
-    destLon: number;
-    /**
-     * 
-     */
-    destName: string;
-    /**
-     * 
-     */
-    forecastAvailable?: boolean;
-    /**
-     * 
-     */
-    hasGeometry?: boolean;
-    /**
-     * 
-     */
     id: string;
     /**
      * 
@@ -71,19 +39,7 @@ export interface RecurringRouteOut {
     /**
      * 
      */
-    nextDeparture?: string | null;
-    /**
-     * 
-     */
-    profile: string;
-    /**
-     * 
-     */
-    scheduleCron: string;
-    /**
-     * 
-     */
-    scheduleDescription: string;
+    description: string;
     /**
      * 
      */
@@ -99,11 +55,31 @@ export interface RecurringRouteOut {
     /**
      * 
      */
-    thumbnail?: RouteThumbnail | null;
+    destLat: number;
     /**
      * 
      */
-    totalDistanceM?: number | null;
+    destLon: number;
+    /**
+     * 
+     */
+    destName: string;
+    /**
+     * 
+     */
+    profile: string;
+    /**
+     * 
+     */
+    scheduleCron: string;
+    /**
+     * 
+     */
+    scheduleDescription: string;
+    /**
+     * 
+     */
+    active: boolean;
     /**
      * 
      */
@@ -111,26 +87,50 @@ export interface RecurringRouteOut {
     /**
      * 
      */
+    totalDistanceM?: number | null;
+    /**
+     * 
+     */
+    hasGeometry?: boolean;
+    /**
+     * 
+     */
+    nextDeparture?: string | null;
+    /**
+     * 
+     */
+    forecastAvailable?: boolean;
+    /**
+     * 
+     */
+    createdAt?: Date | null;
+    /**
+     * 
+     */
     updatedAt?: Date | null;
+    /**
+     * 
+     */
+    thumbnail?: RouteThumbnail | null;
 }
 
 /**
  * Check if a given object implements the RecurringRouteOut interface.
  */
 export function instanceOfRecurringRouteOut(value: object): value is RecurringRouteOut {
-    if (!('active' in value) || value['active'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if ((!('destLat' in (value as Record<string, any>)) && !('dest_lat' in (value as Record<string, any>))) || ((value as Record<string, any>)['destLat'] === undefined && (value as Record<string, any>)['dest_lat'] === undefined)) return false;
-    if ((!('destLon' in (value as Record<string, any>)) && !('dest_lon' in (value as Record<string, any>))) || ((value as Record<string, any>)['destLon'] === undefined && (value as Record<string, any>)['dest_lon'] === undefined)) return false;
-    if ((!('destName' in (value as Record<string, any>)) && !('dest_name' in (value as Record<string, any>))) || ((value as Record<string, any>)['destName'] === undefined && (value as Record<string, any>)['dest_name'] === undefined)) return false;
     if (!('id' in value) || value['id'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('profile' in value) || value['profile'] === undefined) return false;
-    if ((!('scheduleCron' in (value as Record<string, any>)) && !('schedule_cron' in (value as Record<string, any>))) || ((value as Record<string, any>)['scheduleCron'] === undefined && (value as Record<string, any>)['schedule_cron'] === undefined)) return false;
-    if ((!('scheduleDescription' in (value as Record<string, any>)) && !('schedule_description' in (value as Record<string, any>))) || ((value as Record<string, any>)['scheduleDescription'] === undefined && (value as Record<string, any>)['schedule_description'] === undefined)) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if ((!('startLat' in (value as Record<string, any>)) && !('start_lat' in (value as Record<string, any>))) || ((value as Record<string, any>)['startLat'] === undefined && (value as Record<string, any>)['start_lat'] === undefined)) return false;
     if ((!('startLon' in (value as Record<string, any>)) && !('start_lon' in (value as Record<string, any>))) || ((value as Record<string, any>)['startLon'] === undefined && (value as Record<string, any>)['start_lon'] === undefined)) return false;
     if ((!('startName' in (value as Record<string, any>)) && !('start_name' in (value as Record<string, any>))) || ((value as Record<string, any>)['startName'] === undefined && (value as Record<string, any>)['start_name'] === undefined)) return false;
+    if ((!('destLat' in (value as Record<string, any>)) && !('dest_lat' in (value as Record<string, any>))) || ((value as Record<string, any>)['destLat'] === undefined && (value as Record<string, any>)['dest_lat'] === undefined)) return false;
+    if ((!('destLon' in (value as Record<string, any>)) && !('dest_lon' in (value as Record<string, any>))) || ((value as Record<string, any>)['destLon'] === undefined && (value as Record<string, any>)['dest_lon'] === undefined)) return false;
+    if ((!('destName' in (value as Record<string, any>)) && !('dest_name' in (value as Record<string, any>))) || ((value as Record<string, any>)['destName'] === undefined && (value as Record<string, any>)['dest_name'] === undefined)) return false;
+    if (!('profile' in value) || value['profile'] === undefined) return false;
+    if ((!('scheduleCron' in (value as Record<string, any>)) && !('schedule_cron' in (value as Record<string, any>))) || ((value as Record<string, any>)['scheduleCron'] === undefined && (value as Record<string, any>)['schedule_cron'] === undefined)) return false;
+    if ((!('scheduleDescription' in (value as Record<string, any>)) && !('schedule_description' in (value as Record<string, any>))) || ((value as Record<string, any>)['scheduleDescription'] === undefined && (value as Record<string, any>)['schedule_description'] === undefined)) return false;
+    if (!('active' in value) || value['active'] === undefined) return false;
     return true;
 }
 
@@ -144,27 +144,27 @@ export function RecurringRouteOutFromJSONTyped(json: any, ignoreDiscriminator: b
     }
     return {
         
-        'active': json['active'],
-        'createdAt': json['created_at'] === undefined ? undefined : json['created_at'] === null ? null : (parseDateTime(json['created_at'])),
-        'description': json['description'],
-        'destLat': json['dest_lat'],
-        'destLon': json['dest_lon'],
-        'destName': json['dest_name'],
-        'forecastAvailable': json['forecast_available'] == null ? undefined : json['forecast_available'],
-        'hasGeometry': json['has_geometry'] == null ? undefined : json['has_geometry'],
         'id': json['id'],
         'name': json['name'],
-        'nextDeparture': json['next_departure'] === undefined ? undefined : json['next_departure'] === null ? null : json['next_departure'],
-        'profile': json['profile'],
-        'scheduleCron': json['schedule_cron'],
-        'scheduleDescription': json['schedule_description'],
+        'description': json['description'],
         'startLat': json['start_lat'],
         'startLon': json['start_lon'],
         'startName': json['start_name'],
-        'thumbnail': json['thumbnail'] === undefined ? undefined : json['thumbnail'] === null ? null : RouteThumbnailFromJSON(json['thumbnail']),
-        'totalDistanceM': json['total_distance_m'] === undefined ? undefined : json['total_distance_m'] === null ? null : json['total_distance_m'],
+        'destLat': json['dest_lat'],
+        'destLon': json['dest_lon'],
+        'destName': json['dest_name'],
+        'profile': json['profile'],
+        'scheduleCron': json['schedule_cron'],
+        'scheduleDescription': json['schedule_description'],
+        'active': json['active'],
         'totalSeconds': json['total_seconds'] === undefined ? undefined : json['total_seconds'] === null ? null : json['total_seconds'],
+        'totalDistanceM': json['total_distance_m'] === undefined ? undefined : json['total_distance_m'] === null ? null : json['total_distance_m'],
+        'hasGeometry': json['has_geometry'] == null ? undefined : json['has_geometry'],
+        'nextDeparture': json['next_departure'] === undefined ? undefined : json['next_departure'] === null ? null : json['next_departure'],
+        'forecastAvailable': json['forecast_available'] == null ? undefined : json['forecast_available'],
+        'createdAt': json['created_at'] === undefined ? undefined : json['created_at'] === null ? null : (parseDateTime(json['created_at'])),
         'updatedAt': json['updated_at'] === undefined ? undefined : json['updated_at'] === null ? null : (parseDateTime(json['updated_at'])),
+        'thumbnail': json['thumbnail'] === undefined ? undefined : json['thumbnail'] === null ? null : RouteThumbnailFromJSON(json['thumbnail']),
     };
 }
 
@@ -179,27 +179,27 @@ export function RecurringRouteOutToJSONTyped(value?: RecurringRouteOut | null, i
 
     return {
         
-        'active': value['active'],
-        'created_at': value['createdAt'] == null ? value['createdAt'] : serializeDateTime(value['createdAt']),
-        'description': value['description'],
-        'dest_lat': value['destLat'],
-        'dest_lon': value['destLon'],
-        'dest_name': value['destName'],
-        'forecast_available': value['forecastAvailable'],
-        'has_geometry': value['hasGeometry'],
         'id': value['id'],
         'name': value['name'],
-        'next_departure': value['nextDeparture'],
-        'profile': value['profile'],
-        'schedule_cron': value['scheduleCron'],
-        'schedule_description': value['scheduleDescription'],
+        'description': value['description'],
         'start_lat': value['startLat'],
         'start_lon': value['startLon'],
         'start_name': value['startName'],
-        'thumbnail': RouteThumbnailToJSON(value['thumbnail']),
-        'total_distance_m': value['totalDistanceM'],
+        'dest_lat': value['destLat'],
+        'dest_lon': value['destLon'],
+        'dest_name': value['destName'],
+        'profile': value['profile'],
+        'schedule_cron': value['scheduleCron'],
+        'schedule_description': value['scheduleDescription'],
+        'active': value['active'],
         'total_seconds': value['totalSeconds'],
+        'total_distance_m': value['totalDistanceM'],
+        'has_geometry': value['hasGeometry'],
+        'next_departure': value['nextDeparture'],
+        'forecast_available': value['forecastAvailable'],
+        'created_at': value['createdAt'] == null ? value['createdAt'] : serializeDateTime(value['createdAt']),
         'updated_at': value['updatedAt'] == null ? value['updatedAt'] : serializeDateTime(value['updatedAt']),
+        'thumbnail': RouteThumbnailToJSON(value['thumbnail']),
     };
 }
 

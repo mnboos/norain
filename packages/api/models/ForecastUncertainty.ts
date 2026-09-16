@@ -38,19 +38,7 @@ export interface ForecastUncertainty {
     /**
      * 
      */
-    fetchedAt: string;
-    /**
-     * 
-     */
-    forecastTime: string;
-    /**
-     * 
-     */
     metrics: { [key: string]: EnsembleRange; };
-    /**
-     * 
-     */
-    models: Array<EnsembleModelStatistics>;
     /**
      * 
      */
@@ -58,11 +46,11 @@ export interface ForecastUncertainty {
     /**
      * 
      */
-    precipitationIntervalS?: number;
+    rainIfWet?: number | null;
     /**
      * 
      */
-    rainIfWet?: number | null;
+    models: Array<EnsembleModelStatistics>;
     /**
      * 
      */
@@ -70,18 +58,30 @@ export interface ForecastUncertainty {
     /**
      * 
      */
+    forecastTime: string;
+    /**
+     * 
+     */
+    fetchedAt: string;
+    /**
+     * 
+     */
     source?: string;
+    /**
+     * 
+     */
+    precipitationIntervalS?: number;
 }
 
 /**
  * Check if a given object implements the ForecastUncertainty interface.
  */
 export function instanceOfForecastUncertainty(value: object): value is ForecastUncertainty {
-    if ((!('fetchedAt' in (value as Record<string, any>)) && !('fetched_at' in (value as Record<string, any>))) || ((value as Record<string, any>)['fetchedAt'] === undefined && (value as Record<string, any>)['fetched_at'] === undefined)) return false;
-    if ((!('forecastTime' in (value as Record<string, any>)) && !('forecast_time' in (value as Record<string, any>))) || ((value as Record<string, any>)['forecastTime'] === undefined && (value as Record<string, any>)['forecast_time'] === undefined)) return false;
     if (!('metrics' in value) || value['metrics'] === undefined) return false;
     if (!('models' in value) || value['models'] === undefined) return false;
     if ((!('requestedModels' in (value as Record<string, any>)) && !('requested_models' in (value as Record<string, any>))) || ((value as Record<string, any>)['requestedModels'] === undefined && (value as Record<string, any>)['requested_models'] === undefined)) return false;
+    if ((!('forecastTime' in (value as Record<string, any>)) && !('forecast_time' in (value as Record<string, any>))) || ((value as Record<string, any>)['forecastTime'] === undefined && (value as Record<string, any>)['forecast_time'] === undefined)) return false;
+    if ((!('fetchedAt' in (value as Record<string, any>)) && !('fetched_at' in (value as Record<string, any>))) || ((value as Record<string, any>)['fetchedAt'] === undefined && (value as Record<string, any>)['fetched_at'] === undefined)) return false;
     return true;
 }
 
@@ -95,15 +95,15 @@ export function ForecastUncertaintyFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
-        'fetchedAt': json['fetched_at'],
-        'forecastTime': json['forecast_time'],
         'metrics': (mapValues(json['metrics'], EnsembleRangeFromJSON)),
-        'models': ((json['models'] as Array<any>).map(EnsembleModelStatisticsFromJSON)),
         'pop': json['pop'] === undefined ? undefined : json['pop'] === null ? null : json['pop'],
-        'precipitationIntervalS': json['precipitation_interval_s'] == null ? undefined : json['precipitation_interval_s'],
         'rainIfWet': json['rain_if_wet'] === undefined ? undefined : json['rain_if_wet'] === null ? null : json['rain_if_wet'],
+        'models': ((json['models'] as Array<any>).map(EnsembleModelStatisticsFromJSON)),
         'requestedModels': json['requested_models'],
+        'forecastTime': json['forecast_time'],
+        'fetchedAt': json['fetched_at'],
         'source': json['source'] == null ? undefined : json['source'],
+        'precipitationIntervalS': json['precipitation_interval_s'] == null ? undefined : json['precipitation_interval_s'],
     };
 }
 
@@ -118,15 +118,15 @@ export function ForecastUncertaintyToJSONTyped(value?: ForecastUncertainty | nul
 
     return {
         
-        'fetched_at': value['fetchedAt'],
-        'forecast_time': value['forecastTime'],
         'metrics': (mapValues(value['metrics'], EnsembleRangeToJSON)),
-        'models': ((value['models'] as Array<any>).map(EnsembleModelStatisticsToJSON)),
         'pop': value['pop'],
-        'precipitation_interval_s': value['precipitationIntervalS'],
         'rain_if_wet': value['rainIfWet'],
+        'models': ((value['models'] as Array<any>).map(EnsembleModelStatisticsToJSON)),
         'requested_models': value['requestedModels'],
+        'forecast_time': value['forecastTime'],
+        'fetched_at': value['fetchedAt'],
         'source': value['source'],
+        'precipitation_interval_s': value['precipitationIntervalS'],
     };
 }
 

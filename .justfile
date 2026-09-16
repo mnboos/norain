@@ -55,6 +55,68 @@ backend:
 frontend:
     npm run dev
 
+[doc("Run any Django management command locally, e.g. just manage showmigrations.")]
+[group('tasks')]
+[working-directory("backend")]
+manage +args:
+    uv run python manage.py {{ args }}
+
+[doc("Process background tasks locally; defaults to all queues. Optionally pass default, cells, compute or forecasts.")]
+[group('tasks')]
+[working-directory("backend")]
+worker queue='*':
+    uv run python manage.py db_worker --queue-name '{{ queue }}'
+
+[doc("Queue forecast pre-warming for all eligible routes. Requires default and cells workers.")]
+[group('tasks')]
+[working-directory("backend")]
+forecast-refresh-all:
+    uv run python manage.py refresh_forecasts
+
+[doc("Queue missing/stale forecast cells for a route's next three departures. Requires geometry and default/cells workers; reuses fresh cells.")]
+[group('tasks')]
+[working-directory("backend")]
+forecast-refresh $route_id:
+    uv run python manage.py shell -c "import os; from core.models import RecurringRoute; from core.tasks import scan_route_forecasts; route = RecurringRoute.objects.get(id=os.environ['route_id']); print('Queued route scan:', scan_route_forecasts.enqueue(str(route.id)).id)"
+
+[doc("Queue a geometry refresh for one route against the current routing graph. Requires a default worker.")]
+[group('tasks')]
+[working-directory("backend")]
+routing-refresh-route $route_id:
+    uv run python manage.py shell -c "import os; from core.models import RecurringRoute; from core.tasks import refresh_route_geometry; route = RecurringRoute.objects.get(id=os.environ['route_id']); print('Queued geometry refresh:', refresh_route_geometry.enqueue(str(route.id)).id)"
+
+[doc("Queue a route thumbnail rebuild using cached weather. Requires a default worker.")]
+[group('tasks')]
+[working-directory("backend")]
+thumbnail-refresh $route_id:
+    uv run python manage.py shell -c "import os; from core.models import RecurringRoute; from core.tasks import refresh_route_thumbnail; route = RecurringRoute.objects.get(id=os.environ['route_id']); print('Queued thumbnail refresh:', refresh_route_thumbnail.enqueue(str(route.id)).id)"
+
+[doc("Preview missing route timings; pass --enqueue to queue repairs, optionally --route-id UUID or --limit N.")]
+[group('tasks')]
+[working-directory("backend")]
+routing-backfill *args:
+    uv run python manage.py backfill_route_vertex_times {{ args }}
+
+[doc("Rebuild the local routing graph after editing graphhopper-config.yaml or data/graphhopper/models/ (ride speeds live there). Deletes data/graphhopper/cache and imports again; the OSM extract and elevation tiles are kept. Takes minutes.")]
+[group('geodata')]
+[confirm("This deletes the local routing graph and imports it again. Continue?")]
+routing-import:
+    {{ container }} compose -f docker-compose.dev.yml stop graphhopper
+    {{ container }} compose -f docker-compose.dev.yml run --rm --entrypoint bash graphhopper -c 'rm -rf /graph-cache/..?* /graph-cache/.[!.]* /graph-cache/*'
+    {{ container }} compose -f docker-compose.dev.yml run --rm -e GRAPHHOPPER_IMPORT_ONLY=true graphhopper
+    {{ container }} compose -f docker-compose.dev.yml up -d graphhopper
+
+[doc("Print each bike profile's average speed on a few reference routes. Run it after routing-import to see what a speed change did.")]
+[group('geodata')]
+routing-speeds *args:
+    uv run --project backend python scripts/routing_speeds.py {{ args }}
+
+[doc("Re-route every saved route against the current graph. Needs a worker on the default queue; run it after a new graph, or stored arrival times stay old.")]
+[group('geodata')]
+[working-directory("backend")]
+routing-refresh-routes:
+    uv run python manage.py shell -c "from core.models import RecurringRoute; from core.tasks import refresh_route_geometry; print(sum(refresh_route_geometry.enqueue(str(i)) is not None for i in RecurringRoute.objects.values_list('id', flat=True)), 'routes queued')"
+
 [doc("Import a ready-to-use index that you can download from the Graphhopper page.")]
 [group('geodata')]
 setup-geocoder:
@@ -109,11 +171,11 @@ update-api: export-openapi-schema update-api--build-only
 [doc("Build and deploy the checked-out source on the current VPS. Requires production .env settings and local image tags.")]
 [group('deploy')]
 deploy-local:
-    {{ container }} compose --env-file .env -f docker-compose.prod.yml build
-    {{ container }} compose --env-file .env -f docker-compose.prod.yml pull db redis
-    {{ container }} compose --env-file .env -f docker-compose.prod.yml run --rm --pull never backend python manage.py migrate --noinput
-    {{ container }} compose --env-file .env -f docker-compose.prod.yml run --rm --pull never --user root backend python manage.py collectstatic --noinput
-    {{ container }} compose --env-file .env -f docker-compose.prod.yml up -d --pull never --remove-orphans
+    {{ container }} compose --env-file .env build
+    {{ container }} compose --env-file .env pull db redis
+    {{ container }} compose --env-file .env run --rm --pull never backend python manage.py migrate --noinput
+    {{ container }} compose --env-file .env run --rm --pull never --user root backend python manage.py collectstatic --noinput
+    {{ container }} compose --env-file .env up -d --pull never --remove-orphans
 
 # Mirrors the deploy job in .github/workflows/release.yml; the images must already be published.
 [doc("Release a commit's published images to the VPS over SSH, then check health. Needs VPS_USER, VPS_HOST, VPS_PUBLIC_HEALTH_URL. Roll back with an older sha.")]
