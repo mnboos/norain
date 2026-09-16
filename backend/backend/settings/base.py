@@ -82,12 +82,13 @@ INSTALLED_APPS = [
 # throughput comes from running several worker processes, and the split keeps a burst of
 # provider fetches from starving the work a user is actually waiting on:
 #   cells      the provider fan-out, one task per grid cell (many, slow, I/O bound)
+#   compute    weather computation from warm cells
 #   forecasts  job planning and assembly (few, latency-sensitive: someone is watching)
 #   default    geometry, thumbnails, pre-warm scans, maintenance
 TASKS = {
     "default": {
         "BACKEND": "django_tasks_db.DatabaseBackend",
-        "QUEUES": ["default", "cells", "forecasts"],
+        "QUEUES": ["default", "cells", "compute", "forecasts"],
         "OPTIONS": {"id_function": "uuid.uuid7"},
     }
 }

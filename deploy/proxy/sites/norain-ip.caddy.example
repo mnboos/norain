@@ -1,0 +1,10 @@
+# Replace this documentation IP with the VPS public IP, then save as norain.caddy.
+# Match NoRain's DOMAIN and HTTPS origin settings to the same IP.
+203.0.113.10 {
+    tls {
+        issuer acme https://acme-v02.api.letsencrypt.org/directory {
+            profile shortlived
+        }
+    }
+    reverse_proxy norain-web:80
+}

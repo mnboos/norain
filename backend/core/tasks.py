@@ -6,12 +6,14 @@ Background tasks for route geometry computation and forecast grid pre-warming.
 from datetime import UTC, datetime, timedelta
 
 from asgiref.sync import async_to_sync, sync_to_async
+from django.db import transaction
 from django.db.models import F
 from django.tasks import task
 from loguru import logger
 
 from core.claims import claim_cell, release_cell
 from core.entitlements import entitlements_for, entitlements_for_sync, strip_uncertainty
+from core.forecast_schemas import RouteWeatherOut
 from core.grid import (
     get_cached_ensemble_cell,
     get_cached_forecast_cell,
@@ -199,13 +201,13 @@ async def _refresh_station_observations_async(job_id: str) -> None:
 
 
 def _settle_cell_sync(job_id: str, failed: bool = False) -> tuple[ForecastJob | None, bool]:
-    """Count one finished cell and, if it was the last, hand the job to assembly.
+    """Count one finished cell and, if it was the last, hand the job to computation.
 
     ``failed`` also counts the cell in ``cells_failed``: it settled, but stored nothing.
 
-    Returns ``(job, won_assembly)``. The increment is atomic but the read that follows is
+    Returns ``(job, won_computation)``. The increment is atomic but the read that follows is
     not, so several `cells` workers finishing at once could each see a complete job and
-    enqueue assembly. The guarded UPDATE lets the database pick exactly one winner: only
+    enqueue computation. The guarded UPDATE lets the database pick exactly one winner: only
     the row still in `fetching` flips to `assembling`, and only that caller enqueues.
 
     The increment is itself guarded on the job still fetching, so a late duplicate settle
@@ -222,7 +224,7 @@ def _settle_cell_sync(job_id: str, failed: bool = False) -> tuple[ForecastJob | 
         jobs.filter(
             status=ForecastJob.Status.FETCHING,
             cells_settled__gte=F("cells_total"),
-        ).update(status=ForecastJob.Status.ASSEMBLING)
+        ).update(status=ForecastJob.Status.ASSEMBLING, updated_at=datetime.now(tz=UTC))
     )
     return jobs.first(), won
 
@@ -235,13 +237,13 @@ async def _settle_cell(job_id: str | None, failed: bool = False) -> None:
         return
     await publish(job)
     if won:
-        await assemble_forecast_job.aenqueue(str(job.id))
+        await compute_route_weather_job.aenqueue(str(job.id))
 
 
 # --------------------------------------------------------------------------- forecast jobs
 # The HTTP endpoints only create a job and enqueue `plan_forecast_job`. Planning resolves
 # geometry and fans out one cell task per distinct grid cell; the last cell to settle hands
-# over to `assemble_forecast_job`, which builds the payload from cells that are by then warm.
+# over to `compute_route_weather_job`, then assembly adds charts and sections.
 
 
 def _cell_set(sample_points: list[dict]) -> list[tuple[float, float]]:
@@ -345,6 +347,16 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     await job.asave(update_fields=["geometry", "cells_total", "cells_settled", "cells_failed", "status", "updated_at"])
     await publish(job)
 
+    if job.cells_total == 0:
+        won = await ForecastJob.objects.filter(id=job.id, status=ForecastJob.Status.FETCHING).aupdate(
+            status=ForecastJob.Status.ASSEMBLING, updated_at=datetime.now(tz=UTC)
+        )
+        if won:
+            await job.arefresh_from_db()
+            await publish(job)
+            await compute_route_weather_job.aenqueue(str(job.id))
+        return
+
     settled = 0
     for lat_r, lon_r in cells:
         # Ensemble cells are fetched for every tier: `pop` and `rain_if_wet` are not gated,
@@ -381,22 +393,46 @@ async def _wants_stations(job: ForecastJob, departure: datetime, total_seconds: 
     return (await entitlements_for(job.owner)).station_correction
 
 
-@task(queue_name="forecasts")
-def assemble_forecast_job(job_id: str) -> None:
-    """Build the finished forecast payload from cells that are warm by now."""
-    async_to_sync(_assemble_forecast_job_async)(job_id)
+def _active_stage(job: ForecastJob):
+    """Only write back if this stage has not completed, failed, or been restarted."""
+    return ForecastJob.objects.filter(id=job.id, status=ForecastJob.Status.ASSEMBLING, updated_at=job.updated_at)
 
 
-async def _assemble_forecast_job_async(job_id: str) -> None:
+async def _fail_forecast_stage(job: ForecastJob, error: str) -> None:
+    if await _active_stage(job).aupdate(
+        status=ForecastJob.Status.FAILED, error=error, computed_weather=None, updated_at=datetime.now(tz=UTC)
+    ):
+        await job.arefresh_from_db()
+        await publish(job)
+
+
+def _store_computed_weather(job: ForecastJob, computed: dict) -> None:
+    # This backend stores queued tasks in the same database: commit the intermediate
+    # result and its continuation together, or roll both back if enqueue fails.
+    with transaction.atomic():
+        won = _active_stage(job).filter(computed_weather__isnull=True).update(
+            computed_weather=computed, updated_at=datetime.now(tz=UTC)
+        )
+        if won:
+            assemble_forecast_job.enqueue(str(job.id))
+
+
+@task(queue_name="compute")
+def compute_route_weather_job(job_id: str) -> None:
+    """Compute a forecast from warm cells, then queue payload assembly."""
+    async_to_sync(_compute_route_weather_job_async)(job_id)
+
+
+async def _compute_route_weather_job_async(job_id: str) -> None:
     job = await ForecastJob.objects.select_related("owner").filter(id=job_id).afirst()
-    if job is None:
-        logger.warning(f"Forecast job {job_id} not found for assembly")
+    if job is None or job.status != ForecastJob.Status.ASSEMBLING or job.computed_weather is not None:
         return
 
     params = job.params
     geometry = job.geometry or {}
-    assembled = False
     try:
+        if geometry.get("sample_points") is None or geometry.get("polyline") is None:
+            raise ValueError("Forecast computation requires stored route geometry")
         limits = await entitlements_for(job.owner)
         forecast = await compute_route_weather(
             start_lat=params.get("start_lat", 0.0),
@@ -427,8 +463,38 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
         if not limits.ensemble_uncertainty:
             strip_uncertainty(forecast.samples)
 
-        # Stored in the same snake_case shape the API returns, so the job endpoint and the
-        # WebSocket hand the frontend one shape.
+        if not forecast.samples and job.cells_total:
+            await _fail_forecast_stage(job, "Noch keine Wetterdaten verfügbar.")
+            return
+        await sync_to_async(_store_computed_weather)(
+            job, {"forecast": forecast.model_dump(mode="json"), "entitlements": limits.result_marker()}
+        )
+    except Exception:
+        await _fail_forecast_stage(job, "Wetterdaten konnten nicht berechnet werden.")
+        raise
+
+
+@task(queue_name="forecasts")
+def assemble_forecast_job(job_id: str) -> None:
+    """Add charts and sections to a persisted computation and publish the result."""
+    async_to_sync(_assemble_forecast_job_async)(job_id)
+
+
+async def _assemble_forecast_job_async(job_id: str) -> None:
+    job = await ForecastJob.objects.select_related("owner").filter(id=job_id).afirst()
+    if job is None or job.status != ForecastJob.Status.ASSEMBLING:
+        return
+
+    params = job.params
+    try:
+        computed = job.computed_weather
+        if not isinstance(computed, dict):
+            raise TypeError("Forecast assembly requires computed weather")
+        limits = await entitlements_for(job.owner)
+        if computed["entitlements"] != limits.result_marker():
+            await _fail_forecast_stage(job, "Berechtigungen geändert. Bitte Wetter erneut laden.")
+            return
+        forecast = RouteWeatherOut.model_validate(computed["forecast"])
         payload = forecast.model_dump(mode="json")
         payload["figures"] = generate_forecast_figures(forecast, departure_time=params["departure_time"])
         payload["sections"] = [
@@ -437,30 +503,23 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
         if job.kind == ForecastJob.Kind.ROUTE:
             payload["route_id"] = params["route_id"]
         payload["departure_time"] = params["departure_time"]
-        # The tier this result was shaped for. The job key does not carry it, so without this
-        # an upgrade or downgrade would keep being served the old tier's forecast.
-        payload["entitlements"] = limits.result_marker()
-        assembled = True
-    finally:
-        if not assembled:
-            # Tell the watcher. The exception itself carries on to the worker, which records
-            # the task as failed with its traceback and moves on to the next one.
-            await set_status(job, ForecastJob.Status.FAILED, error="Wetterdaten konnten nicht zusammengestellt werden.")
+        payload["entitlements"] = computed["entitlements"]
 
-    if not forecast.samples and job.cells_total:
-        # Every cell was still cold at assembly time. Reporting this as a finished forecast
-        # would put an empty chart in front of the user as though it were the weather; fail
-        # it instead so the UI says so and the next request starts a fresh fan-out.
-        logger.warning(f"Forecast job {job.id} assembled no samples from {job.cells_total} cells")
-        await set_status(job, ForecastJob.Status.FAILED, error="Noch keine Wetterdaten verfügbar.")
-        return
+        won = await _active_stage(job).aupdate(
+            result=payload,
+            status=ForecastJob.Status.DONE,
+            error="",
+            computed_weather=None,
+            updated_at=datetime.now(tz=UTC),
+        )
+    except Exception:
+        await _fail_forecast_stage(job, "Wetterdaten konnten nicht zusammengestellt werden.")
+        raise
 
-    job.result = payload
-    job.status = ForecastJob.Status.DONE
-    job.error = ""
-    await job.asave(update_fields=["result", "status", "error", "updated_at"])
-    await publish(job)
-    logger.info(f"Forecast job {job.id} done ({len(forecast.samples)} samples)")
+    if won:
+        await job.arefresh_from_db()
+        await publish(job)
+        logger.info(f"Forecast job {job.id} done ({len(forecast.samples)} samples)")
 
 
 async def start_forecast_job(kind: str, owner, params: dict) -> ForecastJob:

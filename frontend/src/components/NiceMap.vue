@@ -12,7 +12,7 @@ import { useQuasar } from "quasar";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { PlacesSearchResult, RouteForecastOut, ForecastSampleOut, WindArrow } from "@norain/api/models";
-import { isNightEta, pickVisibleSamples, weatherIconSvg } from "@/utils/weatherIcons";
+import { FROST_MARK, isNightEta, pickVisibleSamples, weatherIconSvg } from "@/utils/weatherIcons";
 import { swissTime } from "@/utils/forecastDetails";
 import {
     CASING_DARK,
@@ -213,9 +213,15 @@ function sampleMarkerEl(sample: ForecastSampleOut): HTMLDivElement {
         </svg>`
                 : ""
         }
-        <div class="wx-chip" style="border-color:${scoreColor(sample.rideScore)}">
+        <div class="wx-chip${sample.frostLevel ? " wx-chip--frost" : ""}" style="border-color:${scoreColor(sample.rideScore)}">
             <svg width="20" height="20" viewBox="0 0 24 24">${glyph}</svg>
             <span>${Math.round(sample.temp)}°</span>
+            ${
+                sample.frostLevel
+                    ? `<svg class="wx-frost" width="14" height="14" viewBox="0 0 24 24"
+                            role="img" aria-label="Frost: ${sample.frostLevel}">${FROST_MARK}</svg>`
+                    : ""
+            }
         </div>`;
     return el;
 }
@@ -339,7 +345,11 @@ function applyMarkerThinning() {
     if (!map) return;
     // Carry the quality band in, so a stretch that turns bad through wind or cold keeps a
     // chip at the transition - the line's colour is never the only cue.
-    const thinnable = samples.map((s, i) => ({ rainMm: s.rainMm, band: scoreBand(scores.value[i] ?? null) }));
+    const thinnable = samples.map((s, i) => ({
+        rainMm: s.rainMm,
+        band: scoreBand(scores.value[i] ?? null),
+        frost: s.frostLevel,
+    }));
     const points = samples.map(s => map.project([s.lon, s.lat]));
     const { clientWidth: width, clientHeight: height } = map.getCanvas();
     const inView = (i: number) => {
@@ -387,6 +397,7 @@ function samplePopupHtml(s: ForecastSampleOut): string {
         💨 ${s.windSpeed == null ? "Nicht verfügbar" : `${s.windSpeed.toFixed(0)} km/h über Grund`}${s.windGust ? ` (Böen ${s.windGust.toFixed(0)})` : ""}<br>
         <span class="${s.headwind != null && s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span><br>
         ${s.windEffortLevel != null ? `↳ ${windPowerText(s.windEffortLevel)}<br>` : ""}
+        ${s.frostLevel != null ? `❄️ Frost: ${s.frostLevel}<br>` : ""}
         ${s.windCoverage != null && s.windCoverage < 1 ? "Für Teile dieses Abschnitts fehlen Winddaten.<br>" : ""}
         <span class="wx-quality">
             <i style="background:${scoreColor(s.rideScore)}"></i> Fahrqualität: ${s.rideLabel ?? "Nicht verfügbar"}
@@ -621,9 +632,11 @@ onBeforeUnmount(() => {
             <div id="map" ref="map" class="col"></div>
             <MapLegend v-if="hasRoute" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
             <div v-if="hasWindProfile" class="wx-wind-legend text-caption">
-                <span aria-hidden="true">➤</span>
-                Wind
-                <div>Pfeile zeigen, wohin der Wind weht. Grösse = Windaufwand (geschätzt).</div>
+                <q-item-label caption>
+                    <span aria-hidden="true">➤</span>
+                    Wind
+                </q-item-label>
+                <div>Pfeile zeigen Richtung und Stärke</div>
             </div>
         </q-card-section>
     </q-card>
@@ -750,6 +763,18 @@ body.body--dark .maplibregl-popup-anchor-right .maplibregl-popup-tip {
 }
 
 .wx-chip svg {
+    display: block;
+    flex: none;
+}
+
+/* Frost adds a crystal and a cold tint to the chip; the weather glyph keeps saying what the
+   sky is doing, so a cold clear morning still shows its sun. The border carries ride quality. */
+.wx-chip--frost {
+    background: #eaf4fb;
+    color: #14506e;
+}
+
+.wx-frost {
     display: block;
     flex: none;
 }

@@ -15,18 +15,17 @@
 
 import { mapValues } from '../runtime';
 /**
- * The route-list glyph: the simplified path and the ride quality of its worst sample.
+ * The route-list glyph: the simplified path, the ride quality of its worst sample, and
+ * the rain and frost the row shows beside it.
  * 
- * The stored blob keeps the raw sample weather; only the verdict leaves the server, scored
- * when the list is served (see ``core.ride_quality``).
+ * The stored blob keeps the raw sample weather; only verdicts and two aggregates leave the
+ * server, scored when the list is served (see ``core.ride_quality``). The rain and frost
+ * levels are the *worst point of the ride*, not the worst-scoring sample: "will it rain on
+ * my ride" is a different question from "what spoils it".
  * @export
  * @interface RouteThumbnail
  */
 export interface RouteThumbnail {
-    /**
-     * 
-     */
-    computedAt?: string | null;
     /**
      * 
      */
@@ -38,11 +37,35 @@ export interface RouteThumbnail {
     /**
      * 
      */
-    rideLabel?: string | null;
+    computedAt?: string | null;
     /**
      * 
      */
     rideScore?: number | null;
+    /**
+     * 
+     */
+    rideLabel?: string | null;
+    /**
+     * 
+     */
+    rainLevel?: string | null;
+    /**
+     * 
+     */
+    frostLevel?: string | null;
+    /**
+     * 
+     */
+    rainProbability?: number | null;
+    /**
+     * 
+     */
+    maxRainRateMmH?: number | null;
+    /**
+     * 
+     */
+    tempMin?: number | null;
 }
 
 /**
@@ -62,11 +85,16 @@ export function RouteThumbnailFromJSONTyped(json: any, ignoreDiscriminator: bool
     }
     return {
         
-        'computedAt': json['computed_at'] === undefined ? undefined : json['computed_at'] === null ? null : json['computed_at'],
         'departure': json['departure'] === undefined ? undefined : json['departure'] === null ? null : json['departure'],
         'path': json['path'] == null ? undefined : json['path'],
-        'rideLabel': json['ride_label'] === undefined ? undefined : json['ride_label'] === null ? null : json['ride_label'],
+        'computedAt': json['computed_at'] === undefined ? undefined : json['computed_at'] === null ? null : json['computed_at'],
         'rideScore': json['ride_score'] === undefined ? undefined : json['ride_score'] === null ? null : json['ride_score'],
+        'rideLabel': json['ride_label'] === undefined ? undefined : json['ride_label'] === null ? null : json['ride_label'],
+        'rainLevel': json['rain_level'] === undefined ? undefined : json['rain_level'] === null ? null : json['rain_level'],
+        'frostLevel': json['frost_level'] === undefined ? undefined : json['frost_level'] === null ? null : json['frost_level'],
+        'rainProbability': json['rain_probability'] === undefined ? undefined : json['rain_probability'] === null ? null : json['rain_probability'],
+        'maxRainRateMmH': json['max_rain_rate_mm_h'] === undefined ? undefined : json['max_rain_rate_mm_h'] === null ? null : json['max_rain_rate_mm_h'],
+        'tempMin': json['temp_min'] === undefined ? undefined : json['temp_min'] === null ? null : json['temp_min'],
     };
 }
 
@@ -81,11 +109,16 @@ export function RouteThumbnailToJSONTyped(value?: RouteThumbnail | null, ignoreD
 
     return {
         
-        'computed_at': value['computedAt'],
         'departure': value['departure'],
         'path': value['path'],
-        'ride_label': value['rideLabel'],
+        'computed_at': value['computedAt'],
         'ride_score': value['rideScore'],
+        'ride_label': value['rideLabel'],
+        'rain_level': value['rainLevel'],
+        'frost_level': value['frostLevel'],
+        'rain_probability': value['rainProbability'],
+        'max_rain_rate_mm_h': value['maxRainRateMmH'],
+        'temp_min': value['tempMin'],
     };
 }
 

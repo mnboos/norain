@@ -119,10 +119,10 @@ function onClose() {
 </script>
 
 <template>
-    <q-dialog :model-value="modelValue" persistent @update:model-value="onClose">
-        <q-card style="min-width: 500px; max-width: 600px">
+    <q-dialog :model-value="modelValue" persistent :maximized="$q.screen.xs" class="row" @update:model-value="onClose">
+        <q-card class="col-3" style="min-width: 50%">
             <q-card-section>
-                <div class="text-h6">Neue Route</div>
+                <q-item-label overline>Neue Route</q-item-label>
             </q-card-section>
 
             <q-card-section class="q-gutter-md">
@@ -130,6 +130,7 @@ function onClose() {
                     v-model="name"
                     label="Name"
                     outlined
+                    no-error-icon
                     dense
                     autofocus
                     :rules="[(val: string) => !!val || 'Pflichtfeld']"
@@ -227,8 +228,8 @@ function onClose() {
             </q-card-section>
 
             <q-card-actions align="right">
-                <q-btn flat label="Abbrechen" @click="onClose" />
-                <q-btn color="primary" label="Speichern" :disable="!isValid" @click="onSave" />
+                <q-btn flat label="Abbrechen" no-caps @click="onClose" />
+                <q-btn color="primary" label="Speichern" :disable="!isValid" no-caps @click="onSave" />
             </q-card-actions>
         </q-card>
     </q-dialog>

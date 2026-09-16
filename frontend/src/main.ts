@@ -10,12 +10,14 @@ import { VueQueryPlugin } from "@tanstack/vue-query";
 import { Configuration, DefaultConfig, type Middleware, type RequestContext } from "@norain/api/runtime";
 
 // Import icon libraries
-import "@quasar/extras/material-symbols-sharp/material-symbols-sharp.css";
+// import "@quasar/extras/material-symbols-sharp/material-symbols-sharp.css";
 // Self-hosted, so no request goes to Google Fonts
 import "@fontsource-variable/lexend";
 
-// Import Quasar css
-import "quasar/dist/quasar.css";
+// Import Quasar css, built from its Sass sources so quasar-variables.scss applies
+// import "quasar/src/css/index.sass";
+// // The CSS addon: breakpoint variants of the flex, spacing and visibility classes
+// import "quasar/src/css/flex-addon.sass";
 import { getCookie, useBackendHost } from "@/utils";
 import { useSession } from "@/composables/useSession";
 import { initialDarkConfig } from "@/utils/theme";

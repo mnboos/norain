@@ -35,6 +35,17 @@ export const YLORRD_8 = [
 /** Cool blue-grey for "we don't know" - deliberately off the warm ramp. */
 export const NO_DATA_COLOR = "#9aa5b1";
 
+/** Colours for the dashboard rain marker; unrelated ride-quality factors do not affect it. */
+export const RAIN_LEVEL_COLORS: Record<string, string> = {
+    leicht: "#3498db",
+    mässig: "#f2c037",
+    stark: "#c10015",
+};
+
+export function rainLevelColor(level: string | null | undefined): string {
+    return (level && RAIN_LEVEL_COLORS[level]) ?? NO_DATA_COLOR;
+}
+
 // The casing under every ramp-coloured line: the map route line and the list glyph. The good
 // end of the ramp is very pale (#ffeda0, #fed976 sit near 1.2:1 against a light background),
 // so a white casing would let it vanish - the casing carries the ink instead and flips with

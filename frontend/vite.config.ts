@@ -13,8 +13,8 @@ export default defineConfig(({ command, mode }) => {
     // whoever's machine they run on.
     const env =
         mode === "test" ? {} : { ...loadEnv(mode, fileURLToPath(new URL("..", import.meta.url)), ""), ...process.env };
-    const frontendPort = Number(env.FRONTEND_PORT || 3000);
-    const backendPort = env.BACKEND_PORT || "8000";
+    const frontendPort = Number(env.FRONTEND_PORT ?? 3000);
+    const backendPort = Number(env.BACKEND_PORT ?? 8000);
     const backend = `http://127.0.0.1:${backendPort}`;
 
     return {
@@ -59,11 +59,15 @@ export default defineConfig(({ command, mode }) => {
             ...(command === "serve"
                 ? [
                       vueDevTools({
-                          launchEditor: "C:\\Program Files\\JetBrains\\PyCharm 2025.2.4\\bin\\pycharm64.exe",
+                          launchEditor: "pycharm",
                       }),
                   ]
                 : []),
-            quasar(),
+            quasar({
+                // A custom variables file is what makes the plugin compile Quasar's Sass sources;
+                // without one it swaps them for the prebuilt dist/quasar.css.
+                sassVariables: fileURLToPath(new URL("./src/assets/quasar-variables.scss", import.meta.url)),
+            }),
         ],
         resolve: {
             alias: [

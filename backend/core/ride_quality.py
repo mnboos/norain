@@ -2,8 +2,8 @@
 
 This is the only implementation of the scoring. The curves, weights and sensitivity are the
 app's own judgement of what makes a ride bad, so they stay on the server: the API sends the
-results (``ride_score``, ``ride_label``, ``wind_effort_level``, ``wind_effort``) and the
-frontend only turns a score into a colour. Never ship a curve or a breakpoint to the client,
+results (``ride_score``, ``ride_label``, ``wind_effort_level``, ``wind_effort``, and the rain
+and frost levels as words) and the frontend only turns a score into a colour. Never ship a curve or a breakpoint to the client,
 not even indirectly - a threshold in the bundle gives the curve away.
 
 Scores are computed when a response is *served* (``core.jobs.forecast_view``,
@@ -21,8 +21,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
-RideFactor = Literal["rain", "wind", "temp"]
-FACTORS: tuple[RideFactor, ...] = ("rain", "wind", "temp")
+RideFactor = Literal["rain", "wind", "temp", "frost"]
+FACTORS: tuple[RideFactor, ...] = ("rain", "wind", "temp", "frost")
 
 
 @dataclass(frozen=True)
@@ -31,7 +31,9 @@ class RideQualityConfig:
 
     ``weights``: how much each factor's penalty (0..1) adds to the score. They need not sum
     to 1: the score is clamped, so a weight of 1 lets that factor alone reach the worst
-    colour. With the defaults the heaviest rain on its own stops at 0.75.
+    colour. With the defaults the heaviest rain on its own stops at 0.75 and the worst frost
+    at 0.8 - frost sits above rain because ice is a danger and rain is a nuisance, so freezing
+    rain names frost as its cause. A config may leave a factor out; a missing weight is 0.
 
     ``sensitivity``: how quickly the score climbs the ramp as conditions worsen. The weighted
     sum is bent as ``sum ** (1 / sensitivity)``: 1 is linear, 2 turns 0.25 into 0.5 and 0.55
@@ -44,7 +46,9 @@ class RideQualityConfig:
     chance like 32%. 30% of 2 mm/h is 0.21 at 1 and 0.38 at 2, before the rain weight.
     """
 
-    weights: Mapping[RideFactor, float] = field(default_factory=lambda: {"rain": 0.75, "wind": 0.25, "temp": 0.2})
+    weights: Mapping[RideFactor, float] = field(
+        default_factory=lambda: {"rain": 0.75, "wind": 0.25, "temp": 0.2, "frost": 0.8}
+    )
     sensitivity: float = 1.0
     rain_risk_aversion: float = 2.0
 
@@ -70,8 +74,33 @@ WIND_CURVE = ((0, 0), (10, 0.3), (20, 0.65), (30, 1))
 # Comfortable riding band is 14-22 °C; it gets worse in both directions.
 TEMP_CURVE = ((-2, 1), (14, 0), (22, 0), (34, 1))
 
+# Frost is a safety factor, not a comfort one: what matters is ice on the road, so this curve
+# is steep around freezing instead of following the slow cold arm of TEMP_CURVE. The two
+# overlap on purpose - cold counts once as discomfort and once as danger. Do not truncate
+# TEMP_CURVE's cold end to "fix" that: it would recolour every cold ride that already reads
+# correctly, and the frontend's NiceChart mirrors its 14-22 °C flat part.
+FROST_CURVE = ((-4, 1), (0, 0.75), (2, 0.35), (5, 0))
+
+# A dry frost is a risk, a wet one is ice. Frost keeps this share of its penalty on a dry road
+# and reaches the full penalty where the rain penalty is worst.
+FROST_DRY_SHARE = 0.5
+
+# Codes that mean frost whatever the thermometer says: freezing drizzle and rain, snow, ice
+# fog. The value is the floor they put under the frost penalty. `weather_code` is None on the
+# OpenWeatherMap fallback and on thumbnails written before it was stored, so this only ever
+# raises the penalty - it never decides that there is no frost.
+FROST_CODES = {
+    48: 0.5,  # Reifnebel
+    56: 0.9, 57: 1.0,  # gefrierender Niesel
+    66: 0.9, 67: 1.0,  # gefrierender Regen
+    71: 0.7, 73: 0.85, 75: 1.0, 77: 0.7,  # Schneefall, Schneegriesel
+    85: 0.85, 86: 1.0,  # Schneeschauer
+}
+
 BAND_LABELS = ("sehr gut", "gut", "mässig", "schlecht", "sehr schlecht")
-FACTOR_LABELS: dict[RideFactor, str] = {"rain": "Regen", "wind": "Wind", "temp": "Temperatur"}
+FACTOR_LABELS: dict[RideFactor, str] = {
+    "rain": "Regen", "wind": "Wind", "temp": "Temperatur", "frost": "Frost",
+}
 
 # Naming a single cause is only honest when one factor actually dominates. Below this share
 # of the total the ride is simply "mixed", and the label stays silent about why.
@@ -81,9 +110,10 @@ MIN_WORST_SHARE = 0.5
 @dataclass(frozen=True)
 class RideScore:
     score: float  # 0 = bestes Wetter, 1 = schlechtestes; derived, unitless
-    rain: float  # the three penalties, each 0..1, before weighting
+    rain: float  # the four penalties, each 0..1, before weighting
     wind: float
     temp: float
+    frost: float
     worst: RideFactor  # largest *weighted* contributor
     worst_share: float  # its share of the weighted total, before sensitivity bends it
 
@@ -168,6 +198,35 @@ def rain_impact(sample, config: RideQualityConfig = RIDE_QUALITY) -> float | Non
     return max(parts) if parts else None
 
 
+def frost_impact(sample, rain: float | None = None, config: RideQualityConfig = RIDE_QUALITY) -> float:
+    """The frost penalty (0..1) of a sample: how likely the road is icy.
+
+    Two readings, and the worse one wins:
+
+    - the thermometer through ``FROST_CURVE``, scaled by how wet it is. Dry frost keeps
+      ``FROST_DRY_SHARE`` of the penalty; a freezing road with rain on it reaches all of it,
+      because that is black ice and not just a cold morning;
+    - the weather code, when it names freezing drizzle, freezing rain, snow or ice fog. Those
+      are frost at any reading, including the +2 °C the thermometer would call harmless.
+
+    ``rain`` is the rain penalty the caller already computed; without it the wetness is read
+    from the sample. Returns **0.0, never None** - like the temperature factor. A ``None``
+    would make every job result and every thumbnail blob written before this field existed
+    unscorable, and the whole list would go grey.
+    """
+    temp = _get(sample, "temp")
+    if _finite(temp):
+        wetness = rain if rain is not None else rain_impact(sample, config)
+        wet_share = FROST_DRY_SHARE + (1 - FROST_DRY_SHARE) * _clamp01(wetness or 0.0)
+        frost = _clamp01(_piecewise(temp, FROST_CURVE)) * wet_share
+    else:
+        frost = 0.0
+    code = _get(sample, "weather_code")
+    if _finite(code):
+        frost = max(frost, FROST_CODES.get(int(code), 0.0))
+    return _clamp01(frost)
+
+
 def score_band(score: float) -> int:
     """Which of the five quality bands a score falls in (0 = sehr gut .. 4 = sehr schlecht)."""
     return min(len(BAND_LABELS) - 1, math.floor(_clamp01(score) * len(BAND_LABELS)))
@@ -179,7 +238,8 @@ def ride_score(sample, config: RideQualityConfig = RIDE_QUALITY) -> RideScore | 
     ``None`` when rain or wind is unknown. Rain is ``rain_impact`` - chance and amount together.
     The wind factor reads the wind effort (``wind_power_w``) and falls back to the
     ground-relative headwind when there is none. Never feed apparent wind into either curve:
-    it is mostly the rider's own speed and would need a different calibration.
+    it is mostly the rider's own speed and would need a different calibration. Temperature and
+    frost never make a sample unscorable: both fall back to no penalty (see ``frost_impact``).
     """
     rain = rain_impact(sample, config)
     if rain is None:
@@ -194,12 +254,12 @@ def ride_score(sample, config: RideQualityConfig = RIDE_QUALITY) -> RideScore | 
         return None
     temp_value = _get(sample, "temp")
     temp =_clamp01(_piecewise(temp_value, TEMP_CURVE)) if _finite(temp_value) else 0.0
+    frost = frost_impact(sample, rain, config)
 
-    weighted = {
-        "rain": rain * config.weights["rain"],
-        "wind": wind * config.weights["wind"],
-        "temp": temp * config.weights["temp"],
-    }
+    penalties: dict[RideFactor, float] = {"rain": rain, "wind": wind, "temp": temp, "frost": frost}
+    # A config may name fewer factors than FACTORS - a missing weight is simply 0, so an older
+    # or hand-built config keeps scoring instead of raising.
+    weighted = {factor: penalties[factor] * config.weights.get(factor, 0.0) for factor in FACTORS}
     worst: RideFactor = "rain"
     for factor in FACTORS:
         if weighted[factor] > weighted[worst]:
@@ -209,7 +269,7 @@ def ride_score(sample, config: RideQualityConfig = RIDE_QUALITY) -> RideScore | 
     # A non-positive sensitivity has no meaningful curve; treat it as linear.
     score = total ** (1 / config.sensitivity) if config.sensitivity > 0 else total
     share = min(1.0, weighted[worst] / total) if total > 0 else 0.0
-    return RideScore(score=score, rain=rain, wind=wind, temp=temp, worst=worst, worst_share=share)
+    return RideScore(score=score, rain=rain, wind=wind, temp=temp, frost=frost, worst=worst, worst_share=share)
 
 
 def worst_ride_score(samples, config: RideQualityConfig = RIDE_QUALITY) -> RideScore | None:
@@ -240,6 +300,45 @@ def wind_effort_level(watts) -> str | None:
     return "sehr hoch"
 
 
+# The rain and frost words the list and the map show. A level is a *result*, like
+# `wind_effort_level`: it says how bad the app thinks it is, without handing the browser the
+# penalty it came from. `None` means "nothing worth naming" - not "unknown"; callers that have
+# no data at all must say so themselves.
+IMPACT_LEVELS = ((0.15, "leicht"), (0.45, "mässig"), (1.01, "stark"))
+
+
+def impact_level(value: float | None) -> str | None:
+    """A rain or frost penalty (0..1) as a word, or ``None`` when there is nothing to name."""
+    if not _finite(value) or value < IMPACT_LEVELS[0][0]:
+        return None
+    for ceiling, word in IMPACT_LEVELS:
+        if value < ceiling:
+            return word
+    return IMPACT_LEVELS[-1][1]
+
+
+def rain_level(sample, config: RideQualityConfig = RIDE_QUALITY) -> str | None:
+    """How much rain this sample means, as a word."""
+    return impact_level(rain_impact(sample, config))
+
+
+def frost_level(sample, config: RideQualityConfig = RIDE_QUALITY) -> str | None:
+    """How icy this sample is, as a word."""
+    return impact_level(frost_impact(sample, config=config))
+
+
+def worst_rain_level(samples, config: RideQualityConfig = RIDE_QUALITY) -> str | None:
+    """The wettest point of a ride as a word. ``None`` entries (cold cells) are skipped."""
+    values = [v for s in samples if s is not None and (v := rain_impact(s, config)) is not None]
+    return impact_level(max(values)) if values else None
+
+
+def worst_frost_level(samples, config: RideQualityConfig = RIDE_QUALITY) -> str | None:
+    """The iciest point of a ride as a word. ``None`` entries (cold cells) are skipped."""
+    values = [frost_impact(s, config=config) for s in samples if s is not None]
+    return impact_level(max(values)) if values else None
+
+
 def wind_effort(watts) -> float:
     """0..1 share of the worst wind effort, for sizing a map arrow: 0 at calm, tailwind or unknown."""
     if not _finite(watts) or watts <= 0:
@@ -255,4 +354,5 @@ def score_sample(sample: dict, config: RideQualityConfig = RIDE_QUALITY) -> dict
         "ride_score": round(rq.score, 4) if rq else None,
         "ride_label": rq.label if rq else None,
         "wind_effort_level": wind_effort_level(sample.get("wind_power_w")),
+        "frost_level": frost_level(sample, config),
     }

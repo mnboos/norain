@@ -4,7 +4,7 @@ services:
       service: graphhopper
       file: docker-compose.base.yml
     ports:
-      - "${GRAPHHOPPER_PORT:-8989}:8989"
+      - "127.0.0.1:${GRAPHHOPPER_PORT:-8989}:8989"
 
   photon:
     extends:
@@ -12,7 +12,7 @@ services:
       file: docker-compose.base.yml
     command: -cors-any
     ports:
-      - "${PHOTON_PORT:-2322}:2322" # Photon runs on port 2322
+      - "127.0.0.1:${PHOTON_PORT:-2322}:2322" # Photon runs on port 2322
 
   db:
     extends:
@@ -21,7 +21,7 @@ services:
     # postgis/postgis publishes no arm64 image; Apple Silicon runs this one emulated.
     platform: linux/amd64
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       # Named volume, not a bind mount: initdb must chmod its data dir, which a
       # Windows-host bind mount (/mnt/c) refuses with "Operation not permitted".
@@ -31,6 +31,6 @@ services:
       service: redis
       file: docker-compose.base.yml
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
 volumes:
   db-data:

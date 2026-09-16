@@ -79,6 +79,12 @@ services:
     deploy:
       replicas: 4
 
+  worker-compute:
+    <<: *app
+    command: python manage.py db_worker --queue-name compute
+    deploy:
+      replicas: 2
+
   worker-forecasts:
     <<: *app
     command: python manage.py db_worker --queue-name forecasts

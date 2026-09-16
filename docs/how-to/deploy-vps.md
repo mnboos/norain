@@ -19,6 +19,25 @@ start. Serving Switzerland needs a heap of about 3 GB; DACH roughly 10–14 GB, 
 both amd64 and arm64, so ARM hosts such as Oracle's Ampere A1 work. Do not expose
 GraphHopper, Photon, PostgreSQL, or Django directly.
 
+### ARM hosts: enable database emulation
+
+The application images support arm64, but
+[`postgis/postgis:18-3.6`](https://github.com/postgis/docker-postgis) is amd64-only.
+Production therefore sets `platform: linux/amd64` for `db`. On an ARM VPS
+(`uname -m` prints `aarch64`), register amd64 emulation before starting the database:
+
+```bash
+docker run --privileged --rm tonistiigi/binfmt --install amd64
+docker compose -f docker-compose.prod.yml run --rm --no-deps db postgres --version
+docker compose -f docker-compose.prod.yml up -d db
+```
+
+The first command registers QEMU with the host kernel and needs privileged access,
+as described in [Docker's emulation setup](https://docs.docker.com/build/building/multi-platform/#install-qemu-manually).
+If `exec /usr/local/bin/docker-entrypoint.sh: exec format error` returns after a
+host reboot, repeat registration and the version check. Selecting a platform alone
+does not install an emulator. Emulation adds database CPU overhead.
+
 ## Configure the server
 
 Copy `deploy/production.env.template` to `/srv/norain/.env`, set its ownership to
@@ -159,7 +178,7 @@ cd /srv/norain
 just deploy-local
 ```
 
-This recipe explicitly selects the production Compose file, builds the application
+This recipe uses `COMPOSE_FILE` from the production `.env`, builds the application
 images, pulls PostGIS and Redis, runs migrations, collects static files, and starts
 the services. If Just is not installed, the equivalent commands are:
 
@@ -179,6 +198,25 @@ graph as described above.
 To roll back a published-image deployment, run the release command with the prior known-good immutable SHA. The
 configured bind-mount directories persist PostgreSQL, Caddy certificates, and
 imported geographic data across releases.
+
+## Shared hostname reverse proxy
+
+On a server hosting several apps, run one independent Caddy stack that owns ports
+80/443 and TLS certificates. Each app's frontend joins the external `server-proxy`
+network under a unique alias; databases and backend services remain private.
+See [the proxy setup and hostname activation guide](../../deploy/proxy/README.md).
+
+After creating the shared network, set this in NoRain's production `.env`:
+
+```dotenv
+COMPOSE_FILE=docker-compose.prod.yml:docker-compose.proxy.yml
+```
+
+Then `docker compose up -d`, `just deploy-local`, and `deploy/release.sh` use both
+files. Commands that explicitly supply `-f` must include both files too. The NoRain
+frontend listens internally at `norain-web:80`, with no host ports, and preserves
+the central proxy's forwarded HTTPS headers. Keep the NoRain hostname template
+inactive until you choose a domain and configure its DNS and application origins.
 
 ## Backups and recovery
 

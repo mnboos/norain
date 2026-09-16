@@ -5,7 +5,11 @@ from django.test import SimpleTestCase
 from core.api.recurring_route import _thumbnail_out
 from core.jobs import wind_arrows_at_detail
 from core.ride_quality import (
+    FROST_CODES,
+    FROST_DRY_SHARE,
     RIDE_QUALITY,
+    frost_impact,
+    frost_level,
     rain_impact,
     ride_score,
     score_band,
@@ -77,7 +81,11 @@ class RideScoreTests(SimpleTestCase):
     def test_names_the_dominant_weighted_factor(self):
         self.assertEqual(ride_score(sample(rain_rate_mm_h=4)).worst, "rain")
         self.assertEqual(ride_score(sample(headwind=28)).worst, "wind")
-        self.assertEqual(ride_score(sample(temp=-5)).worst, "temp")
+        # Below freezing the culprit is the ice, not the discomfort: frost weighs more than
+        # temperature, so a -5 °C ride names "Frost" and not "Temperatur".
+        self.assertEqual(ride_score(sample(temp=-5)).worst, "frost")
+        # Above the comfortable band only the temperature factor can fire.
+        self.assertEqual(ride_score(sample(temp=32)).worst, "temp")
 
     def test_derives_the_rate_from_the_accumulation_when_the_interval_is_known(self):
         # 0.5 mm over 15 min == 2 mm/h
@@ -182,6 +190,60 @@ class WindEffortTests(SimpleTestCase):
         self.assertEqual(wind_effort(1000), 1)
 
 
+class FrostImpactTests(SimpleTestCase):
+    """Frost = the thermometer scaled by how wet the road is, or the weather code saying so."""
+
+    def test_no_frost_in_the_comfortable_band(self):
+        self.assertEqual(frost_impact(sample(temp=18)), 0)
+        self.assertEqual(frost_impact(sample(temp=8)), 0)
+
+    def test_rises_as_the_temperature_falls(self):
+        series = [frost_impact(sample(temp=t)) for t in (6, 4, 2, 0, -2, -6)]
+        self.assertEqual(series, sorted(series))
+        self.assertGreater(frost_impact(sample(temp=-1)), 0)
+
+    def test_a_wet_freezing_road_is_worse_than_a_dry_one(self):
+        dry = frost_impact(sample(temp=-1))
+        self.assertGreater(frost_impact(sample(temp=-1, rain_rate_mm_h=3)), dry)
+        # At the wettest the frost penalty is the whole curve, and a dry road keeps exactly
+        # the dry share of it: same curve, different road.
+        soaked = frost_impact(sample(temp=-1, rain_rate_mm_h=6))
+        self.assertAlmostEqual(dry, soaked * FROST_DRY_SHARE)
+
+    def test_a_freezing_rain_code_is_frost_even_above_zero(self):
+        mild = sample(temp=2, weather_code=67)  # starker gefrierender Regen
+        self.assertEqual(frost_impact(mild), FROST_CODES[67])
+        self.assertGreater(frost_impact(mild), frost_impact(sample(temp=2)))
+        # The code only ever raises the penalty; a mild code never argues frost away.
+        self.assertEqual(frost_impact(sample(temp=-6, weather_code=0)), frost_impact(sample(temp=-6)))
+
+    def test_an_unknown_temperature_is_no_penalty_and_never_none(self):
+        # Every stored job result and thumbnail blob written before frost existed would
+        # otherwise stop being scorable, and the whole list would go grey.
+        self.assertEqual(frost_impact(sample(temp=None)), 0.0)
+        self.assertIsNotNone(ride_score(sample(temp=None)))
+
+    def test_a_missing_weather_code_still_scores_from_temperature(self):
+        # The OpenWeatherMap fallback never sets a code, and neither did older thumbnails.
+        self.assertEqual(frost_impact(sample(temp=-3)), frost_impact(sample(temp=-3, weather_code=None)))
+
+    def test_frost_reaches_the_dark_end_on_its_own(self):
+        icy = ride_score(sample(temp=-6, weather_code=75))
+        self.assertAlmostEqual(icy.frost, 1)
+        self.assertEqual(icy.worst, "frost")
+        self.assertIn("v. a. Frost", icy.label)
+
+    def test_a_config_without_a_frost_weight_still_scores(self):
+        # Configs are hand-written and may name fewer factors than the code knows.
+        legacy = replace(RIDE_QUALITY, weights={"rain": 0.75, "wind": 0.25, "temp": 0.2}, sensitivity=1)
+        self.assertEqual(ride_score(sample(temp=-6), legacy).worst, "temp")
+
+    def test_the_level_is_a_word_and_says_nothing_when_there_is_no_frost(self):
+        self.assertIsNone(frost_level(sample(temp=18)))
+        self.assertEqual(frost_level(sample(temp=-6, weather_code=75)), "stark")
+        self.assertIn(frost_level(sample(temp=1)), ("leicht", "mässig"))
+
+
 class ServedRideQualityTests(SimpleTestCase):
     """The scores reach the client only through what the API serves, computed on read."""
 
@@ -191,6 +253,7 @@ class ServedRideQualityTests(SimpleTestCase):
         self.assertAlmostEqual(served["ride_score"], ride_score(stored).score, places=4)
         self.assertIn("Regen", served["ride_label"])
         self.assertEqual(served["wind_effort_level"], "hoch")
+        self.assertEqual(served["frost_level"], frost_level(stored))
         self.assertNotIn("ride_score", stored)
 
     def test_unscorable_sample_is_served_as_none(self):
@@ -209,6 +272,39 @@ class ServedRideQualityTests(SimpleTestCase):
         self.assertNotIn("samples", out)
         self.assertEqual(out["ride_score"], round(worst_ride_score(blob["samples"]).score, 4))
         self.assertIn("v. a. Regen", out["ride_label"])
+        # Verdicts and two aggregates, and nothing else of the weather: no wind, no code, no
+        # per-sample series.
+        self.assertEqual(
+            set(out),
+            {"departure", "path", "computed_at", "ride_score", "ride_label", "rain_level",
+             "frost_level", "rain_probability", "max_rain_rate_mm_h", "temp_min"},
+        )
+
+    def test_thumbnail_reports_the_worst_point_of_the_ride_not_the_worst_sample(self):
+        # The wettest and the coldest point need not be the sample that spoils the ride.
+        blob = {
+            "departure": None,
+            "path": [],
+            "samples": [
+                {"i": 0, **sample(rain_rate_mm_h=4, pop=0.8, temp=12)},
+                None,
+                {"i": 1, **sample(rain_rate_mm_h=0, pop=0.1, temp=-3)},
+            ],
+        }
+        out = _thumbnail_out(blob)
+        self.assertEqual(out.rain_probability, 0.8)
+        self.assertEqual(out.max_rain_rate_mm_h, 4)
+        self.assertEqual(out.temp_min, -3)
+        self.assertEqual(out.rain_level, "stark")
+        self.assertIsNotNone(out.frost_level)
+
+    def test_thumbnail_says_nothing_rather_than_zero_when_there_is_no_reading(self):
+        out = _thumbnail_out({"departure": None, "path": [], "samples": [None]})
+        self.assertIsNone(out.rain_probability)
+        self.assertIsNone(out.max_rain_rate_mm_h)
+        self.assertIsNone(out.temp_min)
+        self.assertIsNone(out.rain_level)
+        self.assertIsNone(out.frost_level)
 
     def test_thumbnail_without_scorable_samples_has_no_verdict(self):
         out = _thumbnail_out({"departure": None, "path": [], "samples": [None]})

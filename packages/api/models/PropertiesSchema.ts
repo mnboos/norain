@@ -23,7 +23,15 @@ export interface PropertiesSchema {
     /**
      * 
      */
+    name: string;
+    /**
+     * 
+     */
     city?: string | null;
+    /**
+     * 
+     */
+    state?: string | null;
     /**
      * 
      */
@@ -31,15 +39,7 @@ export interface PropertiesSchema {
     /**
      * 
      */
-    name: string;
-    /**
-     * 
-     */
     showCanton: boolean;
-    /**
-     * 
-     */
-    state?: string | null;
 }
 
 /**
@@ -61,11 +61,11 @@ export function PropertiesSchemaFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'city': json['city'] === undefined ? undefined : json['city'] === null ? null : json['city'],
-        'countrycode': json['countrycode'] === undefined ? undefined : json['countrycode'] === null ? null : json['countrycode'],
         'name': json['name'],
-        'showCanton': json['show_canton'],
+        'city': json['city'] === undefined ? undefined : json['city'] === null ? null : json['city'],
         'state': json['state'] === undefined ? undefined : json['state'] === null ? null : json['state'],
+        'countrycode': json['countrycode'] === undefined ? undefined : json['countrycode'] === null ? null : json['countrycode'],
+        'showCanton': json['show_canton'],
     };
 }
 
@@ -80,11 +80,11 @@ export function PropertiesSchemaToJSONTyped(value?: PropertiesSchema | null, ign
 
     return {
         
-        'city': value['city'],
-        'countrycode': value['countrycode'],
         'name': value['name'],
-        'show_canton': value['showCanton'],
+        'city': value['city'],
         'state': value['state'],
+        'countrycode': value['countrycode'],
+        'show_canton': value['showCanton'],
     };
 }
 

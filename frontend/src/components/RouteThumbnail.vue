@@ -1,10 +1,8 @@
 <script setup lang="ts">
 /**
  * The tiny route-shape glyph in the route list: the shape of the ride in a single colour,
- * the YlOrRd ramp colour (`scoreColor`) of the server's `rideScore` for its worst sample -
- * the one the caption names. The scoring itself never reaches the browser.
- * At 40 px a per-stretch ramp is too small to read; one verdict per ride is what the list
- * is for, and the map shows where along the route it changes.
+ * the rain-severity colour of the server's `rainLevel`. The overall ride score remains in the
+ * caption; wind, temperature and frost do not recolour this rain marker.
  *
  * The ramp's pale good end (`#ffeda0`) all but disappears at this size, so the line sits on
  * the same theme-flipping casing the map uses (`CASING_*`). The glyph has no legend and no
@@ -15,40 +13,28 @@
  * weather - and it is deliberately off the warm ramp.
  */
 import { computed } from "vue";
-import type { RecurringRouteOut } from "@norain/api/models";
 
 import {
     CASING_DARK,
     CASING_LIGHT,
     CASING_OPACITY,
     NO_DATA_COLOR,
-    scoreColor,
+    rainLevelColor,
 } from "@/utils/rideQuality";
-import { pointsAttr, projectPath } from "@/utils/routeThumbnail";
+import { liveThumbnail, pointsAttr, projectPath } from "@/utils/routeThumbnail";
+import type { ThumbnailRoute } from "@/utils/routeThumbnail";
 
-/** Only the three fields the glyph reads, so callers and tests need not build a whole route. */
-export type ThumbnailRoute = Pick<RecurringRouteOut, "thumbnail" | "nextDeparture" | "hasGeometry">;
+export type { ThumbnailRoute };
 
 const props = withDefaults(defineProps<{ route: ThumbnailRoute; size?: number }>(), { size: 40 });
 
-const thumbnail = computed(() => props.route.thumbnail ?? null);
+/** The thumbnail when it still describes the ride that is coming; see `liveThumbnail`. */
+const thumbnail = computed(() => liveThumbnail(props.route));
 
-/**
- * A thumbnail is computed for one departure and frozen; `nextDeparture` is recomputed on
- * every request. Once the ride it describes has passed, the row rolls on to the next
- * departure and the stored samples no longer describe it - so fall back to grey rather
- * than present yesterday's weather as today's.
- */
-const stale = computed(() => {
-    const t = thumbnail.value;
-    // A route with no next departure at all also counts: whatever the glyph was computed
-    // for is not a ride that is still coming.
-    return !!t?.departure && t.departure !== props.route.nextDeparture;
-});
-
-/** `"x,y x,y ..."` of the projected path, or `null` when there is no line to draw. */
+/** `"x,y x,y ..."` of the projected path, or `null` when there is no line to draw. A stale
+ * thumbnail still draws its shape - the route has not moved, only its weather has expired. */
 const line = computed(() => {
-    const pts = projectPath(thumbnail.value?.path ?? [], props.size);
+    const pts = projectPath(props.route.thumbnail?.path ?? [], props.size);
     return pts.length < 2 ? null : pointsAttr(pts);
 });
 
@@ -56,11 +42,12 @@ const line = computed(() => {
  * One colour for the whole line: the server's score for the worst sample, the one the caption
  * names. Grey when nothing is known - stale, or no sample the server could score.
  */
-const color = computed(() => (stale.value ? NO_DATA_COLOR : scoreColor(thumbnail.value?.rideScore)));
+// This glyph is the dashboard's rain marker: wind, temperature and frost do not tint it.
+const color = computed(() => rainLevelColor(thumbnail.value?.rainLevel));
 
 const label = computed(() => {
     if (!props.route.hasGeometry) return "Route wird noch berechnet";
-    if (!thumbnail.value || stale.value) return "Fahrqualität: Noch keine Prognose";
+    if (!thumbnail.value) return "Fahrqualität: Noch keine Prognose";
     return `Fahrqualität: ${thumbnail.value.rideLabel ?? "Nicht verfügbar"}`;
 });
 

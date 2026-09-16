@@ -174,10 +174,15 @@ dies on import. Don't paper over a new cycle with a function-level import; fix t
 
 ### Route-list thumbnails
 
-`RecurringRoute.thumbnail` is a precomputed blob (simplified path ≤ 64 vertices + the six
-weather fields per sample that `core.ride_quality` reads), written by the
-`refresh_route_thumbnail` task and only *read* by `list_routes`, which serves the path plus
-the worst sample's `ride_score` / `ride_label` — never the raw samples.
+`RecurringRoute.thumbnail` is a precomputed blob (simplified path ≤ 64 vertices + the nine
+weather fields per sample that `core.ride_quality` reads, `weather_code` among them — frost
+needs it, and without it the list would score frost from the thermometer alone and disagree
+with the map), written by the `refresh_route_thumbnail` task and only *read* by `list_routes`,
+which serves the path plus the worst sample's `ride_score` / `ride_label` and the ride's worst
+rain and frost (`rain_level`, `frost_level`, `rain_probability`, `max_rain_rate_mm_h`,
+`temp_min`) — never the raw samples. The rain and frost readings are the worst *point* of the
+ride, not the worst-scoring sample: "will it rain on my ride" is a different question from
+"what spoils it".
 
 Two rules hold this together:
 
@@ -204,28 +209,44 @@ greyed out, rather than showing yesterday's weather as today's.
 ### Ride quality
 
 `core/ride_quality.py` is the **only** implementation of the ride-quality score: the rain,
-wind and temperature curves, and `RIDE_QUALITY` (`weights` per factor, `sensitivity` — how
-fast the score climbs the colour ramp). It is the app's own judgement and stays secret, so:
+wind, temperature and frost curves, and `RIDE_QUALITY` (`weights` per factor, `sensitivity` —
+how fast the score climbs the colour ramp). It is the app's own judgement and stays secret, so:
 
 - **Nothing derived from the curves ships to the browser.** The API serves results only:
-  per sample `ride_score` (0..1), `ride_label` and `wind_effort_level`; per wind arrow
-  `wind_effort_level` and `wind_effort` (0..1, arrow size); `summary.max_wind_effort_level`;
-  the thumbnail's worst `ride_score` / `ride_label`. `frontend/src/utils/rideQuality.ts` only
-  maps a score to a colour and places samples along the line. Never add a curve, weight or
-  breakpoint to the frontend — a threshold in the bundle gives the curve away.
-- **Score on read, never store.** `core.jobs.forecast_view`, `wind_arrows_at_detail` and
-  `recurring_route._thumbnail_out` score the stored raw weather when serving, so a change to
-  `RIDE_QUALITY` shows on the next request without rebuilding jobs or thumbnails. It is plain
-  arithmetic, cheap enough for the 60 s list poll.
+  per sample `ride_score` (0..1), `ride_label`, `wind_effort_level` and `frost_level`; per wind
+  arrow `wind_effort_level` and `wind_effort` (0..1, arrow size); `summary.max_wind_effort_level`
+  and `summary.max_frost_level`; per section `frost_level`; the thumbnail's worst `ride_score` /
+  `ride_label` plus `rain_level`, `frost_level`, `rain_probability`, `max_rain_rate_mm_h` and
+  `temp_min`. `frontend/src/utils/rideQuality.ts` only maps a score to a colour and places
+  samples along the line. Never add a curve, weight or breakpoint to the frontend — a threshold
+  in the bundle gives the curve away. A *level* is a word, never a number the curve can be read
+  back out of; that is how `wind_effort_level` has always worked.
+- **Score on read, never store.** `core.jobs.forecast_view` (samples, summary *and* sections),
+  `wind_arrows_at_detail` and `recurring_route._thumbnail_out` score the stored raw weather when
+  serving, so a change to `RIDE_QUALITY` shows on the next request without rebuilding jobs or
+  thumbnails. It is plain arithmetic, cheap enough for the 60 s list poll. Sections carry
+  `start_index` / `end_index` so `forecast_view` can score each one's frost from the samples it
+  covers; both are **optional**, because jobs stored before they existed must still validate on
+  the way out.
 - **Rain combines chance and amount** (`rain_impact`): the worse of the main run's rate through
   `RAIN_CURVE` and `curve(rain_if_wet) × pop ** (1 / rain_risk_aversion)`. The main run counts
   at face value; the ensemble adds the risk where it is dry. That is why thumbnails store `pop`
   / `rain_if_wet` and `compute_route_thumbnail` passes `include_uncertainty=True` (still
   `cache_only`) — without them the list would score the main run alone and disagree with the map.
+- **Frost is a safety factor, not a comfort one** (`frost_impact`): `FROST_CURVE` is steep around
+  freezing, scaled by how wet the road is (`FROST_DRY_SHARE` on a dry one, the whole curve where
+  the rain penalty is worst), and `FROST_CODES` puts a floor under it for freezing drizzle,
+  freezing rain, snow and ice fog — that is the +2 °C freezing rain the thermometer would call
+  harmless. It weighs slightly more than rain, so ice names itself as the cause. It overlaps
+  `TEMP_CURVE`'s cold arm on purpose: cold counts once as discomfort and once as danger. Don't
+  truncate `TEMP_CURVE` to "fix" that — it would recolour every cold ride that already reads
+  correctly. Like the temperature factor, frost returns 0 and never `None`, so every job result
+  and thumbnail written before it existed stays scorable.
 - The weights need not sum to 1 (the score is clamped), so the rain weight is also how far rain
-  alone can reach. Tests that check curve *shape* derive from or pin the config, so tuning
-  `RIDE_QUALITY` does not break them. The frontend's `NiceChart` comfort band (14–22 °C)
-  mirrors `TEMP_CURVE`'s flat part.
+  alone can reach; a config may leave a factor out and `ride_score` reads weights with `.get`.
+  Tests that check curve *shape* derive from or pin the config, so tuning `RIDE_QUALITY` does
+  not break them. The frontend's `NiceChart` comfort band (14–22 °C) mirrors `TEMP_CURVE`'s
+  flat part.
 
 ### Weather-station correction
 
@@ -298,6 +319,14 @@ built on another machine (`GRAPHHOPPER_IMPORT_ONLY=true`) and `graph-cache` is c
 (`docs/how-to/build-routing-graph.md`). GraphHopper refuses a graph built with a different
 config or jar, so any change to `graphhopper-config.yaml` or `data/graphhopper/models/` means
 re-importing and re-shipping.
+
+**Ride speed lives in those model files**, nowhere in Python: every eta and every
+`rider_speed` comes from the travel times GraphHopper returns. Each profile's `speed` block
+starts from `bike_average_speed` (road type and surface), scales it, applies the
+`average_slope` rules and caps it — about 18 / 22 / 32 km/h on mixed roads. `bike` keeps the
+jar's `bike.json` + `bike_elevation.json` and adds our factor in `bike_speed.json`, which
+must stay **last** in `custom_model_files` or the slope limits cut it. After a change, saved
+routes keep their old times until `refresh_route_geometry` runs for each one.
 
 ### Recurring routes
 

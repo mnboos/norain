@@ -38,7 +38,7 @@ export interface PlacesSearchResult {
     /**
      * 
      */
-    geometry: GeometrySchema;
+    type?: string;
     /**
      * 
      */
@@ -46,15 +46,15 @@ export interface PlacesSearchResult {
     /**
      * 
      */
-    type?: string;
+    geometry: GeometrySchema;
 }
 
 /**
  * Check if a given object implements the PlacesSearchResult interface.
  */
 export function instanceOfPlacesSearchResult(value: object): value is PlacesSearchResult {
-    if (!('geometry' in value) || value['geometry'] === undefined) return false;
     if (!('properties' in value) || value['properties'] === undefined) return false;
+    if (!('geometry' in value) || value['geometry'] === undefined) return false;
     return true;
 }
 
@@ -68,9 +68,9 @@ export function PlacesSearchResultFromJSONTyped(json: any, ignoreDiscriminator: 
     }
     return {
         
-        'geometry': GeometrySchemaFromJSON(json['geometry']),
-        'properties': PropertiesSchemaFromJSON(json['properties']),
         'type': json['type'] == null ? undefined : json['type'],
+        'properties': PropertiesSchemaFromJSON(json['properties']),
+        'geometry': GeometrySchemaFromJSON(json['geometry']),
     };
 }
 
@@ -85,9 +85,9 @@ export function PlacesSearchResultToJSONTyped(value?: PlacesSearchResult | null,
 
     return {
         
-        'geometry': GeometrySchemaToJSON(value['geometry']),
-        'properties': PropertiesSchemaToJSON(value['properties']),
         'type': value['type'],
+        'properties': PropertiesSchemaToJSON(value['properties']),
+        'geometry': GeometrySchemaToJSON(value['geometry']),
     };
 }
 

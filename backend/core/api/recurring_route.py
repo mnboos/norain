@@ -13,7 +13,7 @@ from ..auth.backend import session_auth
 from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut
 from ..models import ForecastJob, RecurringRoute, route_point
-from ..ride_quality import worst_ride_score
+from ..ride_quality import worst_frost_level, worst_rain_level, worst_ride_score
 from ..schedule import forecast_available_at, next_departure
 from ..schemas import CamelSchema
 from ..tasks import refresh_route_geometry, start_forecast_job
@@ -40,10 +40,13 @@ class RecurringRouteIn(CamelSchema):
 
 
 class RouteThumbnail(CamelSchema):
-    """The route-list glyph: the simplified path and the ride quality of its worst sample.
+    """The route-list glyph: the simplified path, the ride quality of its worst sample, and
+    the rain and frost the row shows beside it.
 
-    The stored blob keeps the raw sample weather; only the verdict leaves the server, scored
-    when the list is served (see ``core.ride_quality``).
+    The stored blob keeps the raw sample weather; only verdicts and two aggregates leave the
+    server, scored when the list is served (see ``core.ride_quality``). The rain and frost
+    levels are the *worst point of the ride*, not the worst-scoring sample: "will it rain on
+    my ride" is a different question from "what spoils it".
     """
 
     departure: str | None = None
@@ -51,18 +54,34 @@ class RouteThumbnail(CamelSchema):
     computed_at: str | None = None
     ride_score: float | None = Field(default=None, ge=0, le=1)  # None: no sample could be scored
     ride_label: str | None = None
+    # None means "no rain / no frost worth naming". Nothing to show at all is a missing
+    # thumbnail or one whose `departure` no longer matches, which the list already handles.
+    rain_level: str | None = None
+    frost_level: str | None = None
+    rain_probability: float | None = Field(default=None, ge=0, le=1)  # peak chance of rain
+    max_rain_rate_mm_h: float | None = None  # shown instead when there is no probability
+    temp_min: float | None = None  # coldest point of the ride, °C
 
 
 def _thumbnail_out(blob: dict | None) -> RouteThumbnail | None:
     if not blob:
         return None
-    worst = worst_ride_score(blob.get("samples") or [])
+    samples = [s for s in (blob.get("samples") or []) if s is not None]
+    worst = worst_ride_score(samples)
+    pops = [s["pop"] for s in samples if s.get("pop") is not None]
+    rates = [s["rain_rate_mm_h"] for s in samples if s.get("rain_rate_mm_h") is not None]
+    temps = [s["temp"] for s in samples if s.get("temp") is not None]
     return RouteThumbnail(
         departure=blob.get("departure"),
         path=blob.get("path") or [],
         computed_at=blob.get("computed_at"),
         ride_score=round(worst.score, 4) if worst else None,
         ride_label=worst.label if worst else None,
+        rain_level=worst_rain_level(samples),
+        frost_level=worst_frost_level(samples),
+        rain_probability=round(max(pops), 2) if pops else None,
+        max_rain_rate_mm_h=round(max(rates), 1) if rates else None,
+        temp_min=round(min(temps), 1) if temps else None,
     )
 
 

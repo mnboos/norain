@@ -41,9 +41,9 @@ take precedence over values loaded by `python-dotenv`.
 | `TZ` | No Compose default | Passed to the PostgreSQL service; does not configure every service |
 | `FRONTEND_URL` | `http://localhost:$FRONTEND_PORT` in development; required in production | Base URL used to build email verification, password-reset and Stripe return links |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL` | Required in production | Outgoing mail. Development prints messages to the console instead |
-| `STRIPE_SECRET_KEY` | Empty in development; required in production | Stripe API key. When empty, the billing endpoints answer 503 and tiers are set in the Django admin |
-| `STRIPE_WEBHOOK_SECRET` | Empty in development; required in production | Verifies the `Stripe-Signature` on `/api/billing/webhook`. Without it the webhook is refused |
-| `STRIPE_PRICE_ID_PRO` | Empty in development; required in production | Price the Pro Checkout session subscribes to |
+| `STRIPE_SECRET_KEY` | Empty; optional in all environments | Stripe API key. When empty, the billing endpoints answer 503 and tiers are set in the Django admin |
+| `STRIPE_WEBHOOK_SECRET` | Empty; optional in all environments | Verifies the `Stripe-Signature` on `/api/billing/webhook`. Without it the webhook is refused |
+| `STRIPE_PRICE_ID_PRO` | Empty; optional in all environments | Price the Pro Checkout session subscribes to |
 
 Weather provider URLs, ensemble model selection, and weather timezone are constants
 in [grid.py](../../backend/core/grid.py), not environment settings.
@@ -54,7 +54,7 @@ in [grid.py](../../backend/core/grid.py), not environment settings.
 | --- | --- | --- |
 | Frontend | `http://127.0.0.1:3000` (`FRONTEND_PORT`) | `just frontend`, or `npm run dev` in `frontend/` |
 | Django API | `http://127.0.0.1:8000/api/` (`BACKEND_PORT`) | `just backend`, or `python manage.py runserver` in `backend/` (listens on `BACKEND_PORT`) |
-| Task workers | No HTTP port | `python manage.py db_worker --queue-name {cells,forecasts,default}` in `backend/` |
+| Task workers | No HTTP port | `python manage.py db_worker --queue-name {cells,compute,forecasts,default}` in `backend/` |
 | Redis | Port 6379 (`REDIS_PORT`) | Cell claims and the WebSocket channel layer (`REDIS_URL`) |
 | GraphHopper | `http://localhost:8989` (`GRAPHHOPPER_PORT`) | Development Compose `graphhopper` |
 | Photon | `http://localhost:2322/api` (`PHOTON_PORT`) | Development Compose `photon` |
@@ -106,6 +106,55 @@ despite older comments in Compose referring to a model-free application.
 Enabled routing profiles are `bike`, `ebike`, and `fast_ebike`, each with a CH
 preparation. `ROUTING_PROFILES` in `core/api/route_weather.py` must list the same
 names; the API rejects any other profile with 422.
+
+### Ride speed
+
+Every arrival time in the app — each sample's clock time, and the `rider_speed` the wind
+effort is computed at — comes from the travel times GraphHopper returns. There is no speed
+setting in the backend. The speed is the `speed` block of each profile's custom model files
+in `data/graphhopper/models/`:
+
+| Profile | Files | Speed rule | Mixed-road average |
+|---|---|---|---|
+| `bike` | `bike.json` + `bike_elevation.json` (both from the jar) + `bike_speed.json` | road speed, slope, then ×1.15 capped at 30 km/h | ~18 km/h |
+| `ebike` | `ebike.json` | road speed ×1.35, soft slope rules, capped at 25 km/h | ~22 km/h |
+| `fast_ebike` | `fast_ebike.json` | road speed ×2.0, soft slope rules, capped at 35 km/h | ~32 km/h |
+
+"Road speed" is GraphHopper's `bike_average_speed`, which comes from the OSM road type and
+surface, so a forest track is slower than a cycleway for all three. Each profile's block
+reads the same way, here `ebike.json`:
+
+```json
+  "speed": [
+    { "if": "true", "limit_to": "bike_average_speed" },   // road type and surface
+    { "if": "true", "multiply_by": "1.35" },              // how fast this rider is
+    { "if": "average_slope >= 15", "limit_to": "8" },     // climbs
+    { "else_if": "average_slope >= 12", "limit_to": "12" },
+    { "else_if": "average_slope >= 8", "multiply_by": "0.9" },
+    { "else_if": "average_slope <= -4", "multiply_by": "1.05" },
+    { "if": "true", "limit_to": "25" }                    // motor cap, last
+  ]
+```
+
+The statements run in order, so the cap stays last and the factor stays above it. For the
+plain bike the first four lines come from the jar's `bike.json` and `bike_elevation.json`;
+only the factor is ours, in `bike_speed.json`, which must stay **last** in
+`custom_model_files` or the slope limits cut it.
+
+### Changing a speed
+
+1. Edit the factor (or the cap, or a slope rule) in the profile's file.
+2. `just routing-import` — the speed is baked into the CH preparation, so it only takes
+   effect through a new graph. This deletes `data/graphhopper/cache` and imports again;
+   it takes minutes. Per-request speeds are not an option: they need `ch.disable=true`,
+   which turns a few-millisecond query into roughly a second.
+3. `just routing-speeds` — prints what each profile now rides on four reference routes,
+   next to the targets above. Repeat from 1 if a number is off.
+4. `just routing-refresh-routes` — saved routes store their travel times, so they keep the
+   old arrival times until they are routed again. Needs a worker on the `default` queue.
+
+On production the graph is not imported on the VPS: build it elsewhere and ship it, see
+[build the routing graph](../how-to/build-routing-graph.md). Step 4 applies there too.
 
 ## Deployment boundary
 

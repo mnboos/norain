@@ -3,6 +3,29 @@
 Use this guide after completing the [local setup](../tutorials/first-forecast.md).
 Commands run from `backend/` with the same environment and database as the API.
 
+From the repository root, use these local shortcuts (replace `UUID` with the saved
+route's ID from its URL or the API):
+
+```bash
+just worker                        # all queues; keep running in a separate terminal
+just forecast-refresh UUID          # pre-warm one route's upcoming departures
+just forecast-refresh-all           # pre-warm all eligible routes
+just routing-refresh-route UUID     # fetch geometry again, then rebuild its thumbnail
+just thumbnail-refresh UUID         # rebuild the thumbnail from cached weather
+just routing-backfill --route-id UUID           # preview missing/invalid timings
+just routing-backfill --route-id UUID --enqueue # queue a repair
+just manage showmigrations          # arbitrary Django management command
+```
+
+These recipes use `uv run` in `backend/` and your local environment. Refresh recipes
+print the queued task ID and return; `just worker` processes the tasks. Use
+`just worker cells` (or `default`, `compute`, `forecasts`) to serve only one queue.
+The route-specific forecast scan requires existing geometry and examines the next
+three departures, reusing fresh cached cells. It explicitly targets the supplied route,
+including inactive routes; the all-routes pass applies the usual eligibility rules.
+Pre-warming does not force fresh provider downloads or regenerate completed forecast
+jobs. Open the route's forecast to request the assembled result.
+
 ## Process queued jobs
 
 Every heavy operation runs on a worker, so **nothing works without one**: forecasts stay
@@ -10,16 +33,18 @@ Every heavy operation runs on a worker, so **nothing works without one**: foreca
 
 ```bash
 uv run python manage.py db_worker --queue-name cells       # provider fetches, one per grid cell
+uv run python manage.py db_worker --queue-name compute     # weather computation from warm cells
 uv run python manage.py db_worker --queue-name forecasts   # job planning and assembly
 uv run python manage.py db_worker --queue-name default     # geometry, thumbnails, scans
 ```
 
-For local development one process can serve all three with `--queue-name '*'`. Without
+For local development one process can serve all four with `--queue-name '*'`. Without
 `--queue-name` a worker only serves `default`, and every forecast stays `pending`.
 
 `db_worker` has no concurrency flag — one process runs one task at a time — so throughput
 comes from running several. In production `docker-compose.prod.yml` runs four `cells`
-replicas, two `forecasts` and one `default`. Raising the `cells` count speeds up a cold
+replicas, two `compute`, two `forecasts` and one `default`. Scale `worker-compute`
+independently to control weather-computation throughput. Raising the `cells` count speeds up a cold
 forecast but spends the Open-Meteo rate limit faster; lower it if you see
 `Ensemble cell NOT stored` warnings in bulk.
 
@@ -33,6 +58,27 @@ return HTTP 409 until sample points exist.
 
 Check the route again through `GET /api/routes/{route_id}`. Its geometry-ready field
 should become true and its duration and distance should be populated.
+
+## Separate computation and assembly
+
+Once all cells settle, `compute_route_weather_job` runs on `compute`. It reads stored
+geometry and warm weather cells, applies the owner's entitlements, and saves an
+intermediate forecast. Saving that result and queueing `assemble_forecast_job` is one
+database transaction. Assembly runs on `forecasts`, adding charts and sections before
+publishing the finished result. Neither stage waits inside a worker for another task.
+
+Both stages appear as `assembling` to the browser. Their task records and queues distinguish
+them for operations. Failed stages mark the forecast failed; the next request can retry.
+The intermediate is cleared after successful assembly or when restarting a job.
+
+For deployment of migration 0008, stop new forecast requests and the scheduler, drain
+existing work with the old workers, then stop those workers. Apply migrations and deploy
+the API and all four worker queues together. Old queued assembly tasks do not contain the
+new intermediate result and must finish before the switch.
+
+Pro/free queue routing is not enabled yet. A future routing policy can select a queue at
+the enqueue boundary with `task.using(queue_name=...).enqueue(...)`; register that queue
+and run workers consuming it.
 
 ## Pre-warm upcoming departures
 
@@ -70,6 +116,31 @@ Django shell, replacing the UUID:
 ```bash
 uv run python manage.py shell -c 'from core.tasks import refresh_route_geometry; refresh_route_geometry.enqueue("REPLACE-WITH-ROUTE-UUID")'
 ```
+
+## Recompute every route after a new routing graph
+
+A route's polyline, sample points, vertex times, duration and distance are stored, so a new
+graph — a new coverage area, or a changed ride speed — does not reach saved routes by
+itself. With the new graph serving, queue them all:
+
+```bash
+just routing-refresh-routes
+```
+
+which is this, from `backend/`:
+
+```bash
+uv run python manage.py shell -c '
+from core.models import RecurringRoute
+from core.tasks import refresh_route_geometry
+for rid in RecurringRoute.objects.values_list("id", flat=True):
+    refresh_route_geometry.enqueue(str(rid))
+'
+```
+
+Pass no `backfill_only` here: it defaults to false, which is what re-routes a route that
+already has valid times. Each refresh queues the route's thumbnail itself, so the list
+glyphs follow. Stored forecast jobs keep the old arrival times until they expire.
 
 ## How a forecast request is served
 

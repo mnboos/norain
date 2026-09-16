@@ -28,7 +28,7 @@ MAX_THUMBNAIL_VERTICES = 64
 # The fields core.ride_quality.ride_score() reads, and nothing else.
 _SAMPLE_FIELDS = (
     "rain_mm", "precipitation_interval_s", "rain_rate_mm_h", "pop", "rain_if_wet", "temp", "headwind",
-    "wind_power_w",
+    "wind_power_w", "weather_code",
 )
 
 

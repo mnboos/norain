@@ -58,43 +58,7 @@ export interface RouteForecastOut {
     /**
      * 
      */
-    departureTime: string;
-    /**
-     * 
-     */
     jobId: string;
-    /**
-     * 
-     */
-    line: Array<Array<number>>;
-    /**
-     * 
-     */
-    routeId?: string | null;
-    /**
-     * 
-     */
-    samples: Array<ForecastSampleOut>;
-    /**
-     * 
-     */
-    sections?: Array<RouteSection>;
-    /**
-     * 
-     */
-    summary: RouteWeatherSummary;
-    /**
-     * 
-     */
-    totalDistanceM: number;
-    /**
-     * 
-     */
-    totalSeconds: number;
-    /**
-     * 
-     */
-    uncertaintyPartial?: boolean;
     /**
      * 
      */
@@ -102,21 +66,57 @@ export interface RouteForecastOut {
     /**
      * 
      */
+    routeId?: string | null;
+    /**
+     * 
+     */
+    departureTime: string;
+    /**
+     * 
+     */
+    line: Array<Array<number>>;
+    /**
+     * 
+     */
+    totalSeconds: number;
+    /**
+     * 
+     */
+    totalDistanceM: number;
+    /**
+     * 
+     */
+    samples: Array<ForecastSampleOut>;
+    /**
+     * 
+     */
+    summary: RouteWeatherSummary;
+    /**
+     * 
+     */
     windArrows?: Array<WindArrow>;
+    /**
+     * 
+     */
+    sections?: Array<RouteSection>;
+    /**
+     * 
+     */
+    uncertaintyPartial?: boolean;
 }
 
 /**
  * Check if a given object implements the RouteForecastOut interface.
  */
 export function instanceOfRouteForecastOut(value: object): value is RouteForecastOut {
-    if ((!('departureTime' in (value as Record<string, any>)) && !('departure_time' in (value as Record<string, any>))) || ((value as Record<string, any>)['departureTime'] === undefined && (value as Record<string, any>)['departure_time'] === undefined)) return false;
     if ((!('jobId' in (value as Record<string, any>)) && !('job_id' in (value as Record<string, any>))) || ((value as Record<string, any>)['jobId'] === undefined && (value as Record<string, any>)['job_id'] === undefined)) return false;
+    if (!('version' in value) || value['version'] === undefined) return false;
+    if ((!('departureTime' in (value as Record<string, any>)) && !('departure_time' in (value as Record<string, any>))) || ((value as Record<string, any>)['departureTime'] === undefined && (value as Record<string, any>)['departure_time'] === undefined)) return false;
     if (!('line' in value) || value['line'] === undefined) return false;
+    if ((!('totalSeconds' in (value as Record<string, any>)) && !('total_seconds' in (value as Record<string, any>))) || ((value as Record<string, any>)['totalSeconds'] === undefined && (value as Record<string, any>)['total_seconds'] === undefined)) return false;
+    if ((!('totalDistanceM' in (value as Record<string, any>)) && !('total_distance_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['totalDistanceM'] === undefined && (value as Record<string, any>)['total_distance_m'] === undefined)) return false;
     if (!('samples' in value) || value['samples'] === undefined) return false;
     if (!('summary' in value) || value['summary'] === undefined) return false;
-    if ((!('totalDistanceM' in (value as Record<string, any>)) && !('total_distance_m' in (value as Record<string, any>))) || ((value as Record<string, any>)['totalDistanceM'] === undefined && (value as Record<string, any>)['total_distance_m'] === undefined)) return false;
-    if ((!('totalSeconds' in (value as Record<string, any>)) && !('total_seconds' in (value as Record<string, any>))) || ((value as Record<string, any>)['totalSeconds'] === undefined && (value as Record<string, any>)['total_seconds'] === undefined)) return false;
-    if (!('version' in value) || value['version'] === undefined) return false;
     return true;
 }
 
@@ -130,18 +130,18 @@ export function RouteForecastOutFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'departureTime': json['departure_time'],
         'jobId': json['job_id'],
-        'line': json['line'],
-        'routeId': json['route_id'] === undefined ? undefined : json['route_id'] === null ? null : json['route_id'],
-        'samples': ((json['samples'] as Array<any>).map(ForecastSampleOutFromJSON)),
-        'sections': json['sections'] == null ? undefined : ((json['sections'] as Array<any>).map(RouteSectionFromJSON)),
-        'summary': RouteWeatherSummaryFromJSON(json['summary']),
-        'totalDistanceM': json['total_distance_m'],
-        'totalSeconds': json['total_seconds'],
-        'uncertaintyPartial': json['uncertainty_partial'] == null ? undefined : json['uncertainty_partial'],
         'version': json['version'],
+        'routeId': json['route_id'] === undefined ? undefined : json['route_id'] === null ? null : json['route_id'],
+        'departureTime': json['departure_time'],
+        'line': json['line'],
+        'totalSeconds': json['total_seconds'],
+        'totalDistanceM': json['total_distance_m'],
+        'samples': ((json['samples'] as Array<any>).map(ForecastSampleOutFromJSON)),
+        'summary': RouteWeatherSummaryFromJSON(json['summary']),
         'windArrows': json['wind_arrows'] == null ? undefined : ((json['wind_arrows'] as Array<any>).map(WindArrowFromJSON)),
+        'sections': json['sections'] == null ? undefined : ((json['sections'] as Array<any>).map(RouteSectionFromJSON)),
+        'uncertaintyPartial': json['uncertainty_partial'] == null ? undefined : json['uncertainty_partial'],
     };
 }
 
@@ -156,18 +156,18 @@ export function RouteForecastOutToJSONTyped(value?: RouteForecastOut | null, ign
 
     return {
         
-        'departure_time': value['departureTime'],
         'job_id': value['jobId'],
-        'line': value['line'],
-        'route_id': value['routeId'],
-        'samples': ((value['samples'] as Array<any>).map(ForecastSampleOutToJSON)),
-        'sections': value['sections'] == null ? undefined : ((value['sections'] as Array<any>).map(RouteSectionToJSON)),
-        'summary': RouteWeatherSummaryToJSON(value['summary']),
-        'total_distance_m': value['totalDistanceM'],
-        'total_seconds': value['totalSeconds'],
-        'uncertainty_partial': value['uncertaintyPartial'],
         'version': value['version'],
+        'route_id': value['routeId'],
+        'departure_time': value['departureTime'],
+        'line': value['line'],
+        'total_seconds': value['totalSeconds'],
+        'total_distance_m': value['totalDistanceM'],
+        'samples': ((value['samples'] as Array<any>).map(ForecastSampleOutToJSON)),
+        'summary': RouteWeatherSummaryToJSON(value['summary']),
         'wind_arrows': value['windArrows'] == null ? undefined : ((value['windArrows'] as Array<any>).map(WindArrowToJSON)),
+        'sections': value['sections'] == null ? undefined : ((value['sections'] as Array<any>).map(RouteSectionToJSON)),
+        'uncertainty_partial': value['uncertaintyPartial'],
     };
 }
 

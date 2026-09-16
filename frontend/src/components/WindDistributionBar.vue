@@ -11,7 +11,7 @@ const colors = ["negative", "primary", "secondary", "blue-grey-3", "grey-7"];
 </script>
 
 <template>
-    <div class="q-mt-sm text-caption" data-testid="wind-distribution">
+    <q-card flat class="col-12 text-caption" data-testid="wind-distribution">
         <div class="row items-center q-gutter-x-sm">
             <span class="text-uppercase text-muted">Wind entlang der Strecke</span>
             <span v-if="total > 0 && distribution.meanFeltSpeed != null" class="text-muted">
@@ -45,5 +45,5 @@ const colors = ["negative", "primary", "secondary", "blue-grey-3", "grey-7"];
             </div>
         </template>
         <div v-else>Keine Strecke</div>
-    </div>
+    </q-card>
 </template>

@@ -1,0 +1,12 @@
+{
+  "speed": [
+    {
+      "if": "true",
+      "multiply_by": "1.15"
+    },
+    {
+      "if": "true",
+      "limit_to": "30"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, toRaw, toRefs, useTemplateRef, watch } from "vue";
 import Plotly from "./plotly";
 import type { Config, Data, Layout, PlotMouseEvent } from "plotly.js";
@@ -45,9 +45,12 @@ const emit = defineEmits<{ selectSample: [index: number] }>();
 function selectPoint(event: PlotMouseEvent) {
     const point = event.points[0];
     const custom = point?.customdata;
-    const index = Array.isArray(custom) && Number.isInteger(custom[0])
-        ? Number(custom[0])
-        : typeof point?.x === "number" ? nearestSampleByTime(props.samples ?? [], point.x) : undefined;
+    const index =
+        Array.isArray(custom) && Number.isInteger(custom[0])
+            ? Number(custom[0])
+            : typeof point?.x === "number"
+              ? nearestSampleByTime(props.samples ?? [], point.x)
+              : undefined;
     if (index !== undefined && index >= 0 && index < (props.samples?.length ?? 0) && index !== props.selectedSample) {
         emit("selectSample", index);
     }
@@ -65,6 +68,16 @@ const { figure } = toRefs(props);
 
 const chart = useTemplateRef<Plotly.PlotlyHTMLElement | null>("chartRef");
 let resizeObserver: ResizeObserver | null = null;
+
+// The parent decides the chart's size. Below this the full layout's margins (148 px tall, 88 px
+// wide) leave hardly any plot, so the chart switches to compactLayout.
+const COMPACT_WIDTH = 260;
+const COMPACT_HEIGHT = 280;
+const compact = ref(false);
+function needsCompact(el: HTMLElement): boolean {
+    const { width, height } = el.getBoundingClientRect();
+    return width < COMPACT_WIDTH || height < COMPACT_HEIGHT;
+}
 
 // Background bands for the temperature chart, at fixed temperatures so a colour means the same
 // thing on every route. 14-22 °C is the flat zero-penalty stretch of TEMP_CURVE in the
@@ -96,12 +109,28 @@ function temperatureBands(ink: string, dark: boolean): Pick<Layout, "shapes" | "
         const y1 = Math.min(to, high);
         if (y1 <= y0) return;
         shapes.push({
-            type: "rect", layer: "below", xref: "paper", yref: "y",
-            x0: 0, x1: 1, y0, y1, fillcolor: fill, line: { width: 0 },
+            type: "rect",
+            layer: "below",
+            xref: "paper",
+            yref: "y",
+            x0: 0,
+            x1: 1,
+            y0,
+            y1,
+            fillcolor: fill,
+            line: { width: 0 },
         });
         annotations.push({
-            text: label, xref: "paper", yref: "y", x: 1, y: y1, xanchor: "right", yanchor: "top",
-            showarrow: false, font: { size: 10, color: ink }, opacity: 0.6,
+            text: label,
+            xref: "paper",
+            yref: "y",
+            x: 1,
+            y: y1,
+            xanchor: "right",
+            yanchor: "top",
+            showarrow: false,
+            font: { size: 10, color: ink },
+            opacity: 0.6,
         });
     };
     band(COMFORT_BAND[0], COMFORT_BAND[1], dark ? "rgba(26, 158, 143, 0.14)" : "rgba(26, 158, 143, 0.09)", "angenehm");
@@ -127,7 +156,7 @@ function buildLayout(): Partial<Layout> {
     const baseline = dark ? "rgba(232, 238, 242, 0.25)" : "rgba(27, 39, 51, 0.2)";
     const axisTheme = { color: ink, showgrid: false, showline: false, zerolinecolor: baseline, zerolinewidth: 1 };
     const revision: unknown = incoming.uirevision;
-    return {
+    const layout: Partial<Layout> = {
         ...incoming,
         uirevision: typeof revision === "string" || typeof revision === "number" ? revision : "forecast-selection",
         autosize: true,
@@ -184,6 +213,37 @@ function buildLayout(): Partial<Layout> {
                   ],
               }
             : {}),
+    };
+    return compact.value ? compactLayout(layout, incoming) : layout;
+}
+
+/** A small tile, e.g. three charts in one row on a phone (~110 px each) or a short strip above
+ *  the map: the full layout's margins alone would fill it. The tooltip still names each series and its unit, so the legend, the axis titles
+ *  and the band labels go. The temperature bands themselves stay. */
+function compactLayout(layout: Partial<Layout>, incoming: Partial<Layout>): Partial<Layout> {
+    // The backend's plotly_white template turns automargin on, which would grow the zero margins
+    // back to fit the tick labels. The labels go inside the plot instead.
+    const axis = (base: Partial<Plotly.LayoutAxis> | undefined) => ({
+        ...base,
+        title: { text: "" },
+        automargin: false,
+        ticklabelposition: "inside" as const,
+        tickfont: { ...base?.tickfont, size: 9 },
+    });
+    return {
+        ...layout,
+        showlegend: false,
+        title: {
+            ...layout.title,
+            ...(props.directionalWind ? { text: "Gegenwind" } : {}),
+            font: { ...layout.title?.font, size: 11 },
+        },
+        // No margins: the plot fills the whole tile, title and tick labels sit on top of it.
+        margin: { t: 0, b: 0, l: 0, r: 0, pad: 0 },
+        annotations: incoming.annotations ?? [],
+        xaxis: axis(layout.xaxis),
+        yaxis: axis(layout.yaxis),
+        ...(layout.yaxis2 ? { yaxis2: axis(layout.yaxis2) } : {}),
     };
 }
 
@@ -343,8 +403,20 @@ async function render() {
 
 onMounted(async () => {
     if (chart.value) {
+        compact.value = needsCompact(chart.value);
+        layout.value = buildLayout();
         resizeObserver = new ResizeObserver(() => {
-            if (chart.value) Plotly.Plots.resize(chart.value);
+            const el = chart.value;
+            if (!el) return;
+            if (needsCompact(el) === compact.value) {
+                Plotly.Plots.resize(el);
+                return;
+            }
+            // Crossed the threshold: swap layouts. render() resizes as well.
+            compact.value = !compact.value;
+            hideTooltip();
+            layout.value = buildLayout();
+            void render();
         });
         resizeObserver.observe(chart.value);
     }
@@ -393,8 +465,18 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div class="chart-shell" @pointermove="moveTooltip" @pointerleave="hideTooltip" @keydown.esc="hideTooltip">
-        <div ref="chartRef" class="chart-container" />
+    <q-card
+        flat
+        bordered
+        class="chart-shell"
+        :class="{ 'chart-shell--compact': compact }"
+        @pointermove="moveTooltip"
+        @pointerleave="hideTooltip"
+        @keydown.esc="hideTooltip"
+    >
+        <q-card-section class="no-padding chart-body">
+            <div ref="chartRef" class="chart-plot" />
+        </q-card-section>
         <svg class="chart-selection" aria-hidden="true">
             <circle
                 v-for="(dot, i) in selectionDots"
@@ -408,32 +490,26 @@ onBeforeUnmount(() => {
                 stroke-width="2"
             />
         </svg>
-        <Transition name="chart-tooltip">
-            <div
-                v-if="tooltip"
-                class="chart-tooltip"
-                :class="{ 'chart-tooltip--dark': $q.dark.isActive }"
-                :style="tooltipPosition"
-                role="tooltip"
-            >
-                <div class="chart-tooltip-time">{{ tooltip.time }}</div>
-                <div class="chart-tooltip-label">{{ tooltip.label }}</div>
-                <strong>{{ tooltip.value }}</strong>
-            </div>
-        </Transition>
-    </div>
+        <q-tooltip v-if="tooltip" role="tooltip">
+            <q-item-label caption>{{ tooltip.time }}</q-item-label>
+            <q-item-label>{{ tooltip.label }}</q-item-label>
+            <q-item-label>{{ tooltip.value }}</q-item-label>
+        </q-tooltip>
+    </q-card>
 </template>
 
 <style scoped>
 .chart-shell {
-    position: relative;
-    width: 100%;
     height: 100%;
+    min-width: 0;
 }
-.chart-container {
-    width: 100%;
+.chart-body,
+.chart-plot {
     height: 100%;
+    min-width: 0;
+    overflow: hidden;
 }
+
 /* Plotly's SVG starts at the container's top-left, so plot pixels are overlay pixels. */
 .chart-selection {
     position: absolute;
@@ -442,56 +518,5 @@ onBeforeUnmount(() => {
     height: 100%;
     overflow: hidden;
     pointer-events: none;
-}
-.chart-tooltip {
-    position: absolute;
-    z-index: 2;
-    pointer-events: none;
-    width: 188px;
-    max-width: calc(100% - 16px);
-    padding: 10px 14px;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.97);
-    color: #1b2733;
-    border: 1px solid rgba(100, 120, 135, 0.18);
-    box-shadow: 0 6px 24px rgba(15, 30, 45, 0.14);
-    transition:
-        left 100ms ease-out,
-        top 100ms ease-out;
-    font-size: 12px;
-    line-height: 1.5;
-}
-.chart-tooltip--dark {
-    background: rgba(30, 42, 53, 0.97);
-    color: #e8eef2;
-}
-.chart-tooltip-time {
-    opacity: 0.65;
-    font-size: 10px;
-}
-.chart-tooltip-label {
-    overflow-wrap: anywhere;
-}
-.chart-tooltip strong {
-    font-size: 17px;
-    font-weight: 500;
-}
-.chart-tooltip-enter-active,
-.chart-tooltip-leave-active {
-    transition:
-        opacity 140ms ease,
-        transform 140ms ease;
-}
-.chart-tooltip-enter-from,
-.chart-tooltip-leave-to {
-    opacity: 0;
-    transform: translateY(4px);
-}
-@media (prefers-reduced-motion: reduce) {
-    .chart-tooltip,
-    .chart-tooltip-enter-active,
-    .chart-tooltip-leave-active {
-        transition: none;
-    }
 }
 </style>

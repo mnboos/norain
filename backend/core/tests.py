@@ -60,6 +60,7 @@ from core.plotting import generate_forecast_figures
 from core.schedule import LOCAL_TZ, local_today, next_departure, upcoming_departures
 from core.tasks import (
     _assemble_forecast_job_async,
+    _compute_route_weather_job_async,
     _job_geometry,
     _known_samples,
     _plan_forecast_job_async,
@@ -1099,6 +1100,9 @@ class RouteThumbnailTests(TestCase):
             self.assertLess(entry["i"], len(thumb["path"]))
             self.assertIn("headwind", entry)
             self.assertIn("wind_power_w", entry)
+            # The frost factor reads the weather code, so the list must store it too or it
+            # would score frost from the thermometer alone and disagree with the map.
+            self.assertIn("weather_code", entry)
 
     def test_warm_ensemble_cells_carry_the_rain_chance_and_amount(self):
         """The rain score combines chance and amount, so the blob must carry both - read cache-only."""
@@ -1786,6 +1790,7 @@ class ForecastJobTests(TestCase):
         with patch("core.weather.get_or_fetch_forecast_cell", AsyncMock(side_effect=AssertionError("provider fetch"))) as fetch, patch(
             "core.weather.get_or_fetch_ensemble_cell", AsyncMock(side_effect=AssertionError("ensemble fetch"))
         ) as ensemble:
+            async_to_sync(_compute_route_weather_job_async)(str(job.id))
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
             kwargs = dict(start_lat=0, start_lon=0, dest_lat=0, dest_lon=0, profile="bike", departure_time=dep.isoformat(),
                           cache_only=True, **geometry)
@@ -1821,7 +1826,7 @@ class ForecastJobTests(TestCase):
         forecast_enqueue, ensemble_enqueue = AsyncMock(), AsyncMock()
         with patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)), patch(
             "core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble_enqueue)
-        ), patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
+        ), patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
 
         # Three sample points, two distinct cells, one deterministic + one ensemble each.
@@ -1874,7 +1879,7 @@ class ForecastJobTests(TestCase):
         forecast_enqueue = AsyncMock()
         with patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)), patch(
             "core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=AsyncMock())
-        ), patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
+        ), patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
 
         self.assertEqual(forecast_enqueue.await_count, 2)
@@ -1894,11 +1899,11 @@ class ForecastJobTests(TestCase):
 
     # -- the handoff to assembly --------------------------------------------------
 
-    def test_assembly_is_enqueued_exactly_once(self):
-        """Parallel cell workers finishing together must not assemble the job twice."""
+    def test_computation_is_enqueued_exactly_once(self):
+        """Parallel cell workers finishing together must not enqueue computation twice."""
         job = self._make_job(status=ForecastJob.Status.FETCHING, cells_total=2)
         enqueue = AsyncMock()
-        with patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=enqueue)):
+        with patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=enqueue)):
             async_to_sync(_settle_cell)(str(job.id))
             self.assertEqual(enqueue.await_count, 0)  # one of two cells done
             async_to_sync(_settle_cell)(str(job.id))
@@ -1916,7 +1921,7 @@ class ForecastJobTests(TestCase):
         day_key = self.departure.date().isoformat()
         self.assertTrue(claim_cell("forecast", 47.0, 9.0, day_key, 2))
 
-        with patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())), patch(
+        with patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())), patch(
             "core.tasks.get_or_fetch_forecast_cell", AsyncMock(return_value=None)
         ):
             async_to_sync(_refresh_forecast_cell_async)(47.0, 9.0, day_key, 2, str(job.id))
@@ -1930,7 +1935,7 @@ class ForecastJobTests(TestCase):
     def test_rate_limited_ensemble_cell_counts_as_failed_but_a_stored_one_does_not(self):
         job = self._make_job(status=ForecastJob.Status.FETCHING, cells_total=3)
         day_key = self.departure.date().isoformat()
-        with patch("core.tasks.assemble_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
+        with patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())):
             with patch("core.tasks.get_or_fetch_ensemble_cell", AsyncMock(return_value=None)):
                 async_to_sync(_refresh_ensemble_cell_async)(47.0, 9.0, day_key, 2, str(job.id))
             with patch("core.tasks.get_or_fetch_ensemble_cell", AsyncMock(return_value=SimpleNamespace())):
@@ -1965,12 +1970,13 @@ class ForecastJobTests(TestCase):
         job.refresh_from_db()
         self.assertEqual((job.status, job.cells_failed), (ForecastJob.Status.PENDING, 0))
 
-    def test_broken_assembly_marks_the_job_failed_and_reraises(self):
+    def test_broken_computation_marks_the_job_failed_and_reraises(self):
         """The watcher must hear about it, and the worker must still see the traceback."""
-        job = self._make_job(status=ForecastJob.Status.ASSEMBLING)
+        job = self._make_job(status=ForecastJob.Status.ASSEMBLING, geometry={"sample_points": [], "polyline": []})
         with patch("core.tasks.compute_route_weather", AsyncMock(side_effect=KeyError("samples"))), self.assertRaises(
             KeyError
         ):
+            async_to_sync(_compute_route_weather_job_async)(str(job.id))
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
         job.refresh_from_db()
         self.assertEqual(job.status, ForecastJob.Status.FAILED)
@@ -2004,11 +2010,158 @@ class ForecastJobTests(TestCase):
             ),
         )
         with patch("core.tasks.compute_route_weather", AsyncMock(return_value=empty)):
+            async_to_sync(_compute_route_weather_job_async)(str(job.id))
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
 
         job.refresh_from_db()
         self.assertEqual(job.status, ForecastJob.Status.FAILED)
         self.assertIsNone(job.result)
+
+    def _compute_fixture(self):
+        job = self._make_job(
+            status=ForecastJob.Status.ASSEMBLING,
+            geometry={"sample_points": self.sample_points, "polyline": self.route.polyline_coordinates},
+        )
+        forecast = RouteWeatherOut.model_validate(_finished_payload())
+        return job, forecast
+
+    def test_computation_has_a_separate_queue(self):
+        from core.tasks import assemble_forecast_job, compute_route_weather_job, plan_forecast_job
+
+        self.assertEqual(compute_route_weather_job.queue_name, "compute")
+        self.assertEqual(assemble_forecast_job.queue_name, "forecasts")
+        self.assertEqual(plan_forecast_job.queue_name, "forecasts")
+
+    def test_compute_persists_and_enqueues_assembly_once(self):
+        from django_tasks_db.models import DBTaskResult
+
+        job, forecast = self._compute_fixture()
+        with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)) as compute:
+            async_to_sync(_compute_route_weather_job_async)(str(job.id))
+            async_to_sync(_compute_route_weather_job_async)(str(job.id))
+        compute.assert_awaited_once()
+        self.assertTrue(compute.call_args.kwargs["cache_only"])
+        job.refresh_from_db()
+        self.assertIsNone(job.result)
+        self.assertEqual(job.computed_weather["forecast"], forecast.model_dump(mode="json"))
+        self.assertEqual(job.computed_weather["entitlements"], FREE.result_marker())
+        self.assertEqual(job.status, ForecastJob.Status.ASSEMBLING)
+        self.assertEqual(DBTaskResult.objects.filter(task_path="core.tasks.assemble_forecast_job").count(), 1)
+
+        with patch("core.tasks.compute_route_weather", AsyncMock(side_effect=AssertionError("recomputed"))), patch(
+            "core.tasks.generate_forecast_figures", return_value=[]
+        ) as figures:
+            async_to_sync(_assemble_forecast_job_async)(str(job.id))
+            async_to_sync(_assemble_forecast_job_async)(str(job.id))
+        figures.assert_called_once()
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.DONE)
+        self.assertIsNone(job.computed_weather)
+
+    def test_stale_computation_cannot_overwrite_or_fail_the_next_stage(self):
+        from django_tasks_db.models import DBTaskResult
+
+        from core.tasks import _fail_forecast_stage, _store_computed_weather
+
+        job, forecast = self._compute_fixture()
+        computed = {"forecast": forecast.model_dump(mode="json"), "entitlements": FREE.result_marker()}
+        # Both workers started from this same row revision. Only one continuation wins.
+        _store_computed_weather(job, computed)
+        _store_computed_weather(job, {**computed, "stale": True})
+        async_to_sync(_fail_forecast_stage)(job, "late failure")
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.ASSEMBLING)
+        self.assertEqual(job.computed_weather, computed)
+        self.assertEqual(DBTaskResult.objects.filter(task_path="core.tasks.assemble_forecast_job").count(), 1)
+
+    def test_compute_enqueue_failure_rolls_back_intermediate(self):
+        job, forecast = self._compute_fixture()
+        with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)), patch(
+            "core.tasks.assemble_forecast_job", SimpleNamespace(enqueue=Mock(side_effect=RuntimeError("queue failed")))
+        ), self.assertRaises(RuntimeError):
+            async_to_sync(_compute_route_weather_job_async)(str(job.id))
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.FAILED)
+        self.assertIsNone(job.computed_weather)
+        self.assertIsNone(job.result)
+
+    def test_compute_requires_geometry(self):
+        job = self._make_job(status=ForecastJob.Status.ASSEMBLING)
+        with patch("core.tasks.compute_route_weather", AsyncMock()) as compute, self.assertRaises(ValueError):
+            async_to_sync(_compute_route_weather_job_async)(str(job.id))
+        compute.assert_not_awaited()
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.FAILED)
+
+    def test_assembly_requires_valid_intermediate(self):
+        job = self._make_job(status=ForecastJob.Status.ASSEMBLING)
+        for intermediate in (None, {"forecast": {}, "entitlements": FREE.result_marker()}):
+            ForecastJob.objects.filter(id=job.id).update(
+                status=ForecastJob.Status.ASSEMBLING, computed_weather=intermediate
+            )
+            with self.assertRaises((TypeError, ValueError)):
+                async_to_sync(_assemble_forecast_job_async)(str(job.id))
+            job.refresh_from_db()
+            self.assertEqual(job.status, ForecastJob.Status.FAILED)
+
+    def test_assembly_failure_notifies_and_reraises(self):
+        job, forecast = self._compute_fixture()
+        with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)):
+            async_to_sync(_compute_route_weather_job_async)(str(job.id))
+        with patch("core.tasks.generate_forecast_figures", side_effect=RuntimeError("chart failed")), patch(
+            "core.tasks.publish", AsyncMock()
+        ) as publish, self.assertRaises(RuntimeError):
+            async_to_sync(_assemble_forecast_job_async)(str(job.id))
+        publish.assert_awaited_once()
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.FAILED)
+        self.assertIsNone(job.result)
+
+    def test_assembly_rejects_changed_entitlements(self):
+        job, forecast = self._compute_fixture()
+        job.computed_weather = {"forecast": forecast.model_dump(mode="json"), "entitlements": PRO.result_marker()}
+        job.save(update_fields=["computed_weather"])
+        async_to_sync(_assemble_forecast_job_async)(str(job.id))
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.FAILED)
+        self.assertIsNone(job.result)
+
+    def test_restart_clears_intermediate(self):
+        job = self._make_job(status=ForecastJob.Status.FAILED, computed_weather={"old": True})
+        async_to_sync(get_or_start_job)(job.kind, self.user, job.params)
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.PENDING)
+        self.assertIsNone(job.computed_weather)
+
+    def test_warm_and_zero_cell_plans_enqueue_compute(self):
+        for points in (self.sample_points, []):
+            with self.subTest(points=len(points)):
+                ForecastJob.objects.all().delete()
+                job = self._make_job(geometry={"sample_points": points, "polyline": []})
+                with patch("core.tasks.get_cached_forecast_cell", AsyncMock(return_value={})), patch(
+                    "core.tasks.get_cached_ensemble_cell", AsyncMock(return_value={})
+                ), patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())) as compute_task:
+                    async_to_sync(_plan_forecast_job_async)(str(job.id))
+                compute_task.aenqueue.assert_awaited_once_with(str(job.id))
+                job.refresh_from_db()
+                self.assertEqual(job.cells_settled, job.cells_total)
+                self.assertEqual(job.status, ForecastJob.Status.ASSEMBLING)
+
+    def test_missing_and_terminal_jobs_skip_both_stages(self):
+        job = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
+        with patch("core.tasks.compute_route_weather", AsyncMock()) as compute, patch(
+            "core.tasks.generate_forecast_figures"
+        ) as figures:
+            for status in (ForecastJob.Status.DONE, ForecastJob.Status.FAILED):
+                ForecastJob.objects.filter(id=job.id).update(status=status)
+                async_to_sync(_compute_route_weather_job_async)(str(job.id))
+                async_to_sync(_assemble_forecast_job_async)(str(job.id))
+            job_id = str(job.id)
+            job.delete()
+            async_to_sync(_compute_route_weather_job_async)(job_id)
+            async_to_sync(_assemble_forecast_job_async)(job_id)
+        compute.assert_not_awaited()
+        figures.assert_not_called()
 
     # -- entitlements --------------------------------------------------------------
 
@@ -2036,6 +2189,9 @@ class ForecastJobTests(TestCase):
         with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)), patch(
             "core.tasks.generate_forecast_figures", return_value=[]
         ):
+            async_to_sync(_compute_route_weather_job_async)(str(job.id))
+            job.refresh_from_db()
+            self.assertIsNone(job.computed_weather["forecast"]["samples"][0]["uncertainty"])
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
 
         job.refresh_from_db()
@@ -2180,6 +2336,42 @@ class ForecastViewTests(TestCase):
         for sample in stored["samples"]:
             # The frontend matches samples to vertices by exact equality.
             self.assertIn([sample["lon"], sample["lat"]], view["line"])
+
+    def test_sections_are_scored_for_frost_on_read(self):
+        payload = _long_payload(vertices=10, every=5)
+        payload["samples"][0]["temp"] = -6.0
+        payload["samples"][0]["weather_code"] = 75  # starker Schneefall
+        payload["sections"] = [
+            {"start_km": 0, "end_km": 1, "start_time": "0:00", "end_time": "0:10", "condition": "dry",
+             "max_rain_mm": 0.0, "temp_min": -6.0, "temp_max": 15.0, "start_index": 0, "end_index": 0},
+            {"start_km": 1, "end_km": 2, "start_time": "0:10", "end_time": "0:20", "condition": "dry",
+             "max_rain_mm": 0.0, "temp_min": 15.0, "temp_max": 15.0, "start_index": 1, "end_index": 1},
+        ]
+        view = forecast_view(self._job(payload, key="frost"))
+
+        self.assertEqual(view["sections"][0]["frost_level"], "stark")
+        # The mild half says nothing rather than claiming frost for the whole ride.
+        self.assertIsNone(view["sections"][1]["frost_level"])
+        self.assertEqual(view["summary"]["max_frost_level"], "stark")
+
+    def test_sections_stored_before_they_carried_their_sample_range_still_serve(self):
+        """Old jobs live for hours; a required index would 500 the detail page until they expire."""
+        payload = _long_payload(vertices=10, every=5)
+        payload["sections"] = [
+            {"start_km": 0, "end_km": 2, "start_time": "0:00", "end_time": "0:20", "condition": "dry",
+             "max_rain_mm": 0.0, "temp_min": 15.0, "temp_max": 15.0},
+        ]
+        job = self._job(payload, key="old-sections")
+
+        self.assertIsNone(forecast_view(job)["sections"][0]["frost_level"])
+        response = self.client.get(f"/api/forecast_jobs/{job.id}")
+        self.assertEqual(response.status_code, 200)
+        # The section survives the response schema and says nothing about frost, rather than
+        # being dropped or failing validation on a range it never stored.
+        [section] = response.json()["result"]["sections"]
+        self.assertEqual(section["condition"], "dry")
+        self.assertIsNone(section.get("startIndex"))
+        self.assertIsNone(section.get("frostLevel"))
 
     def test_uncertainty_partial(self):
         complete = _long_payload(vertices=10, every=5)

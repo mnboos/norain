@@ -130,6 +130,9 @@ class RouteWeatherSummary(CamelSchema):
     # "niedrig" … "sehr hoch" for max_wind_power_w. Filled when served (core.jobs.forecast_view),
     # never stored, like every field derived from the ride-quality curves.
     max_wind_effort_level: str | None = None
+    # The iciest point of the ride as a word, filled when served. None means no frost worth
+    # naming - a ride with no samples at all says so through `samples` being empty.
+    max_frost_level: str | None = None
     wind_distribution: WindDistribution | None = None
     source: str  # "open-meteo" or "openweathermap"
     station_corrected: bool = False  # some samples were corrected with station readings
@@ -154,6 +157,14 @@ class RouteSection(CamelSchema):
     max_headwind: float | None = None
     temp_min: float
     temp_max: float
+    # Which samples this section covers. Plain data, not a verdict - it is what lets
+    # ``core.jobs.forecast_view`` score the section's frost on read. Optional because sections
+    # are stored in ``job.result``: every job finished before these existed has section dicts
+    # without them, and a required field would fail validation on the way back out.
+    start_index: int | None = None
+    end_index: int | None = None
+    # Filled on read by ``forecast_view``; never stored. See ``core.ride_quality``.
+    frost_level: str | None = None
 
 
 class ForecastSampleOut(WeatherSample):
@@ -162,6 +173,7 @@ class ForecastSampleOut(WeatherSample):
     ride_score: float | None = Field(default=None, ge=0, le=1)  # 0 = best ride, 1 = worst
     ride_label: str | None = None  # e.g. "mässig · v. a. Regen"
     wind_effort_level: str | None = None  # "Wind hilft", "keiner", "niedrig" … "sehr hoch"
+    frost_level: str | None = None  # "leicht" … "stark"; None means no frost worth naming
 
 
 class WindArrow(CamelSchema):

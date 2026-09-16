@@ -56,44 +56,56 @@ watch(forecast, () => {
 
 <template>
     <q-card flat class="col column transparent">
-        <q-item>
-            <q-item-section side>
-                <slot name="back" />
-            </q-item-section>
-            <q-item-section>
-                <q-item-label>
-                    <h1 class="text-subtitle1 text-weight-medium q-ma-none">{{ route.name }}</h1>
-                </q-item-label>
-                <q-item-label caption>
-                    {{ route.startName }} → {{ route.destName }} · {{ route.scheduleDescription }}
-                </q-item-label>
-                <q-item-label v-if="route.description" caption>{{ route.description }}</q-item-label>
-            </q-item-section>
-            <q-item-section side>
-                <q-badge outline color="primary" :label="profileLabel" />
-            </q-item-section>
-        </q-item>
+        <q-card-section class="no-padding">
+            <q-item>
+                <q-item-section side>
+                    <slot name="back" />
+                </q-item-section>
+                <q-item-section>
+                    <q-item-label>
+                        <h1 class="text-subtitle1 text-weight-medium q-ma-none">{{ route.name }}</h1>
+                    </q-item-label>
+                    <q-item-label caption>
+                        {{ route.startName }} → {{ route.destName }} · {{ route.scheduleDescription }}
+                    </q-item-label>
+                    <q-item-label v-if="route.description" caption>{{ route.description }}</q-item-label>
+                </q-item-section>
+                <q-item-section side>
+                    <q-badge outline color="primary" :label="profileLabel" />
+                </q-item-section>
+            </q-item>
+        </q-card-section>
         <q-separator />
 
-        <q-banner v-if="!hasGeometry" class="bg-tint-warn">
-            <template #avatar>
-                <q-spinner-dots size="1.5rem" color="accent" />
-            </template>
-            Route wird berechnet… Die Streckendaten werden im Hintergrund geladen.
-        </q-banner>
-        <q-banner v-else-if="forecastError" class="bg-tint-error">
-            Fehler beim Laden der Wetterdaten. Bitte versuche es später erneut.
-        </q-banner>
-        <q-banner v-else-if="!route.forecastAvailable && !forecastLoading" class="bg-tint-neutral">
-            <template #avatar>
-                <q-icon :name="symSharpCloudOff" class="text-muted" />
-            </template>
-            Noch keine Vorhersage möglich. Die Wettervorhersage ist erst näher am Abfahrtstermin verfügbar.
-        </q-banner>
-
-        <template v-if="forecast">
+        <q-card-section class="no-padding">
+            <q-banner v-if="!hasGeometry" class="bg-tint-warn">
+                <template #avatar>
+                    <q-spinner-dots size="1.5rem" color="accent" />
+                </template>
+                Route wird berechnet...
+            </q-banner>
+            <q-banner v-else-if="forecastError" class="bg-tint-error">
+                Fehler beim Laden der Wetterdaten. Bitte versuche es später erneut.
+            </q-banner>
+            <q-banner v-else-if="!route.forecastAvailable && !forecastLoading" class="bg-tint-neutral">
+                <template #avatar>
+                    <q-icon :name="symSharpCloudOff" class="text-muted" />
+                </template>
+                Noch keine Vorhersage möglich. Die Wettervorhersage ist erst näher am Abfahrtstermin verfügbar.
+            </q-banner>
+        </q-card-section>
+        <q-card-section v-if="forecast" class="no-padding">
             <WeatherSummaryCard :forecast="forecast" class="transparent" />
-            <q-card-section>
+        </q-card-section>
+        <q-card-section v-if="forecast" class="no-padding col forecast-stacked">
+            <q-card class="column forecast-map">
+                <NiceMap
+                    :route-weather="forecast"
+                    :selected-sample="selectedSample"
+                    @select-sample="selectedSample = $event"
+                />
+            </q-card>
+            <q-card flat class="transparent forecast-charts">
                 <WeatherCharts
                     :job-id="forecast.jobId"
                     :version="forecast.version"
@@ -101,9 +113,8 @@ watch(forecast, () => {
                     :samples="forecast.samples"
                     @select-sample="selectedSample = $event"
                 />
-            </q-card-section>
-            <NiceMap :route-weather="forecast" :selected-sample="selectedSample" @select-sample="selectedSample = $event" />
-        </template>
+            </q-card>
+        </q-card-section>
 
         <q-inner-loading :showing="forecastLoading && hasGeometry">
             <q-circular-progress
@@ -120,3 +131,17 @@ watch(forecast, () => {
         </q-inner-loading>
     </q-card>
 </template>
+
+<style scoped>
+.forecast-stacked {
+    display: grid;
+    grid-template-rows: minmax(240px, 1fr) clamp(180px, 25dvh, 260px);
+    gap: 4px;
+    grid-template-columns: minmax(0, 1fr);
+}
+.forecast-map,
+.forecast-charts {
+    min-width: 0;
+    min-height: 0;
+}
+</style>
