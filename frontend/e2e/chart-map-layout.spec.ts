@@ -42,13 +42,16 @@ async function expectSeparate(page: Page, tiles: Locator) {
         .toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const boxes = await tiles.all();
-    const first = await boxes[0]!.boundingBox();
-    const last = await boxes[2]!.boundingBox();
+    const first = await boxes[0].boundingBox();
+    const last = await boxes[2].boundingBox();
     const map = await page.locator("#map").boundingBox();
-    expect(Math.abs(first!.y - last!.y)).toBeLessThan(2);
-    expect(Math.abs(first!.x - map!.x)).toBeLessThan(2);
-    expect(Math.abs(last!.x + last!.width - map!.x - map!.width)).toBeLessThan(2);
-    if (page.viewportSize()!.height >= 900) {
+    if (!first || !last || !map) throw new Error("Missing tile or map box");
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error("Missing viewport");
+    expect(Math.abs(first.y - last.y)).toBeLessThan(2);
+    expect(Math.abs(first.x - map.x)).toBeLessThan(2);
+    expect(Math.abs(last.x + last.width - map.x - map.width)).toBeLessThan(2);
+    if (viewport.height >= 900) {
         expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
     }
     for (const tile of await tiles.all()) {

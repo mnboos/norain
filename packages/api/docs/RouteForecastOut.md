@@ -7,18 +7,19 @@ A finished forecast as the job endpoint and the WebSocket serve it.  Slimmer tha
 
 Name | Type
 ------------ | -------------
-`departureTime` | string
 `jobId` | string
-`line` | Array&lt;Array&lt;number&gt;&gt;
-`routeId` | string
-`samples` | [Array&lt;ForecastSampleOut&gt;](ForecastSampleOut.md)
-`sections` | [Array&lt;RouteSection&gt;](RouteSection.md)
-`summary` | [RouteWeatherSummary](RouteWeatherSummary.md)
-`totalDistanceM` | number
-`totalSeconds` | number
-`uncertaintyPartial` | boolean
 `version` | string
+`routeId` | string
+`departureTime` | string
+`line` | Array&lt;Array&lt;number&gt;&gt;
+`totalSeconds` | number
+`totalDistanceM` | number
+`samples` | [Array&lt;ForecastSampleOut&gt;](ForecastSampleOut.md)
+`summary` | [RouteWeatherSummary](RouteWeatherSummary.md)
 `windArrows` | [Array&lt;WindArrow&gt;](WindArrow.md)
+`sections` | [Array&lt;RouteSection&gt;](RouteSection.md)
+`uncertaintyPartial` | boolean
+`departureComparison` | [DepartureComparison](DepartureComparison.md)
 
 ## Example
 
@@ -27,18 +28,19 @@ import type { RouteForecastOut } from ''
 
 // TODO: Update the object below with actual values
 const example = {
-  "departureTime": null,
   "jobId": null,
-  "line": null,
-  "routeId": null,
-  "samples": null,
-  "sections": null,
-  "summary": null,
-  "totalDistanceM": null,
-  "totalSeconds": null,
-  "uncertaintyPartial": null,
   "version": null,
+  "routeId": null,
+  "departureTime": null,
+  "line": null,
+  "totalSeconds": null,
+  "totalDistanceM": null,
+  "samples": null,
+  "summary": null,
   "windArrows": null,
+  "sections": null,
+  "uncertaintyPartial": null,
+  "departureComparison": null,
 } satisfies RouteForecastOut
 
 console.log(example)

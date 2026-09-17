@@ -13,8 +13,8 @@ export const recurringRouteKeys = {
     all: ["recurringRoutes"] as const,
     lists: () => [...recurringRouteKeys.all, "list"] as const,
     detail: (id: string | null | undefined) => [...recurringRouteKeys.all, "detail", id] as const,
-    forecast: (id: string | null | undefined, date: string, time: string) =>
-        [...recurringRouteKeys.detail(id), "forecast", date, time] as const,
+    forecast: (id: string | null | undefined, date: string, time: string, before?: number, after?: number) =>
+        [...recurringRouteKeys.detail(id), "forecast", date, time, before, after] as const,
 };
 
 export function useRecurringRoutes() {
@@ -51,8 +51,12 @@ export function useRecurringRouteForecast(
     date: MaybeRefOrGetter<string>,
     time: MaybeRefOrGetter<string>,
     enabled: MaybeRefOrGetter<boolean>,
+    before?: MaybeRefOrGetter<number | undefined>,
+    after?: MaybeRefOrGetter<number | undefined>,
 ) {
-    const queryKey = computed(() => recurringRouteKeys.forecast(toValue(id), toValue(date), toValue(time)));
+    const queryKey = computed(() =>
+        recurringRouteKeys.forecast(toValue(id), toValue(date), toValue(time), toValue(before), toValue(after)),
+    );
     const query = useQuery({
         queryKey,
         queryFn: async ({ client, queryKey: key, signal }) => {
@@ -60,10 +64,13 @@ export function useRecurringRouteForecast(
                 routeId: toValue(id) ?? "",
                 date: toValue(date),
                 time: toValue(time),
+                departureFlexBeforeMinutes: toValue(before),
+                departureFlexAfterMinutes: toValue(after),
             });
             return await awaitForecastJob(job, reportForecastProgress(client, key), signal);
         },
         enabled: () => toValue(enabled),
+        refetchInterval: () => (toValue(before) || toValue(after) ? 60_000 : false),
         staleTime: 5 * 60 * 1000,
     });
     return Object.assign(query, { progress: useForecastProgress(queryKey) });
@@ -90,5 +97,17 @@ export function useDeleteRecurringRoute() {
     return useMutation({
         mutationFn: (id: string) => api.coreApiRecurringRouteDeleteRoute({ routeId: id }),
         onSuccess: () => invalidateRouteLists(queryClient),
+    });
+}
+
+export function useUpdateRecurringRoute() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: RecurringRouteIn }) =>
+            api.coreApiRecurringRouteUpdateRoute({ routeId: id, recurringRouteIn: data }),
+        onSuccess: async route => {
+            queryClient.setQueryData(recurringRouteKeys.detail(route.id), route);
+            await invalidateRouteLists(queryClient);
+        },
     });
 }

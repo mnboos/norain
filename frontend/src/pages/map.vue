@@ -6,6 +6,8 @@
 </route>
 
 <script setup lang="ts">
+import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
+import DepartureComparison from "@/components/DepartureComparison.vue";
 import WeatherSummaryCard from "@/components/WeatherSummaryCard.vue";
 import ForecastDetails from "@/components/ForecastDetails.vue";
 import NiceMap from "@/components/NiceMap.vue";
@@ -13,11 +15,7 @@ import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import { QSelect } from "quasar";
 import { computed, ref, watchEffect, watch } from "vue";
-import {
-    symSharpElectricBike,
-    symSharpElectricMoped,
-    symSharpPedalBike,
-} from "@quasar/extras/material-symbols-sharp";
+import { symSharpElectricBike, symSharpElectricMoped, symSharpPedalBike } from "@quasar/extras/material-symbols-sharp";
 import type { PlacesSearchResult } from "@norain/api/models";
 import { useRoute } from "vue-router";
 import { usePlaceSearch } from "@/queries/places";
@@ -28,6 +26,9 @@ const route = useRoute();
 
 const profile = ref("bike");
 const departureTime = ref<string>(defaultDepartureTime());
+const flexBefore = ref(0);
+const flexAfter = ref(0);
+const selectedDeparture = ref<string | null>(null);
 
 function defaultDepartureTime(): string {
     const now = new Date();
@@ -70,6 +71,8 @@ watchEffect(() => {
     const r = savedRoute.value;
     if (r) {
         profile.value = r.profile;
+        flexBefore.value = r.departureFlexBeforeMinutes ?? 0;
+        flexAfter.value = r.departureFlexAfterMinutes ?? 0;
         abfahrtsort.value = {
             type: "Feature",
             properties: { name: r.startName, city: null, state: "", countrycode: "CH", showCanton: false },
@@ -92,19 +95,37 @@ const filterDest = ref("");
 const mapView = ref<{ zoom: number; lat: number; lng: number } | undefined>(undefined);
 
 const searchLocation = computed(() =>
-    mapView.value
-        ? { zoom: mapView.value.zoom, lat: mapView.value.lat, lon: mapView.value.lng }
-        : undefined,
+    mapView.value ? { zoom: mapView.value.zoom, lat: mapView.value.lat, lon: mapView.value.lng } : undefined,
 );
 const { data: placesStart, isFetching: isFetchingStart } = usePlaceSearch(filterStart, searchLocation);
 const { data: placesDest, isFetching: isFetchingDest } = usePlaceSearch(filterDest, searchLocation);
 const ready = computed(() => !!zielort.value);
 
-const {
-    data: routeWeather,
-    isFetching: isFetchingWeather,
-    error: weatherError,
-} = useRouteWeather(abfahrtsort, zielort, profile, departureTime);
+const comparisonQuery = useRouteWeather(abfahrtsort, zielort, profile, departureTime, flexBefore, flexAfter);
+const selectedQuery = useRouteWeather(
+    abfahrtsort,
+    zielort,
+    profile,
+    () => selectedDeparture.value ?? departureTime.value,
+    0,
+    0,
+    () => selectedDeparture.value !== null,
+);
+const routeWeather = computed(() => (selectedDeparture.value ? selectedQuery.data.value : comparisonQuery.data.value));
+const isFetchingWeather = computed(() =>
+    selectedDeparture.value ? selectedQuery.isFetching.value : comparisonQuery.isFetching.value,
+);
+const weatherError = computed(() =>
+    selectedDeparture.value ? selectedQuery.error.value : comparisonQuery.error.value,
+);
+const departureComparison = computed(() => comparisonQuery.data.value?.departureComparison);
+watch(
+    [abfahrtsort, zielort, profile, departureTime, flexBefore, flexAfter],
+    () => {
+        selectedDeparture.value = null;
+    },
+    { deep: true, flush: "sync" },
+);
 
 const selectedSample = ref(0);
 watch(routeWeather, () => {
@@ -225,6 +246,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             :minute-options="[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]"
                             @update:model-value="val => (departureTime = departureTime.slice(0, 10) + 'T' + val)"
                         />
+                        <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
                         <!--                        <q-input-->
                         <!--                            v-model="departureTime"-->
                         <!--                            type="datetime-local"-->
@@ -249,6 +271,14 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             v-if="isFetchingWeather || isFetchingStart || isFetchingDest"
                             indeterminate
                             class="q-mt-xs"
+                        />
+
+                        <DepartureComparison
+                            v-if="departureComparison"
+                            :comparison="departureComparison"
+                            :selected-time="selectedDeparture"
+                            @select="selectedDeparture = $event"
+                            @reset="selectedDeparture = null"
                         />
 
                         <q-banner v-if="weatherError" dense class="bg-tint-warn rounded-borders">

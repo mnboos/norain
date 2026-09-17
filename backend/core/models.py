@@ -132,6 +132,8 @@ class RecurringRoute(models.Model):
 
     schedule_cron = models.CharField(max_length=100, help_text="5-field cron expression")
     schedule_description = models.CharField(max_length=200, help_text="Human-readable, e.g. 'Every Monday at 08:00'")
+    departure_flex_before_minutes = models.PositiveSmallIntegerField(default=0)
+    departure_flex_after_minutes = models.PositiveSmallIntegerField(default=0)
 
     # Pre-computed route geometry (populated by background task on create/update)
     polyline = models.LineStringField(

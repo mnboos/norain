@@ -399,6 +399,19 @@ wheels = [
 ]
 
 [[package]]
+name = "django-axes"
+version = "8.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "asgiref" },
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f0/b4/00c701a22d46288e3eb1340a1c141f5b4002572ce836a3e8d069f1e1de8a/django_axes-8.3.1.tar.gz", hash = "sha256:d57e923c0ba33cf45275253dd1313c3a3ff04bec686b38d677beb2b3d43c7bcd", size = 254715, upload-time = "2026-02-11T20:19:52.172Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/46/f6/777a5df7d5698eeb23c7c496cc268c0181f0489dbc5b5f2b235b30e5d8dd/django_axes-8.3.1-py3-none-any.whl", hash = "sha256:f7887582fd12713064f1602091ff6152752becae5e891a15bf802746cab0f51a", size = 74213, upload-time = "2026-02-11T20:19:48.646Z" },
+]
+
+[[package]]
 name = "django-click"
 version = "2.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -434,6 +447,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/25/f7/410af3b53845f04c94a9dabe5934117d9546b6f5ce4028cff5b74deb933c/django_ninja-1.7.0.tar.gz", hash = "sha256:7a0ce06c978a42a808d9a9d7ba1cda383df8eea90040cfc232ad10b7d9024e0d", size = 2341450, upload-time = "2026-08-30T17:49:19.718Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/54/d6/f4f939b912c696b6fc19e15ed3b2b37ac7cb09600373e83211f44adaf6d5/django_ninja-1.7.0-py3-none-any.whl", hash = "sha256:f1a0f762c9810dabcb040fcff76c6e2f5d0cdb51b4a597799ee06b5df8481f3f", size = 2376156, upload-time = "2026-08-30T17:49:17.552Z" },
+]
+
+[[package]]
+name = "django-otp"
+version = "1.7.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/08/88/f98f860f5c209bfa1980c63ff38128b50166bf396d28c60d93c42bdb08de/django_otp-1.7.3.tar.gz", hash = "sha256:3ce501173bf1b936146ffe5ff0cfdae1a0c7eb46cce1e9e3fdddd984d993c74f", size = 78996, upload-time = "2026-09-06T16:44:21.098Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/a5/bb9d7b83b0ebf62603d3ff707cf492f75ec60077495b885ecbdf09774f67/django_otp-1.7.3-py3-none-any.whl", hash = "sha256:7d52fb0f76c4c1c86cbc71c196d3f79941b0b84aff980e45193bef89a70a7a12", size = 73702, upload-time = "2026-09-06T16:44:19.807Z" },
 ]
 
 [[package]]
@@ -656,9 +681,11 @@ dependencies = [
     { name = "croniter" },
     { name = "daphne" },
     { name = "django" },
+    { name = "django-axes" },
     { name = "django-click" },
     { name = "django-cors-headers" },
     { name = "django-ninja" },
+    { name = "django-otp" },
     { name = "django-tasks-db" },
     { name = "httpx" },
     { name = "loguru" },
@@ -667,6 +694,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "rasterio" },
     { name = "redis", extra = ["hiredis"] },
+    { name = "sentry-sdk" },
     { name = "shapely" },
     { name = "stripe" },
 ]
@@ -687,9 +715,11 @@ requires-dist = [
     { name = "croniter", specifier = "==6.2.4" },
     { name = "daphne", specifier = "==4.2.3" },
     { name = "django", specifier = "==6.1.1" },
+    { name = "django-axes", specifier = "==8.3.1" },
     { name = "django-click", specifier = "==2.5.0" },
     { name = "django-cors-headers", specifier = "==4.9.0" },
     { name = "django-ninja", specifier = "==1.7.0" },
+    { name = "django-otp", specifier = "==1.7.3" },
     { name = "django-tasks-db", specifier = "==0.13.0" },
     { name = "httpx", specifier = "==0.28.1" },
     { name = "loguru", specifier = "==0.7.3" },
@@ -698,6 +728,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = "==1.2.3" },
     { name = "rasterio", specifier = "==1.5.1" },
     { name = "redis", extras = ["hiredis"], specifier = "==8.1.0" },
+    { name = "sentry-sdk", specifier = ">=2.69.2" },
     { name = "shapely", specifier = "==2.1.2" },
     { name = "stripe", specifier = "==15.6.1" },
 ]
@@ -1038,6 +1069,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/5f/ea/7f9b938a63ece4bec677ad7f9f7fa02df3383db1949ed93a382441c09a87/ruff-0.16.7-py3-none-win32.whl", hash = "sha256:2ea3470fcebcbc5df2fb0c6f3b90333fa9084c534e0111c038fa4a6ab9f1c4b7", size = 10059082, upload-time = "2026-09-10T18:03:59.632Z" },
     { url = "https://files.pythonhosted.org/packages/39/11/480a6973a927aa653e1cead6a6416008640e03a99d05b34c0434b8c6c366/ruff-0.16.7-py3-none-win_amd64.whl", hash = "sha256:7ac26aca826e9e21d0f1cb25b54ac660760a9fdd094d3e4df9848232be98cfc6", size = 10593368, upload-time = "2026-09-10T18:04:01.999Z" },
     { url = "https://files.pythonhosted.org/packages/8b/4b/51327018d056f0dad2c2238f26d1fb0f53707a9d91b75dea6d1b3039f136/ruff-0.16.7-py3-none-win_arm64.whl", hash = "sha256:aab7f39e2c9df6c596216070f98eef1207b94f8516cca20c808826974971855b", size = 10412401, upload-time = "2026-09-10T18:04:04.098Z" },
+]
+
+[[package]]
+name = "sentry-sdk"
+version = "2.69.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cc/08/1211e4652384195ef754f8ed570566088dc848f8eda7d005abf13f05f17f/sentry_sdk-2.69.2.tar.gz", hash = "sha256:b4d8915a526e626b0b14a2925907554b722d3b8e3e3781570fc35791712af323", size = 1043564, upload-time = "2026-09-15T15:25:09.018Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/78/5d8b79fd60330234317aa827a1f5e445980a6f4e0ea6ed4e1187acb70a0f/sentry_sdk-2.69.2-py3-none-any.whl", hash = "sha256:25bc0a6c55bba0b83398212a7247f4f9f3190f189a1909b68e4807ef4b785895", size = 528765, upload-time = "2026-09-15T15:25:07.362Z" },
 ]
 
 [[package]]

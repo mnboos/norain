@@ -2,6 +2,7 @@ import "./assets/main.css";
 
 import { createApp } from "vue";
 import App from "./App.vue";
+import * as Sentry from "@sentry/vue";
 import router from "./router";
 import { Quasar, Dialog, Dark, LocalStorage } from "quasar";
 import quasarLang from "quasar/lang/de-CH";
@@ -67,6 +68,47 @@ app.use(Quasar, {
     lang: quasarLang,
     iconSet: quasarIconSet,
     config: { dark: initialDarkConfig() },
+});
+
+Sentry.init({
+    app,
+    dsn: import.meta.env.VITE_SENTRY_DSN_FRONTEND,
+    sendDefaultPii: true,
+    enableLogs: true,
+    enableMetrics: true,
+    // tracePropagationTargets: [useBackendHost(""), useBackendHost()],
+    integrations: [
+        Sentry.browserTracingIntegration({ router }),
+        Sentry.replayIntegration(),
+        Sentry.replayCanvasIntegration(),
+        Sentry.vueIntegration({
+            app,
+            tracingOptions: { trackComponents: true, hooks: ["mount", "update", "unmount"] },
+        }),
+        Sentry.browserProfilingIntegration(),
+        Sentry.browserSessionIntegration(),
+        Sentry.captureConsoleIntegration({ levels: ["warn", "error", "debug", "assert"] }),
+        Sentry.contextLinesIntegration(),
+        Sentry.extraErrorDataIntegration(),
+        Sentry.httpClientIntegration(),
+        Sentry.reportingObserverIntegration(),
+        Sentry.feedbackIntegration({
+            colorScheme: "system",
+        }),
+    ],
+
+    // Set tracesSampleRate to 1.0 to capture 100%
+    // of transactions for performance monitoring.
+    // We recommend adjusting this value in production
+    // tracesSampleRate: import.meta.env.PROD ? 0.8 : 1.0,
+    tracesSampleRate: 1.0,
+
+    // Capture Replay for 10% of all sessions,
+    // plus for 100% of sessions with an error
+    replaysSessionSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1.0,
+
+    release: import.meta.env.VITE_VUE_APP_VERSION,
 });
 
 async function bootstrap() {

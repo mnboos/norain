@@ -34,6 +34,7 @@ x-slow-start: &slow-start
 
 services:
   caddy:
+    container_name: caddy
     extends:
       service: caddy
       file: docker-compose.base.yml
@@ -44,6 +45,7 @@ services:
     environment:
       DOMAIN: ${DOMAIN:?DOMAIN must be set}
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL must be set}
+      DJANGO_ADMIN_PATH: ${DJANGO_ADMIN_PATH:?DJANGO_ADMIN_PATH must be set}
     ports:
       - "80:80"
       - "443:443"
@@ -57,6 +59,7 @@ services:
 
   backend:
     <<: *app
+    container_name: backend
     command: daphne -b 0.0.0.0 -p 8000 backend.asgi:application
     depends_on:
       <<: *routing-deps
@@ -73,6 +76,7 @@ services:
       - edge
       - internal
 
+  # The replicated workers have no container_name: Docker does not allow one with replicas.
   worker-cells:
     <<: *app
     command: python manage.py db_worker --queue-name cells
@@ -94,10 +98,12 @@ services:
 
   worker-default:
     <<: *app
+    container_name: worker-default
     command: python manage.py db_worker --queue-name default
     depends_on: *routing-deps
 
   redis:
+    container_name: redis
     extends:
       file: docker-compose.base.yml
       service: redis
@@ -108,9 +114,11 @@ services:
 
   scheduler:
     <<: *app
+    container_name: scheduler
     command: python manage.py run_forecast_scheduler
 
   db:
+    container_name: db
     extends:
       service: db
       file: docker-compose.base.yml
@@ -127,29 +135,32 @@ services:
       - internal
 
   graphhopper:
+    container_name: graphhopper
     extends:
       service: graphhopper
       file: docker-compose.base.yml
     image: ${GRAPHHOPPER_IMAGE:?GRAPHHOPPER_IMAGE must be set}
-    environment:
-      # The VPS only serves: the graph is imported elsewhere and copied into graphhopper/cache
-      # (docs/how-to/build-routing-graph.md). An empty cache fails fast instead of importing.
-      GRAPHHOPPER_ALLOW_IMPORT: "false"
     volumes:
-      # Unused while serving; mapped so the base file's relative ./data path is not used.
+      # The OSM extract and elevation tiles, kept so a rebuild does not download them again.
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/graphhopper/osm:/osm_data
+      # The built graph. Empty it and restart the service to build a new one.
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/graphhopper/cache:/graph-cache
     healthcheck:
-      # Loading a prebuilt graph takes seconds to a few minutes, not an import's hours.
+      # A stored graph loads in minutes, but with an empty cache the service first builds the
+      # graph, which takes much longer. Checks that fail during start_period do not count, so
+      # the build has 3h; everything that waits on graphhopper (and release.sh) waits with it.
       interval: 15s
       timeout: 10s
       retries: 10
-      start_period: 3m
+      start_period: 3h
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8989/info" ]
     networks:
       - internal
+      # Building the graph downloads the OSM extract and the elevation tiles.
+      - egress
 
   photon:
+    container_name: photon
     extends:
       service: photon
       file: docker-compose.base.yml

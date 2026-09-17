@@ -1,7 +1,7 @@
 # Change the geographic coverage
 
 Use this guide to route and search in a different region. You need the existing
-local setup and enough storage and memory for the new import.
+local setup and enough storage and memory to build the new graph.
 
 1. Stop the geographic services from the repository root:
 
@@ -20,10 +20,11 @@ local setup and enough storage and memory for the new import.
    GraphHopper must rebuild its graph; Photon only imports when its index directory
    is absent. Changing URLs alone does not replace these indexes. Keep the old OSM
    file if desired, but move it aside too if the new URL has the same filename.
-4. Adjust `GRAPHHOPPER_HEAP` (or `GRAPHHOPPER_IMPORT_HEAP` for the import alone) and
+4. Adjust `GRAPHHOPPER_HEAP` (or `GRAPHHOPPER_BUILD_HEAP` for the build alone) and
    `PHOTON_IMPORT_HEAP` as needed. If increasing GraphHopper's heap beyond the current
    budget, also raise `GRAPHHOPPER_MEM_LIMIT` (default 8 GB), leaving room for non-heap
-   memory. Production never imports: build the graph as described in
+   memory. Production works the same way: empty `graphhopper/cache` and GraphHopper
+   builds the new graph on start. If the VPS lacks the memory, build it as described in
    [build the routing graph elsewhere](build-routing-graph.md) and copy it over.
 5. Recreate the services and monitor the import:
 

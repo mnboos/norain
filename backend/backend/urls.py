@@ -15,9 +15,11 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.conf import settings
 from django.contrib import admin
 from django.http import HttpResponse
 from django.urls import path
+from django_otp.admin import OTPAdminSite
 
 from core.api import api
 from core.api.billing import checkout_view, entitlements_view, portal_view, webhook_view
@@ -36,9 +38,12 @@ def healthz(request):
     return HttpResponse("ok", content_type="text/plain")
 
 
+# The admin is public, so it asks for a one-time code as well as the password.
+admin.site.__class__ = OTPAdminSite
+
 urlpatterns = [
     path("healthz", healthz),
-    path("admin/", admin.site.urls),
+    path(f"{settings.ADMIN_PATH}/", admin.site.urls),
     path("api/auth/session", session_view),
     path("api/auth/signup", signup_view),
     path("api/auth/verify-email", verify_email_view),

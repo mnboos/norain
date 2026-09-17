@@ -11,6 +11,7 @@ The route sampling is decoupled from the forecast resolution: GraphHopper gives 
 per-road travel time, so we know exactly when you reach each point of the polyline.
 """
 import os
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 
 import httpx
@@ -244,6 +245,23 @@ def _summarize(samples: list[WeatherSample], source: str) -> RouteWeatherSummary
 
 
 # --------------------------------------------------------------------------- core logic
+@dataclass
+class WeatherSnapshot:
+    """One job's cache reads, shared by all candidate departures."""
+
+    forecast_days: int
+    now: datetime = field(default_factory=lambda: datetime.now(UTC))
+    cells: dict = field(default_factory=dict)
+    readings: list | None = None
+
+    async def cell(self, kind, lat, lon, day):
+        key = (kind, lat, lon, day)
+        if key not in self.cells:
+            getter = get_cached_forecast_cell if kind == "forecast" else get_cached_ensemble_cell
+            self.cells[key] = await getter(lat, lon, day, self.forecast_days)
+        return self.cells[key]
+
+
 async def compute_route_weather(
     start_lat: float,
     start_lon: float,
@@ -261,6 +279,8 @@ async def compute_route_weather(
     vertex_times: list[float] | None = None,
     include_segments: bool = True,
     station_correction_enabled: bool = False,
+    snapshot: WeatherSnapshot | None = None,
+    strict_coverage: bool = False,
 ) -> RouteWeatherOut:
     """Compute weather along a route.
 
@@ -282,6 +302,12 @@ async def compute_route_weather(
             `refresh_station_observations` task is what fetches them.
     """
     departure = datetime.fromisoformat(departure_time)
+    # Aware departures cross DST transitions in elapsed time, not wall-clock time.
+    local_departure = departure
+    if departure.tzinfo is not None:
+        from .schedule import LOCAL_TZ
+        local_departure = departure.astimezone(LOCAL_TZ)
+        departure = departure.astimezone(UTC)
     today = local_today()
 
     if sample_points is not None and polyline is not None:
@@ -302,8 +328,8 @@ async def compute_route_weather(
 
     # For each sample point, look up weather from the grid. One horizon covers them all,
     # so every cell of this departure shares a cache key and a claim key.
-    days = forecast_days_for(departure, sample_points, today)
-    day_key_str = departure.date().isoformat()
+    days = snapshot.forecast_days if snapshot is not None else forecast_days_for(local_departure, sample_points, today)
+    day_key_str = local_departure.date().isoformat()
     samples: list[WeatherSample] = []
     forecast_source = "open-meteo"
     forecasts = [None] * len(sample_points)
@@ -311,7 +337,14 @@ async def compute_route_weather(
     corrections = [None] * len(sample_points)
     readings = [[] for _ in sample_points]
     if station_correction_enabled:
-        readings = await get_cached_readings(sample_points, departure, datetime.now(tz=UTC))
+        if snapshot is not None:
+            if snapshot.readings is None:
+                snapshot.readings = await get_cached_readings(
+                    [{**sp, "elapsed_s": 0} for sp in sample_points], snapshot.now, snapshot.now,
+                )
+            readings = snapshot.readings
+        else:
+            readings = await get_cached_readings(sample_points, departure, datetime.now(tz=UTC))
 
     for i, sp in enumerate(sample_points):
         logger.debug("compute_route_weather: processing sample point {}: {}", i, sp)
@@ -323,13 +356,19 @@ async def compute_route_weather(
         eta = departure + timedelta(seconds=elapsed)
 
         # Look up deterministic weather from grid (fetches + stores if missing)
-        if cache_only:
+        if snapshot is not None:
+            cell = await snapshot.cell("forecast", lat_r, lon_r, day_key_str)
+        elif cache_only:
             cell = await get_cached_forecast_cell(lat_r, lon_r, day_key_str, days)
         else:
             cell = await get_or_fetch_forecast_cell(lat_r, lon_r, day_key_str, days)
         if cell is None:
             logger.warning(f"No forecast data for ({lat_r}, {lon_r}) at {eta}")
             continue
+        if strict_coverage:
+            from .departures import cell_covers
+            if not cell_covers(cell.data, eta, cell.source):
+                continue
         logger.debug("compute_route_weather: got forecast cell for {}: {}", eta, cell)
         forecast = extract_sample(cell.data, eta, cell.source)
         if forecast is None:
@@ -347,6 +386,8 @@ async def compute_route_weather(
         forecasts[i] = forecast
         if not include_uncertainty:
             ens_cell = None
+        elif snapshot is not None:
+            ens_cell = await snapshot.cell("ensemble", lat_r, lon_r, day_key_str)
         elif cache_only:
             ens_cell = await get_cached_ensemble_cell(lat_r, lon_r, day_key_str, days)
         else:
@@ -407,7 +448,7 @@ async def compute_route_weather(
                 elapsed_s=int(elapsed),
                 sample_index=i,
                 wind_coverage=wind.samples[i].coverage,
-                eta=eta.isoformat(),
+                eta=(eta.astimezone(local_departure.tzinfo) if local_departure.tzinfo else eta).isoformat(),
                 rain_mm=round(forecast["rain_mm"], 2),
                 precipitation_interval_s=interval,
                 rain_rate_mm_h=round(forecast["rain_mm"] * 3600 / interval, 3),

@@ -189,6 +189,23 @@ class WindArrow(CamelSchema):
     wind_effort: float = Field(default=0, ge=0, le=1)  # 0..1, sizes the arrow
 
 
+class DepartureCandidate(CamelSchema):
+    departure_time: str
+    arrival_time: str
+    available: bool
+    ride_score: float | None = None
+    ride_label: str
+
+
+class DepartureComparison(CamelSchema):
+    requested_time: str
+    window_start: str
+    window_end: str
+    candidates: list[DepartureCandidate]
+    recommended_time: str | None = None
+    explanation: str
+
+
 class RouteForecastOut(CamelSchema):
     """A finished forecast as the job endpoint and the WebSocket serve it.
 
@@ -211,6 +228,7 @@ class RouteForecastOut(CamelSchema):
     wind_arrows: list[WindArrow] = Field(default_factory=list)
     sections: list[RouteSection] = Field(default_factory=list)
     uncertainty_partial: bool = False
+    departure_comparison: DepartureComparison | None = None
 
 
 class ForecastMapDetailOut(CamelSchema):

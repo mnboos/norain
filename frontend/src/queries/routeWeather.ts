@@ -10,8 +10,24 @@ const api = new RouteWeatherApi();
 
 export const routeWeatherKeys = {
     all: ["routeWeather"] as const,
-    forecast: (start: PlacesSearchResult, destination: PlacesSearchResult | undefined, profile: string, departure: string) =>
-        [...routeWeatherKeys.all, "forecast", start.geometry.coordinates, destination?.geometry.coordinates, profile, departure] as const,
+    forecast: (
+        start: PlacesSearchResult,
+        destination: PlacesSearchResult | undefined,
+        profile: string,
+        departure: string,
+        before = 0,
+        after = 0,
+    ) =>
+        [
+            ...routeWeatherKeys.all,
+            "forecast",
+            start.geometry.coordinates,
+            destination?.geometry.coordinates,
+            profile,
+            departure,
+            before,
+            after,
+        ] as const,
 };
 
 export function useRouteWeather(
@@ -19,13 +35,24 @@ export function useRouteWeather(
     destination: MaybeRefOrGetter<PlacesSearchResult | undefined>,
     profile: MaybeRefOrGetter<string>,
     departure: MaybeRefOrGetter<string>,
+    before: MaybeRefOrGetter<number> = 0,
+    after: MaybeRefOrGetter<number> = 0,
+    enabled: MaybeRefOrGetter<boolean> = true,
 ) {
     const queryKey = computed(() =>
-        routeWeatherKeys.forecast(toValue(start), toValue(destination), toValue(profile), toValue(departure)),
+        routeWeatherKeys.forecast(
+            toValue(start),
+            toValue(destination),
+            toValue(profile),
+            toValue(departure),
+            toValue(before),
+            toValue(after),
+        ),
     );
     const query = useQuery({
         queryKey,
-        enabled: () => !!toValue(destination),
+        enabled: () => !!toValue(destination) && toValue(enabled),
+        refetchInterval: () => (toValue(before) || toValue(after) ? 60_000 : false),
         // Routing and every provider fetch happen on workers, so this resolves when the
         // job does rather than blocking a request for the whole fan-out.
         queryFn: async ({ client, queryKey: key, signal }) => {
@@ -40,6 +67,8 @@ export function useRouteWeather(
                 destLon: to[0] ?? 0,
                 profile: toValue(profile),
                 departureTime: toValue(departure),
+                departureFlexBeforeMinutes: toValue(before),
+                departureFlexAfterMinutes: toValue(after),
             });
             return await awaitForecastJob(job, reportForecastProgress(client, key), signal);
         },

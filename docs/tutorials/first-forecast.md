@@ -9,7 +9,7 @@ forecast, a map, and weather charts.
 Use a local checkout of this repository, Docker with Compose, Python 3.14 or
 newer with `uv`, and Node.js/npm compatible with the frontend lockfile. The shell
 commands below use Bash. Allow disk space for geographic downloads and enough
-memory for GraphHopper's 6 GB import and serving heap, Photon import's 4 GB heap, and the host system.
+memory for GraphHopper's 6 GB build and serving heap, Photon import's 4 GB heap, and the host system.
 Initial imports need internet access and can take substantially longer than later starts.
 
 ## 1. Configure the local services

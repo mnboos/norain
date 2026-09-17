@@ -94,6 +94,14 @@ export interface RouteWeatherApiCoreApiRouteWeatherRouteWeatherRequest {
      * 
      */
     intervalSeconds?: number;
+    /**
+     * 
+     */
+    departureFlexBeforeMinutes?: number;
+    /**
+     * 
+     */
+    departureFlexAfterMinutes?: number;
 }
 
 /**
@@ -382,6 +390,14 @@ export class RouteWeatherApi extends runtime.BaseAPI {
 
         if (requestParameters['intervalSeconds'] != null) {
             queryParameters['interval_seconds'] = requestParameters['intervalSeconds'];
+        }
+
+        if (requestParameters['departureFlexBeforeMinutes'] != null) {
+            queryParameters['departure_flex_before_minutes'] = requestParameters['departureFlexBeforeMinutes'];
+        }
+
+        if (requestParameters['departureFlexAfterMinutes'] != null) {
+            queryParameters['departure_flex_after_minutes'] = requestParameters['departureFlexAfterMinutes'];
         }
 
         const headerParameters: runtime.HTTPHeaders = {};

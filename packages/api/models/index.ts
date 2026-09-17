@@ -1,6 +1,8 @@
 // @ts-nocheck
 /* tslint:disable */
 /* eslint-disable */
+export * from './DepartureCandidate';
+export * from './DepartureComparison';
 export * from './EnsembleModelStatistics';
 export * from './EnsembleRange';
 export * from './ForecastJobOut';

@@ -10,6 +10,8 @@ FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS frontend-build
 
 WORKDIR /app
 
+ENV VITE_SENTRY_DSN_FRONTEND=$SENTRY_DSN_FRONTEND
+
 COPY frontend/package.json frontend/package-lock.json ./frontend/
 COPY packages/api/ ./packages/api/
 WORKDIR /app/frontend
@@ -40,8 +42,8 @@ FROM java-base AS graphhopper
 
 WORKDIR /graphhopper
 
-# A graph only loads with the jar that built it: bumping this means re-importing
-# (docs/how-to/build-routing-graph.md).
+# A graph only loads with the jar that built it: bumping this means rebuilding the graph
+# (empty the graph cache and restart the service).
 ADD https://github.com/graphhopper/graphhopper/releases/download/10.2/graphhopper-web-10.2.jar graphhopper.jar
 
 COPY docker/certs/* /usr/local/share/ca-certificates/

@@ -11,6 +11,7 @@ from django.db.models import F
 from django.tasks import task
 from loguru import logger
 
+from core import departures
 from core.claims import claim_cell, release_cell
 from core.entitlements import entitlements_for, entitlements_for_sync, strip_uncertainty
 from core.forecast_schemas import RouteWeatherOut
@@ -30,9 +31,9 @@ from core.thumbnails import compute_route_thumbnail
 from core.weather import (  # reuse existing functions
     ROUTING_ERRORS,
     SAMPLE_INTERVAL_DEFAULT_S,
+    WeatherSnapshot,
     build_geometry,
     compute_route_weather,
-    forecast_days_for,
 )
 from core.wind import valid_vertex_times
 
@@ -187,11 +188,18 @@ async def _refresh_station_observations_async(job_id: str) -> None:
     try:
         job = await ForecastJob.objects.filter(id=job_id).afirst()
         if job is not None and job.geometry:
-            fresh = await refresh_stations_for_ride(
-                job.geometry["sample_points"],
-                datetime.fromisoformat(job.params["departure_time"]),
-                datetime.now(tz=UTC),
-            )
+            now = datetime.now(tz=UTC)
+            times = departures.candidate_times(job.params)
+            points = job.geometry["sample_points"]
+            if departures.enabled(job.params):
+                from core.stations import STATION_HORIZON
+                points = [{**sp, "elapsed_s": 0} for sp in points if any(
+                    abs(t + timedelta(seconds=sp["elapsed_s"]) - now) < STATION_HORIZON for t in times
+                )]
+                departure = now
+            else:
+                departure = datetime.fromisoformat(job.params["departure_time"])
+            fresh = await refresh_stations_for_ride(points, departure, now)
             logger.debug(f"Station readings for job {job_id}: {fresh} fresh")
     finally:
         # Settled even when the task fails: the correction is optional, the forecast is not.
@@ -329,18 +337,15 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         return
 
     sample_points = geometry["sample_points"]
-    departure = datetime.fromisoformat(job.params["departure_time"])
-    day_key = departure.date().isoformat()
-    # Local date on purpose: the Open-Meteo window origin is local midnight, not UTC.
-    days = forecast_days_for(departure, sample_points, local_today())
+    windows = departures.fetch_windows(job.params, sample_points, local_today())
     cells = _cell_set(sample_points)
-    with_stations = await _wants_stations(job, departure, geometry.get("total_seconds"))
+    with_stations = await _wants_stations(job, geometry.get("total_seconds"))
 
     # Both counters and the status must be committed before the first task is enqueued: a
     # `cells` worker is fast enough to settle a cell while this function is still running,
     # and a settle against cells_total=0 would hand the job to assembly with no data.
     job.geometry = geometry
-    job.cells_total = len(cells) * 2 + (1 if with_stations else 0)  # deterministic + ensemble (+ stations)
+    job.cells_total = len(cells) * len(windows) * 2 + (1 if with_stations else 0)  # deterministic + ensemble (+ stations)
     job.cells_settled = 0
     job.cells_failed = 0
     job.status = ForecastJob.Status.FETCHING
@@ -358,23 +363,24 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         return
 
     settled = 0
-    for lat_r, lon_r in cells:
-        # Ensemble cells are fetched for every tier: `pop` and `rain_if_wet` are not gated,
-        # only the spread is, and the cells are shared between accounts anyway.
-        for kind, cached, cell_task in (
-            ("forecast", get_cached_forecast_cell, refresh_forecast_cell),
-            ("ensemble", get_cached_ensemble_cell, refresh_ensemble_cell),
-        ):
-            if await cached(lat_r, lon_r, day_key, days) is not None:
-                settled += 1
-                continue
-            # Enqueued even when the claim is held elsewhere. The holder is usually the
-            # pre-warm scan, whose task carries no job_id and so would never report back --
-            # counting the cell settled here would let assembly run before the data landed
-            # and store an empty forecast as a finished one. A duplicate task is cheap: by
-            # the time it runs the cell is normally warm and get_or_fetch_* just reads it.
-            claim_cell(kind, lat_r, lon_r, day_key, days)
-            await cell_task.aenqueue(lat_r, lon_r, day_key, days, str(job.id))
+    for day_key, days in windows:
+        for lat_r, lon_r in cells:
+            # Ensemble cells are fetched for every tier: `pop` and `rain_if_wet` are not gated,
+            # only the spread is, and the cells are shared between accounts anyway.
+            for kind, cached, cell_task in (
+                ("forecast", get_cached_forecast_cell, refresh_forecast_cell),
+                ("ensemble", get_cached_ensemble_cell, refresh_ensemble_cell),
+            ):
+                if await cached(lat_r, lon_r, day_key, days) is not None:
+                    settled += 1
+                    continue
+                # Enqueued even when the claim is held elsewhere. The holder is usually the
+                # pre-warm scan, whose task carries no job_id and so would never report back --
+                # counting the cell settled here would let assembly run before the data landed
+                # and store an empty forecast as a finished one. A duplicate task is cheap: by
+                # the time it runs the cell is normally warm and get_or_fetch_* just reads it.
+                claim_cell(kind, lat_r, lon_r, day_key, days)
+                await cell_task.aenqueue(lat_r, lon_r, day_key, days, str(job.id))
 
     if with_stations:
         # Counted in cells_total above, so assembly waits for the readings to land.
@@ -386,9 +392,9 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         await _settle_cell(str(job.id))
 
 
-async def _wants_stations(job: ForecastJob, departure: datetime, total_seconds: float | None) -> bool:
+async def _wants_stations(job: ForecastJob, total_seconds: float | None) -> bool:
     """Whether this job should spend Weather Underground calls: a key, a Pro owner, a ride near now."""
-    if not api_key() or not ride_in_window(departure, total_seconds, datetime.now(tz=UTC)):
+    if not api_key() or not any(ride_in_window(t, total_seconds, datetime.now(tz=UTC)) for t in departures.candidate_times(job.params)):
         return False
     return (await entitlements_for(job.owner)).station_correction
 
@@ -434,28 +440,59 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
         if geometry.get("sample_points") is None or geometry.get("polyline") is None:
             raise ValueError("Forecast computation requires stored route geometry")
         limits = await entitlements_for(job.owner)
-        forecast = await compute_route_weather(
-            start_lat=params.get("start_lat", 0.0),
-            start_lon=params.get("start_lon", 0.0),
-            dest_lat=params.get("dest_lat", 0.0),
-            dest_lon=params.get("dest_lon", 0.0),
-            profile=params.get("profile", "bike"),
-            departure_time=params["departure_time"],
-            sample_points=geometry.get("sample_points"),
-            polyline=geometry.get("polyline"),
-            total_seconds=geometry.get("total_seconds"),
-            total_distance_m=geometry.get("total_distance_m"),
-            vertex_times=geometry.get("vertex_times"),
-            interval_seconds=params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S),
+        weather_args = {
+            "start_lat": params.get("start_lat", 0.0),
+            "start_lon": params.get("start_lon", 0.0),
+            "dest_lat": params.get("dest_lat", 0.0),
+            "dest_lon": params.get("dest_lon", 0.0),
+            "profile": params.get("profile", "bike"),
+            "departure_time": params["departure_time"],
+            "sample_points": geometry.get("sample_points"),
+            "polyline": geometry.get("polyline"),
+            "total_seconds": geometry.get("total_seconds"),
+            "total_distance_m": geometry.get("total_distance_m"),
+            "vertex_times": geometry.get("vertex_times"),
+            "interval_seconds": params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S),
             # Every cell this job needs has already been fetched by a `cells` task. Reading
             # through the fetching accessors here would put provider calls back on the path
             # this whole design exists to keep them off.
-            cache_only=True,
+            "cache_only": True,
             # Computed, not stripped afterwards: a corrected number cannot be un-corrected.
             # The owner is part of the job key, so free and Pro never share a result, and the
             # tier is recorded in it below, so a tier change is never served a stale one.
-            station_correction_enabled=limits.station_correction,
-        )
+            "station_correction_enabled": limits.station_correction,
+        }
+
+        comparison = None
+        if departures.enabled(params):
+            times = departures.candidate_times(params)
+            windows = departures.fetch_windows(params, geometry["sample_points"], local_today())
+            weather_args["snapshot"] = WeatherSnapshot(max(days for _, days in windows))
+            # Give the baseline the same elapsed-time semantics as the alternatives.
+            weather_args["departure_time"] = departures.local_iso(departures.instant(params["departure_time"]))
+        forecast = await compute_route_weather(**weather_args)
+        if departures.enabled(params):
+            candidates = []
+            now = weather_args["snapshot"].now
+            for departure in times:
+                if (departure < now or not forecast_available_at(departure)
+                        or not forecast_available_at(departure + timedelta(seconds=geometry["total_seconds"]))):
+                    candidates.append({
+                        "departure_time": departures.local_iso(departure),
+                        "arrival_time": departures.local_iso(departure + timedelta(seconds=geometry["total_seconds"])),
+                        "complete": False, "samples": [],
+                    })
+                    continue
+                candidate = await compute_route_weather(**{
+                    **weather_args, "departure_time": departures.local_iso(departure),
+                    "strict_coverage": True, "include_segments": False,
+                })
+                candidates.append(departures.compact_candidate(departure, candidate, len(geometry["sample_points"])))
+            comparison = {
+                "requested_time": departures.local_iso(departures.instant(params["departure_time"])),
+                "window_start": departures.local_iso(times[0]), "window_end": departures.local_iso(times[-1]),
+                "candidates": candidates,
+            }
 
         # Stripped before storage, not on read: the stored result is what the WebSocket
         # pushes and what the job endpoint returns, so a free account must never have Pro
@@ -467,7 +504,7 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
             await _fail_forecast_stage(job, "Noch keine Wetterdaten verfügbar.")
             return
         await sync_to_async(_store_computed_weather)(
-            job, {"forecast": forecast.model_dump(mode="json"), "entitlements": limits.result_marker()}
+            job, {"forecast": forecast.model_dump(mode="json"), "entitlements": limits.result_marker(), "departure_inputs": comparison}
         )
     except Exception:
         await _fail_forecast_stage(job, "Wetterdaten konnten nicht berechnet werden.")
@@ -504,6 +541,8 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
             payload["route_id"] = params["route_id"]
         payload["departure_time"] = params["departure_time"]
         payload["entitlements"] = computed["entitlements"]
+        if computed.get("departure_inputs"):
+            payload["departure_inputs"] = computed["departure_inputs"]
 
         won = await _active_stage(job).aupdate(
             result=payload,
@@ -680,27 +719,30 @@ async def _scan_route_forecasts_async(route_id: str) -> dict:
         if not forecast_available_at(dep):
             continue
 
-        day_key = dep.date().isoformat()
-        days = forecast_days_for(dep, route.sample_points, today)
-
-        # No station readings here: they are only good for minutes and this scan runs
-        # hourly, so it would spend the Weather Underground budget on data nobody reads.
-        for lat_r, lon_r in cells:
-            for kind, cached, cell_task in (
-                ("forecast", get_cached_forecast_cell, refresh_forecast_cell),
-                ("ensemble", get_cached_ensemble_cell, refresh_ensemble_cell),
-            ):
-                if await cached(lat_r, lon_r, day_key, days) is not None:
-                    continue
-                # The claim is what stops the same cell being enqueued once per sample
-                # point, once per route sharing it, and again by a live request.
-                if not claim_cell(kind, lat_r, lon_r, day_key, days):
-                    continue
-                await cell_task.aenqueue(lat_r, lon_r, day_key, days)
-                if kind == "forecast":
-                    cell_count += 1
-                else:
-                    ensemble_count += 1
+        params = {
+            "departure_time": dep.isoformat(),
+            "departure_flex_before_minutes": route.departure_flex_before_minutes,
+            "departure_flex_after_minutes": route.departure_flex_after_minutes,
+        }
+        for day_key, days in departures.fetch_windows(params, route.sample_points, today):
+            # No station readings here: they are only good for minutes and this scan runs
+            # hourly, so it would spend the Weather Underground budget on data nobody reads.
+            for lat_r, lon_r in cells:
+                for kind, cached, cell_task in (
+                    ("forecast", get_cached_forecast_cell, refresh_forecast_cell),
+                    ("ensemble", get_cached_ensemble_cell, refresh_ensemble_cell),
+                ):
+                    if await cached(lat_r, lon_r, day_key, days) is not None:
+                        continue
+                    # The claim is what stops the same cell being enqueued once per sample
+                    # point, once per route sharing it, and again by a live request.
+                    if not claim_cell(kind, lat_r, lon_r, day_key, days):
+                        continue
+                    await cell_task.aenqueue(lat_r, lon_r, day_key, days)
+                    if kind == "forecast":
+                        cell_count += 1
+                    else:
+                        ensemble_count += 1
 
     # Deferred rather than simply enqueued last: several `cells` workers run in parallel, so
     # queue position no longer implies completion order. The "don't regress a good glyph to

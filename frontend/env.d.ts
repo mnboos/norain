@@ -3,6 +3,8 @@
 interface ImportMetaEnv {
     /** Django's port on localhost, from BACKEND_PORT in the root .env (see vite.config.ts). */
     readonly VITE_BACKEND_PORT: string;
+    readonly VITE_SENTRY_DSN_FRONTEND?: string;
+    readonly VITE_VUE_APP_VERSION?: string;
 }
 
 declare module "*.vue" {

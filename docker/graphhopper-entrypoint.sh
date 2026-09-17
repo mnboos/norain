@@ -1,25 +1,29 @@
 #!/bin/bash
 #
-# Three paths, chosen by whether /graph-cache already holds an imported graph:
-#   graph present                       -> serve it (no .pbf needed)
-#   graph absent, import allowed        -> download + import, then serve (or exit, IMPORT_ONLY)
-#   graph absent, import not allowed    -> fail; the graph is built elsewhere and copied in
-# Production sets GRAPHHOPPER_ALLOW_IMPORT=false: see docs/how-to/build-routing-graph.md.
+# Three paths, chosen by whether /graph-cache already holds a built graph:
+#   graph present                          -> serve it (no .pbf needed)
+#   graph missing, GRAPHHOPPER_BUILD_GRAPH=true (default)
+#                                          -> download OSM_DATA_URL, build the graph, then
+#                                             serve it (or exit, with GRAPHHOPPER_BUILD_ONLY=true)
+#   graph missing, GRAPHHOPPER_BUILD_GRAPH=false
+#                                          -> fail; for a graph built on another machine and
+#                                             copied in (docs/how-to/build-routing-graph.md)
+# To rebuild: stop the service, empty /graph-cache, start it again.
 set -euo pipefail
 
 GRAPH_DIR=/graph-cache
 GRAPHHOPPER_HEAP="${GRAPHHOPPER_HEAP:-6g}"
-GRAPHHOPPER_IMPORT_HEAP="${GRAPHHOPPER_IMPORT_HEAP:-$GRAPHHOPPER_HEAP}"
+GRAPHHOPPER_BUILD_HEAP="${GRAPHHOPPER_BUILD_HEAP:-$GRAPHHOPPER_HEAP}"
 GRAPHHOPPER_DATAACCESS="${GRAPHHOPPER_DATAACCESS:-RAM_STORE}"
 
 if [ ! -f "$GRAPH_DIR/properties" ]; then
-    if [ "${GRAPHHOPPER_ALLOW_IMPORT:-true}" = "false" ]; then
-        echo "No imported graph in $GRAPH_DIR and GRAPHHOPPER_ALLOW_IMPORT=false."
+    if [ "${GRAPHHOPPER_BUILD_GRAPH:-true}" = "false" ]; then
+        echo "No graph in $GRAPH_DIR and GRAPHHOPPER_BUILD_GRAPH=false, so none is built here."
         echo "Build the graph on another machine and copy it here: docs/how-to/build-routing-graph.md"
         exit 1
     fi
 
-    : "${OSM_DATA_URL:?OSM_DATA_URL must be set to import a graph}"
+    : "${OSM_DATA_URL:?OSM_DATA_URL must be set to build a graph}"
     OSM_DATA_FILE="${OSM_DATA_DIR}/$(basename "$OSM_DATA_URL")"
     echo "Requested OSM data: ${OSM_DATA_FILE}"
 
@@ -34,13 +38,14 @@ if [ ! -f "$GRAPH_DIR/properties" ]; then
             "$OSM_DATA_URL"
     fi
 
-    echo "Importing ${OSM_DATA_FILE} with a ${GRAPHHOPPER_IMPORT_HEAP} heap"
-    java -Xmx"${GRAPHHOPPER_IMPORT_HEAP}" \
+    # GraphHopper calls building the graph "import".
+    echo "Building the graph from ${OSM_DATA_FILE} with a ${GRAPHHOPPER_BUILD_HEAP} heap"
+    java -Xmx"${GRAPHHOPPER_BUILD_HEAP}" \
         -Ddw.graphhopper.datareader.file="${OSM_DATA_FILE}" \
         -jar graphhopper.jar import /config.yaml
 
-    if [ "${GRAPHHOPPER_IMPORT_ONLY:-false}" = "true" ]; then
-        echo "Import finished; $GRAPH_DIR is ready to copy."
+    if [ "${GRAPHHOPPER_BUILD_ONLY:-false}" = "true" ]; then
+        echo "Build finished; $GRAPH_DIR is ready."
         exit 0
     fi
 fi

@@ -74,6 +74,26 @@
                             "type": "integer"
                         },
                         "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "departure_flex_before_minutes",
+                        "schema": {
+                            "default": 0,
+                            "title": "Departure Flex Before Minutes",
+                            "type": "integer"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "departure_flex_after_minutes",
+                        "schema": {
+                            "default": 0,
+                            "title": "Departure Flex After Minutes",
+                            "type": "integer"
+                        },
+                        "required": false
                     }
                 ],
                 "responses": {
@@ -465,6 +485,38 @@
                             "type": "string"
                         },
                         "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "departure_flex_before_minutes",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "integer"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Departure Flex Before Minutes"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "departure_flex_after_minutes",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "integer"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Departure Flex After Minutes"
+                        },
+                        "required": false
                     }
                 ],
                 "responses": {
@@ -561,6 +613,92 @@
     },
     "components": {
         "schemas": {
+            "DepartureCandidate": {
+                "properties": {
+                    "departure_time": {
+                        "title": "Departure Time",
+                        "type": "string"
+                    },
+                    "arrival_time": {
+                        "title": "Arrival Time",
+                        "type": "string"
+                    },
+                    "available": {
+                        "title": "Available",
+                        "type": "boolean"
+                    },
+                    "ride_score": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Score"
+                    },
+                    "ride_label": {
+                        "title": "Ride Label",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "departure_time",
+                    "arrival_time",
+                    "available",
+                    "ride_label"
+                ],
+                "title": "DepartureCandidate",
+                "type": "object"
+            },
+            "DepartureComparison": {
+                "properties": {
+                    "requested_time": {
+                        "title": "Requested Time",
+                        "type": "string"
+                    },
+                    "window_start": {
+                        "title": "Window Start",
+                        "type": "string"
+                    },
+                    "window_end": {
+                        "title": "Window End",
+                        "type": "string"
+                    },
+                    "candidates": {
+                        "items": {
+                            "$ref": "#/components/schemas/DepartureCandidate"
+                        },
+                        "title": "Candidates",
+                        "type": "array"
+                    },
+                    "recommended_time": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Recommended Time"
+                    },
+                    "explanation": {
+                        "title": "Explanation",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "requested_time",
+                    "window_start",
+                    "window_end",
+                    "candidates",
+                    "explanation"
+                ],
+                "title": "DepartureComparison",
+                "type": "object"
+            },
             "EnsembleRange": {
                 "properties": {
                     "member_count": {
@@ -1057,6 +1195,16 @@
                         "default": false,
                         "title": "Uncertainty Partial",
                         "type": "boolean"
+                    },
+                    "departure_comparison": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/DepartureComparison"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
                     }
                 },
                 "required": [
@@ -1641,6 +1789,16 @@
                         "title": "Schedule Description",
                         "type": "string"
                     },
+                    "departure_flex_before_minutes": {
+                        "default": 0,
+                        "title": "Departure Flex Before Minutes",
+                        "type": "integer"
+                    },
+                    "departure_flex_after_minutes": {
+                        "default": 0,
+                        "title": "Departure Flex After Minutes",
+                        "type": "integer"
+                    },
                     "active": {
                         "title": "Active",
                         "type": "boolean"
@@ -1916,6 +2074,22 @@
                     "scheduleDescription": {
                         "title": "Scheduledescription",
                         "type": "string"
+                    },
+                    "departureFlexBeforeMinutes": {
+                        "default": 0,
+                        "maximum": 120,
+                        "minimum": 0,
+                        "multipleOf": 15,
+                        "title": "Departureflexbeforeminutes",
+                        "type": "integer"
+                    },
+                    "departureFlexAfterMinutes": {
+                        "default": 0,
+                        "maximum": 120,
+                        "minimum": 0,
+                        "multipleOf": 15,
+                        "title": "Departureflexafterminutes",
+                        "type": "integer"
                     },
                     "active": {
                         "default": true,

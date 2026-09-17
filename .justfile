@@ -97,16 +97,16 @@ thumbnail-refresh $route_id:
 routing-backfill *args:
     uv run python manage.py backfill_route_vertex_times {{ args }}
 
-[doc("Rebuild the local routing graph after editing graphhopper-config.yaml or data/graphhopper/models/ (ride speeds live there). Deletes data/graphhopper/cache and imports again; the OSM extract and elevation tiles are kept. Takes minutes.")]
+[doc("Rebuild the local routing graph after editing graphhopper-config.yaml or data/graphhopper/models/ (ride speeds live there). Deletes data/graphhopper/cache and builds it again; the OSM extract and elevation tiles are kept. Takes minutes.")]
 [group('geodata')]
-[confirm("This deletes the local routing graph and imports it again. Continue?")]
-routing-import:
+[confirm("This deletes the local routing graph and builds it again. Continue?")]
+routing-build:
     {{ container }} compose -f docker-compose.dev.yml stop graphhopper
     {{ container }} compose -f docker-compose.dev.yml run --rm --entrypoint bash graphhopper -c 'rm -rf /graph-cache/..?* /graph-cache/.[!.]* /graph-cache/*'
-    {{ container }} compose -f docker-compose.dev.yml run --rm -e GRAPHHOPPER_IMPORT_ONLY=true graphhopper
+    {{ container }} compose -f docker-compose.dev.yml run --rm -e GRAPHHOPPER_BUILD_ONLY=true graphhopper
     {{ container }} compose -f docker-compose.dev.yml up -d graphhopper
 
-[doc("Print each bike profile's average speed on a few reference routes. Run it after routing-import to see what a speed change did.")]
+[doc("Print each bike profile's average speed on a few reference routes. Run it after routing-build to see what a speed change did.")]
 [group('geodata')]
 routing-speeds *args:
     uv run --project backend python scripts/routing_speeds.py {{ args }}

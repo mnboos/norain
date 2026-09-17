@@ -71,6 +71,15 @@ rows and lock both accounts out.
 `email_verified` gates sign-in and `createsuperuser` cannot set it, so a fresh superuser
 reaches `/admin` but not the SPA until `python manage.py verify_user` runs.
 
+**The admin is public, so it has three guards.** It is served at `DJANGO_ADMIN_PATH`
+(production refuses a missing value or `admin`; Caddy routes the same variable). It is an
+`OTPAdminSite` (django-otp): password plus an authenticator code, and the first device comes
+from `manage.py add_totp_device`. And django-axes counts failed sign-ins — app and admin —
+**per IP**, not per account+IP: a pair lockout never trips when one address tries a new
+account each time. The IP comes only from `X-Real-IP`, which Caddy sets from `{client_ip}`
+(`core/auth/lockout.py`); daphne has no proxy headers and `X-Forwarded-For` differs between
+the two Caddyfiles. The lockout reply is JSON because the SPA's `request()` parses every body.
+
 **Migration ordering.** `core.User` is created in `0002`, not `0001`, because `0001` was
 already released. Django resolves `swappable_dependency(AUTH_USER_MODEL)` to
 `("core", "__first__")`, which would schedule `admin.0001_initial` before the user model
@@ -314,11 +323,12 @@ gets that far.
 ### Routing graph
 
 GraphHopper is bike-only (`bike`, `ebike`, `fast_ebike`, each with CH); `ROUTING_PROFILES`
-in `api/route_weather.py` must list the same names. Production never imports: the graph is
-built on another machine (`GRAPHHOPPER_IMPORT_ONLY=true`) and `graph-cache` is copied over
-(`docs/how-to/build-routing-graph.md`). GraphHopper refuses a graph built with a different
-config or jar, so any change to `graphhopper-config.yaml` or `data/graphhopper/models/` means
-re-importing and re-shipping.
+in `api/route_weather.py` must list the same names. The container builds the graph from
+`OSM_DATA_URL` whenever `graph-cache` is empty, production included (`GRAPHHOPPER_BUILD_GRAPH`,
+default `true`); to rebuild, empty the cache and restart. It can also be built on another
+machine (`GRAPHHOPPER_BUILD_ONLY=true`) and copied over (`docs/how-to/build-routing-graph.md`).
+GraphHopper calls the build "import". It refuses a graph built with a different config or jar,
+so any change to `graphhopper-config.yaml` or `data/graphhopper/models/` means rebuilding.
 
 **Ride speed lives in those model files**, nowhere in Python: every eta and every
 `rider_speed` comes from the travel times GraphHopper returns. Each profile's `speed` block
@@ -344,6 +354,8 @@ expired `ForecastJob` rows. A successful SPA sign-in (`login_view`) also enqueue
 - `SimpleTestCase` for pure functions (no DB)
 - `TestCase` for DB-dependent tests (CellCacheTests, EntitlementTests, StripeWebhookTests,
   ForecastJobTests), `TransactionTestCase` for the consumer (`ForecastJobConsumerTests`)
+- Sign in with `self.client.force_login(user)`, never `self.client.login()`: `login()` calls
+  `authenticate()` without a request, and django-axes' backend refuses that
 - Tests call the private `_..._async` twins directly, never the `@task()` wrappers — no
   test needs a live worker
 - Run: `cd backend && python manage.py test core`

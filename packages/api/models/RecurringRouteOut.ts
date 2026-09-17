@@ -79,6 +79,14 @@ export interface RecurringRouteOut {
     /**
      * 
      */
+    departureFlexBeforeMinutes?: number;
+    /**
+     * 
+     */
+    departureFlexAfterMinutes?: number;
+    /**
+     * 
+     */
     active: boolean;
     /**
      * 
@@ -156,6 +164,8 @@ export function RecurringRouteOutFromJSONTyped(json: any, ignoreDiscriminator: b
         'profile': json['profile'],
         'scheduleCron': json['schedule_cron'],
         'scheduleDescription': json['schedule_description'],
+        'departureFlexBeforeMinutes': json['departure_flex_before_minutes'] == null ? undefined : json['departure_flex_before_minutes'],
+        'departureFlexAfterMinutes': json['departure_flex_after_minutes'] == null ? undefined : json['departure_flex_after_minutes'],
         'active': json['active'],
         'totalSeconds': json['total_seconds'] === undefined ? undefined : json['total_seconds'] === null ? null : json['total_seconds'],
         'totalDistanceM': json['total_distance_m'] === undefined ? undefined : json['total_distance_m'] === null ? null : json['total_distance_m'],
@@ -191,6 +201,8 @@ export function RecurringRouteOutToJSONTyped(value?: RecurringRouteOut | null, i
         'profile': value['profile'],
         'schedule_cron': value['scheduleCron'],
         'schedule_description': value['scheduleDescription'],
+        'departure_flex_before_minutes': value['departureFlexBeforeMinutes'],
+        'departure_flex_after_minutes': value['departureFlexAfterMinutes'],
         'active': value['active'],
         'total_seconds': value['totalSeconds'],
         'total_distance_m': value['totalDistanceM'],

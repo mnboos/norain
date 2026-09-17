@@ -275,7 +275,7 @@ No authorization required
 
 ## coreApiRecurringRouteRouteForecast
 
-> ForecastJobOut coreApiRecurringRouteRouteForecast(routeId, date, time)
+> ForecastJobOut coreApiRecurringRouteRouteForecast(routeId, date, time, departureFlexBeforeMinutes, departureFlexAfterMinutes)
 
 Route Forecast
 
@@ -301,6 +301,10 @@ async function example() {
     date: date_example,
     // string
     time: time_example,
+    // number (optional)
+    departureFlexBeforeMinutes: 56,
+    // number (optional)
+    departureFlexAfterMinutes: 56,
   } satisfies CoreApiRecurringRouteRouteForecastRequest;
 
   try {
@@ -323,6 +327,8 @@ example().catch(console.error);
 | **routeId** | `string` |  | [Defaults to `undefined`] |
 | **date** | `string` |  | [Defaults to `undefined`] |
 | **time** | `string` |  | [Defaults to `undefined`] |
+| **departureFlexBeforeMinutes** | `number` |  | [Optional] [Defaults to `undefined`] |
+| **departureFlexAfterMinutes** | `number` |  | [Optional] [Defaults to `undefined`] |
 
 ### Return type
 

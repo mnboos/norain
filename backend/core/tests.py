@@ -938,11 +938,33 @@ class AuthApiTests(TestCase):
         response = self.post_json("/api/routes", {**data, "profile": "car"})
         self.assertEqual(response.status_code, 422)
 
+        # A half-typed time in the form once reached the API as "NaN 17 * * 4,5", was stored,
+        # and then broke the whole route list on every poll.
+        for cron in ("NaN 17 * * 4,5", "0 0 8 * * 1", "@daily", ""):
+            response = self.post_json("/api/routes", {**data, "scheduleCron": cron})
+            self.assertEqual(response.status_code, 422, cron)
+
         response = self.client.delete(f"/api/routes/{owned_route.id}")
         self.assertEqual(response.status_code, 403)
         response = self.client.delete(f"/api/routes/{other_route.id}", **self.csrf_headers())
         self.assertEqual(response.status_code, 404)
         self.assertTrue(RecurringRoute.objects.filter(id=other_route.id).exists())
+
+    def test_route_list_survives_a_stored_invalid_schedule(self):
+        User = get_user_model()
+        owner = User.objects.create_user(username="owner", email="owner@example.test", password=self.password)
+        good = self.route(owner)
+        bad = self.route(owner)
+        RecurringRoute.objects.filter(id=bad.id).update(schedule_cron="NaN 17 * * 4,5")
+
+        self.client.force_login(owner)
+        response = self.client.get("/api/routes")
+        self.assertEqual(response.status_code, 200)
+        by_id = {item["id"]: item for item in response.json()}
+        self.assertIsNotNone(by_id[str(good.id)]["next_departure"])
+        self.assertIsNone(by_id[str(bad.id)]["next_departure"])
+        self.assertIsNone(next_departure("NaN 17 * * 4,5"))
+        self.assertEqual(upcoming_departures("NaN 17 * * 4,5"), [])
 
     def test_password_reset_requires_a_valid_one_time_token(self):
         User = get_user_model()

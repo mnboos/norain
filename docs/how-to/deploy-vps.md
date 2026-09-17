@@ -11,10 +11,13 @@ HTTPS (443) in the VPS firewall. Install Docker Engine, the Docker Compose plugi
 Git, and Restic. Create a non-root `norain` deployment user in the `docker` group,
 then clone this repository at `/srv/norain`.
 
-GraphHopper does not import on the VPS: [build the routing graph on another
-machine](build-routing-graph.md) and copy it into `graphhopper/cache` before the first
-start. Serving Switzerland needs a heap of about 3 GB; DACH roughly 10–14 GB, or a
-3 GB heap with `GRAPHHOPPER_DATAACCESS=MMAP`. Prepare Photon with a manual import before first startup (see below), using
+GraphHopper builds its routing graph on the VPS the first time it starts with an empty
+`graphhopper/cache`, from `OSM_DATA_URL`. Building needs more memory than serving:
+Switzerland needs a build heap (`GRAPHHOPPER_BUILD_HEAP`) of about 6 GB and a serving heap
+of about 3 GB; DACH a 16–24 GB build heap and a 10–14 GB serving heap, or a 3 GB serving
+heap with `GRAPHHOPPER_DATAACCESS=MMAP`. `GRAPHHOPPER_MEM_LIMIT` must fit the build heap.
+If the VPS cannot hold the build, [build the graph on another
+machine](build-routing-graph.md) and copy it in. Prepare Photon with a manual import before first startup (see below), using
 `PHOTON_IMPORT_HEAP` (4 GB by default). The published images are built for
 both amd64 and arm64, so ARM hosts such as Oracle's Ampere A1 work. Do not expose
 GraphHopper, Photon, PostgreSQL, or Django directly.
@@ -64,6 +67,9 @@ sudo install -d -o norain -g norain -m 0750 \
   /srv/norain-data/photon
 ```
 
+`graphhopper/osm` keeps the downloaded OSM extract and elevation tiles, so a rebuild does
+not download them again; allow disk space for them next to the graph in `graphhopper/cache`.
+
 The supplied Compose file expects these internal endpoints:
 
 ```dotenv
@@ -76,6 +82,11 @@ and the desired map-data URLs. Use a transactional SMTP provider with a domain
 sender: sign-up is deliberately blocked until email verification is complete.
 The template derives `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, and
 `FRONTEND_URL` from `DOMAIN`.
+
+Set `DJANGO_ADMIN_PATH` to a random slug (for example `openssl rand -hex 8`). The Django
+admin is served at `https://YOUR_DOMAIN/<DJANGO_ADMIN_PATH>/`, not `/admin/`. The backend
+refuses to start without it, so on an existing server add it to `.env` **before**
+deploying a release that needs it.
 
 Create `/etc/norain/restic-password`, restrict it to root and the `norain` user,
 and set `RESTIC_REPOSITORY` plus `RESTIC_PASSWORD_FILE` in the server
@@ -158,11 +169,32 @@ to local `HEAD`, which CI must already have published) and then checks the healt
 endpoint. It reads `VPS_USER`, `VPS_HOST`, and `VPS_PUBLIC_HEALTH_URL` from the local
 `.env`, and your SSH key must be accepted by the deployment user.
 
-Photon and GraphHopper load the indexes prepared above.
-Follow both with
+Photon loads the index prepared above. GraphHopper loads its graph, or builds it first
+when `graphhopper/cache` is empty. The backend, `worker-forecasts` and `worker-default` wait
+until GraphHopper is healthy (and Caddy waits for the backend), so the first release waits
+for the whole build and the site stays down until it is done. Restarting only
+`graphhopper` to rebuild leaves the running backend up, but routing fails until the build
+ends. Follow both with
 `docker compose --env-file .env -f docker-compose.prod.yml logs -f graphhopper photon`.
 After they are ready, verify `https://YOUR_DOMAIN/healthz`, sign up, verify the
 email, create a route, and confirm the worker computes its geometry.
+
+### Admin access
+
+The admin is on the public internet, so it asks for a code from an authenticator app as
+well as the password, and ten failed sign-ins from one address lock that address out for
+30 minutes (this applies to the app's sign-in too). Create the admin account and its
+authenticator device in the backend container:
+
+```bash
+docker compose --env-file .env -f docker-compose.prod.yml exec backend python manage.py createsuperuser
+docker compose --env-file .env -f docker-compose.prod.yml exec backend python manage.py add_totp_device --identifier YOU
+```
+
+Enter the printed key in an authenticator app and store the backup codes somewhere safe;
+they are shown once. Then sign in at `https://YOUR_DOMAIN/<DJANGO_ADMIN_PATH>/`: submit
+the username and password first, and the form then lists your devices. Pick `default` and
+enter the code from the app (or `backup` and a backup code).
 
 ### Build images on the VPS
 
@@ -192,8 +224,7 @@ docker compose up -d --pull never --remove-orphans
 ```
 
 `deploy/release.sh` pulls published images; use `just deploy-local` for local
-builds. Building the GraphHopper image still requires a separately prepared routing
-graph as described above.
+builds.
 
 To roll back a published-image deployment, run the release command with the prior known-good immutable SHA. The
 configured bind-mount directories persist PostgreSQL, Caddy certificates, and

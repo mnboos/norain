@@ -7,6 +7,7 @@ import {
     symSharpPedalBike,
     symSharpSchedule,
 } from "@quasar/extras/material-symbols-sharp";
+import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import type { PlacesSearchResult, RecurringRouteIn } from "@norain/api/models";
@@ -28,6 +29,8 @@ const dest = ref<PlacesSearchResult | null>(null);
 const profile = ref("bike");
 const days = ref<number[]>([1, 2, 3, 4, 5]);
 const time = ref("08:00");
+const flexBefore = ref(0);
+const flexAfter = ref(0);
 
 const filterStart = ref("");
 const filterDest = ref("");
@@ -72,17 +75,24 @@ function toggleDay(day: number) {
 
 const dayLabels = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
+// The input uses fill-mask, so a half-typed time is still five characters ("17:__").
+// Only a complete HH:MM counts; anything else would reach the cron string as NaN.
+const parsedTime = computed(() => {
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time.value);
+    return match ? { h: Number(match[1]), m: Number(match[2]) } : null;
+});
+
 const scheduleDescription = computed(() => {
-    if (!days.value.length || !time.value) return "";
+    if (!days.value.length || !parsedTime.value) return "";
     const dayNames = days.value.map(d => dayLabels[d - 1] ?? "");
-    const [h, m] = time.value.split(":").map(Number);
-    return `${dayNames.join(", ")} um ${String(h).padStart(2, "0")}:${String(m ?? 0).padStart(2, "0")}`;
+    const { h, m } = parsedTime.value;
+    return `${dayNames.join(", ")} um ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 });
 
 const scheduleCron = computed(() => {
-    if (!days.value.length || !time.value) return "";
-    const [h, m] = time.value.split(":").map(Number);
-    return `${m ?? 0} ${h} * * ${days.value.join(",")}`;
+    if (!days.value.length || !parsedTime.value) return "";
+    const { h, m } = parsedTime.value;
+    return `${m} ${h} * * ${days.value.join(",")}`;
 });
 
 const profileOptions = [
@@ -92,7 +102,7 @@ const profileOptions = [
 ];
 
 const isValid = computed(
-    () => !!name.value.length && !!start.value && !!dest.value && !!days.value.length && !!time.value.length,
+    () => !!name.value.length && !!start.value && !!dest.value && !!days.value.length && !!parsedTime.value,
 );
 
 function onSave() {
@@ -108,6 +118,8 @@ function onSave() {
         destName: dest.value.properties.name,
         profile: profile.value,
         scheduleCron: scheduleCron.value,
+        departureFlexBeforeMinutes: flexBefore.value,
+        departureFlexAfterMinutes: flexAfter.value,
         scheduleDescription: scheduleDescription.value,
     });
     emit("update:modelValue", false);
@@ -207,7 +219,16 @@ function onClose() {
                     </q-btn-group>
                 </div>
 
-                <q-input v-model="time" label="Abfahrtszeit" outlined dense mask="##:##" fill-mask>
+                <q-input
+                    v-model="time"
+                    label="Abfahrtszeit"
+                    outlined
+                    dense
+                    mask="##:##"
+                    fill-mask
+                    no-error-icon
+                    :rules="[() => !!parsedTime || 'Uhrzeit als HH:MM']"
+                >
                     <template #append>
                         <q-icon :name="symSharpSchedule" class="cursor-pointer">
                             <q-popup-proxy cover transition-show="scale" transition-hide="scale">
@@ -216,6 +237,8 @@ function onClose() {
                         </q-icon>
                     </template>
                 </q-input>
+
+                <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
 
                 <div v-if="scheduleDescription" class="text-body2 text-muted">
                     {{ scheduleDescription }}

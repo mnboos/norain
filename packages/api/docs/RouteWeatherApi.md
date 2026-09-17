@@ -288,7 +288,7 @@ No authorization required
 
 ## coreApiRouteWeatherRouteWeather
 
-> ForecastJobOut coreApiRouteWeatherRouteWeather(startLat, startLon, destLat, destLon, profile, departureTime, intervalSeconds)
+> ForecastJobOut coreApiRouteWeatherRouteWeather(startLat, startLon, destLat, destLon, profile, departureTime, intervalSeconds, departureFlexBeforeMinutes, departureFlexAfterMinutes)
 
 Route Weather
 
@@ -322,6 +322,10 @@ async function example() {
     departureTime: departureTime_example,
     // number (optional)
     intervalSeconds: 56,
+    // number (optional)
+    departureFlexBeforeMinutes: 56,
+    // number (optional)
+    departureFlexAfterMinutes: 56,
   } satisfies CoreApiRouteWeatherRouteWeatherRequest;
 
   try {
@@ -348,6 +352,8 @@ example().catch(console.error);
 | **profile** | `string` |  | [Defaults to `undefined`] |
 | **departureTime** | `string` |  | [Defaults to `undefined`] |
 | **intervalSeconds** | `number` |  | [Optional] [Defaults to `300`] |
+| **departureFlexBeforeMinutes** | `number` |  | [Optional] [Defaults to `0`] |
+| **departureFlexAfterMinutes** | `number` |  | [Optional] [Defaults to `0`] |
 
 ### Return type
 

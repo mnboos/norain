@@ -21,9 +21,12 @@
         file_server
     }
 
-    @backend path /healthz /api/* /admin/* /accounts/* /ws/*
+    @backend path /healthz /api/* /{$DJANGO_ADMIN_PATH}/* /accounts/* /ws/*
     handle @backend {
         reverse_proxy backend:8000 {
+            # The only client address Django trusts (login lockout). {client_ip} honours
+            # trusted_proxies, and header_up overwrites whatever the client sent.
+            header_up X-Real-IP {client_ip}
             transport http {
                 read_timeout 120s
                 write_timeout 120s

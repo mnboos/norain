@@ -14,10 +14,10 @@ from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut
 from ..models import ForecastJob, RecurringRoute, route_point
 from ..ride_quality import worst_frost_level, worst_rain_level, worst_ride_score
-from ..schedule import forecast_available_at, next_departure
+from ..schedule import check_schedule_cron, forecast_available_at, next_departure
 from ..schemas import CamelSchema
 from ..tasks import refresh_route_geometry, start_forecast_job
-from .route_weather import check_routing_profile, job_out
+from .route_weather import check_routing_profile, flexibility_params, job_out
 
 router = Router(auth=session_auth, tags=["Recurring routes"])
 
@@ -34,9 +34,12 @@ class RecurringRouteIn(CamelSchema):
     profile: str = "bike"
     schedule_cron: str
     schedule_description: str
+    departure_flex_before_minutes: int = Field(default=0, ge=0, le=120, multiple_of=15)
+    departure_flex_after_minutes: int = Field(default=0, ge=0, le=120, multiple_of=15)
     active: bool = True
 
     _profile = field_validator("profile")(check_routing_profile)
+    _schedule_cron = field_validator("schedule_cron")(check_schedule_cron)
 
 
 class RouteThumbnail(CamelSchema):
@@ -98,6 +101,8 @@ class RecurringRouteOut(CamelSchema):
     profile: str
     schedule_cron: str
     schedule_description: str
+    departure_flex_before_minutes: int = 0
+    departure_flex_after_minutes: int = 0
     active: bool
     total_seconds: int | None = None
     total_distance_m: float | None = None
@@ -142,6 +147,8 @@ def _route_to_out(route: RecurringRoute) -> RecurringRouteOut:
         profile=route.profile,
         schedule_cron=route.schedule_cron,
         schedule_description=route.schedule_description,
+        departure_flex_before_minutes=route.departure_flex_before_minutes,
+        departure_flex_after_minutes=route.departure_flex_after_minutes,
         active=route.active,
         total_seconds=route.total_seconds,
         total_distance_m=route.total_distance_m,
@@ -275,6 +282,8 @@ async def route_forecast(
     route_id: UUID,
     date: str,  # YYYY-MM-DD
     time: str,  # HH:MM
+    departure_flex_before_minutes: int | None = None,
+    departure_flex_after_minutes: int | None = None,
 ):
     """Start (or join) the forecast for one departure of a saved route.
 
@@ -291,7 +300,11 @@ async def route_forecast(
     job = await start_forecast_job(
         ForecastJob.Kind.ROUTE,
         await _current_user(request),
-        {"route_id": str(route.id), "departure_time": f"{date}T{time}"},
+        {"route_id": str(route.id), "departure_time": f"{date}T{time}", **flexibility_params(
+            f"{date}T{time}",
+            route.departure_flex_before_minutes if departure_flex_before_minutes is None else departure_flex_before_minutes,
+            route.departure_flex_after_minutes if departure_flex_after_minutes is None else departure_flex_after_minutes,
+        )},
     )
     status = 200 if job.status == ForecastJob.Status.DONE else 202
     return status, job_out(job)

@@ -5,6 +5,7 @@ from django.http import HttpRequest
 from ninja import Router
 from ninja.errors import HttpError
 
+from ..departures import candidate_times, check_flexibility
 from ..forecast_schemas import ForecastJobOut, ForecastMapDetailOut, ForecastUncertainty
 from ..jobs import job_snapshot, line_at_detail, wind_arrows_at_detail
 from ..models import ForecastJob
@@ -27,6 +28,19 @@ def job_out(job) -> ForecastJobOut:
     return ForecastJobOut(**job_snapshot(job))
 
 
+def flexibility_params(departure: str, before: int, after: int) -> dict:
+    try:
+        check_flexibility(before)
+        check_flexibility(after)
+        if not before and not after:
+            return {}
+        params = {"departure_flex_before_minutes": before, "departure_flex_after_minutes": after}
+        candidate_times({"departure_time": departure, **params})
+        return params
+    except ValueError as exc:
+        raise HttpError(422, str(exc)) from None
+
+
 @router.get("/route_weather", response={200: ForecastJobOut, 202: ForecastJobOut})
 async def route_weather(
     request: HttpRequest,
@@ -37,6 +51,8 @@ async def route_weather(
     profile: str,
     departure_time: str,
     interval_seconds: int = 300,
+    departure_flex_before_minutes: int = 0,
+    departure_flex_after_minutes: int = 0,
 ):
     """Start (or join) the forecast for an ad-hoc route.
 
@@ -60,6 +76,7 @@ async def route_weather(
             "profile": profile,
             "departure_time": departure_time,
             "interval_seconds": interval_seconds,
+            **flexibility_params(departure_time, departure_flex_before_minutes, departure_flex_after_minutes),
         },
     )
     status = 200 if job.status == ForecastJob.Status.DONE else 202

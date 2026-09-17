@@ -14,6 +14,13 @@
  */
 
 import { mapValues } from '../runtime';
+import type { DepartureComparison } from './DepartureComparison';
+import {
+    DepartureComparisonFromJSON,
+    DepartureComparisonFromJSONTyped,
+    DepartureComparisonToJSON,
+    DepartureComparisonToJSONTyped,
+} from './DepartureComparison';
 import type { ForecastSampleOut } from './ForecastSampleOut';
 import {
     ForecastSampleOutFromJSON,
@@ -103,6 +110,10 @@ export interface RouteForecastOut {
      * 
      */
     uncertaintyPartial?: boolean;
+    /**
+     * 
+     */
+    departureComparison?: DepartureComparison | null;
 }
 
 /**
@@ -142,6 +153,7 @@ export function RouteForecastOutFromJSONTyped(json: any, ignoreDiscriminator: bo
         'windArrows': json['wind_arrows'] == null ? undefined : ((json['wind_arrows'] as Array<any>).map(WindArrowFromJSON)),
         'sections': json['sections'] == null ? undefined : ((json['sections'] as Array<any>).map(RouteSectionFromJSON)),
         'uncertaintyPartial': json['uncertainty_partial'] == null ? undefined : json['uncertainty_partial'],
+        'departureComparison': json['departure_comparison'] === undefined ? undefined : json['departure_comparison'] === null ? null : DepartureComparisonFromJSON(json['departure_comparison']),
     };
 }
 
@@ -168,6 +180,7 @@ export function RouteForecastOutToJSONTyped(value?: RouteForecastOut | null, ign
         'wind_arrows': value['windArrows'] == null ? undefined : ((value['windArrows'] as Array<any>).map(WindArrowToJSON)),
         'sections': value['sections'] == null ? undefined : ((value['sections'] as Array<any>).map(RouteSectionToJSON)),
         'uncertainty_partial': value['uncertaintyPartial'],
+        'departure_comparison': DepartureComparisonToJSON(value['departureComparison']),
     };
 }
 

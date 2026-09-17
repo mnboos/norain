@@ -2,10 +2,12 @@
 import { computed, ref, toRefs, watch } from "vue";
 import { symSharpCloudOff } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
+import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
+import DepartureComparison from "@/components/DepartureComparison.vue";
 import WeatherSummaryCard from "@/components/WeatherSummaryCard.vue";
 import WeatherCharts from "@/components/WeatherCharts.vue";
 import NiceMap from "@/components/NiceMap.vue";
-import { useRecurringRoute, useRecurringRouteForecast } from "@/queries/recurringRoutes";
+import { useRecurringRoute, useRecurringRouteForecast, useUpdateRecurringRoute } from "@/queries/recurringRoutes";
 
 const PROFILE_LABELS: Record<string, string> = {
     bike: "Velo",
@@ -28,17 +30,66 @@ const profileLabel = computed(() => PROFILE_LABELS[route.value.profile] ?? route
 // Polls until the geometry is built. The page reads the same query key, so `route` updates with it.
 useRecurringRoute(routeId, () => (hasGeometry.value ? false : 3000));
 
-const {
-    data: forecast,
-    isFetching: forecastLoading,
-    error: forecastError,
-    progress: forecastProgress,
-} = useRecurringRouteForecast(
+const flexBefore = ref(route.value.departureFlexBeforeMinutes ?? 0);
+const flexAfter = ref(route.value.departureFlexAfterMinutes ?? 0);
+const selectedDeparture = ref<string | null>(null);
+watch(
+    () => [route.value.id, route.value.departureFlexBeforeMinutes, route.value.departureFlexAfterMinutes],
+    () => {
+        flexBefore.value = route.value.departureFlexBeforeMinutes ?? 0;
+        flexAfter.value = route.value.departureFlexAfterMinutes ?? 0;
+    },
+);
+watch(
+    [routeId, departureDate, departureTime, flexBefore, flexAfter],
+    () => {
+        selectedDeparture.value = null;
+    },
+    { flush: "sync" },
+);
+const comparisonQuery = useRecurringRouteForecast(
     routeId,
     departureDate,
     departureTime,
     () => hasGeometry.value && !!departureDate.value && !!departureTime.value,
+    flexBefore,
+    flexAfter,
 );
+const selectedQuery = useRecurringRouteForecast(
+    routeId,
+    () => selectedDeparture.value?.slice(0, 10) ?? departureDate.value,
+    () => selectedDeparture.value?.slice(11) ?? departureTime.value,
+    () => hasGeometry.value && selectedDeparture.value !== null,
+    0,
+    0,
+);
+const forecast = computed(() => (selectedDeparture.value ? selectedQuery.data.value : comparisonQuery.data.value));
+const forecastLoading = computed(() =>
+    selectedDeparture.value ? selectedQuery.isFetching.value : comparisonQuery.isFetching.value,
+);
+const forecastError = computed(() =>
+    selectedDeparture.value ? selectedQuery.error.value : comparisonQuery.error.value,
+);
+const forecastProgress = computed(() =>
+    selectedDeparture.value ? selectedQuery.progress.value : comparisonQuery.progress.value,
+);
+const departureComparison = computed(() => comparisonQuery.data.value?.departureComparison);
+const saveWindow = useUpdateRecurringRoute();
+const windowChanged = computed(
+    () =>
+        flexBefore.value !== (route.value.departureFlexBeforeMinutes ?? 0) ||
+        flexAfter.value !== (route.value.departureFlexAfterMinutes ?? 0),
+);
+function saveFlexibility() {
+    saveWindow.mutate({
+        id: route.value.id,
+        data: {
+            ...route.value,
+            departureFlexBeforeMinutes: flexBefore.value,
+            departureFlexAfterMinutes: flexAfter.value,
+        },
+    });
+}
 
 // The forecast is assembled from one grid cell per ~1 km² of route, fetched by background
 // workers. Showing how many have landed turns an indefinite wait into a determinate one.
@@ -74,6 +125,25 @@ watch(forecast, () => {
                     <q-badge outline color="primary" :label="profileLabel" />
                 </q-item-section>
             </q-item>
+        </q-card-section>
+        <q-card-section>
+            <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
+            <q-btn
+                v-if="windowChanged"
+                flat
+                no-caps
+                label="Für diese Route speichern"
+                :loading="saveWindow.isPending.value"
+                @click="saveFlexibility"
+            />
+            <div v-if="saveWindow.isError.value" role="alert">Zeitfenster konnte nicht gespeichert werden.</div>
+            <DepartureComparison
+                v-if="departureComparison"
+                :comparison="departureComparison"
+                :selected-time="selectedDeparture"
+                @select="selectedDeparture = $event"
+                @reset="selectedDeparture = null"
+            />
         </q-card-section>
         <q-separator />
 

@@ -6,18 +6,20 @@
 
 Name | Type
 ------------ | -------------
-`active` | boolean
-`description` | string
-`destLat` | number
-`destLon` | number
-`destName` | string
 `name` | string
-`profile` | string
-`scheduleCron` | string
-`scheduleDescription` | string
+`description` | string
 `startLat` | number
 `startLon` | number
 `startName` | string
+`destLat` | number
+`destLon` | number
+`destName` | string
+`profile` | string
+`scheduleCron` | string
+`scheduleDescription` | string
+`departureFlexBeforeMinutes` | number
+`departureFlexAfterMinutes` | number
+`active` | boolean
 
 ## Example
 
@@ -26,18 +28,20 @@ import type { RecurringRouteIn } from ''
 
 // TODO: Update the object below with actual values
 const example = {
-  "active": null,
-  "description": null,
-  "destLat": null,
-  "destLon": null,
-  "destName": null,
   "name": null,
-  "profile": null,
-  "scheduleCron": null,
-  "scheduleDescription": null,
+  "description": null,
   "startLat": null,
   "startLon": null,
   "startName": null,
+  "destLat": null,
+  "destLon": null,
+  "destName": null,
+  "profile": null,
+  "scheduleCron": null,
+  "scheduleDescription": null,
+  "departureFlexBeforeMinutes": null,
+  "departureFlexAfterMinutes": null,
+  "active": null,
 } satisfies RecurringRouteIn
 
 console.log(example)

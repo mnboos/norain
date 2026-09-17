@@ -55,14 +55,15 @@ services:
       - OSM_DATA_URL=${OSM_DATA_URL:-https://download.geofabrik.de/europe/switzerland-latest.osm.pbf}
       # Serving JVM heap (maximum). With RAM_STORE it must hold the whole graph.
       - GRAPHHOPPER_HEAP=${GRAPHHOPPER_HEAP:-6g}
-      # Import heap, when this container imports; defaults to GRAPHHOPPER_HEAP.
-      - GRAPHHOPPER_IMPORT_HEAP=${GRAPHHOPPER_IMPORT_HEAP:-}
+      # Heap for building the graph, when this container builds it; defaults to GRAPHHOPPER_HEAP.
+      - GRAPHHOPPER_BUILD_HEAP=${GRAPHHOPPER_BUILD_HEAP:-}
       # RAM_STORE (graph in heap) or MMAP (graph paged in from disk, small heap).
       - GRAPHHOPPER_DATAACCESS=${GRAPHHOPPER_DATAACCESS:-RAM_STORE}
-      # false: refuse to import when /graph-cache is empty (production). See the entrypoint.
-      - GRAPHHOPPER_ALLOW_IMPORT=${GRAPHHOPPER_ALLOW_IMPORT:-true}
-      # true: import and exit, for building a graph to copy to another machine.
-      - GRAPHHOPPER_IMPORT_ONLY=${GRAPHHOPPER_IMPORT_ONLY:-false}
+      # true: build the graph from OSM_DATA_URL when /graph-cache is empty. false: fail instead,
+      # for a graph built elsewhere and copied in. See the entrypoint.
+      - GRAPHHOPPER_BUILD_GRAPH=${GRAPHHOPPER_BUILD_GRAPH:-true}
+      # true: build the graph and exit, e.g. to copy it to another machine.
+      - GRAPHHOPPER_BUILD_ONLY=${GRAPHHOPPER_BUILD_ONLY:-false}
     restart: unless-stopped
 
   photon:

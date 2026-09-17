@@ -15,6 +15,7 @@ from channels.layers import get_channel_layer
 from loguru import logger
 from redis.exceptions import RedisError
 
+from .departures import candidate_times, comparison_view
 from .entitlements import entitlements_for
 from .geo import simplify_line
 from .grid import MAX_CELL_AGE
@@ -214,7 +215,9 @@ def forecast_view(job: ForecastJob) -> dict:
     the route page would each compute their own job for the same forecast.
     """
     result = job.result or {}
-    view = {key: value for key, value in result.items() if key not in ("figures", "wind_segments", "entitlements")}
+    view = {key: value for key, value in result.items() if key not in ("figures", "wind_segments", "entitlements", "departure_inputs")}
+    if result.get("departure_inputs"):
+        view["departure_comparison"] = comparison_view(result["departure_inputs"])
     view["line"] = line_at_detail(result, "coarse")
     view["wind_arrows"] = wind_arrows_at_detail(result, "coarse")
     samples = result.get("samples") or []
@@ -277,7 +280,7 @@ async def _uses_stations(job: ForecastJob, owner, now: datetime) -> bool:
     if not api_key() or not departure:
         return False
     total_seconds = (job.geometry or {}).get("total_seconds")
-    if not ride_in_window(datetime.fromisoformat(departure), total_seconds, now):
+    if not any(ride_in_window(t, total_seconds, now) for t in candidate_times(job.params)):
         return False
     return (await entitlements_for(owner)).station_correction
 

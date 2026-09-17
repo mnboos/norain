@@ -63,6 +63,14 @@ export interface RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest {
      * 
      */
     time: string;
+    /**
+     * 
+     */
+    departureFlexBeforeMinutes?: number | null;
+    /**
+     * 
+     */
+    departureFlexAfterMinutes?: number | null;
 }
 
 export interface RecurringRoutesApiCoreApiRecurringRouteUpdateRouteRequest {
@@ -295,6 +303,14 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
 
         if (requestParameters['time'] != null) {
             queryParameters['time'] = requestParameters['time'];
+        }
+
+        if (requestParameters['departureFlexBeforeMinutes'] != null) {
+            queryParameters['departure_flex_before_minutes'] = requestParameters['departureFlexBeforeMinutes'];
+        }
+
+        if (requestParameters['departureFlexAfterMinutes'] != null) {
+            queryParameters['departure_flex_after_minutes'] = requestParameters['departureFlexAfterMinutes'];
         }
 
         const headerParameters: runtime.HTTPHeaders = {};

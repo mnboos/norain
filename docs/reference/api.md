@@ -21,6 +21,43 @@ Use local ISO departure times without an offset, such as `YYYY-MM-DDT08:00:00`,
 with a date in the current forecast window. See [time handling](../explanation/forecasts.md)
 for current restrictions.
 
+Departure comparisons return ISO times with an explicit Europe/Zurich UTC offset.
+Preserve that offset when requesting the selected forecast, including the `time`
+parameter on saved-route forecasts, so repeated daylight-saving hours stay distinct.
+
+## Flexible departure times
+
+Both forecast endpoints accept `departure_flex_before_minutes` and
+`departure_flex_after_minutes`: integers from 0 to 120 in steps of 15. For example,
+`departure_time=2026-09-17T08:00&departure_flex_before_minutes=30&departure_flex_after_minutes=60`
+compares departures from 07:30 to 09:00, including 08:00. Invalid windows return 422.
+One-off requests default to zero. Saved-route forecasts use the route's stored
+settings when omitted; explicit zeros request only the exact departure.
+
+Recurring-route create/update bodies and responses contain the same two fields,
+defaulting to zero for existing routes. They configure flexibility without changing
+the cron schedule. Clients may override them for an individual forecast.
+
+When flexibility is enabled, the finished job result includes `departure_comparison`:
+
+- `requested_time`, `window_start`, and `window_end` describe the original window.
+- `candidates` contains departure and arrival times, `available`, `ride_score`
+  (0 is best; null when unavailable), and `ride_label` for each evaluated departure.
+- `recommended_time` is the selected departure or null when none can be compared;
+  `explanation` describes the recommendation in German.
+
+The comparison evaluates weather along the whole ride, combining typical and worst
+conditions. Similar results favour the requested departure. Missing weather, past
+departures, and rides outside provider coverage are not ranked. Rankings are derived
+when serving the job; HTTP polling and WebSocket results share the same shape.
+
+The ordinary forecast remains for the requested departure. To apply a candidate,
+request its exact time with both flexibility values set to zero and keep the original
+comparison in the UI. Route-list thumbnails and recurring schedules continue to use
+the requested time. Suggestions are available to every tier; existing station and
+uncertainty entitlements still apply. Candidate spacing is 15 minutes, even when the
+underlying weather data is hourly.
+
 ## Endpoints
 
 | Method | Path | Purpose |

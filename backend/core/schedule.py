@@ -30,6 +30,17 @@ def _local(after: datetime | None) -> datetime:
     return after.astimezone(LOCAL_TZ) if after.tzinfo is not None else after.replace(tzinfo=LOCAL_TZ)
 
 
+def check_schedule_cron(cron_expr: str) -> str:
+    """Accept only a plain 5-field cron expression that croniter can parse.
+
+    croniter also takes a seconds field and ``@daily``-style aliases; the form never
+    sends those, so refusing them keeps every stored schedule in one shape.
+    """
+    if len(cron_expr.split()) != 5 or not croniter.is_valid(cron_expr):
+        raise ValueError(f"invalid cron expression {cron_expr!r}; expected 5 fields")
+    return cron_expr
+
+
 def next_departure(cron_expr: str, after: datetime | None = None) -> datetime | None:
     """Return the next datetime matching the cron expression after *after* (defaults to now).
 
@@ -38,9 +49,11 @@ def next_departure(cron_expr: str, after: datetime | None = None) -> datetime | 
     try:
         it = croniter(cron_expr, _local(after))
         return it.get_next(datetime)
-    except:
-        logger.exception("next_departure: failed to parse cron expression {!r}", cron_expr)
-        raise
+    except (ValueError, KeyError) as exc:
+        # A warning, not a traceback: the route list is polled every 60 s and would log
+        # the same stack for one bad row each time.
+        logger.warning("next_departure: invalid cron expression {!r}: {}", cron_expr, exc)
+        return None
 
 
 def upcoming_departures(
@@ -55,9 +68,9 @@ def upcoming_departures(
     try:
         it = croniter(cron_expr, _local(after))
         return [it.get_next(datetime) for _ in range(count)]
-    except:
-        logger.exception("upcoming_departures: failed to parse cron expression {!r}", cron_expr)
-        raise
+    except (ValueError, KeyError) as exc:
+        logger.warning("upcoming_departures: invalid cron expression {!r}: {}", cron_expr, exc)
+        return []
 
 
 def forecast_available_at(dt: datetime) -> bool:

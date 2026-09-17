@@ -12,7 +12,10 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 import sys
+from datetime import timedelta
 from pathlib import Path
+
+import corsheaders.defaults
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -34,11 +37,22 @@ AUTH_USER_MODEL = "core.User"
 
 ALLOWED_HOSTS = []
 
-AUTHENTICATION_BACKENDS = ["core.auth.backend.IdentityBackend"]
+# Axes must come first: it refuses a locked-out client before any password is checked.
+AUTHENTICATION_BACKENDS = ["axes.backends.AxesStandaloneBackend", "core.auth.backend.IdentityBackend"]
+
+# The admin is reachable from the internet, so it lives at a path set per deployment
+# (production requires one) instead of the /admin/ every bot tries.
+ADMIN_PATH = os.environ.get("DJANGO_ADMIN_PATH", "admin").strip("/")
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS: list[str] = []
 CSRF_TRUSTED_ORIGINS: list[str] = []
+CORS_ALLOW_HEADERS = (
+    *corsheaders.defaults.default_headers,
+    "baggage",  # for sentry
+    "sentry-trace",  # for sentry
+    "Access-Control-Allow-Origin",
+)
 
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = True
@@ -76,6 +90,10 @@ INSTALLED_APPS = [
     "django.contrib.gis",
     "channels",
     "django_tasks_db",
+    "axes",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
+    "django_otp.plugins.otp_static",
 ]
 
 # Queue split. `db_worker` has no concurrency flag -- it runs one task at a time -- so
@@ -128,9 +146,31 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Last, so it can swap the response of a locked-out login for the lockout response.
+    "axes.middleware.AxesMiddleware",
 ]
+# None of this runs for websockets: backend/asgi.py hands those to the consumers directly.
+# That is fine -- ws/forecast/<id>/ is an ordinary user feature, not the admin -- so do not
+# add these middlewares to the Channels stack.
+
+# Failed sign-ins (the SPA login and the admin login) are counted per client IP. Per IP
+# rather than per account+IP: a pair lockout never trips when one address tries a
+# different account each time, which is what a bot does. The cost is that people behind
+# one shared address can be locked out by someone else's failures for the cool-off.
+AXES_LOCKOUT_PARAMETERS = ["ip_address"]
+AXES_FAILURE_LIMIT = 10
+AXES_COOLOFF_TIME = timedelta(minutes=30)
+AXES_RESET_ON_SUCCESS = True
+AXES_CLIENT_IP_CALLABLE = "core.auth.lockout.client_ip"
+AXES_USERNAME_CALLABLE = "core.auth.lockout.attempted_identity"
+AXES_LOCKOUT_CALLABLE = "core.auth.lockout.lockout_response"
+
+# 2FA for the admin: OTPAdminSite (backend/urls.py) asks for a code from an authenticator
+# app. The first device is created with `manage.py add_totp_device`.
+OTP_TOTP_ISSUER = "NoRain"
 
 ROOT_URLCONF = "backend.urls"
 

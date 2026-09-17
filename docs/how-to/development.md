@@ -84,14 +84,18 @@ in the [documentation index](../README.md).
 ## Create an account you can sign in with
 
 `IdentityBackend` refuses any account whose `email_verified` is false, and
-`createsuperuser` cannot set that flag — so a fresh superuser reaches `/admin` but not the
-app itself until you verify it:
+`createsuperuser` cannot set that flag — so verify the account before signing in to the app:
 
 ```bash
 cd backend
 python manage.py createsuperuser          # asks for username, email and password
 python manage.py verify_user --identifier you@example.test
+python manage.py add_totp_device --identifier you@example.test   # only to use /admin
 ```
+
+The admin asks for a code from an authenticator app as well as the password;
+`add_totp_device` prints the key to enter in the app. Locally it stays at `/admin/`
+unless `DJANGO_ADMIN_PATH` is set.
 
 Signing in accepts either the email address or the username, case-insensitively.
 

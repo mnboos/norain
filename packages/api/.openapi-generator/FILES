@@ -3,6 +3,8 @@ apis/RecurringRoutesApi.ts
 apis/RouteWeatherApi.ts
 apis/index.ts
 index.ts
+models/DepartureCandidate.ts
+models/DepartureComparison.ts
 models/EnsembleModelStatistics.ts
 models/EnsembleRange.ts
 models/ForecastJobOut.ts

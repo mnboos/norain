@@ -12,8 +12,8 @@ Django commands from `backend/`.
 | GeoDjango cannot find GEOS or GDAL                                                                 | Install the host GIS libraries documented in the development guide, or correct `GEOS_LIBRARY_PATH` / `GDAL_LIBRARY_PATH`.                                                                                                                                                                                                                          |
 | Missing database table                                                                             | Run `uv run python manage.py migrate` against the same environment as the server and worker.                                                                                                                                                                                                                                                       |
 | Search fails                                                                                       | Set `GEOCODER_API_URL=http://localhost:2322/api`, restart the backend, and inspect Photon logs and import completion.                                                                                                                                                                                                                              |
-| Routing fails or times out                                                                         | Inspect GraphHopper logs; confirm import is complete and both points are covered. Only `bike`, `ebike` and `fast_ebike` are configured; the API answers 422 for any other profile.                                                                                                                                                                 |
-| Production GraphHopper exits with `No imported graph`                                              | The VPS does not import. [Build the graph elsewhere](build-routing-graph.md) and copy it into `graphhopper/cache`.                                                                                                                                                                                                                                 |
+| Routing fails or times out                                                                         | Inspect GraphHopper logs; confirm the graph build is complete and both points are covered. Only `bike`, `ebike` and `fast_ebike` are configured; the API answers 422 for any other profile.                                                                                                                                                                 |
+| Production GraphHopper exits with `No graph in /graph-cache`                                       | `GRAPHHOPPER_BUILD_GRAPH=false` is set and the cache is empty. Copy a graph [built elsewhere](build-routing-graph.md) into `graphhopper/cache`, or remove the setting so it builds on start.                                                                                                                                                       |
 | GraphHopper refuses to load a copied graph                                                         | It was built with a different configuration or jar version. Rebuild from the commit deployed on the VPS.                                                                                                                                                                                                                                           |
 | **Route wird berechnet…** persists, or forecast returns HTTP 409                                   | Run the `default` worker; inspect routing failures and [retry geometry](background-jobs.md).                                                                                                                                                                                                                                                       |
 | A forecast stays `pending` or `fetching` forever                                                   | No worker is consuming that queue. All three of `cells`, `forecasts` and `default` must run — see [background jobs](background-jobs.md).                                                                                                                                                                                                           |
@@ -43,6 +43,18 @@ Changing an API URL requires restarting processes that read it at import time. C
 they have separate in-memory caches and must share the same persistent database.
 
 [Documentation index](../README.md)
+
+## Sign-in answers "Zu viele fehlgeschlagene Anmeldeversuche"
+
+Ten failed sign-ins from one address (app or admin) lock that address for 30 minutes.
+To lift it early, run `python manage.py axes_reset_ip IP_ADDRESS`, or `axes_reset` to clear
+every lockout. In production run these with `docker compose ... exec backend`.
+
+## Lost the authenticator app for the admin
+
+Sign in with a backup code (pick the `backup` device on the login form), or create a new
+device, which also replaces the backup codes:
+`python manage.py add_totp_device --identifier YOU --replace`.
 
 ## Production database exits with `exec format error`
 

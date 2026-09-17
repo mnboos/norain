@@ -25,12 +25,12 @@ take precedence over values loaded by `python-dotenv`.
 | `OPENWEATHERMAP_API_KEY` | Optional | Enables OWM fallback when primary fetching fails |
 | `WEATHERUNDERGROUND_API_KEY` | Optional | Pro only: corrects temperature and rain risk near now with nearby personal weather stations. Budgeted for the free PWS owner key (1500 calls/day, 30/min) |
 | `REDIS_URL` | `redis://localhost:6379` | In-flight grid-cell claims (DB 1) and the forecast-progress channel layer (DB 2); needed by the web process and every worker |
-| `OSM_DATA_URL` | `https://download.geofabrik.de/europe/switzerland-latest.osm.pbf` | GraphHopper import; not used by production, which does not import |
+| `OSM_DATA_URL` | `https://download.geofabrik.de/europe/switzerland-latest.osm.pbf` | The OSM extract GraphHopper builds its graph from, when `/graph-cache` is empty |
 | `GRAPHHOPPER_HEAP` | `6g` | GraphHopper serving JVM maximum heap; with `RAM_STORE` it must hold the whole graph |
-| `GRAPHHOPPER_IMPORT_HEAP` | `GRAPHHOPPER_HEAP` | JVM maximum heap for an import |
+| `GRAPHHOPPER_BUILD_HEAP` | `GRAPHHOPPER_HEAP` | JVM maximum heap while building the graph |
 | `GRAPHHOPPER_DATAACCESS` | `RAM_STORE` | `RAM_STORE` keeps the graph in the heap; `MMAP` pages it in from disk with a small heap |
-| `GRAPHHOPPER_ALLOW_IMPORT` | `true`; `false` in production Compose | `false` makes an empty `/graph-cache` an error instead of an import |
-| `GRAPHHOPPER_IMPORT_ONLY` | `false` | `true` exits after importing, for [building a graph to ship](../how-to/build-routing-graph.md) |
+| `GRAPHHOPPER_BUILD_GRAPH` | `true` | `true` builds the graph from `OSM_DATA_URL` when `/graph-cache` is empty. `false` exits with an error instead, for a graph [built elsewhere](../how-to/build-routing-graph.md) and copied in |
+| `GRAPHHOPPER_BUILD_ONLY` | `false` | `true` exits once the graph is built instead of serving it |
 | `GRAPHHOPPER_MEM_LIMIT` | `8g` | GraphHopper container memory and swap limit |
 | `PHOTON_INDEX_URL` | `https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst` | Photon import |
 | `PHOTON_INDEX_FILE` | Empty | Local artifact path inside the container; takes precedence over the URL |
@@ -39,6 +39,7 @@ take precedence over values loaded by `python-dotenv`.
 | `PHOTON_IMPORT_HEAP` | `4g` | Photon import JVM heap |
 | `APP_STORAGE_PATH` | Required by Compose interpolation | PostgreSQL bind-mount root |
 | `TZ` | No Compose default | Passed to the PostgreSQL service; does not configure every service |
+| `DJANGO_ADMIN_PATH` | `admin` in development; required in production, one segment of letters, digits, `-` or `_`, and not `admin` | URL path of the Django admin, in Django and in the Caddy route to the backend |
 | `FRONTEND_URL` | `http://localhost:$FRONTEND_PORT` in development; required in production | Base URL used to build email verification, password-reset and Stripe return links |
 | `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `EMAIL_USE_TLS`, `DEFAULT_FROM_EMAIL` | Required in production | Outgoing mail. Development prints messages to the console instead |
 | `STRIPE_SECRET_KEY` | Empty; optional in all environments | Stripe API key. When empty, the billing endpoints answer 503 and tiers are set in the Django admin |
@@ -73,8 +74,8 @@ CORS allows `http://localhost:$FRONTEND_PORT` and `http://127.0.0.1:$FRONTEND_PO
 | Path | Contents |
 | --- | --- |
 | `${APP_STORAGE_PATH}/db/app/data/` | Development PostgreSQL/PostGIS data |
-| `data/graphhopper/osm/` | Downloaded OSM extract and elevation tiles (import only) |
-| `data/graphhopper/cache/` | Imported routing graph; the directory copied to production |
+| `data/graphhopper/osm/` | Downloaded OSM extract and elevation tiles (only read while building the graph) |
+| `data/graphhopper/cache/` | Built routing graph; empty it to build a new one |
 | `data/graphhopper/graphhopper-config.yaml` | Mounted routing configuration |
 | `data/graphhopper/models/` | Custom e-bike routing models |
 | `data/photon/` | Photon search data; inner `photon_data/` indicates an existing index |
@@ -144,8 +145,8 @@ only the factor is ours, in `bike_speed.json`, which must stay **last** in
 ### Changing a speed
 
 1. Edit the factor (or the cap, or a slope rule) in the profile's file.
-2. `just routing-import` — the speed is baked into the CH preparation, so it only takes
-   effect through a new graph. This deletes `data/graphhopper/cache` and imports again;
+2. `just routing-build` — the speed is baked into the CH preparation, so it only takes
+   effect through a new graph. This deletes `data/graphhopper/cache` and builds it again;
    it takes minutes. Per-request speeds are not an option: they need `ch.disable=true`,
    which turns a few-millisecond query into roughly a second.
 3. `just routing-speeds` — prints what each profile now rides on four reference routes,
@@ -153,8 +154,10 @@ only the factor is ours, in `bike_speed.json`, which must stay **last** in
 4. `just routing-refresh-routes` — saved routes store their travel times, so they keep the
    old arrival times until they are routed again. Needs a worker on the `default` queue.
 
-On production the graph is not imported on the VPS: build it elsewhere and ship it, see
-[build the routing graph](../how-to/build-routing-graph.md). Step 4 applies there too.
+On production, deploy the changed files, then stop `graphhopper`, empty
+`graphhopper/cache` and start it again: it builds the new graph. On a VPS without the
+memory for that, [build the graph elsewhere](../how-to/build-routing-graph.md). Step 4
+applies there too.
 
 ## Deployment boundary
 
