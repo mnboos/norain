@@ -45,6 +45,10 @@ take precedence over values loaded by `python-dotenv`.
 | `STRIPE_SECRET_KEY` | Empty; optional in all environments | Stripe API key. When empty, the billing endpoints answer 503 and tiers are set in the Django admin |
 | `STRIPE_WEBHOOK_SECRET` | Empty; optional in all environments | Verifies the `Stripe-Signature` on `/api/billing/webhook`. Without it the webhook is refused |
 | `STRIPE_PRICE_ID_PRO` | Empty; optional in all environments | Price the Pro Checkout session subscribes to |
+| `SENTRY_DSN_BACKEND` | Empty; optional | Sentry DSN for Django, the workers and the scheduler. Read only by the production settings |
+| `SENTRY_DSN_FRONTEND` | Empty; optional | Sentry DSN for the SPA, read from `.env` at build time: Vite bakes it into the bundle (`npm run dev`/`build` read the root `.env`, the production compose build passes it as a build arg), so a change needs a rebuild |
+| `SENTRY_RELEASE` | Empty | Release reported by both halves, baked into both images. `just deploy-local` sets it to `git rev-parse HEAD` |
+| `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT_FRONTEND` | Empty | Build time only, from `.env`: with a token, `vite build` writes hidden source maps, uploads them to Sentry and deletes them. The frontend image never contains a map, and Caddy answers `*.map` with 404. The production compose build passes the token as a BuildKit secret |
 
 Weather provider URLs, ensemble model selection, and weather timezone are constants
 in [grid.py](../../backend/core/grid.py), not environment settings.

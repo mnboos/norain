@@ -9,6 +9,8 @@
         X-Content-Type-Options nosniff
         X-Frame-Options DENY
         Referrer-Policy strict-origin-when-cross-origin
+        # Lets the Sentry browser profiler sample the JavaScript thread.
+        Document-Policy js-profiling
         -Server
     }
 
@@ -28,6 +30,13 @@
                 write_timeout 120s
             }
         }
+    }
+
+    # Source maps go to Sentry at build time and are not in the image. Without this,
+    # try_files would answer a request for one with index.html.
+    @sourcemaps path *.map
+    handle @sourcemaps {
+        respond 404
     }
 
     handle {

@@ -5,6 +5,7 @@ import vue from "@vitejs/plugin-vue";
 import vueDevTools from "vite-plugin-vue-devtools";
 import { quasar, transformAssetUrls } from "@quasar/vite-plugin";
 import VueRouter from "vue-router/vite";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -16,11 +17,21 @@ export default defineConfig(({ command, mode }) => {
     const frontendPort = Number(env.FRONTEND_PORT ?? 3000);
     const backendPort = Number(env.BACKEND_PORT ?? 8000);
     const backend = `http://127.0.0.1:${backendPort}`;
+    // Source maps exist only to be uploaded to Sentry: without a token none are written, and
+    // with one the plugin deletes them after the upload, so dist/ never ships a map.
+    const uploadSourceMaps = command === "build" && Boolean(env.SENTRY_AUTH_TOKEN);
 
     return {
         define: {
-            // The one value of .env the client bundle gets: useBackendHost needs it on localhost.
+            // The values of .env the client bundle gets: useBackendHost needs the port on
+            // localhost; an empty DSN leaves Sentry off.
             "import.meta.env.VITE_BACKEND_PORT": JSON.stringify(backendPort),
+            "import.meta.env.VITE_SENTRY_DSN_FRONTEND": JSON.stringify(env.SENTRY_DSN_FRONTEND ?? ""),
+            "import.meta.env.VITE_VUE_APP_VERSION": JSON.stringify(env.SENTRY_RELEASE ?? ""),
+        },
+        build: {
+            // "hidden": the maps are written but the bundles carry no sourceMappingURL.
+            sourcemap: uploadSourceMaps ? "hidden" : false,
         },
         optimizeDeps: {
             include: ["plotly.js/lib/core", "plotly.js/lib/bar"],
@@ -68,6 +79,19 @@ export default defineConfig(({ command, mode }) => {
                 // without one it swaps them for the prebuilt dist/quasar.css.
                 sassVariables: fileURLToPath(new URL("./src/assets/quasar-variables.scss", import.meta.url)),
             }),
+            // Last, so it sees the final bundles.
+            ...(uploadSourceMaps
+                ? [
+                      sentryVitePlugin({
+                          org: env.SENTRY_ORG,
+                          project: env.SENTRY_PROJECT_FRONTEND,
+                          authToken: env.SENTRY_AUTH_TOKEN,
+                          release: { name: env.SENTRY_RELEASE || undefined },
+                          sourcemaps: { filesToDeleteAfterUpload: ["./dist/**/*.map"] },
+                          telemetry: false,
+                      }),
+                  ]
+                : []),
         ],
         resolve: {
             alias: [

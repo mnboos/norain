@@ -35,6 +35,7 @@
         "@eslint/js": "10.0.1",
         "@playwright/test": "1.63.0",
         "@quasar/vite-plugin": "2.0.2",
+        "@sentry/vite-plugin": "5.4.0",
         "@tanstack/eslint-plugin-query": "5.102.8",
         "@tanstack/vue-query-devtools": "6.1.48",
         "@tsconfig/node22": "22.0.6",

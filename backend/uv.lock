@@ -728,7 +728,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = "==1.2.3" },
     { name = "rasterio", specifier = "==1.5.1" },
     { name = "redis", extras = ["hiredis"], specifier = "==8.1.0" },
-    { name = "sentry-sdk", specifier = ">=2.69.2" },
+    { name = "sentry-sdk", specifier = "==2.69.2" },
     { name = "shapely", specifier = "==2.1.2" },
     { name = "stripe", specifier = "==15.6.1" },
 ]

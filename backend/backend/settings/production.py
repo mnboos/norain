@@ -13,9 +13,10 @@ from .base import *
 sentry_sdk.init(
     # dsn="",
     dsn=os.environ.get("SENTRY_DSN_BACKEND"),
+    environment="production",
+    # The image sets SENTRY_RELEASE to the commit; sentry-sdk reads it on its own.
     enable_logs=True,
     enable_metrics=True,
-    enable_tracing=True,
     # debug=True,
     integrations=[
         DjangoIntegration(
@@ -39,7 +40,6 @@ sentry_sdk.init(
     # If you wish to associate users to errors (assuming you are using
     # django.contrib.auth) you may enable sending PII data.
     send_default_pii=True,
-    profile_lifecycle="trace",
 )
 
 

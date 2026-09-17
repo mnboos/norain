@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # One Dockerfile, one stage per image. Pick the image with `--target` (compose: `target:`,
 # CI: the `publish` matrix in .github/workflows/release.yml).
 
@@ -10,15 +11,24 @@ FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS frontend-build
 
 WORKDIR /app
 
-ENV VITE_SENTRY_DSN_FRONTEND=$SENTRY_DSN_FRONTEND
-
 COPY frontend/package.json frontend/package-lock.json ./frontend/
 COPY packages/api/ ./packages/api/
 WORKDIR /app/frontend
 RUN npm ci
 
 COPY frontend/ ./
-RUN npm run build-only
+
+# Sentry, read by vite.config.ts. The DSN is public (it ends up in the bundle), and org and
+# project only name where the source maps go. The auth token is a BuildKit secret, so no
+# layer or build arg keeps it; without it the build writes no source maps at all.
+ARG SENTRY_DSN_FRONTEND=""
+ARG SENTRY_RELEASE=""
+ARG SENTRY_ORG=""
+ARG SENTRY_PROJECT_FRONTEND=""
+RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN npm run build-only
+# Source maps belong to Sentry, never to the web server. The plugin already deletes them
+# after the upload; this makes sure none reaches /srv even if that step did not run.
+RUN find dist -name '*.map' -print -delete
 
 
 FROM caddy:2.10-alpine AS frontend
@@ -108,5 +118,9 @@ COPY --chown=app:app backend/ ./
 
 USER app
 EXPOSE 8000
+
+# The commit this image was built from; sentry-sdk reports it as the release.
+ARG SENTRY_RELEASE=""
+ENV SENTRY_RELEASE=$SENTRY_RELEASE
 
 CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "backend.asgi:application"]

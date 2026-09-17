@@ -72,6 +72,15 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMAGE_PREFIX }}-${{ matrix.image }}:${{ github.sha }}
+          # Each stage uses only the args it declares. The DSN, org and project are repository
+          # variables (none is a secret); the auth token uploads the frontend source maps.
+          build-args: |
+            SENTRY_RELEASE=${{ github.sha }}
+            SENTRY_DSN_FRONTEND=${{ vars.SENTRY_DSN_FRONTEND }}
+            SENTRY_ORG=${{ vars.SENTRY_ORG }}
+            SENTRY_PROJECT_FRONTEND=${{ vars.SENTRY_PROJECT_FRONTEND }}
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
 
   deploy:
     needs: publish

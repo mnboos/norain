@@ -223,6 +223,12 @@ docker compose run --rm --pull never --user root backend python manage.py collec
 docker compose up -d --pull never --remove-orphans
 ```
 
+The build takes the Sentry settings from `.env`: `SENTRY_DSN_FRONTEND` is baked into the
+frontend image (so changing it means building again), and with `SENTRY_AUTH_TOKEN`,
+`SENTRY_ORG` and `SENTRY_PROJECT_FRONTEND` set the source maps are uploaded to Sentry and
+left out of the image. `just deploy-local` sets `SENTRY_RELEASE` to the checked-out commit;
+without Just, run `SENTRY_RELEASE="$(git rev-parse HEAD)" docker compose build`.
+
 `deploy/release.sh` pulls published images; use `just deploy-local` for local
 builds.
 

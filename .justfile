@@ -171,7 +171,7 @@ update-api: export-openapi-schema update-api--build-only
 [doc("Build and deploy the checked-out source on the current VPS. Requires production .env settings and local image tags.")]
 [group('deploy')]
 deploy-local:
-    {{ container }} compose --env-file .env build
+    SENTRY_RELEASE="$(git rev-parse HEAD)" {{ container }} compose --env-file .env build
     {{ container }} compose --env-file .env pull db redis
     {{ container }} compose --env-file .env run --rm --pull never backend python manage.py migrate --noinput
     {{ container }} compose --env-file .env run --rm --pull never --user root backend python manage.py collectstatic --noinput

@@ -6,10 +6,9 @@ import * as Sentry from "@sentry/vue";
 import router from "./router";
 import { Quasar, Dialog, Dark, LocalStorage } from "quasar";
 import quasarLang from "quasar/lang/de-CH";
-import quasarIconSet from "quasar/icon-set/material-symbols-sharp";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { Configuration, DefaultConfig, type Middleware, type RequestContext } from "@norain/api/runtime";
-
+import quasarIconSet from "quasar/icon-set/svg-material-symbols-sharp";
 // Import icon libraries
 // import "@quasar/extras/material-symbols-sharp/material-symbols-sharp.css";
 // Self-hosted, so no request goes to Google Fonts
@@ -73,6 +72,7 @@ app.use(Quasar, {
 Sentry.init({
     app,
     dsn: import.meta.env.VITE_SENTRY_DSN_FRONTEND,
+    environment: import.meta.env.MODE,
     sendDefaultPii: true,
     enableLogs: true,
     enableMetrics: true,
@@ -87,10 +87,11 @@ Sentry.init({
         }),
         Sentry.browserProfilingIntegration(),
         Sentry.browserSessionIntegration(),
-        Sentry.captureConsoleIntegration({ levels: ["warn", "error", "debug", "assert"] }),
+        Sentry.captureConsoleIntegration({ levels: ["warn", "error", "assert"] }),
         Sentry.contextLinesIntegration(),
         Sentry.extraErrorDataIntegration(),
-        Sentry.httpClientIntegration(),
+        // 503 is left out: the billing endpoints answer it on purpose when Stripe is not configured.
+        Sentry.httpClientIntegration({ failedRequestStatusCodes: [[500, 502], [504, 599]] }),
         Sentry.reportingObserverIntegration(),
         Sentry.feedbackIntegration({
             colorScheme: "system",
@@ -103,12 +104,16 @@ Sentry.init({
     // tracesSampleRate: import.meta.env.PROD ? 0.8 : 1.0,
     tracesSampleRate: 1.0,
 
+    // Profile every traced session; needs Caddy's `Document-Policy: js-profiling` header.
+    profileSessionSampleRate: 1.0,
+    profileLifecycle: "trace",
+
     // Capture Replay for 10% of all sessions,
     // plus for 100% of sessions with an error
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
 
-    release: import.meta.env.VITE_VUE_APP_VERSION,
+    release: import.meta.env.VITE_VUE_APP_VERSION || undefined,
 });
 
 async function bootstrap() {
