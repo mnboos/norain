@@ -4,7 +4,7 @@ import { createApp } from "vue";
 import App from "./App.vue";
 import * as Sentry from "@sentry/vue";
 import router from "./router";
-import { Quasar, Dialog, Dark, LocalStorage } from "quasar";
+import { Quasar, Dialog, Dark, LocalStorage, Notify } from "quasar";
 import quasarLang from "quasar/lang/de-CH";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { Configuration, DefaultConfig, type Middleware, type RequestContext } from "@norain/api/runtime";
@@ -117,7 +117,7 @@ Sentry.init({
 app.use(router);
 app.use(VueQueryPlugin);
 app.use(Quasar, {
-    plugins: { Dialog, Dark, LocalStorage },
+    plugins: { Dialog, Dark, LocalStorage, Notify },
     lang: quasarLang,
     iconSet: quasarIconSet,
     config: { dark: initialDarkConfig() },

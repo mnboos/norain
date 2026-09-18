@@ -4,40 +4,14 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="feat(web): add telemetry and ideal ride prediction">
-      <change beforePath="$PROJECT_DIR$/.env.template" beforeDir="false" afterPath="$PROJECT_DIR$/.env.template" afterDir="false" />
+    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="feat(registration): fix email signup">
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources.local.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources.local.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources/data_sources_history.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources/data_sources_history.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/backend/settings/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/backend/settings/base.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/backend/settings/development.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/backend/settings/development.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/backend/settings/production.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/backend/settings/production.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/backend/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/backend/urls.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/admin.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/admin.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/apps.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/apps.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/auth/backend.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/auth/backend.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/auth/lockout.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/auth/lockout.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/auth/tokens.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/auth/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/auth/views.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/management/commands/verify_user.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/management/commands/verify_user.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/models.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/tasks.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/tasks.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/test_admin_security.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/test_admin_security.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/test_stations.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/test_stations.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/test_telemetry.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/test_telemetry.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/tests.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/tests.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/pyproject.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/uv.lock" beforeDir="false" afterPath="$PROJECT_DIR$/backend/uv.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/how-to/development.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/development.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/how-to/sentry-metrics.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/sentry-metrics.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/reference/configuration.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/reference/configuration.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/DepartureFlexibility.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/DepartureFlexibility.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/e2e/forecastMock.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/e2e/forecastMock.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/main.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/main.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/account.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/account.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/router/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/router/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/services/__tests__/auth.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/services/__tests__/auth.spec.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/services/__tests__/http.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/services/__tests__/http.spec.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/services/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/services/auth.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/services/http.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/services/http.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -55,11 +29,16 @@
       <entry key="_C:/src/norain" value="3FGm5340V9e7zo4OzTk5qbxggcQ" />
     </persistenceIdMap>
   </component>
+  <component name="DatabaseLocalColorSettings">
+    <colors>
+      <entry key="adf92753-6bdf-41bf-897f-7df4e362d1cd" value="" />
+    </colors>
+  </component>
   <component name="DjangoConsoleOptions" custom-start-script="import sys; print('Python %s on %s' % (sys.version, sys.platform))&#10;import django; print('Django %s' % django.get_version())&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;if 'setup' in dir(django): django.setup()&#10;import django_manage_shell; django_manage_shell.run(PROJECT_ROOT)">
     <option name="myCustomStartScript" value="import sys; print('Python %s on %s' % (sys.version, sys.platform))&#10;import django; print('Django %s' % django.get_version())&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;if 'setup' in dir(django): django.setup()&#10;import django_manage_shell; django_manage_shell.run(PROJECT_ROOT)" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="289" />
+    <option name="cachedIndexableFilesCount" value="361" />
     <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
   </component>
   <component name="FileTemplateManagerImpl">
@@ -93,61 +72,61 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.6671660306455465" />
-      <entry key="MS500" value="4.942411560291093" />
-      <entry key="S2" value="9.678051150867955" />
-      <entry key="S5" value="11.501198294715142" />
-      <entry key="S10" value="12.218567098483936" />
-      <entry key="S30" value="12.732020046876071" />
-      <entry key="S60" value="12.865047089163438" />
-      <entry key="M2" value="12.93228088070669" />
-      <entry key="M5" value="12.972853863971485" />
-      <entry key="M10" value="12.986417377009765" />
-      <entry key="M15" value="12.991080385875549" />
-      <entry key="M30" value="13.084653148413315" />
-      <entry key="H1" value="15.270761089733575" />
-      <entry key="H2" value="24.485393690669696" />
-      <entry key="H4" value="39.476801530289855" />
-      <entry key="D1" value="409.14634430625495" />
-      <entry key="W1" value="1599.8880139407008" />
+      <entry key="MS100" value="1.5345104635047149" />
+      <entry key="MS500" value="5.408005247378846" />
+      <entry key="S2" value="16.124459369301082" />
+      <entry key="S5" value="29.041361793164874" />
+      <entry key="S10" value="40.78227702446379" />
+      <entry key="S30" value="55.50850801292199" />
+      <entry key="S60" value="62.89463887907333" />
+      <entry key="M2" value="69.97305909977325" />
+      <entry key="M5" value="77.38887563056882" />
+      <entry key="M10" value="81.42534233336751" />
+      <entry key="M15" value="84.08507660683769" />
+      <entry key="M30" value="89.94092510460652" />
+      <entry key="H1" value="97.05124080425179" />
+      <entry key="H2" value="108.6301381136496" />
+      <entry key="H4" value="125.56766638255874" />
+      <entry key="D1" value="491.4585663285524" />
+      <entry key="W1" value="1686.940942351554" />
     </decayedCancelled>
     <decayedSelected>
-      <entry key="MS100" value="0.0" />
-      <entry key="MS500" value="0.0" />
-      <entry key="S2" value="0.0" />
-      <entry key="S5" value="0.0" />
-      <entry key="S10" value="0.0" />
-      <entry key="S30" value="4.926001688066497E-168" />
-      <entry key="S60" value="2.252797130952372E-84" />
-      <entry key="M2" value="1.6729798690025283E-42" />
-      <entry key="M5" value="2.662810824778471E-17" />
-      <entry key="M10" value="7.146871074723152E-9" />
-      <entry key="M15" value="4.652299511159002E-6" />
-      <entry key="M30" value="0.003042955560488044" />
-      <entry key="H1" value="0.07798587814860773" />
-      <entry key="H2" value="0.39948622156734886" />
-      <entry key="H4" value="1.014539132759753" />
-      <entry key="D1" value="47.56856840424129" />
-      <entry key="W1" value="180.95708267310275" />
+      <entry key="MS100" value="1.6579625457345688E-36" />
+      <entry key="MS500" value="6.980956680886816E-8" />
+      <entry key="S2" value="0.016254691664406015" />
+      <entry key="S5" value="0.19248260795395347" />
+      <entry key="S10" value="0.4387283988459755" />
+      <entry key="S30" value="0.759857082340057" />
+      <entry key="S60" value="0.8716978159546223" />
+      <entry key="M2" value="0.9336475865949735" />
+      <entry key="M5" value="0.9729111745084846" />
+      <entry key="M10" value="0.9863625980567471" />
+      <entry key="M15" value="0.9908879938981762" />
+      <entry key="M30" value="0.9963097305488372" />
+      <entry key="H1" value="1.0395652683701937" />
+      <entry key="H2" value="1.2915058530814325" />
+      <entry key="H4" value="1.8677719551123928" />
+      <entry key="D1" value="47.35070553701807" />
+      <entry key="W1" value="181.2878984404517" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="1.5975503629077923" />
-      <entry key="MS500" value="4.896265743746433" />
-      <entry key="S2" value="9.653773520933923" />
-      <entry key="S5" value="11.489512379102123" />
-      <entry key="S10" value="12.212335753657493" />
-      <entry key="S30" value="12.729850305423353" />
-      <entry key="S60" value="12.863950222260168" />
-      <entry key="M2" value="12.931729415968313" />
-      <entry key="M5" value="12.972632546401544" />
-      <entry key="M10" value="12.986306603066648" />
-      <entry key="M15" value="12.991011152329877" />
-      <entry key="M30" value="13.087657634794462" />
-      <entry key="H1" value="15.348708974043857" />
-      <entry key="H2" value="24.884819519375768" />
-      <entry key="H4" value="40.49123651453574" />
-      <entry key="D1" value="456.71012777052175" />
-      <entry key="W1" value="1780.842481943658" />
+      <entry key="MS100" value="1.4740272760864703" />
+      <entry key="MS500" value="5.3627224984919115" />
+      <entry key="S2" value="16.10219418809317" />
+      <entry key="S5" value="29.188346096558817" />
+      <entry key="S10" value="41.17908865069904" />
+      <entry key="S30" value="56.245254572991584" />
+      <entry key="S60" value="63.75045538839884" />
+      <entry key="M2" value="70.89513316548422" />
+      <entry key="M5" value="78.35522867679587" />
+      <entry key="M10" value="82.40793617060262" />
+      <entry key="M15" value="85.07332115036364" />
+      <entry key="M30" value="90.93583500781178" />
+      <entry key="H1" value="98.09007190250591" />
+      <entry key="H2" value="109.92123764462629" />
+      <entry key="H4" value="127.4351668067376" />
+      <entry key="D1" value="538.8045788303428" />
+      <entry key="W1" value="1868.2262314158636" />
     </decayedShown>
   </component>
   <component name="ProjectColorInfo">{
@@ -215,6 +194,11 @@
     "to.speed.mode.migration.done": "true",
     "ts.external.directory.path": "/home/martin/src/norain/frontend/node_modules/typescript/lib",
     "vue.rearranger.settings.migration": "true"
+  },
+  "keyToStringList": {
+    "DatabaseDriversLRU": [
+      "postgresql"
+    ]
   }
 }]]></component>
   <component name="RecentsManager">
@@ -315,7 +299,8 @@
       <workItem from="1789462199710" duration="3961000" />
       <workItem from="1789472584919" duration="6128000" />
       <workItem from="1789547346153" duration="21093000" />
-      <workItem from="1789579363327" duration="12296000" />
+      <workItem from="1789579363327" duration="15345000" />
+      <workItem from="1789732986662" duration="657000" />
     </task>
     <task id="LOCAL-00001" summary="chore(ide): update settings">
       <option name="closed" value="true" />
@@ -493,7 +478,15 @@
       <option name="project" value="LOCAL" />
       <updated>1789712040232</updated>
     </task>
-    <option name="localTasksCounter" value="23" />
+    <task id="LOCAL-00023" summary="feat(registration): fix email signup">
+      <option name="closed" value="true" />
+      <created>1789729219509</created>
+      <option name="number" value="00023" />
+      <option name="presentableId" value="LOCAL-00023" />
+      <option name="project" value="LOCAL" />
+      <updated>1789729219509</updated>
+    </task>
+    <option name="localTasksCounter" value="24" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -526,9 +519,10 @@
     <MESSAGE value="feat(ui): update overview layout" />
     <MESSAGE value="feat(web): new features and sentry" />
     <MESSAGE value="feat(web): add telemetry and ideal ride prediction" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(web): add telemetry and ideal ride prediction" />
+    <MESSAGE value="feat(registration): fix email signup" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(registration): fix email signup" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1789727508949" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
+    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1789733358146" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
   </component>
 </project>

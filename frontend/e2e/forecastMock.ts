@@ -28,7 +28,9 @@ export async function mockForecast(page: Page, saved: { id: string }, input: obj
             await route.fulfill({ json });
         },
     );
-    await page.route("https://basemaps.cartocdn.com/**", route =>
+    // The map's style file, fetched by MapLibre. No query string: the dev server also loads
+    // `positron.json?import&url` as a JS module, and that request must pass through.
+    await page.route(/\/(positron|dark-matter)[^/?]*\.json$/, route =>
         route.fulfill({
             json: {
                 version: 8,
