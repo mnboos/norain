@@ -2,40 +2,54 @@
 
 import json
 from io import StringIO
+from pathlib import Path
+from unittest import skipUnless
 
 from axes.models import AccessAttempt
 from django.conf import settings
 from django.contrib import admin
+from django.core.cache import cache
 from django.core.management import CommandError, call_command
-from django.test import Client, TestCase
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django_otp.admin import OTPAdminSite
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_static.models import StaticToken
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from core.models import User
+from core.test_signup import TEST_SETTINGS, login_code, verified_user
 
 PASSWORD = "Correct horse battery staple 2026!"
 ADMIN = f"/{settings.ADMIN_PATH}/"
 
 
+@override_settings(**TEST_SETTINGS)
 class LoginLockoutTests(TestCase):
     """Too many failed sign-ins from one address lock that address out, whatever account it tries."""
 
     def setUp(self):
+        cache.clear()
         self.client = Client(enforce_csrf_checks=True)
-        self.user = User.objects.create_user(
-            username="Rider", email="rider@example.test", password=PASSWORD, email_verified=True
-        )
+        self.user = verified_user(username="Rider", email="rider@example.test", password=PASSWORD)
 
     def login(self, identifier, password, **meta):
         self.client.get("/api/auth/session", **meta)
+        # The SPA sends every identity as `username`; allauth tries it as an email first.
         return self.client.post(
-            "/api/auth/login",
-            data=json.dumps({"identifier": identifier, "password": password}),
+            "/api/allauth/browser/v1/auth/login",
+            data=json.dumps({"username": identifier, "password": password}),
             content_type="application/json",
             HTTP_X_CSRFTOKEN=self.client.cookies["csrftoken"].value,
             **meta,
+        )
+
+    def post(self, path, data):
+        self.client.get("/api/auth/session")
+        return self.client.post(
+            path,
+            data=json.dumps(data),
+            content_type="application/json",
+            HTTP_X_CSRFTOKEN=self.client.cookies["csrftoken"].value,
         )
 
     def fail(self, times, identifier="Rider", **meta):
@@ -70,19 +84,47 @@ class LoginLockoutTests(TestCase):
         self.fail(settings.AXES_FAILURE_LIMIT - 1)
         self.assertEqual(self.login("Rider", PASSWORD).status_code, 200)
 
+    def test_the_lockout_covers_passwords_only_not_sign_in_by_code(self):
+        # Axes counts password checks. A code proves control of the mailbox, and guessing
+        # one is capped by allauth instead (3 tries per code, 3 code requests a minute
+        # per address), so a locked-out address can still get in by code.
+        self.fail(settings.AXES_FAILURE_LIMIT)
+        self.assertEqual(self.login("Rider", PASSWORD).status_code, 429)
+
+        self.assertEqual(
+            self.post("/api/allauth/browser/v1/auth/code/request", {"email": "rider@example.test"}).status_code, 401
+        )
+        self.assertEqual(
+            self.post("/api/allauth/browser/v1/auth/code/confirm", {"code": login_code()}).status_code, 200
+        )
+
+    def test_allauth_does_not_lock_one_identity_out_before_axes(self):
+        # allauth's own login_failed limit (5 per identity) is off, so axes alone decides.
+        self.fail(settings.AXES_FAILURE_LIMIT - 1)
+
+        self.assertEqual(self.login("Rider", PASSWORD).status_code, 200)
+
     def test_attempts_are_logged_under_the_identity_that_was_typed(self):
         self.login("RIDER@example.test", "wrong")
 
         self.assertEqual(AccessAttempt.objects.get().username, "rider@example.test")
 
 
+class AdminOtpSwitchTests(SimpleTestCase):
+    def test_production_settings_never_read_the_switch(self):
+        # DJANGO_ADMIN_OTP=false is for a local machine only. Production keeps ADMIN_OTP
+        # from base.py whatever the environment says.
+        source = (Path(settings.BASE_DIR) / "backend" / "settings" / "production.py").read_text()
+        self.assertNotIn("DJANGO_ADMIN_OTP", source)
+        self.assertNotIn("ADMIN_OTP", source)
+
+
+@skipUnless(settings.ADMIN_OTP, "DJANGO_ADMIN_OTP is off in .env")
 class AdminTwoFactorTests(TestCase):
     """The admin needs a code from an authenticator app as well as the password."""
 
     def setUp(self):
-        self.staff = User.objects.create_superuser(
-            username="boss", email="boss@example.test", password=PASSWORD
-        )
+        self.staff = User.objects.create_superuser(username="boss", email="boss@example.test", password=PASSWORD)
 
     def admin_login(self, device=None, token=""):
         return self.client.post(

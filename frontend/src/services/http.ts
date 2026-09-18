@@ -21,7 +21,7 @@ function detailOf(value: unknown): string | null {
     return typeof detail === "string" && detail ? detail : null;
 }
 
-export const parseDetail: Parse<DetailResponse> = (value) => {
+export const parseDetail: Parse<DetailResponse> = value => {
     const detail = detailOf(value);
     return detail === null ? null : { detail };
 };
@@ -31,6 +31,8 @@ export class ApiError extends Error {
     constructor(
         message: string,
         readonly status: number,
+        /** allauth's error code (e.g. `invalid_password_reset`), when the reply had one. */
+        readonly code?: string,
     ) {
         super(message);
         this.name = "ApiError";
@@ -62,6 +64,60 @@ export async function request<T>(path: string, parse: Parse<T>, method = "GET", 
         throw new ApiError("Unerwartete Antwort vom Server.", response.status);
     }
     return parsed;
+}
+
+/** A reply from allauth's headless API: `{status, data, meta}`, whatever the HTTP status. */
+export interface AllauthReply {
+    status: number;
+    data: Record<string, unknown>;
+    meta: Record<string, unknown>;
+}
+
+/** allauth's first error, or the `detail` of our own replies (the axes 429). */
+function allauthErrorOf(value: unknown): { message: string | null; code?: string } {
+    if (isRecord(value) && Array.isArray(value.errors)) {
+        const first: unknown = value.errors[0];
+        if (isRecord(first) && typeof first.message === "string" && first.message) {
+            return { message: first.message, ...(typeof first.code === "string" ? { code: first.code } : {}) };
+        }
+    }
+    return { message: detailOf(value) };
+}
+
+/**
+ * Session-cookie request against allauth's headless API (`/api/allauth/browser/v1/…`).
+ *
+ * 200 and 401 both come back as a reply rather than an error: in allauth, 401 is the
+ * normal answer for "not signed in" and "a step is still pending" (verify the email,
+ * enter the code), and `data.flows` says which. Everything else throws `ApiError`.
+ */
+export async function allauthRequest(
+    path: string,
+    method = "GET",
+    body?: object,
+    headers: Record<string, string> = {},
+): Promise<AllauthReply> {
+    const response = await fetch(`${useBackendHost()}/api/allauth/browser/v1${path}`, {
+        method,
+        credentials: "include",
+        headers: {
+            ...(body ? { "Content-Type": "application/json" } : {}),
+            ...(method === "GET" ? {} : { "X-CSRFToken": getCookie("csrftoken") ?? "" }),
+            ...headers,
+        },
+        body: body ? JSON.stringify(body) : undefined,
+    });
+    const payload: unknown = await response.json().catch(() => null);
+    if (response.status !== 200 && response.status !== 401) {
+        const { message, code } = allauthErrorOf(payload);
+        throw new ApiError(message ?? "Die Anfrage ist fehlgeschlagen.", response.status, code);
+    }
+    const reply = isRecord(payload) ? payload : {};
+    return {
+        status: response.status,
+        data: isRecord(reply.data) ? reply.data : {},
+        meta: isRecord(reply.meta) ? reply.meta : {},
+    };
 }
 
 /**

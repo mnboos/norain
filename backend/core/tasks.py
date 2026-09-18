@@ -8,7 +8,6 @@ from datetime import UTC, datetime, timedelta
 from asgiref.sync import async_to_sync, sync_to_async
 from django.db import transaction
 from django.db.models import F
-from django.tasks import task
 from loguru import logger
 
 from core import departures, telemetry
@@ -28,6 +27,7 @@ from core.schedule import forecast_available_at, local_today, next_departure, up
 from core.sections import compute_sections
 from core.stations import api_key, purge_station_data, refresh_stations_for_ride, ride_in_window
 from core.thumbnails import compute_route_thumbnail
+from core.tracing import traced_task as task
 from core.weather import (  # reuse existing functions
     ROUTING_ERRORS,
     SAMPLE_INTERVAL_DEFAULT_S,

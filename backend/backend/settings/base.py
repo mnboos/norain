@@ -38,7 +38,11 @@ AUTH_USER_MODEL = "core.User"
 ALLOWED_HOSTS = []
 
 # Axes must come first: it refuses a locked-out client before any password is checked.
-AUTHENTICATION_BACKENDS = ["axes.backends.AxesStandaloneBackend", "core.auth.backend.IdentityBackend"]
+# allauth's backend takes an email or a username, for the SPA and the admin alike.
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
 
 # The admin is reachable from the internet, so it lives at a path set per deployment
 # (production requires one) instead of the /admin/ every bot tries.
@@ -53,6 +57,7 @@ CORS_ALLOW_HEADERS = (
     "sentry-trace",  # for sentry
     "Access-Control-Allow-Origin",
     "X-NoRain-Prefetch",  # dashboard prefetch; see route_forecast
+    "x-email-verification-key",
 )
 
 SESSION_COOKIE_HTTPONLY = True
@@ -92,6 +97,9 @@ INSTALLED_APPS = [
     "channels",
     "django_tasks_db",
     "axes",
+    "allauth",
+    "allauth.account",
+    "allauth.headless",
     "django_otp",
     "django_otp.plugins.otp_totp",
     "django_otp.plugins.otp_static",
@@ -147,6 +155,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "allauth.account.middleware.AccountMiddleware",
     "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -169,9 +178,41 @@ AXES_CLIENT_IP_CALLABLE = "core.auth.lockout.client_ip"
 AXES_USERNAME_CALLABLE = "core.auth.lockout.attempted_identity"
 AXES_LOCKOUT_CALLABLE = "core.auth.lockout.lockout_response"
 
+# Sign-up, sign-in and password reset are django-allauth in headless mode: it serves JSON
+# under /api/allauth/ and the Vue app draws every form. Sign-up has two steps. Step 1 takes
+# only the email; allauth creates the user with a generated username and no usable
+# password and mails a link. Step 2 (core.auth.views.complete_signup_view) sets the real
+# username and password. A link opened in another browser verifies the email but does not
+# sign in, so sign-in by emailed code is on as the way back in.
+ACCOUNT_ADAPTER = "core.auth.adapter.AccountAdapter"
+HEADLESS_ADAPTER = "core.auth.adapter.HeadlessAdapter"
+ACCOUNT_LOGIN_METHODS = {"email", "username"}
+ACCOUNT_SIGNUP_FIELDS = ["email*"]
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
+ACCOUNT_LOGIN_BY_CODE_ENABLED = True
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "NoRain: "
+# Axes is the only lockout for failed sign-ins. allauth's own `login_failed` limit would
+# block one identity after 5 tries with a different error body, before axes ever counts
+# to 10. allauth's other limits (sign-up, mails, codes, reset) stay on.
+ACCOUNT_RATE_LIMITS = {"login_failed": None}
+HEADLESS_ONLY = True
+HEADLESS_CLIENTS = ("browser",)
+# Paths only: HeadlessAdapter.get_frontend_url puts FRONTEND_URL in front when a mail is
+# sent, because production.py sets FRONTEND_URL after this file is read.
+HEADLESS_FRONTEND_URLS = {
+    "account_confirm_email": "/account?verify_key={key}",
+    "account_reset_password": "/account?mode=reset",
+    "account_reset_password_from_key": "/account?reset_key={key}",
+    "account_signup": "/account?mode=signup",
+}
+
 # 2FA for the admin: OTPAdminSite (backend/urls.py) asks for a code from an authenticator
 # app. The first device is created with `manage.py add_totp_device`.
 OTP_TOTP_ISSUER = "NoRain"
+# Only development.py may turn this off (DJANGO_ADMIN_OTP); production never reads it.
+ADMIN_OTP = True
 
 ROOT_URLCONF = "backend.urls"
 

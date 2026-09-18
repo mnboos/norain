@@ -9,11 +9,16 @@ const router = createRouter({
 });
 
 router.beforeEach(async to => {
-    const { isAuthenticated, sessionLoaded, refreshSession } = useSession();
+    const { isAuthenticated, session, sessionLoaded, refreshSession } = useSession();
     if (to.meta.requiresAuth && !sessionLoaded.value) {
         await refreshSession();
     }
     if (to.meta.requiresAuth && !isAuthenticated.value) {
+        return { path: "/account", query: { next: to.fullPath } };
+    }
+    // Between the two sign-up steps the account has a generated username and no password
+    // of its own; nothing else opens until step 2 on /account is done.
+    if (isAuthenticated.value && session.value.user?.signupComplete === false && to.name !== "account") {
         return { path: "/account", query: { next: to.fullPath } };
     }
     return true;

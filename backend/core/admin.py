@@ -6,14 +6,16 @@ from .models import EnsembleCell, ForecastCell, ProcessedStripeEvent, RecurringR
 
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
-    """Django's user admin plus the NoRain verification fields."""
+    """Django's user admin plus the NoRain fields.
 
-    list_display = ("username", "email", "email_verified", "is_active", "is_staff", "created_at")
-    list_filter = ("email_verified", "is_active", "is_staff", "is_superuser")
+    Email verification is on allauth's own "Email addresses" admin page.
+    """
+
+    list_display = ("username", "email", "signup_completed", "is_active", "is_staff", "created_at")
+    list_filter = ("signup_completed", "is_active", "is_staff", "is_superuser")
     search_fields = ("username", "email")
     readonly_fields = ("created_at",)
-    # email_verified gates sign-in (see IdentityBackend), so it belongs somewhere visible.
-    fieldsets = (*DjangoUserAdmin.fieldsets, ("NoRain", {"fields": ["email_verified", "created_at"]}))
+    fieldsets = (*DjangoUserAdmin.fieldsets, ("NoRain", {"fields": ["signup_completed", "created_at"]}))
 
 
 @admin.register(Subscription)

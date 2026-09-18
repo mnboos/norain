@@ -1,6 +1,7 @@
 import uuid
 from typing import ClassVar
 
+from allauth.account.models import EmailAddress
 from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.models import UserManager as DjangoUserManager
@@ -23,12 +24,16 @@ class UserManager(DjangoUserManager):
     """Ensure accounts created through ``createsuperuser`` can sign in immediately."""
 
     def create_superuser(self, username, email=None, password=None, **extra_fields):
-        extra_fields.setdefault("email_verified", True)
-        return super().create_superuser(username, email, password, **extra_fields)
+        extra_fields.setdefault("signup_completed", True)
+        user = super().create_superuser(username, email, password, **extra_fields)
+        # allauth reads verification from EmailAddress, not the user row. A trusted admin
+        # created this account, so its address counts as verified.
+        EmailAddress.objects.create(user=user, email=user.email.lower(), primary=True, verified=True)
+        return user
 
 
 class User(AbstractUser):
-    """A NoRain account: sign-in identity plus email-verification state.
+    """A NoRain account: the sign-in identities plus whether sign-up was finished.
 
     The reason this is a custom model rather than ``django.contrib.auth.User`` is the two
     constraints below. Django's default user permits duplicate and blank emails
@@ -37,13 +42,17 @@ class User(AbstractUser):
     — and constraints cannot be added to a model the project does not own.
 
     Both the email and the username are sign-in identities; see
-    ``core.auth.backend.IdentityBackend``.
+    ``core.auth.adapter.AccountAdapter``. Whether the email is verified lives in allauth's
+    ``EmailAddress``, not here.
     """
 
     # Overridden from AbstractUser purely to make it required: an account with no email
     # could never verify itself or reset its password.
     email = models.EmailField("email address", blank=False)
-    email_verified = models.BooleanField(default=False)
+    # False from step 1 of sign-up (allauth made the account with a generated username)
+    # until step 2 (core.auth.views.complete_signup_view). Not inferred from the password:
+    # a password reset sets one without the user ever picking a username.
+    signup_completed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = UserManager()

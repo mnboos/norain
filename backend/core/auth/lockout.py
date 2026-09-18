@@ -18,11 +18,12 @@ def client_ip(request: HttpRequest) -> str | None:
 def attempted_identity(request: HttpRequest, credentials: dict | None) -> str:
     """What the client typed as its identity, for the axes log and ``axes_reset_username``.
 
-    The SPA login calls ``authenticate(identifier=…)`` and the admin login
-    ``authenticate(username=…)``; axes only looks for ``username`` on its own.
+    allauth calls ``authenticate(email=…)`` or ``authenticate(username=…)`` (the SPA always
+    sends ``username``), and so does the admin login; axes only looks for ``username`` on
+    its own.
     """
     credentials = credentials or {}
-    value = credentials.get("identifier") or credentials.get("email") or credentials.get("username")
+    value = credentials.get("email") or credentials.get("username")
     return value.strip().lower() if isinstance(value, str) else ""
 
 

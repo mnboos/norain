@@ -302,7 +302,7 @@ class ThumbnailStationTests(_NearNowRoute, TestCase):
         self.build()
         self.add_readings()
         self.user = get_user_model().objects.create_user(
-            username="rider", email="rider@example.com", password="pw", email_verified=True
+            username="rider", email="rider@example.com", password="pw"
         )
         self.route = RecurringRoute.objects.create(
             owner=self.user, name="Commute", start_point=route_point(47.0, 9.0), start_name="Start",
@@ -355,7 +355,7 @@ class StationJobTests(_NearNowRoute, TestCase):
         cache.clear()
         self.build()
         self.user = get_user_model().objects.create_user(
-            username="rider", email="rider@example.com", password="pw", email_verified=True
+            username="rider", email="rider@example.com", password="pw"
         )
 
     def make_pro(self):

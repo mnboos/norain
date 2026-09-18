@@ -13,18 +13,14 @@ from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
-from django.contrib.auth.tokens import default_token_generator
-from django.core import mail
 from django.core.cache import cache
 from django.core.management import call_command
 from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, override_settings
-from django.utils.http import urlsafe_base64_encode
 
 from backend import load_dotenv
 from backend.asgi import application
 from core.api.places import retrieve_places
 from core.api.recurring_route import _route_to_out
-from core.auth.tokens import email_verification_token_generator
 from core.claims import claim_cell
 from core.entitlements import FREE, PRO, entitlements_for_sync, strip_uncertainty
 from core.forecast_schemas import ForecastUncertainty, RouteWeatherOut, RouteWeatherSummary, WeatherSample
@@ -726,13 +722,8 @@ class CellCacheTests(TestCase):
         self.assertIsNotNone(cell)
 
 
-@override_settings(
-    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
-    DEFAULT_FROM_EMAIL="noreply@example.test",
-    FRONTEND_URL="http://frontend.example.test",
-)
 class AuthApiTests(TestCase):
-    """Exercise verification, session, CSRF, and route isolation at the HTTP boundary."""
+    """Session, CSRF and route isolation at the HTTP boundary. Sign-up and sign-in: test_signup.py."""
 
     password = "Correct horse battery staple 2026!"
 
@@ -759,140 +750,6 @@ class AuthApiTests(TestCase):
             schedule_cron="0 8 * * 1",
             schedule_description="Monday at 08:00",
         )
-
-    def test_signup_requires_csrf_and_verification_before_login(self):
-        response = self.post_json(
-            "/api/auth/signup",
-            {"email": "Rider@Example.test", "username": "Rider", "password": self.password},
-            csrf=False,
-        )
-        self.assertEqual(response.status_code, 403)
-
-        response = self.post_json(
-            "/api/auth/signup",
-            {"email": "Rider@Example.test", "username": "Rider", "password": self.password},
-        )
-        self.assertEqual(response.status_code, 201)
-        user = User.objects.get(email="rider@example.test")
-        self.assertFalse(user.is_active)
-        self.assertFalse(user.email_verified)
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("frontend.example.test/account", mail.outbox[0].body)
-
-        response = self.post_json("/api/auth/login", {"email": user.email, "password": self.password})
-        self.assertEqual(response.status_code, 401)
-
-        response = self.post_json(
-            "/api/auth/verify-email",
-            {
-                "uid": urlsafe_base64_encode(str(user.pk).encode()),
-                "token": email_verification_token_generator.make_token(user),
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        user.refresh_from_db()
-        self.assertTrue(user.is_active)
-        self.assertTrue(user.email_verified)
-
-        response = self.post_json("/api/auth/login", {"email": user.email, "password": self.password})
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["authenticated"])
-        self.assertEqual(response.json()["user"]["email"], user.email)
-        self.assertEqual(response.json()["user"]["username"], "Rider")
-
-    def test_login_accepts_either_email_or_username(self):
-        User.objects.create_user(
-            username="Velofahrer", email="rider@example.test", password=self.password, email_verified=True
-        )
-
-        # Both identities work, and neither is case-sensitive.
-        for identifier in ("rider@example.test", "RIDER@EXAMPLE.TEST", "Velofahrer", "velofahrer"):
-            with self.subTest(identifier=identifier):
-                response = self.post_json("/api/auth/login", {"identifier": identifier, "password": self.password})
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json()["user"]["username"], "Velofahrer")
-                self.post_json("/api/auth/logout", {})
-
-        # The older "email" key still carries a username, so an un-updated client keeps working.
-        response = self.post_json("/api/auth/login", {"email": "Velofahrer", "password": self.password})
-        self.assertEqual(response.status_code, 200)
-
-    def test_login_queues_the_forecast_refresh_and_survives_a_queue_failure(self):
-        user = User.objects.create_user(
-            username="Rider", email="rider@example.test", password=self.password, email_verified=True
-        )
-        enqueue = Mock()
-        with patch("core.auth.views.refresh_user_forecasts", SimpleNamespace(enqueue=enqueue)):
-            response = self.post_json("/api/auth/login", {"identifier": "Rider", "password": "wrong"})
-            self.assertEqual(response.status_code, 401)
-            enqueue.assert_not_called()
-
-            response = self.post_json("/api/auth/login", {"identifier": "Rider", "password": self.password})
-        self.assertEqual(response.status_code, 200)
-        enqueue.assert_called_once_with(user.pk)
-
-        self.post_json("/api/auth/logout", {})
-        broken = SimpleNamespace(enqueue=Mock(side_effect=RuntimeError("queue down")))
-        with patch("core.auth.views.refresh_user_forecasts", broken):
-            response = self.post_json("/api/auth/login", {"identifier": "Rider", "password": self.password})
-        self.assertEqual(response.status_code, 200)
-
-    def test_superuser_can_login_without_email_verification(self):
-        user = User.objects.create_superuser(
-            username="admin", email="admin@example.test", password=self.password
-        )
-        self.assertTrue(user.email_verified)
-
-        # The exemption also keeps superusers made before the custom manager change usable.
-        user.email_verified = False
-        user.save(update_fields=["email_verified"])
-        response = self.post_json("/api/auth/login", {"identifier": "admin", "password": self.password})
-        self.assertEqual(response.status_code, 200)
-
-    def test_login_rejects_unverified_account_by_either_identity(self):
-        User.objects.create_user(
-            username="newcomer", email="new@example.test", password=self.password, email_verified=False
-        )
-
-        for identifier in ("new@example.test", "newcomer"):
-            with self.subTest(identifier=identifier):
-                response = self.post_json("/api/auth/login", {"identifier": identifier, "password": self.password})
-                self.assertEqual(response.status_code, 401)
-
-    def test_username_containing_at_sign_resolves_as_a_username(self):
-        """UnicodeUsernameValidator allows "@", so the lookup must not route on it."""
-        User.objects.create_user(
-            username="handle@home", email="real@example.test", password=self.password, email_verified=True
-        )
-
-        response = self.post_json("/api/auth/login", {"identifier": "handle@home", "password": self.password})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["user"]["email"], "real@example.test")
-
-    def test_signup_rejects_a_username_taken_in_any_case_or_column(self):
-        User.objects.create_user(
-            username="Rider", email="taken@example.test", password=self.password, email_verified=True
-        )
-
-        response = self.post_json(
-            "/api/auth/signup",
-            {"email": "fresh@example.test", "username": "rIdEr", "password": self.password},
-        )
-        self.assertEqual(response.status_code, 400)
-
-        # A username equal to somebody's email address would make the login lookup ambiguous.
-        response = self.post_json(
-            "/api/auth/signup",
-            {"email": "fresh@example.test", "username": "taken@example.test", "password": self.password},
-        )
-        self.assertEqual(response.status_code, 400)
-
-        response = self.post_json(
-            "/api/auth/signup",
-            {"email": "fresh@example.test", "username": "not a username", "password": self.password},
-        )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(User.objects.count(), 1)
 
     def test_routes_are_authenticated_csrf_protected_and_owned(self):
         owner = User.objects.create_user(username="owner", email="owner@example.test", password=self.password)
@@ -968,30 +825,6 @@ class AuthApiTests(TestCase):
         self.assertIsNone(by_id[str(bad.id)]["next_departure"])
         self.assertIsNone(next_departure("NaN 17 * * 4,5"))
         self.assertEqual(upcoming_departures("NaN 17 * * 4,5"), [])
-
-    def test_password_reset_requires_a_valid_one_time_token(self):
-        user = User.objects.create_user(
-            username="rider", email="rider@example.test", password=self.password, email_verified=True
-        )
-
-        response = self.post_json("/api/auth/password-reset", {"email": user.email})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(mail.outbox), 1)
-
-        new_password = "Different correct battery staple 2026!"
-        response = self.post_json(
-            "/api/auth/password-reset/confirm",
-            {
-                "uid": urlsafe_base64_encode(str(user.pk).encode()),
-                "token": default_token_generator.make_token(user),
-                "password": new_password,
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        response = self.post_json("/api/auth/login", {"email": user.email, "password": self.password})
-        self.assertEqual(response.status_code, 401)
-        response = self.post_json("/api/auth/login", {"email": user.email, "password": new_password})
-        self.assertEqual(response.status_code, 200)
 
 
 class SimplifyPathTests(SimpleTestCase):
@@ -1258,7 +1091,7 @@ class EntitlementTests(TestCase):
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
         self.user = User.objects.create_user(
-            username="rider", email="rider@example.test", password=self.password, email_verified=True
+            username="rider", email="rider@example.test", password=self.password
         )
         self.client.force_login(self.user)
 
@@ -1413,7 +1246,7 @@ class EntitlementTests(TestCase):
         for i, route in enumerate(mine):
             RecurringRoute.objects.filter(id=route.id).update(created_at=datetime(2026, 1, i + 1, tzinfo=UTC))
         other = User.objects.create_user(
-            username="other", email="other@example.test", password="x", email_verified=True
+            username="other", email="other@example.test", password="x"
         )
         self.add_route("theirs", owner=other, sample_points=points)
 
@@ -1433,7 +1266,7 @@ class StripeWebhookTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            username="rider", email="rider@example.test", password="x", email_verified=True
+            username="rider", email="rider@example.test", password="x"
         )
         self.subscription = Subscription.objects.create(user=self.user, stripe_customer_id="cus_123", plan=Plan.FREE)
 
@@ -1594,7 +1427,7 @@ class BillingEndpointTests(TestCase):
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
         self.user = User.objects.create_user(
-            username="rider", email="rider@example.test", password="x", email_verified=True
+            username="rider", email="rider@example.test", password="x"
         )
 
     def test_entitlements_reports_the_free_tier_and_route_usage(self):
@@ -1737,7 +1570,7 @@ class ForecastJobTests(TestCase):
     def setUp(self):
         cache.clear()
         self.user = User.objects.create_user(
-            username="rider", email="rider@example.com", password="pw", email_verified=True
+            username="rider", email="rider@example.com", password="pw"
         )
         self.departure = next_departure("0 8 * * *")
         # Two sample points inside one ~1 km² cell plus one in another: three samples,
@@ -1936,7 +1769,7 @@ class ForecastJobTests(TestCase):
         """Job ids are capabilities for ad-hoc runs, but an owned job stays private."""
         job = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
         other = User.objects.create_user(
-            username="other", email="other@example.com", password="pw", email_verified=True
+            username="other", email="other@example.com", password="pw"
         )
         client = Client(enforce_csrf_checks=True)
         client.force_login(other)
@@ -2519,7 +2352,7 @@ class ForecastViewTests(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            username="viewer", email="viewer@example.com", password="pw", email_verified=True
+            username="viewer", email="viewer@example.com", password="pw"
         )
         self.client = Client(enforce_csrf_checks=True)
         self.client.force_login(self.user)
@@ -2725,7 +2558,7 @@ class ForecastViewTests(TestCase):
 
         job = self._job()
         other = User.objects.create_user(
-            username="other", email="other@example.com", password="pw", email_verified=True
+            username="other", email="other@example.com", password="pw"
         )
         client = Client(enforce_csrf_checks=True)
         client.force_login(other)
@@ -2739,7 +2572,7 @@ class ForecastJobConsumerTests(TransactionTestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            username="watcher", email="watcher@example.com", password="pw", email_verified=True
+            username="watcher", email="watcher@example.com", password="pw"
         )
 
     def _job(self, **overrides):
@@ -2797,7 +2630,7 @@ class ForecastJobConsumerTests(TransactionTestCase):
         """An owned job is as private on the socket as it is on the job endpoint."""
         job = self._job(owner=self.user)
         other = User.objects.create_user(
-            username="nosy", email="nosy@example.com", password="pw", email_verified=True
+            username="nosy", email="nosy@example.com", password="pw"
         )
 
         async def run():

@@ -11,6 +11,7 @@ dependencies = [
     "croniter==6.2.4",
     "daphne==4.2.3",
     "django==6.1.1",
+    "django-allauth==65.19.4",
     "django-axes==8.3.1",
     "django-click==2.5.0",
     "django-cors-headers==4.9.0",
