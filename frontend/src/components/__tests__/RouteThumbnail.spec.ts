@@ -2,7 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 
 import RouteThumbnail, { type ThumbnailRoute } from "../RouteThumbnail.vue";
-import { NO_DATA_COLOR, rainLevelColor } from "@/utils/rideQuality";
+import { NO_DATA_COLOR, scoreColor } from "@/utils/rideQuality";
 
 const DEPARTURE = "2026-09-14T08:00:00+02:00";
 
@@ -35,14 +35,18 @@ const strokes = (wrapper: ReturnType<typeof mount>) =>
     wrapper.findAll("polyline:not([data-casing])").map(p => p.attributes("stroke"));
 
 describe("RouteThumbnail", () => {
-    it("strokes the whole line using the server's rain level", () => {
-        const wrapper = mount(RouteThumbnail, { props: { route: route({}, 0.1, "sehr gut", "leicht") } });
-        expect(rainLevelColor("leicht")).not.toBe(NO_DATA_COLOR);
-        expect(strokes(wrapper)).toEqual([rainLevelColor("leicht")]);
+    it("strokes the whole line using the server's ride score", () => {
+        const wrapper = mount(RouteThumbnail, { props: { route: route({}, 0.3) } });
+        expect(strokes(wrapper)).toEqual([scoreColor(0.3)]);
     });
 
-    it("distinguishes rain severity and keeps the overall quality label", () => {
-        const good = mount(RouteThumbnail, { props: { route: route({}, 0.1, "sehr gut", "leicht") } });
+    it("colours a dry ride, rather than greying it out as if there were no forecast", () => {
+        const wrapper = mount(RouteThumbnail, { props: { route: route({}, 0.1, "sehr gut", null) } });
+        expect(strokes(wrapper)).not.toEqual([NO_DATA_COLOR]);
+    });
+
+    it("distinguishes good from bad rides and keeps the overall quality label", () => {
+        const good = mount(RouteThumbnail, { props: { route: route({}, 0.1, "sehr gut") } });
         const bad = mount(RouteThumbnail, { props: { route: route({}, 0.9, "sehr schlecht · v. a. Regen", "stark") } });
         expect(strokes(bad)).not.toEqual(strokes(good));
         // The colour has no legend at this size, so the label must keep naming the quality.

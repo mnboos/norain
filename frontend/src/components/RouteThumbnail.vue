@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * The tiny route-shape glyph in the route list: the shape of the ride in a single colour,
- * the rain-severity colour of the server's `rainLevel`. The overall ride score remains in the
- * caption; wind, temperature and frost do not recolour this rain marker.
+ * the worst sample's ride score on the same YlOrRd ramp as the map route line. Rain and frost
+ * have their own icons beside it (`RouteWeatherBadges`), coloured by their own levels.
  *
  * The ramp's pale good end (`#ffeda0`) all but disappears at this size, so the line sits on
  * the same theme-flipping casing the map uses (`CASING_*`). The glyph has no legend and no
@@ -19,7 +19,7 @@ import {
     CASING_LIGHT,
     CASING_OPACITY,
     NO_DATA_COLOR,
-    rainLevelColor,
+    scoreColor,
 } from "@/utils/rideQuality";
 import { liveThumbnail, pointsAttr, projectPath } from "@/utils/routeThumbnail";
 import type { ThumbnailRoute } from "@/utils/routeThumbnail";
@@ -42,8 +42,7 @@ const line = computed(() => {
  * One colour for the whole line: the server's score for the worst sample, the one the caption
  * names. Grey when nothing is known - stale, or no sample the server could score.
  */
-// This glyph is the dashboard's rain marker: wind, temperature and frost do not tint it.
-const color = computed(() => rainLevelColor(thumbnail.value?.rainLevel));
+const color = computed(() => scoreColor(thumbnail.value?.rideScore));
 
 const label = computed(() => {
     if (!props.route.hasGeometry) return "Route wird noch berechnet";
