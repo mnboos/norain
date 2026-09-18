@@ -3,7 +3,6 @@ import { useQueryClient } from "@tanstack/vue-query";
 import type { RecurringRouteOut } from "@norain/api/models";
 
 import { useSession } from "@/composables/useSession";
-import { prefetchForecastFigures } from "@/queries/forecastParts";
 import { prefetchRecurringRouteForecast, recurringRouteKeys } from "@/queries/recurringRoutes";
 import { pickPrefetchRoutes, recentRouteIds } from "@/utils/recentRoutes";
 
@@ -37,9 +36,9 @@ export function usePrefetchRoutes(routes: MaybeRefOrGetter<RecurringRouteOut[] |
             if (stopped()) return;
             const forecast = await prefetchRecurringRouteForecast(client, route);
             if (!forecast || stopped()) continue;
-            // The charts load Plotly as its own chunk; fetch the code along with their data.
+            // The charts load Plotly as its own chunk; fetch the code with the forecast. Their data
+            // comes with the forecast itself.
             void import("@/components/chart/NiceChart.vue").catch(() => undefined);
-            await prefetchForecastFigures(client, forecast.jobId, forecast.version);
         }
     }
 

@@ -22,7 +22,7 @@ from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser
 
 from .forecast_schemas import WeatherSample
-from .models import Plan, Subscription, User
+from .models import Plan, RecurringRoute, Subscription, User
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,8 @@ class Entitlements:
     max_routes: int | None
     ensemble_uncertainty: bool
     station_correction: bool
+    departure_comparison: bool = False
+    max_briefing_routes: int = 0
 
     @property
     def is_pro(self) -> bool:
@@ -43,18 +45,35 @@ class Entitlements:
 
         Compared by ``get_or_start_job``: a result built for another tier is never reused.
         """
-        return {"ensemble_uncertainty": self.ensemble_uncertainty, "station_correction": self.station_correction}
+        return {
+            "ensemble_uncertainty": self.ensemble_uncertainty,
+            "station_correction": self.station_correction,
+            "departure_comparison": self.departure_comparison,
+        }
 
 
 FREE = Entitlements(plan=Plan.FREE, max_routes=2, ensemble_uncertainty=False, station_correction=False)
-PRO = Entitlements(plan=Plan.PRO, max_routes=None, ensemble_uncertainty=True, station_correction=True)
+PRO = Entitlements(
+    plan=Plan.PRO,
+    max_routes=20,
+    ensemble_uncertainty=True,
+    station_correction=True,
+    departure_comparison=True,
+    max_briefing_routes=5,
+)
 
 BY_PLAN = {Plan.FREE: FREE, Plan.PRO: PRO}
 
 
 def _entitlements_for_subscription(subscription: Subscription | None) -> Entitlements:
     """Paid entitlements only while the subscription is actually current."""
-    if subscription is None or subscription.plan != Plan.PRO:
+    if subscription is None:
+        return FREE
+    if subscription.complimentary_until and subscription.complimentary_until > datetime.now(tz=UTC):
+        return PRO
+    if subscription.trial_ends_at and subscription.trial_ends_at > datetime.now(tz=UTC):
+        return PRO
+    if subscription.plan != Plan.PRO:
         return FREE
     if subscription.status and subscription.status not in Subscription.ACTIVE_STATUSES:
         return FREE
@@ -94,3 +113,70 @@ def strip_uncertainty(samples: list[WeatherSample]) -> None:
     """
     for sample in samples:
         sample.uncertainty = None
+
+
+def allowed_route_ids(user) -> list:
+    if user is None or not user.is_authenticated:
+        return []
+    limits = entitlements_for_sync(user)
+    routes = RecurringRoute.objects.filter(owner=user, active=True, return_of__isnull=True).order_by(
+        "-free_selected", "created_at", "id"
+    )
+    roots = list(routes.values_list("id", flat=True)[: limits.max_routes])
+    return roots + list(
+        RecurringRoute.objects.filter(owner=user, active=True, return_of_id__in=roots).values_list("id", flat=True)
+    )
+
+
+def briefing_route_ids(user) -> list:
+    limits = entitlements_for_sync(user)
+    if not limits.max_briefing_routes:
+        return []
+    roots = list(
+        RecurringRoute.objects.filter(
+            id__in=allowed_route_ids(user), return_of__isnull=True, briefing_channel__in=["email", "push"]
+        )
+        .order_by("created_at", "id")
+        .values_list("id", flat=True)[: limits.max_briefing_routes]
+    )
+    return roots + list(
+        RecurringRoute.objects.filter(owner=user, active=True, return_of_id__in=roots)
+        .exclude(briefing_channel="")
+        .values_list("id", flat=True)
+    )
+
+
+async def forecast_params_for(user, params: dict) -> dict:
+    """Normalize saved windows after expiry, including already queued jobs."""
+    if (await entitlements_for(user)).departure_comparison:
+        return params
+    return {
+        k: v
+        for k, v in params.items()
+        if k
+        not in {
+            "departure_flex_before_minutes",
+            "departure_flex_after_minutes",
+        }
+    }
+
+
+def access_source(user) -> str:
+    """Keep gifts and trials out of paid conversion metrics."""
+    if user is None or not user.is_authenticated:
+        return "free"
+    subscription = Subscription.objects.filter(user=user).first()
+    if not subscription or not _entitlements_for_subscription(subscription).is_pro:
+        return "free"
+    now = datetime.now(tz=UTC)
+    if (
+        subscription.stripe_subscription_id
+        and subscription.status in Subscription.ACTIVE_STATUSES
+        and (subscription.current_period_end is None or subscription.current_period_end > now)
+    ):
+        return "paid"
+    if subscription.complimentary_until and subscription.complimentary_until > now:
+        return "complimentary"
+    if subscription.trial_ends_at and subscription.trial_ends_at > now:
+        return "trial"
+    return "admin"

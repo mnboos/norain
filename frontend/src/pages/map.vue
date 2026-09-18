@@ -6,6 +6,7 @@
 </route>
 
 <script setup lang="ts">
+import { useEntitlements } from "@/composables/useEntitlements";
 import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import DepartureComparison from "@/components/DepartureComparison.vue";
@@ -24,6 +25,7 @@ import { useRecurringRoute } from "@/queries/recurringRoutes";
 import { useRouteWeather } from "@/queries/routeWeather";
 
 const route = useRoute();
+const { isPro } = useEntitlements();
 
 const profile = ref("bike");
 const departureTime = ref<string>(defaultDepartureTime());
@@ -92,7 +94,7 @@ const { data: placesStart, isFetching: isFetchingStart } = usePlaceSearch(filter
 const { data: placesDest, isFetching: isFetchingDest } = usePlaceSearch(filterDest, searchLocation);
 const ready = computed(() => !!zielort.value);
 
-const comparisonQuery = useRouteWeather(abfahrtsort, zielort, profile, departureTime, flexBefore, flexAfter);
+const comparisonQuery = useRouteWeather(abfahrtsort, zielort, profile, departureTime, () => isPro.value ? flexBefore.value : 0, () => isPro.value ? flexAfter.value : 0);
 const selectedQuery = useRouteWeather(
     abfahrtsort,
     zielort,

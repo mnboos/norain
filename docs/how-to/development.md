@@ -83,15 +83,20 @@ in the [documentation index](../README.md).
 
 ## Create an account you can sign in with
 
-`IdentityBackend` refuses any account whose `email_verified` is false, and
-`createsuperuser` cannot set that flag — so verify the account before signing in to the app:
+Sign up in the app: enter an email, then open the link the backend prints to its console
+(development sends mail there) in the same browser and pick a username and password.
+
+Or create a superuser. `createsuperuser` marks its email as verified, so it can sign in to
+the app at once:
 
 ```bash
 cd backend
 python manage.py createsuperuser          # asks for username, email and password
-python manage.py verify_user --identifier you@example.test
 python manage.py add_totp_device --identifier you@example.test   # only to use /admin
 ```
+
+An account made by hand in the admin or the shell has no verified email and cannot sign in
+until `python manage.py verify_user --identifier you@example.test` runs.
 
 The admin asks for a code from an authenticator app as well as the password;
 `add_totp_device` prints the key to enter in the app. Locally it stays at `/admin/`

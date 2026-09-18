@@ -10,7 +10,6 @@ from django.test import SimpleTestCase
 from .forecast_schemas import RouteWeatherOut
 from .geo import vertex_distances
 from .grid import _from_open_meteo, _from_owm
-from .plotting import generate_forecast_figures
 from .schedule import LOCAL_TZ
 from .test_uncertainty import ETA, FETCHED, ensemble_data
 from .test_uncertainty import sample as weather_sample
@@ -78,7 +77,7 @@ class WindTests(SimpleTestCase):
         self.assertIsNone(empty.metrics["crosswind"].median)
         self.assertIsNotNone(empty.pop)
 
-    def test_legacy_payload_defaults_and_felt_chart_gap_selection(self):
+    def test_legacy_payload_defaults(self):
         samples = [weather_sample()]
         forecast = RouteWeatherOut(
             line=[[0, 0], [0, 0.01]],
@@ -89,16 +88,6 @@ class WindTests(SimpleTestCase):
         )
         self.assertEqual(forecast.wind_segments, [])
         self.assertIsNone(forecast.summary.wind_distribution)
-        result = profile([[0, 0], [0, 0.01]])
-        result.segments[1]["felt_coverage"] = 0.5
-        forecast = RouteWeatherOut(**{**forecast.model_dump(), "wind_segments": result.segments})
-        figures = generate_forecast_figures(forecast, departure_time="2026-09-12T10:00:00Z")
-        felt = next(t for t in figures[2]["data"] if t.get("legendgroup") == "felt")
-        self.assertIsNone(felt["y"][1])
-        self.assertFalse(felt["connectgaps"])
-        self.assertEqual(felt["visible"], "legendonly")
-        self.assertTrue(all(c[0] is None for c in felt["customdata"]))
-        self.assertTrue(felt["customdata"][0][1].startswith("12:"))
 
     def test_cardinal_crosswind_sign_and_support_absolute(self):
         east = normalize_wind(10, 90)

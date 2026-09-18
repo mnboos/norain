@@ -120,6 +120,26 @@ export interface RecurringRouteOut {
      * 
      */
     thumbnail?: RouteThumbnail | null;
+    /**
+     * 
+     */
+    returnRouteId?: string | null;
+    /**
+     * 
+     */
+    parentRouteId?: string | null;
+    /**
+     * 
+     */
+    returnScheduleCron?: string | null;
+    /**
+     * 
+     */
+    returnScheduleDescription?: string;
+    /**
+     * 
+     */
+    returnNextDeparture?: string | null;
 }
 
 /**
@@ -175,6 +195,11 @@ export function RecurringRouteOutFromJSONTyped(json: any, ignoreDiscriminator: b
         'createdAt': json['created_at'] === undefined ? undefined : json['created_at'] === null ? null : (parseDateTime(json['created_at'])),
         'updatedAt': json['updated_at'] === undefined ? undefined : json['updated_at'] === null ? null : (parseDateTime(json['updated_at'])),
         'thumbnail': json['thumbnail'] === undefined ? undefined : json['thumbnail'] === null ? null : RouteThumbnailFromJSON(json['thumbnail']),
+        'returnRouteId': json['return_route_id'] === undefined ? undefined : json['return_route_id'] === null ? null : json['return_route_id'],
+        'parentRouteId': json['parent_route_id'] === undefined ? undefined : json['parent_route_id'] === null ? null : json['parent_route_id'],
+        'returnScheduleCron': json['return_schedule_cron'] === undefined ? undefined : json['return_schedule_cron'] === null ? null : json['return_schedule_cron'],
+        'returnScheduleDescription': json['return_schedule_description'] == null ? undefined : json['return_schedule_description'],
+        'returnNextDeparture': json['return_next_departure'] === undefined ? undefined : json['return_next_departure'] === null ? null : json['return_next_departure'],
     };
 }
 
@@ -212,6 +237,11 @@ export function RecurringRouteOutToJSONTyped(value?: RecurringRouteOut | null, i
         'created_at': value['createdAt'] == null ? value['createdAt'] : serializeDateTime(value['createdAt']),
         'updated_at': value['updatedAt'] == null ? value['updatedAt'] : serializeDateTime(value['updatedAt']),
         'thumbnail': RouteThumbnailToJSON(value['thumbnail']),
+        'return_route_id': value['returnRouteId'],
+        'parent_route_id': value['parentRouteId'],
+        'return_schedule_cron': value['returnScheduleCron'],
+        'return_schedule_description': value['returnScheduleDescription'],
+        'return_next_departure': value['returnNextDeparture'],
     };
 }
 

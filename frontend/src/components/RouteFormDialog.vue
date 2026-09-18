@@ -30,6 +30,10 @@ const dest = ref<PlacesSearchResult | null>(null);
 const profile = ref("bike");
 const days = ref<number[]>([1, 2, 3, 4, 5]);
 const time = ref("08:00");
+const twoWay = ref(false);
+const returnTime = ref("17:00");
+const returnDays = ref<number[]>([1, 2, 3, 4, 5]);
+const returnValid = computed(() => /^([01]\d|2[0-3]):[0-5]\d$/.test(returnTime.value) && returnDays.value.length > 0);
 const flexBefore = ref(0);
 const flexAfter = ref(0);
 
@@ -103,7 +107,7 @@ const profileOptions = [
 ];
 
 const isValid = computed(
-    () => !!name.value.length && !!start.value && !!dest.value && !!days.value.length && !!parsedTime.value,
+    () => !!name.value.length && !!start.value && !!dest.value && !!days.value.length && !!parsedTime.value && (!twoWay.value || returnValid.value),
 );
 
 function onSave() {
@@ -122,6 +126,8 @@ function onSave() {
         departureFlexBeforeMinutes: flexBefore.value,
         departureFlexAfterMinutes: flexAfter.value,
         scheduleDescription: scheduleDescription.value,
+        returnScheduleCron: twoWay.value ? `${Number(returnTime.value.slice(3))} ${Number(returnTime.value.slice(0, 2))} * * ${returnDays.value.join(",")}` : null,
+        returnScheduleDescription: twoWay.value ? `${returnDays.value.map(d => dayLabels[d - 1]).join(", ")} um ${returnTime.value}` : "",
     });
     emit("update:modelValue", false);
 }
@@ -240,6 +246,18 @@ function onClose() {
                         </q-icon>
                     </template>
                 </q-input>
+
+                <q-toggle v-model="twoWay" label="Hin- und Rückfahrt als eine Route speichern" />
+                <div v-if="twoWay" class="q-gutter-sm">
+                    <q-input
+v-model="returnTime" label="Abfahrtszeit der Rückfahrt" outlined dense mask="##:##" fill-mask
+                        :rules="[() => returnValid || 'Gültige Uhrzeit und mindestens einen Tag auswählen']" />
+                    <div class="text-caption">Tage der Rückfahrt</div>
+                    <q-option-group
+v-model="returnDays" type="checkbox" inline
+                        :options="dayLabels.map((label, i) => ({ label, value: i + 1 }))" />
+                    <p class="text-caption">Die Rückfahrt wird vom Ziel zum Start separat berechnet. Beide Fahrten zählen zusammen als eine Route.</p>
+                </div>
 
                 <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
 

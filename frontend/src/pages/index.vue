@@ -38,7 +38,7 @@ function onRouteSave(data: RecurringRouteIn) {
             if (isQuotaExceeded(err)) {
                 $q.dialog({
                     title: "Tarifgrenze erreicht",
-                    message: `Der Free-Tarif erlaubt ${maxRoutes.value ?? 2} aktive Routen. Mit Pro sind es unbegrenzt viele.`,
+                    message: `Dein Tarif erlaubt ${maxRoutes.value ?? 2} aktive Routen. Plus umfasst 20 Routen.`,
                     cancel: { label: "Später", flat: true },
                     ok: { label: "Upgrade", color: "primary", unelevated: true },
                 }).onOk(() => void router.push("/account"));

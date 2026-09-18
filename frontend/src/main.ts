@@ -4,7 +4,7 @@ import { createApp } from "vue";
 import App from "./App.vue";
 import * as Sentry from "@sentry/vue";
 import router from "./router";
-import { Quasar, Dialog, Dark, LocalStorage } from "quasar";
+import { Quasar, Dialog, Dark, LocalStorage, Notify } from "quasar";
 import quasarLang from "quasar/lang/de-CH";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { Configuration, DefaultConfig, type Middleware, type RequestContext } from "@norain/api/runtime";
@@ -21,6 +21,7 @@ import "@fontsource-variable/lexend";
 import { getCookie, useBackendHost } from "@/utils";
 import { useSession } from "@/composables/useSession";
 import { initialDarkConfig } from "@/utils/theme";
+import { backendTraceTargets } from "@/services/tracing";
 
 const app = createApp(App);
 
@@ -60,15 +61,6 @@ DefaultConfig.config = new Configuration({
     middleware: [new AppropriateOptionsMiddleware()],
 });
 
-app.use(router);
-app.use(VueQueryPlugin);
-app.use(Quasar, {
-    plugins: { Dialog, Dark, LocalStorage },
-    lang: quasarLang,
-    iconSet: quasarIconSet,
-    config: { dark: initialDarkConfig() },
-});
-
 Sentry.init({
     app,
     dsn: import.meta.env.VITE_SENTRY_DSN_FRONTEND,
@@ -76,7 +68,7 @@ Sentry.init({
     sendDefaultPii: true,
     enableLogs: true,
     enableMetrics: true,
-    // tracePropagationTargets: [useBackendHost(""), useBackendHost()],
+    tracePropagationTargets: backendTraceTargets(backendHost),
     integrations: [
         Sentry.browserTracingIntegration({ router }),
         Sentry.replayIntegration(),
@@ -119,6 +111,16 @@ Sentry.init({
     replaysOnErrorSampleRate: 1.0,
 
     release: import.meta.env.VITE_VUE_APP_VERSION ?? undefined,
+});
+
+// Install the router after tracing so its initial navigation is instrumented too.
+app.use(router);
+app.use(VueQueryPlugin);
+app.use(Quasar, {
+    plugins: { Dialog, Dark, LocalStorage, Notify },
+    lang: quasarLang,
+    iconSet: quasarIconSet,
+    config: { dark: initialDarkConfig() },
 });
 
 async function bootstrap() {

@@ -13,18 +13,14 @@ from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
-from django.contrib.auth.tokens import default_token_generator
-from django.core import mail
 from django.core.cache import cache
 from django.core.management import call_command
 from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, override_settings
-from django.utils.http import urlsafe_base64_encode
 
 from backend import load_dotenv
 from backend.asgi import application
 from core.api.places import retrieve_places
 from core.api.recurring_route import _route_to_out
-from core.auth.tokens import email_verification_token_generator
 from core.claims import claim_cell
 from core.entitlements import FREE, PRO, entitlements_for_sync, strip_uncertainty
 from core.forecast_schemas import ForecastUncertainty, RouteWeatherOut, RouteWeatherSummary, WeatherSample
@@ -60,7 +56,6 @@ from core.models import (
     route_line,
     route_point,
 )
-from core.plotting import generate_forecast_figures
 from core.schedule import LOCAL_TZ, local_today, next_departure, upcoming_departures
 from core.tasks import (
     _assemble_forecast_job_async,
@@ -569,103 +564,6 @@ class ForecastDaysTests(SimpleTestCase):
         self.assertEqual(_forecast_days(datetime(2026, 6, 10, 0, 0, tzinfo=LOCAL_TZ), today), 1)
 
 
-class PlottingTests(SimpleTestCase):
-    """Tests for figure generation with empty/invalid input."""
-
-    @staticmethod
-    def _make_forecast(samples: list[WeatherSample] | None = None) -> RouteWeatherOut:
-        return RouteWeatherOut(
-            line=[[9.5, 47.5], [9.6, 47.6]],
-            total_seconds=600,
-            total_distance_m=5000.0,
-            samples=samples or [],
-            summary=RouteWeatherSummary(
-                will_rain=False,
-                first_rain_eta=None,
-                first_rain_place=None,
-                max_rain_mm=0.0,
-                rain_probability=None,
-                rain_amount=0.0,
-                max_headwind=0.0,
-                source="open-meteo",
-            ),
-        )
-
-    def test_empty_samples_returns_placeholder_figures(self):
-        forecast = self._make_forecast([])
-        figures = generate_forecast_figures(forecast)
-
-        self.assertEqual(len(figures), 3)
-        for fig in figures:
-            self.assertIn("data", fig)
-            self.assertIn("layout", fig)
-
-    def test_placeholder_figures_contain_message(self):
-        forecast = self._make_forecast([])
-        figures = generate_forecast_figures(forecast)
-
-        # All 3 figures are Cartesian placeholders with the no-data message.
-        for fig in figures:
-            annotation_texts = [a.get("text", "") for a in fig["layout"].get("annotations", [])]
-            self.assertTrue(
-                any("Keine Wetterdaten" in t for t in annotation_texts),
-                f"Expected 'Keine Wetterdaten' in annotations, got {annotation_texts}",
-            )
-
-    def test_figures_only_use_cartesian_traces(self):
-        """Figures must stick to scatter/bar - the frontend registers only those."""
-        samples = [
-            WeatherSample(
-                lat=47.5,
-                lon=9.5,
-                elapsed_s=0,
-                eta="2026-06-20T14:00",
-                rain_mm=0.0,
-                temp=18.0,
-                wind_speed=10.0,
-                wind_dir=270.0,
-                headwind=5.0,
-                crosswind=2.0,
-                weather_desc="klar",
-            ),
-            WeatherSample(
-                lat=47.55,
-                lon=9.55,
-                elapsed_s=300,
-                eta="2026-06-20T14:05",
-                rain_mm=2.5,
-                temp=17.0,
-                wind_speed=12.0,
-                wind_dir=180.0,
-                headwind=10.0,
-                crosswind=0.0,
-                weather_desc="Regen",
-            ),
-            WeatherSample(
-                lat=47.6,
-                lon=9.6,
-                elapsed_s=600,
-                eta="2026-06-20T14:10",
-                rain_mm=0.3,
-                temp=19.0,
-                wind_speed=8.0,
-                wind_dir=90.0,
-                headwind=0.0,
-                crosswind=5.0,
-                weather_desc="bewölkt",
-            ),
-        ]
-        forecast = self._make_forecast(samples)
-        figures = generate_forecast_figures(forecast)
-
-        self.assertEqual(len(figures), 3)
-        trace_types = {t.get("type", "scatter") for fig in figures for t in fig["data"]}
-        self.assertTrue(
-            trace_types <= {"scatter", "bar"},
-            f"Unexpected trace types for the trimmed plotly.js bundle: {trace_types}",
-        )
-
-
 class CellCacheTests(TestCase):
     """Tests for forecast_days-aware cell cache freshness."""
 
@@ -726,13 +624,8 @@ class CellCacheTests(TestCase):
         self.assertIsNotNone(cell)
 
 
-@override_settings(
-    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
-    DEFAULT_FROM_EMAIL="noreply@example.test",
-    FRONTEND_URL="http://frontend.example.test",
-)
 class AuthApiTests(TestCase):
-    """Exercise verification, session, CSRF, and route isolation at the HTTP boundary."""
+    """Session, CSRF and route isolation at the HTTP boundary. Sign-up and sign-in: test_signup.py."""
 
     password = "Correct horse battery staple 2026!"
 
@@ -759,140 +652,6 @@ class AuthApiTests(TestCase):
             schedule_cron="0 8 * * 1",
             schedule_description="Monday at 08:00",
         )
-
-    def test_signup_requires_csrf_and_verification_before_login(self):
-        response = self.post_json(
-            "/api/auth/signup",
-            {"email": "Rider@Example.test", "username": "Rider", "password": self.password},
-            csrf=False,
-        )
-        self.assertEqual(response.status_code, 403)
-
-        response = self.post_json(
-            "/api/auth/signup",
-            {"email": "Rider@Example.test", "username": "Rider", "password": self.password},
-        )
-        self.assertEqual(response.status_code, 201)
-        user = User.objects.get(email="rider@example.test")
-        self.assertFalse(user.is_active)
-        self.assertFalse(user.email_verified)
-        self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("frontend.example.test/account", mail.outbox[0].body)
-
-        response = self.post_json("/api/auth/login", {"email": user.email, "password": self.password})
-        self.assertEqual(response.status_code, 401)
-
-        response = self.post_json(
-            "/api/auth/verify-email",
-            {
-                "uid": urlsafe_base64_encode(str(user.pk).encode()),
-                "token": email_verification_token_generator.make_token(user),
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        user.refresh_from_db()
-        self.assertTrue(user.is_active)
-        self.assertTrue(user.email_verified)
-
-        response = self.post_json("/api/auth/login", {"email": user.email, "password": self.password})
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.json()["authenticated"])
-        self.assertEqual(response.json()["user"]["email"], user.email)
-        self.assertEqual(response.json()["user"]["username"], "Rider")
-
-    def test_login_accepts_either_email_or_username(self):
-        User.objects.create_user(
-            username="Velofahrer", email="rider@example.test", password=self.password, email_verified=True
-        )
-
-        # Both identities work, and neither is case-sensitive.
-        for identifier in ("rider@example.test", "RIDER@EXAMPLE.TEST", "Velofahrer", "velofahrer"):
-            with self.subTest(identifier=identifier):
-                response = self.post_json("/api/auth/login", {"identifier": identifier, "password": self.password})
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.json()["user"]["username"], "Velofahrer")
-                self.post_json("/api/auth/logout", {})
-
-        # The older "email" key still carries a username, so an un-updated client keeps working.
-        response = self.post_json("/api/auth/login", {"email": "Velofahrer", "password": self.password})
-        self.assertEqual(response.status_code, 200)
-
-    def test_login_queues_the_forecast_refresh_and_survives_a_queue_failure(self):
-        user = User.objects.create_user(
-            username="Rider", email="rider@example.test", password=self.password, email_verified=True
-        )
-        enqueue = Mock()
-        with patch("core.auth.views.refresh_user_forecasts", SimpleNamespace(enqueue=enqueue)):
-            response = self.post_json("/api/auth/login", {"identifier": "Rider", "password": "wrong"})
-            self.assertEqual(response.status_code, 401)
-            enqueue.assert_not_called()
-
-            response = self.post_json("/api/auth/login", {"identifier": "Rider", "password": self.password})
-        self.assertEqual(response.status_code, 200)
-        enqueue.assert_called_once_with(user.pk)
-
-        self.post_json("/api/auth/logout", {})
-        broken = SimpleNamespace(enqueue=Mock(side_effect=RuntimeError("queue down")))
-        with patch("core.auth.views.refresh_user_forecasts", broken):
-            response = self.post_json("/api/auth/login", {"identifier": "Rider", "password": self.password})
-        self.assertEqual(response.status_code, 200)
-
-    def test_superuser_can_login_without_email_verification(self):
-        user = User.objects.create_superuser(
-            username="admin", email="admin@example.test", password=self.password
-        )
-        self.assertTrue(user.email_verified)
-
-        # The exemption also keeps superusers made before the custom manager change usable.
-        user.email_verified = False
-        user.save(update_fields=["email_verified"])
-        response = self.post_json("/api/auth/login", {"identifier": "admin", "password": self.password})
-        self.assertEqual(response.status_code, 200)
-
-    def test_login_rejects_unverified_account_by_either_identity(self):
-        User.objects.create_user(
-            username="newcomer", email="new@example.test", password=self.password, email_verified=False
-        )
-
-        for identifier in ("new@example.test", "newcomer"):
-            with self.subTest(identifier=identifier):
-                response = self.post_json("/api/auth/login", {"identifier": identifier, "password": self.password})
-                self.assertEqual(response.status_code, 401)
-
-    def test_username_containing_at_sign_resolves_as_a_username(self):
-        """UnicodeUsernameValidator allows "@", so the lookup must not route on it."""
-        User.objects.create_user(
-            username="handle@home", email="real@example.test", password=self.password, email_verified=True
-        )
-
-        response = self.post_json("/api/auth/login", {"identifier": "handle@home", "password": self.password})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["user"]["email"], "real@example.test")
-
-    def test_signup_rejects_a_username_taken_in_any_case_or_column(self):
-        User.objects.create_user(
-            username="Rider", email="taken@example.test", password=self.password, email_verified=True
-        )
-
-        response = self.post_json(
-            "/api/auth/signup",
-            {"email": "fresh@example.test", "username": "rIdEr", "password": self.password},
-        )
-        self.assertEqual(response.status_code, 400)
-
-        # A username equal to somebody's email address would make the login lookup ambiguous.
-        response = self.post_json(
-            "/api/auth/signup",
-            {"email": "fresh@example.test", "username": "taken@example.test", "password": self.password},
-        )
-        self.assertEqual(response.status_code, 400)
-
-        response = self.post_json(
-            "/api/auth/signup",
-            {"email": "fresh@example.test", "username": "not a username", "password": self.password},
-        )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(User.objects.count(), 1)
 
     def test_routes_are_authenticated_csrf_protected_and_owned(self):
         owner = User.objects.create_user(username="owner", email="owner@example.test", password=self.password)
@@ -968,30 +727,6 @@ class AuthApiTests(TestCase):
         self.assertIsNone(by_id[str(bad.id)]["next_departure"])
         self.assertIsNone(next_departure("NaN 17 * * 4,5"))
         self.assertEqual(upcoming_departures("NaN 17 * * 4,5"), [])
-
-    def test_password_reset_requires_a_valid_one_time_token(self):
-        user = User.objects.create_user(
-            username="rider", email="rider@example.test", password=self.password, email_verified=True
-        )
-
-        response = self.post_json("/api/auth/password-reset", {"email": user.email})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(mail.outbox), 1)
-
-        new_password = "Different correct battery staple 2026!"
-        response = self.post_json(
-            "/api/auth/password-reset/confirm",
-            {
-                "uid": urlsafe_base64_encode(str(user.pk).encode()),
-                "token": default_token_generator.make_token(user),
-                "password": new_password,
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        response = self.post_json("/api/auth/login", {"email": user.email, "password": self.password})
-        self.assertEqual(response.status_code, 401)
-        response = self.post_json("/api/auth/login", {"email": user.email, "password": new_password})
-        self.assertEqual(response.status_code, 200)
 
 
 class SimplifyPathTests(SimpleTestCase):
@@ -1258,7 +993,7 @@ class EntitlementTests(TestCase):
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
         self.user = User.objects.create_user(
-            username="rider", email="rider@example.test", password=self.password, email_verified=True
+            username="rider", email="rider@example.test", password=self.password
         )
         self.client.force_login(self.user)
 
@@ -1330,7 +1065,7 @@ class EntitlementTests(TestCase):
         self.add_route("archived", active=False)
         self.assertEqual(self.post_route("second").status_code, 200)
 
-    def test_pro_tier_is_not_capped(self):
+    def test_pro_allows_more_than_two_routes(self):
         self.make_pro()
         for i in range(4):
             self.assertEqual(self.post_route(f"route-{i}").status_code, 200)
@@ -1386,7 +1121,7 @@ class EntitlementTests(TestCase):
 
     # -- pre-warm fan-out (the actual API spend) -------------------------
 
-    def test_prewarm_keeps_the_oldest_routes_of_a_downgraded_account(self):
+    def test_prewarm_stops_for_a_downgraded_account(self):
         oldest = self.add_route("oldest")
         middle = self.add_route("middle")
         newest = self.add_route("newest")
@@ -1395,17 +1130,17 @@ class EntitlementTests(TestCase):
             RecurringRoute.objects.filter(id=route.id).update(created_at=datetime(2026, 1, day, tzinfo=UTC))
 
         selected = async_to_sync(_prewarm_routes)()
-        self.assertEqual([r.name for r in selected], ["oldest", "middle"])
+        self.assertEqual(selected, [])
 
     def test_prewarm_skips_ownerless_routes(self):
         self.add_route("orphan", owner=None)
         self.assertEqual(async_to_sync(_prewarm_routes)(), [])
 
-    def test_prewarm_covers_every_route_for_pro(self):
+    def test_prewarm_requires_briefing_opt_in_for_pro(self):
         self.make_pro()
         for i in range(4):
             self.add_route(f"route-{i}")
-        self.assertEqual(len(async_to_sync(_prewarm_routes)()), 4)
+        self.assertEqual(async_to_sync(_prewarm_routes)(), [])
 
     def test_sign_in_refresh_scans_only_that_accounts_routes_within_quota(self):
         points = [{"lat": 47.5, "lon": 9.3, "lat_r": 47.5, "lon_r": 9.3, "elapsed_s": 0, "idx": 0}]
@@ -1413,7 +1148,7 @@ class EntitlementTests(TestCase):
         for i, route in enumerate(mine):
             RecurringRoute.objects.filter(id=route.id).update(created_at=datetime(2026, 1, i + 1, tzinfo=UTC))
         other = User.objects.create_user(
-            username="other", email="other@example.test", password="x", email_verified=True
+            username="other", email="other@example.test", password="x"
         )
         self.add_route("theirs", owner=other, sample_points=points)
 
@@ -1421,9 +1156,9 @@ class EntitlementTests(TestCase):
         with patch("core.tasks.scan_route_forecasts", SimpleNamespace(aenqueue=enqueue)):
             result = async_to_sync(_refresh_user_forecasts_async)(self.user.id)
 
-        # Free: the two oldest, exactly as the hourly pass would pick them.
-        self.assertEqual(result, {"routes": 2, "prebuilds": 0})
-        self.assertEqual([c.args[0] for c in enqueue.await_args_list], [str(mine[0].id), str(mine[1].id)])
+        # Free forecasts are demand-driven. Sign-in does not spend provider calls.
+        self.assertEqual(result, {"routes": 0, "prebuilds": 0})
+        enqueue.assert_not_awaited()
 
 
 @override_settings(STRIPE_WEBHOOK_SECRET="whsec_test", STRIPE_SECRET_KEY="sk_test", STRIPE_PRICE_ID_PRO="price_test")
@@ -1433,7 +1168,7 @@ class StripeWebhookTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
-            username="rider", email="rider@example.test", password="x", email_verified=True
+            username="rider", email="rider@example.test", password="x"
         )
         self.subscription = Subscription.objects.create(user=self.user, stripe_customer_id="cus_123", plan=Plan.FREE)
 
@@ -1594,7 +1329,7 @@ class BillingEndpointTests(TestCase):
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
         self.user = User.objects.create_user(
-            username="rider", email="rider@example.test", password="x", email_verified=True
+            username="rider", email="rider@example.test", password="x"
         )
 
     def test_entitlements_reports_the_free_tier_and_route_usage(self):
@@ -1627,7 +1362,7 @@ class BillingEndpointTests(TestCase):
         )
         self.assertEqual(response.status_code, 503)
 
-    @override_settings(STRIPE_SECRET_KEY="sk_test", STRIPE_PRICE_ID_PRO="price_test")
+    @override_settings(BILLING_ENABLED=True, STRIPE_SECRET_KEY="sk_test", STRIPE_PRICE_ID_PRO="price_test")
     def test_a_checkout_session_with_no_url_is_reported_as_such(self):
         """Only a hosted, still-active session carries a URL, so it can come back empty.
 
@@ -1720,7 +1455,6 @@ def _finished_payload() -> dict:
             "source": "open-meteo",
         },
         "departure_time": "2026-09-14T08:00",
-        "figures": [],
         "sections": [],
         "entitlements": FREE.result_marker(),
     }
@@ -1737,7 +1471,7 @@ class ForecastJobTests(TestCase):
     def setUp(self):
         cache.clear()
         self.user = User.objects.create_user(
-            username="rider", email="rider@example.com", password="pw", email_verified=True
+            username="rider", email="rider@example.com", password="pw"
         )
         self.departure = next_departure("0 8 * * *")
         # Two sample points inside one ~1 km² cell plus one in another: three samples,
@@ -1936,7 +1670,7 @@ class ForecastJobTests(TestCase):
         """Job ids are capabilities for ad-hoc runs, but an owned job stays private."""
         job = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
         other = User.objects.create_user(
-            username="other", email="other@example.com", password="pw", email_verified=True
+            username="other", email="other@example.com", password="pw"
         )
         client = Client(enforce_csrf_checks=True)
         client.force_login(other)
@@ -2172,15 +1906,14 @@ class ForecastJobTests(TestCase):
         self.assertEqual(job.status, ForecastJob.Status.ASSEMBLING)
         self.assertEqual(DBTaskResult.objects.filter(task_path="core.tasks.assemble_forecast_job").count(), 1)
 
-        with patch("core.tasks.compute_route_weather", AsyncMock(side_effect=AssertionError("recomputed"))), patch(
-            "core.tasks.generate_forecast_figures", return_value=[]
-        ) as figures:
+        with patch("core.tasks.compute_route_weather", AsyncMock(side_effect=AssertionError("recomputed"))):
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
-        figures.assert_called_once()
         job.refresh_from_db()
         self.assertEqual(job.status, ForecastJob.Status.DONE)
         self.assertIsNone(job.computed_weather)
+        # The frontend draws the charts from the samples; the result carries no figures.
+        self.assertNotIn("figures", job.result)
 
     def test_stale_computation_cannot_overwrite_or_fail_the_next_stage(self):
         from django_tasks_db.models import DBTaskResult
@@ -2232,7 +1965,7 @@ class ForecastJobTests(TestCase):
         job, forecast = self._compute_fixture()
         with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)):
             async_to_sync(_compute_route_weather_job_async)(str(job.id))
-        with patch("core.tasks.generate_forecast_figures", side_effect=RuntimeError("chart failed")), patch(
+        with patch("core.tasks.compute_sections", side_effect=RuntimeError("sections failed")), patch(
             "core.tasks.publish", AsyncMock()
         ) as publish, self.assertRaises(RuntimeError):
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
@@ -2274,8 +2007,8 @@ class ForecastJobTests(TestCase):
     def test_missing_and_terminal_jobs_skip_both_stages(self):
         job = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
         with patch("core.tasks.compute_route_weather", AsyncMock()) as compute, patch(
-            "core.tasks.generate_forecast_figures"
-        ) as figures:
+            "core.tasks.compute_sections"
+        ) as sections:
             for status in (ForecastJob.Status.DONE, ForecastJob.Status.FAILED):
                 ForecastJob.objects.filter(id=job.id).update(status=status)
                 async_to_sync(_compute_route_weather_job_async)(str(job.id))
@@ -2285,7 +2018,7 @@ class ForecastJobTests(TestCase):
             async_to_sync(_compute_route_weather_job_async)(job_id)
             async_to_sync(_assemble_forecast_job_async)(job_id)
         compute.assert_not_awaited()
-        figures.assert_not_called()
+        sections.assert_not_called()
 
     # -- entitlements --------------------------------------------------------------
 
@@ -2310,9 +2043,7 @@ class ForecastJobTests(TestCase):
                 will_rain=False, max_rain_mm=0.0, rain_amount=0.0, max_headwind=0.0, source="open-meteo"
             ),
         )
-        with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)), patch(
-            "core.tasks.generate_forecast_figures", return_value=[]
-        ):
+        with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)):
             async_to_sync(_compute_route_weather_job_async)(str(job.id))
             job.refresh_from_db()
             self.assertIsNone(job.computed_weather["forecast"]["samples"][0]["uncertainty"])
@@ -2362,10 +2093,12 @@ class ForecastJobTests(TestCase):
 
     def test_prebuilt_job_is_the_one_the_route_page_opens(self):
         """The page sends nextDeparture split at "T"; the endpoint must hash the same params."""
+        Subscription.objects.create(user=self.user, plan=Plan.PRO)
+        RecurringRoute.objects.filter(pk=self.route.pk).update(briefing_channel="email")
         result = self._prebuild()
         self.assertTrue(result["built"])
         ForecastJob.objects.filter(id=result["job_id"]).update(
-            status=ForecastJob.Status.DONE, result=_finished_payload()
+            status=ForecastJob.Status.DONE, result={**_finished_payload(), "entitlements": PRO.result_marker()}
         )
 
         next_departure_iso = _route_to_out(self.route).next_departure
@@ -2432,13 +2165,18 @@ class ForecastJobTests(TestCase):
         with patch.dict(os.environ, {"WEATHERUNDERGROUND_API_KEY": "test-key"}), patch(
             "core.tasks.next_departure", return_value=soon
         ):
-            self.assertTrue(self._prebuild()["built"])
+            self.assertFalse(self._prebuild()["built"])
+            RecurringRoute.objects.filter(pk=self.route.pk).update(briefing_channel="email")
             ForecastJob.objects.all().delete()
             Subscription.objects.update_or_create(user=self.user, defaults={"plan": Plan.PRO, "status": "active"})
             self.assertFalse(self._prebuild()["built"])
         self.assertEqual(ForecastJob.objects.count(), 0)
 
     def test_sign_in_prebuilds_only_recently_opened_routes(self):
+        Subscription.objects.create(user=self.user, plan=Plan.PRO)
+        self.route.briefing_channel = "email"
+        self.route.schedule_cron = "0 * * * *"
+        self.route.save()
         stale = RecurringRoute.objects.create(
             owner=self.user, name="Old", start_point=route_point(47.0, 9.0), start_name="Start",
             destination_point=route_point(47.01, 9.01), dest_name="Destination",
@@ -2493,6 +2231,7 @@ def _long_payload(vertices: int = 2000, every: int = 150) -> dict:
         **_finished_payload(),
         "line": line,
         "samples": samples,
+        # Results stored before the frontend drew the charts itself still carry figures.
         "figures": [{"data": [], "layout": {}}],
         "wind_segments": _wind_segments(10_000),
     }
@@ -2519,7 +2258,7 @@ class ForecastViewTests(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            username="viewer", email="viewer@example.com", password="pw", email_verified=True
+            username="viewer", email="viewer@example.com", password="pw"
         )
         self.client = Client(enforce_csrf_checks=True)
         self.client.force_login(self.user)
@@ -2628,12 +2367,6 @@ class ForecastViewTests(TestCase):
         self.assertNotIn("figures", result)
         self.assertLess(len(result["line"]), 2000)
 
-    def test_figures_endpoint(self):
-        job = self._job()
-        response = self.client.get(f"/api/forecast_jobs/{job.id}/figures")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [{"data": [], "layout": {}}])
-
     def test_line_detail_levels(self):
         job = self._job()
         coarse = len(forecast_view(job)["line"])
@@ -2693,6 +2426,7 @@ class ForecastViewTests(TestCase):
         self.assertIsNone(arrows[0]["wind_power_w"])
 
     def test_sample_uncertainty_endpoint(self):
+        Subscription.objects.create(user=self.user, plan=Plan.PRO)
         job = self._job()
         response = self.client.get(f"/api/forecast_jobs/{job.id}/samples/1/uncertainty")
         self.assertEqual(response.status_code, 200)
@@ -2716,20 +2450,19 @@ class ForecastViewTests(TestCase):
         self.assertTrue(body["result"]["version"])
         self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "medium"}).status_code, 200)
         self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/samples/0/uncertainty").status_code, 200)
-        self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/figures").status_code, 200)
 
     def test_parts_are_404_before_the_job_is_done_and_for_other_accounts(self):
         pending = self._job(result={}, key="pending", status=ForecastJob.Status.FETCHING)
-        for path in ("figures", "map_detail?detail=full", "samples/0/uncertainty"):
+        for path in ("map_detail?detail=full", "samples/0/uncertainty"):
             self.assertEqual(self.client.get(f"/api/forecast_jobs/{pending.id}/{path}").status_code, 404, path)
 
         job = self._job()
         other = User.objects.create_user(
-            username="other", email="other@example.com", password="pw", email_verified=True
+            username="other", email="other@example.com", password="pw"
         )
         client = Client(enforce_csrf_checks=True)
         client.force_login(other)
-        for path in ("figures", "map_detail?detail=full", "samples/0/uncertainty"):
+        for path in ("map_detail?detail=full", "samples/0/uncertainty"):
             self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/{path}").status_code, 404, path)
 
 
@@ -2739,7 +2472,7 @@ class ForecastJobConsumerTests(TransactionTestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(
-            username="watcher", email="watcher@example.com", password="pw", email_verified=True
+            username="watcher", email="watcher@example.com", password="pw"
         )
 
     def _job(self, **overrides):
@@ -2797,7 +2530,7 @@ class ForecastJobConsumerTests(TransactionTestCase):
         """An owned job is as private on the socket as it is on the job endpoint."""
         job = self._job(owner=self.user)
         other = User.objects.create_user(
-            username="nosy", email="nosy@example.com", password="pw", email_verified=True
+            username="nosy", email="nosy@example.com", password="pw"
         )
 
         async def run():

@@ -102,10 +102,10 @@ const addButtonLabel = computed(() => (atRouteLimit.value ? "Tarifgrenze erreich
                 <!-- At the tier limit: say so where the add button just went dead. -->
                 <q-item v-if="atRouteLimit" class="bg-grey-2 text-caption">
                     <q-item-section>
-                        {{ maxRoutes }} von {{ maxRoutes }} Routen belegt — Pro hebt das Limit auf.
+                        {{ maxRoutes }} von {{ maxRoutes }} Routen belegt — Plus umfasst 20 aktive Routen.
                     </q-item-section>
                     <q-item-section side>
-                        <q-btn dense flat color="primary" label="Upgrade" @click="emit('upgrade')" />
+                        <q-btn dense flat color="primary" label="Tarif ansehen" @click="emit('upgrade')" />
                     </q-item-section>
                 </q-item>
 
@@ -127,6 +127,9 @@ const addButtonLabel = computed(() => (atRouteLimit.value ? "Tarifgrenze erreich
                         </q-item-label>
                         <q-item-label caption>
                             {{ route.startName }} → {{ route.destName }} · {{ profileLabel(route.profile) }}
+                        </q-item-label>
+                        <q-item-label v-if="route.returnRouteId" caption>
+                            Rückfahrt: {{ route.returnScheduleDescription }} · {{ relativeTime(route.returnNextDeparture) }}
                         </q-item-label>
                         <!-- Rain and frost: the two readings that decide whether you ride. They add
                      to the wording above, never replace it, and the line is there only when

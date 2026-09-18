@@ -8,12 +8,17 @@ from datetime import UTC, datetime, timedelta
 from asgiref.sync import async_to_sync, sync_to_async
 from django.db import transaction
 from django.db.models import F
-from django.tasks import task
 from loguru import logger
 
 from core import departures, telemetry
 from core.claims import claim_cell, release_cell
-from core.entitlements import entitlements_for, entitlements_for_sync, strip_uncertainty
+from core.entitlements import (
+    allowed_route_ids,
+    briefing_route_ids,
+    entitlements_for,
+    forecast_params_for,
+    strip_uncertainty,
+)
 from core.forecast_schemas import RouteWeatherOut
 from core.grid import (
     get_cached_ensemble_cell,
@@ -23,11 +28,11 @@ from core.grid import (
 )
 from core.jobs import MAX_PLAN_ATTEMPTS, PLAN_RETRY_DELAY, get_or_start_job, publish, set_status
 from core.models import ForecastJob, ProcessedStripeEvent, RecurringRoute, route_line
-from core.plotting import generate_forecast_figures
 from core.schedule import forecast_available_at, local_today, next_departure, upcoming_departures
 from core.sections import compute_sections
 from core.stations import api_key, purge_station_data, refresh_stations_for_ride, ride_in_window
 from core.thumbnails import compute_route_thumbnail
+from core.tracing import traced_task as task
 from core.weather import (  # reuse existing functions
     ROUTING_ERRORS,
     SAMPLE_INTERVAL_DEFAULT_S,
@@ -186,16 +191,19 @@ def refresh_station_observations(job_id: str) -> None:
 
 async def _refresh_station_observations_async(job_id: str) -> None:
     try:
-        job = await ForecastJob.objects.filter(id=job_id).afirst()
-        if job is not None and job.geometry:
+        job = await ForecastJob.objects.select_related("owner").filter(id=job_id).afirst()
+        if job is not None and job.geometry and (await entitlements_for(job.owner)).station_correction:
             now = datetime.now(tz=UTC)
             times = departures.candidate_times(job.params)
             points = job.geometry["sample_points"]
             if departures.enabled(job.params):
                 from core.stations import STATION_HORIZON
-                points = [{**sp, "elapsed_s": 0} for sp in points if any(
-                    abs(t + timedelta(seconds=sp["elapsed_s"]) - now) < STATION_HORIZON for t in times
-                )]
+
+                points = [
+                    {**sp, "elapsed_s": 0}
+                    for sp in points
+                    if any(abs(t + timedelta(seconds=sp["elapsed_s"]) - now) < STATION_HORIZON for t in times)
+                ]
                 departure = now
             else:
                 departure = datetime.fromisoformat(job.params["departure_time"])
@@ -316,6 +324,11 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     if job.status == ForecastJob.Status.DONE:
         return
 
+    if job.kind == ForecastJob.Kind.ROUTE and str(job.params.get("route_id")) not in {
+        str(i) for i in await sync_to_async(allowed_route_ids)(job.owner)
+    }:
+        await set_status(job, ForecastJob.Status.FAILED, error="Diese Route ist durch deinen Tarif pausiert.")
+        return
     await telemetry.bind_job(job)
     await set_status(job, ForecastJob.Status.PLANNING)
 
@@ -338,6 +351,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         await plan_forecast_job.using(run_after=datetime.now(tz=UTC) + PLAN_RETRY_DELAY).aenqueue(str(job.id))
         return
 
+    job.params = await forecast_params_for(job.owner, job.params)
     sample_points = geometry["sample_points"]
     windows = departures.fetch_windows(job.params, sample_points, local_today())
     cells = _cell_set(sample_points)
@@ -398,9 +412,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
 async def _wants_stations(job: ForecastJob, total_seconds: float | None) -> bool:
     """Whether this job should spend Weather Underground calls: a key, a Pro owner, a ride near now."""
     now = datetime.now(tz=UTC)
-    if not api_key() or not any(
-        ride_in_window(t, total_seconds, now) for t in departures.candidate_times(job.params)
-    ):
+    if not api_key() or not any(ride_in_window(t, total_seconds, now) for t in departures.candidate_times(job.params)):
         return False
     return (await entitlements_for(job.owner)).station_correction
 
@@ -423,8 +435,10 @@ def _store_computed_weather(job: ForecastJob, computed: dict) -> None:
     # This backend stores queued tasks in the same database: commit the intermediate
     # result and its continuation together, or roll both back if enqueue fails.
     with transaction.atomic():
-        won = _active_stage(job).filter(computed_weather__isnull=True).update(
-            computed_weather=computed, updated_at=datetime.now(tz=UTC)
+        won = (
+            _active_stage(job)
+            .filter(computed_weather__isnull=True)
+            .update(computed_weather=computed, updated_at=datetime.now(tz=UTC))
         )
         if won:
             assemble_forecast_job.enqueue(str(job.id))
@@ -443,7 +457,7 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
         return
 
     await telemetry.bind_job(job)
-    params = job.params
+    params = await forecast_params_for(job.owner, job.params)
     geometry = job.geometry or {}
     try:
         if geometry.get("sample_points") is None or geometry.get("polyline") is None:
@@ -485,22 +499,35 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
             candidates = []
             now = weather_args["snapshot"].now
             for departure in times:
-                if (departure < now or not forecast_available_at(departure)
-                        or not forecast_available_at(departure + timedelta(seconds=geometry["total_seconds"]))):
-                    candidates.append({
-                        "departure_time": departures.local_iso(departure),
-                        "arrival_time": departures.local_iso(departure + timedelta(seconds=geometry["total_seconds"])),
-                        "complete": False, "samples": [],
-                    })
+                if (
+                    departure < now
+                    or not forecast_available_at(departure)
+                    or not forecast_available_at(departure + timedelta(seconds=geometry["total_seconds"]))
+                ):
+                    candidates.append(
+                        {
+                            "departure_time": departures.local_iso(departure),
+                            "arrival_time": departures.local_iso(
+                                departure + timedelta(seconds=geometry["total_seconds"])
+                            ),
+                            "complete": False,
+                            "samples": [],
+                        }
+                    )
                     continue
-                candidate = await compute_route_weather(**{
-                    **weather_args, "departure_time": departures.local_iso(departure),
-                    "strict_coverage": True, "include_segments": False,
-                })
+                candidate = await compute_route_weather(
+                    **{
+                        **weather_args,
+                        "departure_time": departures.local_iso(departure),
+                        "strict_coverage": True,
+                        "include_segments": False,
+                    }
+                )
                 candidates.append(departures.compact_candidate(departure, candidate, len(geometry["sample_points"])))
             comparison = {
                 "requested_time": departures.local_iso(departures.instant(params["departure_time"])),
-                "window_start": departures.local_iso(times[0]), "window_end": departures.local_iso(times[-1]),
+                "window_start": departures.local_iso(times[0]),
+                "window_end": departures.local_iso(times[-1]),
                 "candidates": candidates,
             }
 
@@ -528,7 +555,7 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
 
 @task(queue_name="forecasts")
 def assemble_forecast_job(job_id: str) -> None:
-    """Add charts and sections to a persisted computation and publish the result."""
+    """Add sections to a persisted computation and publish the result."""
     async_to_sync(_assemble_forecast_job_async)(job_id)
 
 
@@ -550,7 +577,6 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
             return
         forecast = RouteWeatherOut.model_validate(computed["forecast"])
         payload = forecast.model_dump(mode="json")
-        payload["figures"] = generate_forecast_figures(forecast, departure_time=params["departure_time"])
         payload["sections"] = [
             section.model_dump(mode="json") for section in compute_sections(forecast.samples, forecast.total_distance_m)
         ]
@@ -579,9 +605,7 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
         logger.info(f"Forecast job {job.id} done ({len(forecast.samples)} samples)")
 
 
-async def start_forecast_job(
-    kind: str, owner, params: dict, *, min_remaining: timedelta = timedelta(0)
-) -> ForecastJob:
+async def start_forecast_job(kind: str, owner, params: dict, *, min_remaining: timedelta = timedelta(0)) -> ForecastJob:
     """Find or start the job for a request, enqueueing planning only when it is new."""
     if kind == ForecastJob.Kind.ROUTE:
         route = await RecurringRoute.objects.only("geometry_fetched_at").filter(id=params["route_id"]).afirst()
@@ -639,40 +663,23 @@ def refresh_upcoming_forecasts() -> dict:
 
 
 async def _prewarm_routes(owner_id: int | None = None) -> list[RecurringRoute]:
-    """Active routes whose owner's tier still entitles them to pre-warming.
-
-    With ``owner_id``, only that account's routes -- the same quota applies, so a sign-in
-    never pre-warms a route the hourly pass would skip.
-
-    This is where the Open-Meteo budget is actually spent — a route here fans out one
-    fetch per sample point per upcoming departure — so the quota has to be applied at
-    this point and not only in the HTTP endpoints.
-
-    An account can only exceed its quota by being downgraded after creating routes. In
-    that case keep the oldest `max_routes`: those are the ones the user has relied on
-    longest, and the choice is stable between runs, unlike dropping all of them. The extra
-    routes stay visible and usable in the UI — they just stop being pre-warmed.
-    """
+    """Only entitled briefing routes departing within four hours receive background work."""
     selected: list[RecurringRoute] = []
-    by_owner: dict[int | None, list[RecurringRoute]] = {}
     query = (
-        RecurringRoute.objects.filter(active=True)
+        RecurringRoute.objects.filter(active=True, owner__isnull=False)
+        .exclude(briefing_channel="")
         .select_related("owner")
-        .defer("polyline", "thumbnail")  # large JSON blobs this pass never reads
-        .order_by("created_at")
     )
     if owner_id is not None:
         query = query.filter(owner_id=owner_id)
+    eligible_by_owner = {}
+    now = datetime.now(tz=UTC)
     async for route in query:
-        by_owner.setdefault(route.owner_id, []).append(route)
-
-    for route_owner_id, routes in by_owner.items():
-        if route_owner_id is None:
-            # Ownerless legacy routes belong to nobody and are invisible in the UI; see
-            # the claim_routes management command.
-            continue
-        limits = await sync_to_async(entitlements_for_sync)(routes[0].owner)
-        selected.extend(routes if limits.max_routes is None else routes[: limits.max_routes])
+        if route.owner_id not in eligible_by_owner:
+            eligible_by_owner[route.owner_id] = await sync_to_async(briefing_route_ids)(route.owner)
+        departure = next_departure(route.schedule_cron)
+        if route.id in eligible_by_owner[route.owner_id] and departure and departure - now <= timedelta(hours=4):
+            selected.append(route)
     return selected
 
 
@@ -720,6 +727,8 @@ async def _prebuild_route_forecast_async(route_id: str) -> dict:
     if route is None or not route.active or not route.sample_points or route.owner is None:
         return {"built": False, "reason": "not eligible"}
 
+    if route.id not in await sync_to_async(briefing_route_ids)(route.owner):
+        return {"built": False, "reason": "not entitled"}
     now = datetime.now(tz=UTC)
     departure = next_departure(route.schedule_cron)
     if departure is None or departure - now > PREBUILD_HORIZON or not forecast_available_at(departure):
@@ -805,6 +814,9 @@ async def _scan_route_forecasts_async(route_id: str) -> dict:
     route = await RecurringRoute.objects.filter(id=route_id).afirst()
     if route is None or not route.sample_points:
         return {"cells_enqueued": 0, "ensembles_enqueued": 0}
+    owner = await sync_to_async(lambda: route.owner)()
+    if owner is None or route.id not in await sync_to_async(briefing_route_ids)(owner):
+        return {"cells_enqueued": 0, "ensembles_enqueued": 0}
 
     now = datetime.now(tz=UTC)
     today = local_today()
@@ -812,8 +824,8 @@ async def _scan_route_forecasts_async(route_id: str) -> dict:
 
     cell_count = 0
     ensemble_count = 0
-    for dep in upcoming_departures(route.schedule_cron, count=3, after=now):
-        if not forecast_available_at(dep):
+    for dep in upcoming_departures(route.schedule_cron, count=1, after=now):
+        if dep - now > timedelta(hours=4) or not forecast_available_at(dep):
             continue
 
         params = {

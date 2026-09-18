@@ -77,19 +77,20 @@ for (const viewport of [
     test(`charts fill a row below map at ${viewport.width}x${viewport.height}`, async ({ page }) => {
         await page.setViewportSize(viewport);
         await mockForecast(page, saved, { ...fixture, line: wideLine });
-        let releaseFigures!: () => void;
-        const figuresReady = new Promise<void>(resolve => {
-            releaseFigures = resolve;
+        // Hold back the chart code: the placeholders must sit where the charts will go.
+        let releaseCharts!: () => void;
+        const chartsReady = new Promise<void>(resolve => {
+            releaseCharts = resolve;
         });
-        await page.route("**/figures", async route => {
-            await figuresReady;
-            await route.fulfill({ json: fixture.figures });
+        await page.route(/NiceChart\.vue/, async route => {
+            await chartsReady;
+            await route.continue();
         });
         await page.goto(`/routes/${saved.id}`);
         try {
             await expectSeparate(page, page.getByLabel("Diagramm wird geladen"));
         } finally {
-            releaseFigures();
+            releaseCharts();
         }
         await expect(page.locator(".js-plotly-plot .main-svg").first()).toBeVisible();
         await expectSeparate(page, page.locator(".js-plotly-plot"));

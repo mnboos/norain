@@ -13,7 +13,8 @@ distinguish them. Separate projects also work: select both when investigating
 a user journey. Keep the environment variables as deployment overrides rather
 than embedding a DSN in application code.
 
-The backend initializes Sentry only with production settings. The frontend DSN
+The backend initializes Sentry in production and, when a DSN is set, in development.
+The Django test command skips live initialization. The frontend DSN
 is baked into its bundle, so rebuild after changing it. Existing release,
 environment, tracing, and profiling settings continue to apply. A missing DSN
 leaves the SDK unconfigured; instrumentation does not require a network connection
@@ -50,7 +51,7 @@ their latest or maximum value within a time bucket rather than summing them.
 | `forecast.delivery_fallback` | Counter | One WebSocket-to-polling transition. Successful polling recovery does not count as a failed load. |
 | `search.completed` | Counter | Server searches with `outcome:success/empty/error`, including server cache hits. Browser cache reads do not invoke this endpoint. |
 | `search.duration`, `search.results` | Distribution | Server search time and result count. Result count is emitted only when retrieval succeeds, including zero results. |
-| `account.action` | Counter | Request actions: `signup`, `verify_email`, `login`, `logout`, `password_reset`, `password_reset_confirm`; outcomes `success/rejected/error`. Business milestones: `created`, `verification_resent`, `verified`, `password_changed`. A signup request is not necessarily an account creation. |
+| `account.action` | Counter | Request action: `complete_signup` (step 2 of sign-up) with outcomes `success/rejected/error`. The other account requests are allauth's and are not counted per request. Milestones from allauth's signals, all `outcome:success`: `created` (step 1 made an account), `verified`, `login`, `password_changed`. A sign-up with an address that already has an account creates nothing and counts nothing. |
 | `route.action` | Counter | Persisted `created/updated/deleted` milestones with `outcome:success`, or `action:quota outcome:rejected`. Geometry work has its own provider outcomes; it does not undo a saved-route milestone. |
 | `billing.action` | Counter | `checkout/portal` request outcomes `success/rejected/unavailable/error`. Verified milestones use actions `checkout.session.completed` and `invoice.payment_failed` with `outcome:applied`. A successful checkout API call only means a session was created. |
 | `billing.webhook` | Counter | `outcome:applied/duplicate/unmatched/ignored/rejected/error`. Accepted event types are explicit; unsupported types are grouped as `other`. |
@@ -144,3 +145,35 @@ No live dashboards or alerts are created by the repository change.
 
 Automated tests mock SDK entry points and external providers. They verify event
 semantics without sending telemetry. Live ingestion must be checked after deployment.
+
+## Follow a backend error back to the browser
+
+The browser sends `sentry-trace` and `baggage` on API requests, including the
+separate local backend port. Django continues that trace automatically. CORS
+already allows both headers; Caddy forwards them unchanged. Tracing starts
+before the router's initial navigation and the session bootstrap request.
+
+Queued forecast work preserves the same context in the task's existing JSON
+envelope. Workers continue it in isolated `queue.process` transactions, including
+fan-out and follow-up tasks. Unhandled task exceptions are captured before the
+worker catches them. Old tasks without trace metadata start their own traces.
+No database migration is needed.
+
+In Sentry, open a backend error event and follow its **Trace / View trace** link.
+The trace includes the initiating browser activity, API request, and queued work.
+Select both projects if frontend and backend use separate projects; they must
+belong to the same Sentry organization. Select `production` for a deployed build
+or `development` for a local session. A recorded browser replay can also provide
+visual context, but replay is not guaranteed for every backend error.
+
+A cached, shared, or proactively built forecast keeps the trace of the request or
+scheduler that created it. Later viewers do not become its parent retroactively;
+use the existing `job.id` metric/log attribute to investigate those views.
+WebSocket updates deliver job state; task errors remain on the initiating HTTP
+trace rather than a new trace for each update.
+
+After deploying, restart API and worker processes and rebuild the frontend.
+Verify in browser Network tools that an API request carries both trace headers,
+then compare its trace ID with a backend event's trace ID. Automated tests use the
+real SDK with an in-memory transport to verify ASGI error continuation and task
+fan-out, and check that local CORS preflights accept both headers.

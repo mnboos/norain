@@ -328,7 +328,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
     }
 
     /**
-     * Start (or join) the forecast for one departure of a saved route.  Returns 200 with the finished payload -- weather, Plotly figures and sections -- when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither is allowed on this path.
+     * Start (or join) the forecast for one departure of a saved route.  Returns 200 with the finished payload -- weather and sections -- when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. Cell fetching and assembly both happen on workers; neither is allowed on this path.
      * Route Forecast
      */
     async coreApiRecurringRouteRouteForecastRaw(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastJobOut>> {
@@ -339,7 +339,7 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
     }
 
     /**
-     * Start (or join) the forecast for one departure of a saved route.  Returns 200 with the finished payload -- weather, Plotly figures and sections -- when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither is allowed on this path.
+     * Start (or join) the forecast for one departure of a saved route.  Returns 200 with the finished payload -- weather and sections -- when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over `wsUrl`. Cell fetching and assembly both happen on workers; neither is allowed on this path.
      * Route Forecast
      */
     async coreApiRecurringRouteRouteForecast(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {

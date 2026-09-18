@@ -43,3 +43,5 @@ instructions. When changing an endpoint, setting, or workflow, update its relate
 page and verify commands against the implementation.
 
 [Project overview](../README.md)
+
+- [Run the Free / Plus beta and invite colleagues](how-to/freemium-beta.md)

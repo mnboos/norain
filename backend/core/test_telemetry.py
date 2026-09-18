@@ -2,12 +2,15 @@
 
 import asyncio
 import json
+import re
 from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
+from urllib.parse import unquote
 
 import httpx
 from asgiref.sync import async_to_sync
+from django.core import mail
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from django_tasks_db.models import DBTaskResult
@@ -15,6 +18,7 @@ from django_tasks_db.models import DBTaskResult
 from . import grid, telemetry
 from .jobs import get_or_start_job, set_status
 from .models import ForecastJob, ProcessedStripeEvent, Subscription, User
+from .test_signup import TEST_SETTINGS
 
 
 class TelemetryTests(SimpleTestCase):
@@ -125,9 +129,7 @@ class TelemetryTests(SimpleTestCase):
 
 class TelemetryDatabaseTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(
-            username="metrics", email="metrics@example.test", email_verified=True
-        )
+        self.user = User.objects.create_user(username="metrics", email="metrics@example.test")
 
     def test_job_reuse_and_restart_are_separate_from_completions(self):
         params = {"departure_time": "2026-09-18T08:00", "start_lat": 47, "start_lon": 9}
@@ -169,30 +171,25 @@ class TelemetryDatabaseTests(TestCase):
         self.client.force_login(self.user)
         self.assertEqual(self.client.get("/api/auth/session").json()["user"]["id"], str(self.user.pk))
 
-    def test_signup_creation_emits_after_commit_but_not_on_resend(self):
-        body = {
-            "username": "new_metrics",
-            "email": "new_metrics@example.test",
-            "password": "A sufficiently long riding password 2026!",
-        }
-        with patch("core.auth.views._send_verification_email"), patch.object(telemetry, "event") as event:
+    @override_settings(**TEST_SETTINGS)
+    def test_signup_creation_emits_after_commit_but_not_for_a_known_address(self):
+        signup = "/api/allauth/browser/v1/auth/signup"
+        body = json.dumps({"email": "new_metrics@example.test"})
+        with patch.object(telemetry, "event") as event:
             with self.captureOnCommitCallbacks(execute=True):
-                self.assertEqual(
-                    self.client.post(
-                        "/api/auth/signup", data=json.dumps(body), content_type="application/json"
-                    ).status_code,
-                    201,
-                )
+                self.assertEqual(self.client.post(signup, data=body, content_type="application/json").status_code, 401)
                 self.assertFalse(any(c.kwargs.get("action") == "created" for c in event.call_args_list))
-            body["username"] = "unused_name"
-            self.assertEqual(
-                self.client.post(
-                    "/api/auth/signup", data=json.dumps(body), content_type="application/json"
-                ).status_code,
-                201,
+            # The same address again: allauth mails the owner and creates nothing.
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(self.client.post(signup, data=body, content_type="application/json").status_code, 401)
+            key = unquote(re.search(r"verify_key=(\S+)", mail.outbox[0].body).group(1))
+            self.client.post(
+                "/api/allauth/browser/v1/auth/email/verify",
+                data=json.dumps({"key": key}),
+                content_type="application/json",
             )
         self.assertEqual(sum(c.kwargs.get("action") == "created" for c in event.call_args_list), 1)
-        self.assertEqual(sum(c.kwargs.get("action") == "verification_resent" for c in event.call_args_list), 1)
+        self.assertEqual(sum(c.kwargs.get("action") == "verified" for c in event.call_args_list), 1)
 
     def test_search_empty_results_include_requested_text_location_and_user(self):
         self.client.force_login(self.user)

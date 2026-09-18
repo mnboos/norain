@@ -18,20 +18,13 @@ Including another URLconf
 from django.conf import settings
 from django.contrib import admin
 from django.http import HttpResponse
-from django.urls import path
+from django.urls import include, path
 from django_otp.admin import OTPAdminSite
 
 from core.api import api
-from core.api.billing import checkout_view, entitlements_view, portal_view, webhook_view
-from core.auth.views import (
-    login_view,
-    logout_view,
-    password_reset_confirm_view,
-    password_reset_view,
-    session_view,
-    signup_view,
-    verify_email_view,
-)
+from core.api.billing import checkout_view, entitlements_view, free_routes_view, portal_view, trial_view, webhook_view
+from core.api.briefings import preferences_view, push_view
+from core.auth.views import complete_signup_view, session_view
 
 
 def healthz(request):
@@ -39,20 +32,24 @@ def healthz(request):
 
 
 # The admin is public, so it asks for a one-time code as well as the password.
-admin.site.__class__ = OTPAdminSite
+# Only the development settings can turn this off (ADMIN_OTP).
+if settings.ADMIN_OTP:
+    admin.site.__class__ = OTPAdminSite
 
 urlpatterns = [
     path("healthz", healthz),
     path(f"{settings.ADMIN_PATH}/", admin.site.urls),
     path("api/auth/session", session_view),
-    path("api/auth/signup", signup_view),
-    path("api/auth/verify-email", verify_email_view),
-    path("api/auth/login", login_view),
-    path("api/auth/logout", logout_view),
-    path("api/auth/password-reset", password_reset_view),
-    path("api/auth/password-reset/confirm", password_reset_confirm_view),
+    path("api/auth/complete-signup", complete_signup_view),
+    # Sign-up, sign-in, verification and password reset: allauth's JSON API. Before
+    # api.urls, which would otherwise claim every path under /api/.
+    path("api/allauth/", include("allauth.headless.urls")),
     # Billing lives outside the Ninja API: NinjaAPI(auth=session_auth) CSRF-checks every
     # route it owns, which would reject Stripe's webhook POST with 403.
+    path("api/briefings/preferences", preferences_view),
+    path("api/briefings/push", push_view),
+    path("api/billing/trial", trial_view),
+    path("api/billing/free-routes", free_routes_view),
     path("api/billing/entitlements", entitlements_view),
     path("api/billing/checkout", checkout_view),
     path("api/billing/portal", portal_view),

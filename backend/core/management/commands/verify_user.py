@@ -2,11 +2,12 @@
 
 Usage: python manage.py verify_user --identifier you@example.test
 
-`IdentityBackend` refuses any account whose `email_verified` is False, and
-`createsuperuser` cannot set it — so a fresh superuser can reach /admin but not the SPA
-until this runs (or until the verification email link is followed).
+allauth refuses a sign-in until the account's primary `EmailAddress` is verified.
+`createsuperuser` sets that already; this is for accounts made by hand in the admin or
+the shell, which get no `EmailAddress` row at all.
 """
 
+from allauth.account.models import EmailAddress
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
@@ -30,13 +31,20 @@ class Command(BaseCommand):
             raise CommandError(f"{value!r} matches more than one user — pass the exact username.") from None
 
         verified = not options["unverify"]
-        user.email_verified = verified
-        # Sign-in also requires is_active; verifying without it would be a confusing no-op.
-        fields = ["email_verified"]
-        if verified and not user.is_active:
+        # Only one primary address per user: an older row may hold it if the email changed.
+        EmailAddress.objects.filter(user=user).exclude(email__iexact=user.email).update(primary=False)
+        address, _ = EmailAddress.objects.get_or_create(user=user, email=user.email.lower())
+        address.primary = True
+        address.verified = verified
+        address.save(update_fields=["primary", "verified"])
+        if verified:
+            # Sign-in also requires is_active; verifying without it would be a confusing no-op.
             user.is_active = True
-            fields.append("is_active")
-        user.save(update_fields=fields)
+            # An account made by hand already has the username and password an admin gave
+            # it, so the app should not send it through step 2 of sign-up.
+            if user.has_usable_password():
+                user.signup_completed = True
+            user.save(update_fields=["is_active", "signup_completed"])
 
         state = "verified" if verified else "unverified"
         self.stdout.write(self.style.SUCCESS(f"{user.username} <{user.email}> is now {state}"))

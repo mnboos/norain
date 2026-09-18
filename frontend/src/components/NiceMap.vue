@@ -11,6 +11,8 @@ import { shallowRef, computed, onBeforeUnmount, onMounted, type Ref, ref, useTem
 import { useQuasar } from "quasar";
 
 import "maplibre-gl/dist/maplibre-gl.css";
+import lightStyleUrl from "@/assets/map-styles/positron.json?url";
+import darkStyleUrl from "@/assets/map-styles/dark-matter.json?url";
 import type { PlacesSearchResult, RouteForecastOut, ForecastSampleOut, WindArrow } from "@norain/api/models";
 import { FROST_MARK, isNightEta, pickVisibleSamples, weatherIconSvg } from "@/utils/weatherIcons";
 import { swissTime } from "@/utils/forecastDetails";
@@ -35,9 +37,11 @@ const $q = useQuasar();
 
 // Pale, low-ink vector basemaps (CARTO, no API key) so the route line and the weather chips
 // carry the map instead of competing with OSM's POIs and landuse fills. Both styles ship
-// their own OSM/CARTO attribution.
-const LIGHT_STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
-const DARK_STYLE = "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+// their own OSM/CARTO attribution. The style files are copies of
+// https://basemaps.cartocdn.com/gl/{positron,dark-matter}-gl-style/style.json, built into the
+// app; the tiles, sprite and fonts they point to still come from CARTO.
+const LIGHT_STYLE = lightStyleUrl;
+const DARK_STYLE = darkStyleUrl;
 
 const props = defineProps<{
     routeWeather: RouteForecastOut | undefined;

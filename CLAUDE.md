@@ -14,7 +14,6 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     weather.py       routing + sampling + wind logic, compute_route_weather, build_geometry
     grid.py          forecast grid cache (ForecastCell, EnsembleCell) + API fetch + extraction
     stations.py      Weather Underground stations: budgeted fetch, cache, near-now correction
-    plotting.py      Plotly figure generation (temp, precip, wind charts)
     models.py        User (custom, AUTH_USER_MODEL), Subscription, ProcessedStripeEvent,
                      RecurringRoute, ForecastCell, EnsembleCell, StationLookup,
                      StationObservation, ForecastJob
@@ -24,7 +23,8 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     forecast_schemas.py  the forecast payload (RouteWeatherOut, WeatherSample, ForecastJobOut, …)
     api/             ninja routers: route_weather.py, recurring_route.py (route CRUD),
                      billing.py, places.py
-    auth/            backend.py (session_auth, IdentityBackend), views.py, tokens.py
+    auth/            backend.py (session_auth), adapter.py (allauth rules), signals.py,
+                     views.py (session + sign-up step 2), lockout.py
     entitlements.py  every tier limit, in one place
     thumbnails.py    route-list glyph: path simplification + cache-only weather
     ride_quality.py  ride-quality curves + RIDE_QUALITY config (secret; scored on read)
@@ -36,8 +36,9 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     management/commands/  verify_user, claim_routes, refresh_forecasts, run_forecast_scheduler
 frontend/         Vue 3 + Quasar + @tanstack/vue-query
   src/
-    services/        http.ts (shared fetch+CSRF), auth.ts, billing.ts — the plain-Django
-                     endpoints; the ninja API goes through the generated @norain/api client
+    services/        http.ts (shared fetch+CSRF, allauthRequest), auth.ts, billing.ts — the
+                     plain-Django and allauth endpoints; the ninja API goes through the
+                     generated @norain/api client
     composables/     useSession, useEntitlements
     utils/rideQuality.ts   score -> YlOrRd colour + its casing, line placement; no scoring
                            (that is core/ride_quality.py, server-only)
@@ -54,29 +55,66 @@ packages/api/     generated TypeScript client (see "Regenerating the client")
 ### Accounts and sign-in
 
 `core.User` (`AUTH_USER_MODEL = "core.User"`) subclasses `AbstractUser`. It exists as a
-custom model for exactly one reason: the two constraints in its `Meta`. Django's default
+custom model for one main reason: the two constraints in its `Meta`. Django's default
 user permits duplicate and blank emails (`unique=False, blank=True`) and its `username`
 index is case-sensitive, so "one account per email address, however capitalised" cannot be
 expressed there — and you cannot add constraints to a model the project does not own. The
 model also overrides `email` to `blank=False` (an account with no email could never verify
-itself or reset its password) and adds `email_verified`.
+itself or reset its password) and adds `signup_completed`.
 
-Both the email and the username are sign-in identities.
-`IdentityBackend.authenticate()` resolves either with one
-`Q(email__iexact=…) | Q(username__iexact=…)`. Do **not** branch on whether the identifier
-contains `@` — `UnicodeUsernameValidator` permits `@` in usernames. Signup also refuses a
-username that matches any existing email (and vice versa), or the lookup would match two
-rows and lock both accounts out.
+**Sign-up, sign-in, verification and password reset are django-allauth, headless.** allauth
+serves JSON under `/api/allauth/browser/v1/`; the Vue app draws every form
+(`components/account/SignInForms.vue`). Our own endpoints are only `/api/auth/session`
+(the session as the app needs it, plus the CSRF cookie) and `/api/auth/complete-signup`.
+Sign-up has two steps:
 
-`email_verified` gates sign-in and `createsuperuser` cannot set it, so a fresh superuser
-reaches `/admin` but not the SPA until `python manage.py verify_user` runs.
+1. The form takes only the email. allauth creates the user with a generated username and
+   no usable password, and mails `/account?verify_key=…`. A known address gets the same
+   reply (allauth mails its owner instead), so the form reveals nothing.
+2. Opened in the same browser, the link signs the user in. Opened anywhere else, allauth
+   only verifies the address and does **not** sign in (on purpose, see
+   `login_on_verification`), so sign-in by emailed code (`ACCOUNT_LOGIN_BY_CODE_ENABLED`)
+   is the way back in. The signed-in user then picks username and password in
+   `complete_signup_view`. `User.signup_completed` marks that, and the router keeps the
+   user on `/account` until it is true. That guard is the UI's only: the API does not
+   check `signup_completed` (the email is verified and every tier limit applies, so there is
+   nothing to protect), so don't describe it as a server-side rule. It is a separate flag, not "has a usable password":
+   a password reset sets a password without the user ever picking a username.
+
+Whether an email is verified lives only in allauth's `EmailAddress`. `create_superuser`
+adds a verified one, so a superuser can sign in to the app at once; an account made by hand
+in the admin or the shell has none until `python manage.py verify_user` runs (which also
+marks sign-up complete when the account already has a password). A sign-in by code marks
+the address verified too.
+
+Both the email and the username are sign-in identities. The SPA sends whatever was typed as
+`username`; allauth's `AuthenticationBackend` tries it as an email first, then as a
+username. Do **not** branch on whether the identifier contains `@` —
+`UnicodeUsernameValidator` permits `@` in usernames. `core.auth.adapter.AccountAdapter`
+refuses a username that matches any existing email (and vice versa), or one sign-in would
+match two accounts. The adapter also names the site "NoRain" in allauth's mails and counts
+allauth's rate limits by `core.auth.lockout.client_ip` (allauth's own
+`TRUSTED_CLIENT_IP_HEADER` has no fallback, so without Caddy every request would get a
+403). Links in the mails come from `HeadlessAdapter.get_frontend_url`, which puts
+`FRONTEND_URL` in front of the paths in `HEADLESS_FRONTEND_URLS` when the mail is sent,
+because production.py sets `FRONTEND_URL` after base.py is read.
+
+Side effects hang off allauth's signals (`core/auth/signals.py`): the forecast refresh on
+sign-in and the `account.action` milestones. They are allauth's signals, not Django's, so
+`force_login` and the admin sign-in don't send them.
 
 **The admin is public, so it has three guards.** It is served at `DJANGO_ADMIN_PATH`
 (production refuses a missing value or `admin`; Caddy routes the same variable). It is an
 `OTPAdminSite` (django-otp): password plus an authenticator code, and the first device comes
-from `manage.py add_totp_device`. And django-axes counts failed sign-ins — app and admin —
+from `manage.py add_totp_device` (`DJANGO_ADMIN_OTP=false` turns the code off, under the
+development settings only). And django-axes counts failed sign-ins — app and admin —
 **per IP**, not per account+IP: a pair lockout never trips when one address tries a new
-account each time. The IP comes only from `X-Real-IP`, which Caddy sets from `{client_ip}`
+account each time. It is the only limit on wrong *passwords*: allauth's own `login_failed`
+limit is off (`ACCOUNT_RATE_LIMITS`), or it would block one identity after 5 tries, before
+axes counts to 10, with a different reply. Axes does **not** cover sign-in by code (no
+password is checked, so a locked-out address can still get in by code). That is on
+purpose: a code proves the mailbox, and guessing one is capped by allauth (3 tries per
+code, `request_login_code` 3 a minute per address). A test pins this. The IP comes only from `X-Real-IP`, which Caddy sets from `{client_ip}`
 (`core/auth/lockout.py`); daphne has no proxy headers and `X-Forwarded-For` differs between
 the two Caddyfiles. The lockout reply is JSON because the SPA's `request()` parses every body.
 
@@ -136,7 +174,7 @@ the accessors without `v1` are deprecated. `stripe.Webhook.construct_event` is d
 
 ### Every heavy operation is a task
 
-No HTTP request performs a provider fetch, a GraphHopper call or a Plotly render. The
+No HTTP request performs a provider fetch or a GraphHopper call. The
 forecast endpoints create a `ForecastJob`, enqueue `plan_forecast_job` and return **202**
 with a job id; a finished job that is still fresh returns **200** with its stored payload.
 
@@ -145,14 +183,14 @@ POST-ish GET  ->  ForecastJob (202)
                      plan_forecast_job     queue: forecasts   geometry + fan-out
                        refresh_forecast_cell  \ queue: cells   one task per ~1 km² cell
                        refresh_ensemble_cell  /
-                         assemble_forecast_job  queue: forecasts  cache_only + figures
+                         assemble_forecast_job  queue: forecasts  cache_only + sections
                            -> job.result, pushed over ws/forecast/<job_id>/
 ```
 
 The stored `job.result` is always complete. `job_snapshot` serves a slim view of it
 (`core.jobs.forecast_view`: a ~50 m line, wind arrows ~2 km apart instead of the wind
-segments, no figures, no per-model breakdown), and pages fetch those parts from
-`/api/forecast_jobs/{id}/figures`, `/map_detail?detail=` (line + arrows) and
+segments, no per-model breakdown), and pages fetch those parts from
+`/api/forecast_jobs/{id}/map_detail?detail=` (line + arrows) and
 `/samples/{i}/uncertainty` only when they draw them. Shape on read only — never let page
 shape into the job key, or two pages would compute two jobs for one forecast. Every line
 level must keep each sample's vertex exactly: the map finds samples on the line by equality.
@@ -186,7 +224,7 @@ pre-warm scan, whose task carries no `job_id` and would never report back.
 
 **Imports go at module scope — keep the layering that allows it.** The forecast payload
 schemas live in `core/forecast_schemas.py`, outside the `core.api` package, because the
-domain modules (`weather`, `uncertainty`, `plotting`, `sections`) need them and importing
+domain modules (`weather`, `uncertainty`, `sections`) need them and importing
 anything under `core.api` runs its `__init__`, which loads the routers, which import
 `core.tasks`. The direction is one way: `core.api.*` → `core.tasks` → domain modules →
 `forecast_schemas`. Never make a domain module import from `core.api`; that recreates the
@@ -323,14 +361,14 @@ blank chart.
 OWM One Call 3.0 returns `rain` as a float (mm); legacy 2.5 returns `{"1h": value}`.
 `_from_owm()` handles both.
 
-### Plotting
+### Charts
 
-`generate_forecast_figures()` returns 3 Plotly figure JSONs. It is plain synchronous CPU
-and is called only from `assemble_forecast_job`, never from a request — on one daphne
-process a Plotly render in a request coroutine stalls every other request. When
-`forecast.samples` is empty it returns placeholder figures with a "Keine Wetterdaten"
-annotation instead of crashing, though a job that assembles no samples fails before it
-gets that far.
+The backend draws no charts. `frontend/src/utils/forecastCharts.ts` builds the temperature,
+precipitation and headwind charts from the samples the job result already carries
+(`temp`, `rainRateMmH`, `pop`, `headwind` and the ensemble p10/median/p90), so they need no
+request of their own; `NiceChart.vue` adds the theme. The chart design lives only there:
+a chart that needs a new value needs it on the sample, not a figures endpoint. Results
+stored before this still carry a `figures` key; `forecast_view` drops it.
 
 ### Routing graph
 
@@ -357,7 +395,7 @@ Users configure routes with cron schedules. `next_departure()` computes the next
 `run_forecast_scheduler` runs `refresh_forecasts` hourly, which now only *queues*
 `refresh_upcoming_forecasts`; that fans out to one `scan_route_forecasts` task per eligible
 route, so one slow route no longer holds up the pass, and it purges the Stripe ledger and
-expired `ForecastJob` rows. A successful SPA sign-in (`login_view`) also enqueues
+expired `ForecastJob` rows. A successful SPA sign-in (allauth's `user_logged_in`, `core/auth/signals.py`) also enqueues
 `refresh_user_forecasts`, which scans just that account's routes through the same
 `_prewarm_routes` quota; a failure to enqueue never fails the sign-in.
 
@@ -397,8 +435,8 @@ API request, patch `core.weather.get_or_fetch_forecast_cell` *and*
 namespace, so patching `core.grid.*` does not intercept and the test passes while the code
 still fetches. The same rule everywhere: the route handlers use
 `core.api.recurring_route.refresh_route_geometry`, assembly uses `core.tasks.compute_route_weather`
-/ `core.tasks.generate_forecast_figures`, the cell tasks `core.tasks.get_or_fetch_*`, sign-in
-`core.auth.views.refresh_user_forecasts`. A patch on the defining module is silently ignored —
+/ `core.tasks.compute_sections`, the cell tasks `core.tasks.get_or_fetch_*`, sign-in
+`core.auth.signals.refresh_user_forecasts`. A patch on the defining module is silently ignored —
 an `AssertionError` side effect then passes vacuously.
 
 Override both `CACHES` (locmem) and `CHANNEL_LAYERS` (`InMemoryChannelLayer`) for anything

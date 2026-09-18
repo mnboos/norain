@@ -6,29 +6,34 @@
 
 Name | Type
 ------------ | -------------
-`id` | string
-`name` | string
+`active` | boolean
+`createdAt` | Date
+`departureFlexAfterMinutes` | number
+`departureFlexBeforeMinutes` | number
 `description` | string
-`startLat` | number
-`startLon` | number
-`startName` | string
 `destLat` | number
 `destLon` | number
 `destName` | string
+`forecastAvailable` | boolean
+`hasGeometry` | boolean
+`id` | string
+`name` | string
+`nextDeparture` | string
+`parentRouteId` | string
 `profile` | string
+`returnNextDeparture` | string
+`returnRouteId` | string
+`returnScheduleCron` | string
+`returnScheduleDescription` | string
 `scheduleCron` | string
 `scheduleDescription` | string
-`departureFlexBeforeMinutes` | number
-`departureFlexAfterMinutes` | number
-`active` | boolean
-`totalSeconds` | number
-`totalDistanceM` | number
-`hasGeometry` | boolean
-`nextDeparture` | string
-`forecastAvailable` | boolean
-`createdAt` | Date
-`updatedAt` | Date
+`startLat` | number
+`startLon` | number
+`startName` | string
 `thumbnail` | [RouteThumbnail](RouteThumbnail.md)
+`totalDistanceM` | number
+`totalSeconds` | number
+`updatedAt` | Date
 
 ## Example
 
@@ -37,29 +42,34 @@ import type { RecurringRouteOut } from ''
 
 // TODO: Update the object below with actual values
 const example = {
-  "id": null,
-  "name": null,
+  "active": null,
+  "createdAt": null,
+  "departureFlexAfterMinutes": null,
+  "departureFlexBeforeMinutes": null,
   "description": null,
-  "startLat": null,
-  "startLon": null,
-  "startName": null,
   "destLat": null,
   "destLon": null,
   "destName": null,
+  "forecastAvailable": null,
+  "hasGeometry": null,
+  "id": null,
+  "name": null,
+  "nextDeparture": null,
+  "parentRouteId": null,
   "profile": null,
+  "returnNextDeparture": null,
+  "returnRouteId": null,
+  "returnScheduleCron": null,
+  "returnScheduleDescription": null,
   "scheduleCron": null,
   "scheduleDescription": null,
-  "departureFlexBeforeMinutes": null,
-  "departureFlexAfterMinutes": null,
-  "active": null,
-  "totalSeconds": null,
-  "totalDistanceM": null,
-  "hasGeometry": null,
-  "nextDeparture": null,
-  "forecastAvailable": null,
-  "createdAt": null,
-  "updatedAt": null,
+  "startLat": null,
+  "startLon": null,
+  "startName": null,
   "thumbnail": null,
+  "totalDistanceM": null,
+  "totalSeconds": null,
+  "updatedAt": null,
 } satisfies RecurringRouteOut
 
 console.log(example)

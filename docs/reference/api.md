@@ -77,7 +77,6 @@ return `user: null`.
 | DELETE | `/api/routes/{route_id}` | Delete route; return 204 without a body |
 | GET | `/api/routes/{route_id}/forecast` | Start (or join) a saved-route forecast; returns a job |
 | GET | `/api/forecast_jobs/{job_id}` | Poll one forecast job (WebSocket fallback) |
-| GET | `/api/forecast_jobs/{job_id}/figures` | Plotly chart figures of a finished job |
 | GET | `/api/forecast_jobs/{job_id}/map_detail?detail=medium\|full` | Route line and wind arrows at more detail than the job result's |
 | GET | `/api/forecast_jobs/{job_id}/samples/{index}/uncertainty` | One sample's full ensemble spread, with the per-model breakdown |
 | GET | `/api/billing/entitlements` | Current tier, its limits, and how much of them is used |
@@ -143,7 +142,6 @@ draws. It leaves out three parts, each served by its own endpoint once the job i
 
 | Left out of `result` | Fetch from |
 | --- | --- |
-| Plotly `figures` | `GET /api/forecast_jobs/{job_id}/figures` |
 | The full route line (`result.line` is simplified to ~50 m) | `GET /api/forecast_jobs/{job_id}/map_detail?detail=medium` (~10 m) or `detail=full` |
 | The wind segments (`result.wind_arrows` holds one arrow per ~2 km) | the same `map_detail` call: `wind_arrows` ~500 m apart for `medium`, every drawable segment for `full` |
 | Each sample's `uncertainty.models` and `requested_models` | `GET /api/forecast_jobs/{job_id}/samples/{index}/uncertainty` (`null` when the sample has no spread, which includes every sample of a free account) |
@@ -188,8 +186,7 @@ readiness indicates stored sample points; it does not guarantee available weathe
 The saved forecast endpoint requires `date=YYYY-MM-DD` and `time=HH:MM` query
 parameters. The requested departure need not match the saved cron schedule.
 It returns a job like the ad-hoc endpoint; its `result` adds `route_id`, `departure_time`
-and `sections`. The temperature, precipitation and wind Plotly figures come from
-`/api/forecast_jobs/{job_id}/figures`.
+and `sections`. There are no chart figures: the frontend draws the charts from `samples`.
 
 ## Forecast response fields
 
@@ -350,3 +347,38 @@ Curves and out-and-back routes remain part of the distance totals.
 `max_wind_power_w` is its largest local value (at least 0). Both are null without timing.
 `timing_source` is `routing`, `sample-interpolation` for legacy geometry, or `unavailable`.
 Display-chunk count and map zoom do not affect these route totals.
+
+## Free / Plus and ride briefings
+
+These session-authenticated JSON endpoints use camelCase and require CSRF for mutations:
+
+- `GET /api/billing/entitlements`: effective plan (`pro` means Plus), route and briefing
+  limits, comparison access, `trialEligible`, `trialEndsAt`, `complimentaryUntil`,
+  `paidSubscription`, and `billingConfigured`. Routes count pairs once.
+- `POST /api/billing/trial {}`: activate the account's one 14-day no-card trial; 409 if
+  used already or currently Plus. No Stripe objects are created.
+- `POST /api/billing/checkout {"interval":"annual"|"monthly"}`: server-selected Stripe
+  price; 503 before checkout is enabled, 409 for an existing live subscription.
+- `POST /api/billing/free-routes {"routeIds":[...]}`: select up to two owned active
+  parent rides to retain on Free; excess rides are preserved and paused.
+- `GET /api/briefings/preferences`: available channels, public push key, route
+  preferences, effective activation, device count and the ten most recent messages.
+- `POST /api/briefings/preferences {"routeId":"...","channel":"email"|"push"|""}`:
+  set the channel for the parent ride and its return journey. Five rides on Plus;
+  disabling is always permitted. A registered device is required for push.
+- `POST /api/briefings/push`: browser `PushSubscription.toJSON()` containing `endpoint`
+  and `keys`. Only supported HTTPS push-provider endpoints are accepted.
+- `DELETE /api/briefings/push {"endpoint":"..."}`: remove this account's registration.
+
+Recurring-route creation accepts optional `returnScheduleCron` and
+`returnScheduleDescription`. A return journey swaps start/destination and is routed
+independently. List responses contain parent rides only, with `return_route_id`,
+`return_schedule_cron`, `return_schedule_description` and `return_next_departure`. Detail
+responses also expose `parent_route_id` for a return journey (the generated TypeScript client maps these to camelCase). Use either leg's ID at
+`/routes/{id}/forecast`. Both legs count as one slot and share a briefing setting.
+Updates preserve the return schedule when omitted; an explicit empty return cron
+removes the return journey. Deleting a parent deletes both journeys.
+
+Explicit departure-comparison requests require Plus (402 otherwise). Saved comparison
+windows revert to ordinary forecasts after expiry. Forecasts of paused saved rides
+return 402. Basic weather and rain probability remain on Free.

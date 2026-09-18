@@ -1,7 +1,7 @@
 # NoRain frontend
 
 Vue 3, Quasar, and TanStack Query provide the route interface. MapLibre renders the
-map and Plotly renders backend-generated forecast charts. The application imports
+map and Plotly draws the forecast charts from the job's samples. The application imports
 the shared `@norain/api` client from `../packages/api/`.
 
 - [Local setup and first forecast](../docs/tutorials/first-forecast.md)

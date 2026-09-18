@@ -11,7 +11,8 @@ redirect is not evidence of anything — the browser may never load it, and a us
 it directly.
 """
 
-from datetime import UTC, datetime
+import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import stripe
@@ -34,7 +35,7 @@ from stripe.params.checkout import (
 )
 
 from .. import telemetry
-from ..entitlements import entitlements_for_sync, subscription_for_sync
+from ..entitlements import allowed_route_ids, entitlements_for_sync, subscription_for_sync
 from ..models import Plan, ProcessedStripeEvent, RecurringRoute, Subscription, User
 
 # Events that can change what an account is entitled to. Anything else is acknowledged
@@ -69,13 +70,30 @@ def _entitlements_payload(user: AbstractBaseUser | AnonymousUser) -> dict[str, A
         "plan": limits.plan,
         "maxRoutes": limits.max_routes,
         "ensembleUncertainty": limits.ensemble_uncertainty,
-        "routeCount": RecurringRoute.objects.filter(owner=user, active=True).count() if user.is_authenticated else 0,
+        "departureComparison": limits.departure_comparison,
+        "maxBriefingRoutes": limits.max_briefing_routes,
+        "trialEligible": bool(
+            user.is_authenticated and not limits.is_pro and (not subscription or not subscription.trial_started_at)
+        ),
+        "complimentaryUntil": subscription.complimentary_until.isoformat()
+        if subscription and subscription.complimentary_until
+        else None,
+        "trialEndsAt": subscription.trial_ends_at.isoformat() if subscription and subscription.trial_ends_at else None,
+        "paidSubscription": bool(
+            subscription and subscription.stripe_subscription_id and subscription.status in Subscription.ACTIVE_STATUSES
+        ),
+        "prices": {"annual": 29, "monthly": 3.9, "currency": "EUR"},
+        "routeCount": RecurringRoute.objects.filter(owner=user, active=True, return_of__isnull=True).count()
+        if user.is_authenticated
+        else 0,
         "status": subscription.status if subscription else "",
         "currentPeriodEnd": subscription.current_period_end.isoformat()
         if subscription and subscription.current_period_end
         else None,
         "cancelAtPeriodEnd": bool(subscription and subscription.cancel_at_period_end),
-        "billingConfigured": bool(settings.STRIPE_SECRET_KEY and settings.STRIPE_PRICE_ID_PRO),
+        "billingConfigured": bool(
+            settings.BILLING_ENABLED and settings.STRIPE_SECRET_KEY and _price("annual") and _price("monthly")
+        ),
     }
 
 
@@ -93,30 +111,68 @@ def checkout_view(request: HttpRequest) -> HttpResponse:
     user = _user(request)
     if user is None:
         return JsonResponse({"detail": "Authentication required."}, status=401)
+    try:
+        data = json.loads(request.body or b"{}")
+        interval = data.get("interval", "annual")
+        if interval not in {"annual", "monthly"}:
+            raise ValueError
+    except ValueError, AttributeError, TypeError:
+        return JsonResponse({"detail": "Choose annual or monthly billing."}, status=400)
     client = _client()
-    if client is None or not settings.STRIPE_PRICE_ID_PRO:
+    price = _price(interval)
+    if not settings.BILLING_ENABLED or client is None or not price:
         return _not_configured()
 
-    subscription = subscription_for_sync(user)
-    if not subscription.stripe_customer_id:
-        customer = client.v1.customers.create(
-            params=CustomerCreateParams(email=user.email, metadata={"user_id": str(user.pk)})
-        )
-        subscription.stripe_customer_id = customer.id
-        subscription.save(update_fields=["stripe_customer_id", "updated_at"])
+    with transaction.atomic():
+        User.objects.select_for_update().get(pk=user.pk)
+        subscription = subscription_for_sync(user)
+        if subscription.stripe_subscription_id and subscription.status in {
+            "active",
+            "trialing",
+            "past_due",
+            "unpaid",
+            "incomplete",
+            "paused",
+        }:
+            return JsonResponse({"detail": "Manage your existing subscription in the billing portal."}, status=409)
+        if subscription.checkout_session_id:
+            previous = client.v1.checkout.sessions.retrieve(subscription.checkout_session_id)
+            if previous.status == "complete" and not (
+                subscription.stripe_subscription_id and subscription.status in {"canceled", "incomplete_expired"}
+            ):
+                return JsonResponse(
+                    {"detail": "Payment is being processed. Please refresh your account shortly."}, status=409
+                )
+            if previous.status == "open" and subscription.checkout_interval == interval and previous.url:
+                return JsonResponse({"url": previous.url})
+            if previous.status == "open":
+                client.v1.checkout.sessions.expire(subscription.checkout_session_id)
+        if not subscription.stripe_customer_id:
+            customer = client.v1.customers.create(
+                params=CustomerCreateParams(email=user.email, metadata={"user_id": str(user.pk)}),
+                options={"idempotency_key": f"norain-customer-{user.pk}"},
+            )
+            subscription.stripe_customer_id = customer.id
+            subscription.save(update_fields=["stripe_customer_id", "updated_at"])
 
-    session = client.v1.checkout.sessions.create(
-        params=CheckoutSessionParams(
-            mode="subscription",
-            customer=subscription.stripe_customer_id,
-            line_items=[SessionCreateParamsLineItem(price=settings.STRIPE_PRICE_ID_PRO, quantity=1)],
-            success_url=f"{settings.FRONTEND_URL.rstrip('/')}/account?checkout=success",
-            cancel_url=f"{settings.FRONTEND_URL.rstrip('/')}/account?checkout=cancelled",
-            # Lets the webhook find the user even if the customer id ever changes.
-            client_reference_id=str(user.pk),
-            subscription_data=SessionCreateParamsSubscriptionData(metadata={"user_id": str(user.pk)}),
+        previous_session = subscription.checkout_session_id or "initial"
+        session = client.v1.checkout.sessions.create(
+            params=CheckoutSessionParams(
+                mode="subscription",
+                customer=subscription.stripe_customer_id,
+                line_items=[SessionCreateParamsLineItem(price=price, quantity=1)],
+                success_url=f"{settings.FRONTEND_URL.rstrip('/')}/account?checkout=success",
+                cancel_url=f"{settings.FRONTEND_URL.rstrip('/')}/account?checkout=cancelled",
+                # Lets the webhook find the user even if the customer id ever changes.
+                client_reference_id=str(user.pk),
+                subscription_data=SessionCreateParamsSubscriptionData(metadata={"user_id": str(user.pk)}),
+            ),
+            options={"idempotency_key": f"norain-checkout-{user.pk}-{interval}-{previous_session}"},
         )
-    )
+        subscription.checkout_session_id = session.id
+        subscription.checkout_interval = interval
+        subscription.save(update_fields=["checkout_session_id", "checkout_interval", "updated_at"])
+
     if not session.url:
         # Only a hosted session has a URL, and only while it is still active. There is
         # nothing to redirect the browser to, and the server is configured correctly, so
@@ -269,7 +325,7 @@ def webhook_view(request: HttpRequest) -> HttpResponse:
             sig_header=request.headers.get("Stripe-Signature", ""),
             secret=settings.STRIPE_WEBHOOK_SECRET,
         )
-    except (ValueError, stripe.SignatureVerificationError):
+    except ValueError, stripe.SignatureVerificationError:
         # Never log the body: an unverified payload is attacker-controlled.
         logger.warning("Stripe webhook rejected: invalid payload or signature")
         telemetry.event("billing.webhook", outcome="rejected")
@@ -300,3 +356,67 @@ def webhook_view(request: HttpRequest) -> HttpResponse:
         telemetry.event("billing.webhook", outcome="error", **context)
         raise
     return JsonResponse({"received": True})
+
+
+def _price(interval: str) -> str:
+    if interval == "annual":
+        return settings.STRIPE_PRICE_ID_PLUS_ANNUAL or settings.STRIPE_PRICE_ID_PRO
+    return settings.STRIPE_PRICE_ID_PLUS_MONTHLY
+
+
+@require_POST
+@csrf_protect
+def trial_view(request):
+    user = _user(request)
+    if user is None:
+        return JsonResponse({"detail": "Authentication required."}, status=401)
+    with transaction.atomic():
+        User.objects.select_for_update().get(pk=user.pk)
+        subscription = subscription_for_sync(user)
+        if subscription.trial_started_at or entitlements_for_sync(user).is_pro:
+            return JsonResponse({"detail": "The trial is available once per account."}, status=409)
+        subscription.trial_started_at = datetime.now(tz=UTC)
+        subscription.trial_ends_at = subscription.trial_started_at + timedelta(days=14)
+        subscription.save(update_fields=["trial_started_at", "trial_ends_at", "updated_at"])
+    telemetry.event("billing.action", action="trial_started", outcome="success", **telemetry.user_context(user))
+    return JsonResponse(_entitlements_payload(user))
+
+
+@require_POST
+@csrf_protect
+def free_routes_view(request):
+    user = _user(request)
+    if user is None:
+        return JsonResponse({"detail": "Authentication required."}, status=401)
+    try:
+        data = json.loads(request.body)
+        ids = data["routeIds"]
+        if (
+            not isinstance(ids, list)
+            or len(ids) > 2
+            or any(not isinstance(i, str) for i in ids)
+            or len(set(ids)) != len(ids)
+        ):
+            raise ValueError
+        from uuid import UUID
+
+        ids = [UUID(i) for i in ids]
+    except ValueError, TypeError, KeyError:
+        return JsonResponse({"detail": "Choose up to two of your active routes."}, status=400)
+    with transaction.atomic():
+        User.objects.select_for_update().get(pk=user.pk)
+        routes = RecurringRoute.objects.filter(owner=user, active=True, return_of__isnull=True)
+        if routes.filter(id__in=ids).count() != len(ids):
+            return JsonResponse({"detail": "Route not found."}, status=404)
+        routes.update(free_selected=False)
+        routes.filter(id__in=ids).update(free_selected=True)
+    return JsonResponse(
+        {
+            "routeIds": [
+                str(i)
+                for i in RecurringRoute.objects.filter(
+                    id__in=allowed_route_ids(user), return_of__isnull=True
+                ).values_list("id", flat=True)
+            ]
+        }
+    )

@@ -12,14 +12,33 @@ function mainRunPeakRate(samples: ForecastSampleOut[]): number | null {
     return rates.length ? Math.round(Math.max(...rates) * 10) / 10 : null;
 }
 
+// Wind effort levels worth a headline of their own; "niedrig" and "keiner" are not.
+const dryWindHeadlines: Record<string, string> = {
+    "sehr hoch": "Trocken, sehr starker Gegenwind",
+    hoch: "Trocken, starker Gegenwind",
+    mittel: "Trocken, etwas Gegenwind",
+    "Wind hilft": "Trocken mit Rückenwind",
+};
+
+/**
+ * With rain ruled out, "trocken" alone says little: name what the rider will feel instead.
+ * Frost comes first because it is a safety matter, the wind second. Both are levels the
+ * server already worked out; this only turns the words into a sentence.
+ */
+function dryHeadline(summary: RouteWeatherSummary): string {
+    const frost = summary.maxFrostLevel;
+    if (frost) return frost === "leicht" ? "Trocken, leichte Glättegefahr" : "Trocken, aber Glättegefahr";
+    return dryWindHeadlines[summary.maxWindEffortLevel ?? ""] ?? "Voraussichtlich trocken";
+}
+
 export function forecastHeadline(summary: RouteWeatherSummary, samples: ForecastSampleOut[]): string {
     if (!samples.length) return "Keine Wetterdaten";
     const p = summary.rainProbability;
-    if (p == null) return summary.willRain ? "Regen erwartet" : "Voraussichtlich trocken";
+    if (p == null) return summary.willRain ? "Regen erwartet" : dryHeadline(summary);
     // `willRain` is the backend's ensemble verdict (POP_VERDICT). A few wet members below it
     // are shown as the risk percentage, not as a headline next to a dry "Regen max.". The
     // main run raining still counts, or the headline would say dry beside a non-zero rate.
-    if (!summary.willRain && !(mainRunPeakRate(samples) ?? 0)) return "Voraussichtlich trocken";
+    if (!summary.willRain && !(mainRunPeakRate(samples) ?? 0)) return dryHeadline(summary);
     const time = summary.firstRainEta ? ` ab ca. ${swissTime(summary.firstRainEta)} Uhr` : "";
     return `Regen möglich${time}`;
 }

@@ -36,13 +36,6 @@ export interface RouteWeatherApiCoreApiRouteWeatherForecastJobRequest {
     jobId: string;
 }
 
-export interface RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest {
-    /**
-     * 
-     */
-    jobId: string;
-}
-
 export interface RouteWeatherApiCoreApiRouteWeatherForecastJobMapDetailRequest {
     /**
      * 
@@ -153,53 +146,6 @@ export class RouteWeatherApi extends runtime.BaseAPI {
      */
     async coreApiRouteWeatherForecastJob(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
         const response = await this.coreApiRouteWeatherForecastJobRaw(requestParameters, initOverrides);
-        return await response.value();
-    }
-
-    /**
-     * Creates request options for coreApiRouteWeatherForecastJobFigures without sending the request
-     */
-    async coreApiRouteWeatherForecastJobFiguresRequestOpts(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['jobId'] == null) {
-            throw new runtime.RequiredError(
-                'jobId',
-                'Required parameter "jobId" was null or undefined when calling coreApiRouteWeatherForecastJobFigures().'
-            );
-        }
-
-        const queryParameters: any = {};
-
-        const headerParameters: runtime.HTTPHeaders = {};
-
-
-        let urlPath = `/api/forecast_jobs/{job_id}/figures`;
-        urlPath = urlPath.replace('{job_id}', encodeURIComponent(String(requestParameters['jobId'])));
-
-        return {
-            path: urlPath,
-            method: 'GET',
-            headers: headerParameters,
-            query: queryParameters,
-        };
-    }
-
-    /**
-     * The Plotly chart figures of a finished job, for the pages that draw charts.
-     * Forecast Job Figures
-     */
-    async coreApiRouteWeatherForecastJobFiguresRaw(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<{ [key: string]: any | null; }>>> {
-        const requestOptions = await this.coreApiRouteWeatherForecastJobFiguresRequestOpts(requestParameters);
-        const response = await this.request(requestOptions, initOverrides);
-
-        return new runtime.JSONApiResponse<any>(response);
-    }
-
-    /**
-     * The Plotly chart figures of a finished job, for the pages that draw charts.
-     * Forecast Job Figures
-     */
-    async coreApiRouteWeatherForecastJobFigures(requestParameters: RouteWeatherApiCoreApiRouteWeatherForecastJobFiguresRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<{ [key: string]: any | null; }>> {
-        const response = await this.coreApiRouteWeatherForecastJobFiguresRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

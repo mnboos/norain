@@ -2,6 +2,7 @@
 import { computed, ref, toRefs, watch } from "vue";
 import { symSharpCloudOff } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
+import { useEntitlements } from "@/composables/useEntitlements";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import DepartureComparison from "@/components/DepartureComparison.vue";
 import WeatherSummaryCard from "@/components/WeatherSummaryCard.vue";
@@ -22,6 +23,7 @@ const props = defineProps<{
 }>();
 
 const { route, departureDate, departureTime } = toRefs(props);
+const { isPro } = useEntitlements();
 
 const routeId = computed(() => route.value.id);
 const hasGeometry = computed(() => !!route.value.hasGeometry);
@@ -52,8 +54,8 @@ const comparisonQuery = useRecurringRouteForecast(
     departureDate,
     departureTime,
     () => hasGeometry.value && !!departureDate.value && !!departureTime.value,
-    flexBefore,
-    flexAfter,
+    () => isPro.value ? flexBefore.value : 0,
+    () => isPro.value ? flexAfter.value : 0,
 );
 const selectedQuery = useRecurringRouteForecast(
     routeId,
@@ -156,7 +158,8 @@ watch(forecast, () => {
                 Route wird berechnet...
             </q-banner>
             <q-banner v-else-if="forecastError" class="bg-tint-error">
-                Fehler beim Laden der Wetterdaten. Bitte versuche es später erneut.
+                Wetterdaten konnten nicht geladen werden. Ist diese Route nach Ablauf von Plus pausiert?
+                <q-btn flat to="/account" label="Aktive Routen und Tarif verwalten" no-caps />
             </q-banner>
             <q-banner v-else-if="!route.forecastAvailable && !forecastLoading" class="bg-tint-neutral">
                 <template #avatar>
@@ -178,7 +181,6 @@ watch(forecast, () => {
             </q-card>
             <q-card flat class="transparent forecast-charts">
                 <WeatherCharts
-                    :job-id="forecast.jobId"
                     :version="forecast.version"
                     :selected-sample="selectedSample"
                     :samples="forecast.samples"

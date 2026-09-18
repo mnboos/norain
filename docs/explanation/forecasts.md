@@ -150,8 +150,8 @@ with Zurich and verify boundary dates/times; cross-zone scheduling needs code ch
 ## Missing data is not dry weather
 
 Samples whose weather cannot be fetched or extracted are skipped. An empty response
-can still include geometry and a summary with default zero values. Plotting explicitly
-produces three **Keine Wetterdaten** placeholders, and sections are empty. Interpret
+can still include geometry and a summary with default zero values. The route page then
+shows **Keine Diagrammdaten verfügbar.** instead of charts, and sections are empty. Interpret
 that state as unavailable weather, not as a reliable dry forecast.
 
 [Documentation index](../README.md)

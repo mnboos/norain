@@ -1,7 +1,7 @@
 """The forecast payload: what compute_route_weather builds, what a job stores and what the API serves.
 
-Kept out of the ``core.api`` package so the domain modules (weather, uncertainty, plotting,
-sections) can import it without loading the API routers, which import ``core.tasks``.
+Kept out of the ``core.api`` package so the domain modules (weather, uncertainty, sections)
+can import it without loading the API routers, which import ``core.tasks``.
 """
 
 from typing import Literal
@@ -211,9 +211,9 @@ class RouteForecastOut(CamelSchema):
 
     Slimmer than what the job stores (see ``core.jobs.forecast_view``): ``line`` is the
     coarse route line, ``wind_arrows`` are about 2 km apart and the samples carry no
-    per-model breakdown. The chart figures, finer map detail and one sample's breakdown
-    each come from their own endpoint, keyed by ``job_id``; ``version`` changes whenever
-    the job is recomputed under the same id.
+    per-model breakdown. Finer map detail and one sample's breakdown each come from their
+    own endpoint, keyed by ``job_id``; ``version`` changes whenever the job is recomputed
+    under the same id. The frontend draws the charts from ``samples``.
     """
 
     job_id: UUID

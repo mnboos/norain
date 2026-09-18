@@ -47,8 +47,13 @@ const departureTime = computed(() => departure.value.time);
 
         <q-banner v-else-if="error || !route" class="bg-tint-error q-ma-md" rounded>Route nicht gefunden.</q-banner>
 
+        <q-tabs v-if="route?.returnRouteId || route?.parentRouteId" dense>
+            <q-route-tab :to="`/routes/${route.parentRouteId ?? route.id}`" label="Hinfahrt" exact />
+            <q-route-tab :to="`/routes/${route.returnRouteId ?? route.id}`" label="Rückfahrt" exact />
+        </q-tabs>
         <RouteDetailPanel
-            v-else
+            v-if="route"
+            :key="routeId"
             :route="route"
             :departure-date="departureDate"
             :departure-time="departureTime"

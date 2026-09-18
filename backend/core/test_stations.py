@@ -302,7 +302,7 @@ class ThumbnailStationTests(_NearNowRoute, TestCase):
         self.build()
         self.add_readings()
         self.user = get_user_model().objects.create_user(
-            username="rider", email="rider@example.com", password="pw", email_verified=True
+            username="rider", email="rider@example.com", password="pw"
         )
         self.route = RecurringRoute.objects.create(
             owner=self.user, name="Commute", start_point=route_point(47.0, 9.0), start_name="Start",
@@ -355,7 +355,7 @@ class StationJobTests(_NearNowRoute, TestCase):
         cache.clear()
         self.build()
         self.user = get_user_model().objects.create_user(
-            username="rider", email="rider@example.com", password="pw", email_verified=True
+            username="rider", email="rider@example.com", password="pw"
         )
 
     def make_pro(self):
@@ -414,6 +414,7 @@ class StationJobTests(_NearNowRoute, TestCase):
         station_enqueue.assert_not_awaited()
 
     def test_station_task_uses_cached_lookups_and_fresh_readings(self):
+        self.make_pro()
         job = self.make_job(status=ForecastJob.Status.FETCHING, cells_total=1)
         for lat_c, lon_c in {stations._lookup_cell(sp["lat"], sp["lon"]) for sp in self.sample_points}:
             StationLookup.objects.create(lat_c=lat_c, lon_c=lon_c, stations=[
@@ -441,8 +442,19 @@ class StationJobTests(_NearNowRoute, TestCase):
         self.assertEqual(job.cells_settled, 1)
         self.assertEqual(job.cells_failed, 0)  # missing readings never shorten the forecast's life
 
+    def test_queued_station_task_rechecks_expired_access(self):
+        job = self.make_job(status=ForecastJob.Status.FETCHING, cells_total=1)
+        with patch("core.tasks.refresh_stations_for_ride", new_callable=AsyncMock) as fetch, patch(
+            "core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())
+        ):
+            async_to_sync(_refresh_station_observations_async)(str(job.id))
+        fetch.assert_not_awaited()
+        job.refresh_from_db()
+        self.assertEqual(job.cells_settled, 1)
+
     def test_station_task_failure_still_settles(self):
         """The task fails loudly, but the job it belongs to still goes on to assembly."""
+        self.make_pro()
         job = self.make_job(status=ForecastJob.Status.FETCHING, cells_total=1)
         assemble = AsyncMock()
         with patch.dict(os.environ, WITH_KEY), patch(

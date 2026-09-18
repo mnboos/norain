@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from django.test import SimpleTestCase, TestCase
 
-from .forecast_schemas import RouteWeatherOut, WeatherSample
+from .forecast_schemas import WeatherSample
 from .grid import (
     ENSEMBLE_REQUEST_VERSION,
     _fetch_ensemble,
@@ -14,10 +14,9 @@ from .grid import (
     get_or_fetch_ensemble_cell,
 )
 from .models import EnsembleCell
-from .plotting import generate_forecast_figures
 from .schedule import LOCAL_TZ
 from .uncertainty import extract_uncertainty
-from .weather import _summarize, compute_route_weather
+from .weather import compute_route_weather
 
 # Provider timestamps are Swiss wall time with the zone left off.
 ETA = datetime(2026, 9, 10, 12, tzinfo=LOCAL_TZ).replace(tzinfo=None)
@@ -176,43 +175,6 @@ class UncertaintyTests(SimpleTestCase):
             self.assertEqual(result.samples[0].pop, 0.7)
             self.assertEqual(result.samples[0].probability_source, "openweathermap")
             self.assertIsNone(result.samples[0].uncertainty)
-
-    def test_chart_gaps_time_positions_and_sample_indices(self):
-        points = [
-            sample(0, uncertainty=uncertainty(), pop=0.5),
-            sample(300),
-            sample(600, uncertainty=uncertainty(), pop=0.0),
-        ]
-        forecast = RouteWeatherOut(
-            line=[],
-            total_seconds=600,
-            total_distance_m=3000.0,
-            samples=points,
-            summary=_summarize(points, "open-meteo"),
-        )
-        figures = generate_forecast_figures(forecast)
-        median = next(
-            t
-            for t in figures[0]["data"]
-            if t.get("legendgroup") == "temperature" and t.get("mode") == "lines+markers" and not t["line"].get("dash")
-        )
-        self.assertEqual(list(median["x"]), [0.0, 5.0, 10.0])
-        self.assertEqual(list(median["y"]), [15.0, None, 15.0])
-        self.assertEqual(median["customdata"][2][0], 2)
-        bands = [t for t in figures[0]["data"] if t.get("fill") == "tonexty"]
-        self.assertEqual(len(bands), 2)
-        pop = next(t for t in figures[1]["data"] if t.get("yaxis") == "y2")
-        self.assertEqual(list(pop["y"]), [50.0, None, 0.0])
-        gust = next(
-            t for t in figures[2]["data"]
-            if t.get("legendgroup") == "windGust" and t["line"].get("dash") == "dot"
-        )
-        self.assertEqual(list(gust["y"]), [None, None, None])
-        # One legend entry per metric; a lone series (temperature) gets no legend at all.
-        self.assertFalse(figures[0]["layout"]["showlegend"])
-        for figure in figures:
-            shown = [t["legendgroup"] for t in figure["data"] if t.get("showlegend", True)]
-            self.assertEqual(len(shown), len(set(shown)))
 
     async def test_fetch_requests_variables_and_does_not_memoize(self):
         response = Mock()
