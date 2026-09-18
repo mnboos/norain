@@ -9,6 +9,7 @@ to avoid circular imports between weather.py <-> grid.py).
 
 import os
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -16,6 +17,7 @@ from asgiref.sync import sync_to_async
 from loguru import logger
 
 from .models import EnsembleCell, ForecastCell
+from .telemetry import emit, provider
 from .uncertainty import ENSEMBLE_VARIABLES
 from .wind import finite_number
 
@@ -38,6 +40,9 @@ _OM_VARS = {
 
 # Cells older than this are considered stale and should be refreshed.
 MAX_CELL_AGE = timedelta(hours=2)
+# minutely_15 covers ~1-2 h into the future; only use it when the nearest match is
+# within 2 h, otherwise fall through to hourly.
+MINUTELY_15_MAX_DELTA = timedelta(hours=2)
 
 ENSEMBLE_MODELS = "icon_seamless_eps,meteoswiss_icon_ch1_ensemble,meteoswiss_icon_ch2_ensemble"
 POP_MEMBER_MM = 0.1
@@ -49,6 +54,7 @@ ENSEMBLE_REQUEST_VERSION = 2
 # =============================================================================
 
 
+@provider("open-meteo-ensemble")
 async def _fetch_ensemble(lat_r: float, lon_r: float, forecast_days: int, day_key: str) -> dict:
     """Open-Meteo ensemble: many members across several models, hourly weather variables."""
     params = {
@@ -68,6 +74,7 @@ async def _fetch_ensemble(lat_r: float, lon_r: float, forecast_days: int, day_ke
         return data
 
 
+@provider("open-meteo")
 async def _fetch_open_meteo(lat_r: float, lon_r: float, forecast_days: int, day_key: str) -> dict:
     features = ",".join(_OM_VARS)
     params = {
@@ -85,10 +92,12 @@ async def _fetch_open_meteo(lat_r: float, lon_r: float, forecast_days: int, day_
         return resp.json()
 
 
+@provider("openweathermap", optional_key="OPENWEATHERMAP_API_KEY")
 async def _fetch_owm(lat_r: float, lon_r: float) -> dict | None:
     """OpenWeatherMap One Call 3.0 hourly fallback. Returns None if no key configured."""
     key = os.environ.get("OPENWEATHERMAP_API_KEY")
     if not key:
+        emit("count", "weather.fallback", outcome="unconfigured")
         logger.warning("No OpenWeatherMap API key configured")
         return None
     params = {
@@ -146,10 +155,6 @@ def _from_open_meteo(data: dict, eta: datetime) -> dict | None:
     # Provider timestamps are Swiss local wall time. Saved routes can supply aware ETAs.
     if eta.tzinfo is not None:
         eta = eta.astimezone(ZoneInfo("Europe/Zurich")).replace(tzinfo=None)
-    # minutely_15 covers ~1–2 h into the future; only use when the nearest match
-    # is within 2 h, otherwise fall through to hourly.
-    MINUTELY_15_MAX_DELTA = timedelta(hours=2)
-
     for block in ("minutely_15", "hourly"):
         b = data.get(block)
         if not isinstance(b, dict) or not b.get("time"):
@@ -172,7 +177,7 @@ def _from_open_meteo(data: dict, eta: datetime) -> dict | None:
                 block,
             )
 
-        code = (b.get("weather_code") or [None])[i] if b.get("weather_code") else None
+        code: Any = (b.get("weather_code") or [None])[i] if b.get("weather_code") else None
         rain = b.get("precipitation") or b.get("rain") or []
         return {
             "rain_mm": float(rain[i]) if i < len(rain) and rain[i] is not None else 0.0,
@@ -348,7 +353,9 @@ async def get_cached_forecast_cell(
     for source in ("open-meteo", "openweathermap"):
         cell = await sync_to_async(_get_forecast_cell_sync)(lat_r, lon_r, day_key, source, forecast_days)
         if cell is not None:
+            emit("count", "cache.lookup", kind="forecast", outcome="hit", source=source)
             return cell
+    emit("count", "cache.lookup", kind="forecast", outcome="miss")
     return None
 
 
@@ -377,6 +384,7 @@ async def get_or_fetch_forecast_cell(
         logger.warning("get_or_fetch_forecast_cell: Open-Meteo fetch failed for ({}, {}): {}", lat_r, lon_r, exc)
 
     if data is None:
+        emit("count", "weather.fallback", outcome="needed")
         source = "openweathermap"
         try:
             data = await _fetch_owm(lat_r, lon_r)
@@ -393,8 +401,9 @@ async def get_or_fetch_forecast_cell(
         )
         return None
 
-    cell = await sync_to_async(_store_forecast_cell_sync)(lat_r, lon_r, day_key, forecast_days, data, source)
-    return cell
+    if source == "openweathermap":
+        emit("count", "weather.fallback", outcome="recovered")
+    return await sync_to_async(_store_forecast_cell_sync)(lat_r, lon_r, day_key, forecast_days, data, source)
 
 
 async def get_cached_ensemble_cell(
@@ -403,7 +412,9 @@ async def get_cached_ensemble_cell(
     """Return a fresh EnsembleCell already in the DB, without ever fetching."""
     if isinstance(day_key, str):
         day_key = date.fromisoformat(day_key)
-    return await sync_to_async(_get_ensemble_cell_sync)(lat_r, lon_r, day_key, forecast_days)
+    cell = await sync_to_async(_get_ensemble_cell_sync)(lat_r, lon_r, day_key, forecast_days)
+    emit("count", "cache.lookup", kind="ensemble", outcome="hit" if cell is not None else "miss")
+    return cell
 
 
 async def get_or_fetch_ensemble_cell(
@@ -436,8 +447,7 @@ async def get_or_fetch_ensemble_cell(
     if data is None:
         return None
 
-    cell = await sync_to_async(_store_ensemble_cell_sync)(lat_r, lon_r, day_key, forecast_days, data)
-    return cell
+    return await sync_to_async(_store_ensemble_cell_sync)(lat_r, lon_r, day_key, forecast_days, data)
 
 
 def extract_sample(cell_data: dict, eta: datetime, source: str | None = None) -> dict | None:

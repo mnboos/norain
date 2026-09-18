@@ -1,6 +1,8 @@
 import { type DetailResponse, isRecord, type Parse, parseDetail, request } from "@/services/http";
 
 export interface SessionUser {
+    /** Optional while older backend instances finish rolling out. */
+    id?: string;
     email: string;
     username: string;
 }
@@ -10,13 +12,15 @@ export interface SessionState {
     user: SessionUser | null;
 }
 
-const parseUser: Parse<SessionUser> = (value) => {
+const parseUser: Parse<SessionUser> = value => {
     if (!isRecord(value)) return null;
-    const { email, username } = value;
-    return typeof email === "string" && typeof username === "string" ? { email, username } : null;
+    const { id, email, username } = value;
+    return typeof email === "string" && typeof username === "string"
+        ? { email, username, ...(typeof id === "string" ? { id } : {}) }
+        : null;
 };
 
-const parseSession: Parse<SessionState> = (value) => {
+const parseSession: Parse<SessionState> = value => {
     if (!isRecord(value) || typeof value.authenticated !== "boolean") return null;
     const authenticated = value.authenticated;
     if (value.user == null) return { authenticated, user: null };

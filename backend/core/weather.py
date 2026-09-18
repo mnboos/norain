@@ -18,7 +18,7 @@ import httpx
 from async_lru import alru_cache
 from loguru import logger
 
-from .forecast_schemas import RouteWeatherOut, RouteWeatherSummary, WeatherSample, WindDistribution
+from .forecast_schemas import RouteWeatherOut, RouteWeatherSummary, WeatherSample, WindDistribution, WindSegment
 from .geo import haversine_m as _haversine_m
 from .grid import (
     ENSEMBLE_MODELS,
@@ -28,8 +28,18 @@ from .grid import (
     get_or_fetch_ensemble_cell,
     get_or_fetch_forecast_cell,
 )
+from .models import EnsembleCell
 from .schedule import local_today
-from .stations import RAIN_HORIZON, STATION_HORIZON, get_cached_readings, lead_weight, station_correction
+from .stations import (
+    RAIN_HORIZON,
+    STATION_HORIZON,
+    Reading,
+    StationCorrection,
+    get_cached_readings,
+    lead_weight,
+    station_correction,
+)
+from .telemetry import provider
 from .uncertainty import extract_uncertainty
 from .wind import compute_wind_profile, normalize_wind, resolve_vertex_times
 
@@ -87,8 +97,8 @@ def _cumulative_times_s(coords: list[list[float]], time_details: list[list]) -> 
     """
     n = len(coords)
     seg_s = [0.0] * n  # seconds to travel from vertex i-1 to vertex i (indexed by i)
-    for frm, to, time_ms in time_details:
-        frm, to = int(frm), int(to)
+    for raw_from, raw_to, time_ms in time_details:
+        frm, to = int(raw_from), int(raw_to)
         if to <= frm:
             continue
         lengths = [_haversine_m(coords[i][0], coords[i][1], coords[i + 1][0], coords[i + 1][1]) for i in range(frm, to)]
@@ -135,6 +145,7 @@ def _sample_indices(cum_s: list[float], interval_s: int) -> list[int]:
 ROUTING_ERRORS = (httpx.HTTPError, ValueError, KeyError, IndexError)
 
 @alru_cache(maxsize=64)
+@provider("graphhopper")
 async def _fetch_route(profile: str, start_lat: float, start_lon: float, dest_lat: float, dest_lon: float) -> dict:
     body = {
         "profile": profile,
@@ -252,7 +263,7 @@ class WeatherSnapshot:
     forecast_days: int
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
     cells: dict = field(default_factory=dict)
-    readings: list | None = None
+    readings: list[list[Reading]] | None = None
 
     async def cell(self, kind, lat, lon, day):
         key = (kind, lat, lon, day)
@@ -332,17 +343,17 @@ async def compute_route_weather(
     day_key_str = local_departure.date().isoformat()
     samples: list[WeatherSample] = []
     forecast_source = "open-meteo"
-    forecasts = [None] * len(sample_points)
-    ensemble_cells = [None] * len(sample_points)
-    corrections = [None] * len(sample_points)
-    readings = [[] for _ in sample_points]
+    forecasts: list[dict | None] = [None] * len(sample_points)
+    ensemble_cells: list[EnsembleCell | None] = [None] * len(sample_points)
+    corrections: list[StationCorrection | None] = [None] * len(sample_points)
+    readings: list[list[Reading]] = [[] for _ in sample_points]
     if station_correction_enabled:
         if snapshot is not None:
             if snapshot.readings is None:
                 snapshot.readings = await get_cached_readings(
                     [{**sp, "elapsed_s": 0} for sp in sample_points], snapshot.now, snapshot.now,
                 )
-            readings = snapshot.readings
+            readings = snapshot.readings or []
         else:
             readings = await get_cached_readings(sample_points, departure, datetime.now(tz=UTC))
 
@@ -380,9 +391,10 @@ async def compute_route_weather(
             # built, so every later reader of `forecast` sees the same number.
             observed_at = min(r.observed_at for r in readings[i])
             model_now = extract_sample(cell.data, observed_at, cell.source)
-            corrections[i] = station_correction(readings[i], model_now["temp"] if model_now else None)
-            if corrections[i] is not None and corrections[i].temp_offset is not None:
-                forecast["temp"] += lead_weight(eta, observed_at, STATION_HORIZON) * corrections[i].temp_offset
+            correction = station_correction(readings[i], model_now["temp"] if model_now else None)
+            corrections[i] = correction
+            if correction is not None and correction.temp_offset is not None:
+                forecast["temp"] += lead_weight(eta, observed_at, STATION_HORIZON) * correction.temp_offset
         forecasts[i] = forecast
         if not include_uncertainty:
             ens_cell = None
@@ -486,5 +498,5 @@ async def compute_route_weather(
         total_distance_m=wind.total_distance_m,
         samples=samples,
         summary=summary,
-        wind_segments=wind.segments,
+        wind_segments=[WindSegment(**segment) for segment in wind.segments],
     )

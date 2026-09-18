@@ -36,9 +36,10 @@ def flexibility_params(departure: str, before: int, after: int) -> dict:
             return {}
         params = {"departure_flex_before_minutes": before, "departure_flex_after_minutes": after}
         candidate_times({"departure_time": departure, **params})
-        return params
     except ValueError as exc:
         raise HttpError(422, str(exc)) from None
+    else:
+        return params
 
 
 @router.get("/route_weather", response={200: ForecastJobOut, 202: ForecastJobOut})

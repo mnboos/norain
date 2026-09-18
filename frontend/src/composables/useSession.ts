@@ -1,5 +1,6 @@
 import { computed, ref } from "vue";
 
+import { identifyUser } from "@/services/telemetry";
 import { authApi, type SessionState } from "@/services/auth";
 
 const session = ref<SessionState>({ authenticated: false, user: null });
@@ -14,6 +15,7 @@ export function useSession() {
         } catch {
             session.value = { authenticated: false, user: null };
         } finally {
+            identifyUser(session.value.user?.id);
             sessionLoaded.value = true;
         }
         return session.value;
@@ -21,6 +23,7 @@ export function useSession() {
 
     function setSession(value: SessionState) {
         session.value = value;
+        identifyUser(value.user?.id);
         sessionLoaded.value = true;
     }
 

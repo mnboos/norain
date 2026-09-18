@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, ref, toValue, watch, type MaybeRefOrGetter } from "vue";
-import { keepPreviousData, useQuery } from "@tanstack/vue-query";
+import { keepPreviousData, useQuery, type QueryClient } from "@tanstack/vue-query";
 import { CoreApiRouteWeatherForecastJobMapDetailDetailEnum as MapDetailParam, RouteWeatherApi } from "@norain/api/apis";
 import type { ForecastUncertainty } from "@norain/api/models";
 
@@ -40,6 +40,18 @@ export function useForecastFigures(jobId: MaybeRefOrGetter<string>, version: May
         queryFn: () => api.coreApiRouteWeatherForecastJobFigures({ jobId: toValue(jobId) }),
         staleTime: PART_STALE_TIME,
     });
+}
+
+/** Load a finished job's figures before its charts are drawn. Failures are left for the page to retry. */
+export async function prefetchForecastFigures(client: QueryClient, jobId: string, version: string): Promise<void> {
+    await client
+        .query({
+            queryKey: forecastPartKeys.figures(jobId, version),
+            queryFn: () => api.coreApiRouteWeatherForecastJobFigures({ jobId }),
+            staleTime: PART_STALE_TIME,
+            gcTime: 30 * 60 * 1000,
+        })
+        .catch(() => undefined);
 }
 
 /** The route line and wind arrows at one detail level finer than the job result's. */

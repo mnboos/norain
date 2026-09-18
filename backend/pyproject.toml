@@ -41,12 +41,52 @@ dev = [
 export_openapi_schema = "python manage.py export_openapi_schema --indent 4 --sorted --output api_schema.json"
 
 [tool.ruff]
-extend-include = ["ALL", "I"]
-target-version = "py313"
+# target-version is inferred from requires-python above -- one place to change it.
 show-fixes = true
 line-length = 120
 indent-width = 4
 fix = true
 
 [tool.ruff.lint]
-dummy-variable-rgx = "^request$"
+select = ["ALL"]
+# The default pattern, plus `request`: a view that never reads its request is normal.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?)|request)$"
+ignore = [
+    # Style this project decides for itself.
+    "D",        # docstrings go where they earn their place, not on every symbol
+    "ANN",      # same for annotations
+    "COM812",   # trailing commas -- conflicts with the formatter
+    "ISC001",   # implicit string concatenation -- conflicts with the formatter
+    "CPY001",   # copyright headers
+    "TID252",   # `from ..models import` is the house style inside core/
+    "EM",       # exception message must be a variable first
+    "TRY003",   # long message outside the exception class
+    "FBT",      # boolean positional arguments
+    "RUF001",   # "ambiguous" unicode: the UI text is German, and comments use arrows
+    "RUF002",
+    "RUF003",
+    # Django and its ecosystem.
+    "PT",       # pytest idioms; the test suite runs on Django's unittest runner
+    "RUF012",   # ClassVar on Django/migration class attributes
+    "ARG",      # unused arguments: signal handlers and Django hooks have fixed shapes
+    "S101",     # assert
+    "SLF001",   # tests reach into the private helpers they cover
+    "TC",       # separate type-checking import blocks
+    # Judgement calls that a linter cannot make.
+    "PLC0415",  # a function-level import is sometimes how a cycle gets broken
+    "TRY301",   # a guard clause inside a try reads better than an inner function
+    "PLR0913",  # too many arguments
+    "PLR0917",  # too many positional arguments
+    "PLR2004",  # magic numbers
+    "C901",     # complexity, and the three below
+    "PLR0911",
+    "PLR0912",
+    "PLR0915",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"core/migrations/*" = ["ALL"]  # Django writes these; they are not ours to style.
+"backend/settings/*" = ["F403", "F405", "ERA001"]  # `from .base import *` is the layering.
+"backend/asgi.py" = ["E402"]  # the imports below django.setup() have to stay there.
+"add_ts_nocheck.py" = ["T201", "PTH118", "PTH119", "PTH120", "PTH123", "PTH207"]
+"core/test*.py" = ["S105", "S106", "T201"]  # test passwords are not secrets.

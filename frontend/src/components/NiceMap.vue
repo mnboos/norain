@@ -7,7 +7,7 @@ import type { ExpressionSpecification, MapMouseEvent } from "maplibre-gl";
 // never loads - raster tiles still paint, so it looks like the route just disappeared.
 // Point maplibre at the worker the bundler emits for us instead.
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-import { computed, onBeforeUnmount, onMounted, type Ref, ref, useTemplateRef, watch, toRefs } from "vue";
+import { shallowRef, computed, onBeforeUnmount, onMounted, type Ref, ref, useTemplateRef, watch, toRefs } from "vue";
 import { useQuasar } from "quasar";
 
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -46,6 +46,7 @@ const props = defineProps<{
     /** CSS height of the map canvas. Defaults to the full viewport. */
     height?: string;
     selectedSample?: number;
+    pickLocation?: boolean;
 }>();
 
 const { routeWeather, abfahrtsort, zielort } = toRefs(props);
@@ -53,11 +54,15 @@ const { routeWeather, abfahrtsort, zielort } = toRefs(props);
 const emit = defineEmits<{
     mapView: [view: { zoom: number; lat: number; lng: number }];
     selectSample: [index: number];
+    selectLocation: [point: { lng: number; lat: number }];
 }>();
 
 const mapContainer = useTemplateRef<HTMLDivElement>("map");
-const mymap: Ref<MapLibreMap | undefined> = ref(undefined);
+const mymap: Ref<MapLibreMap | undefined> = shallowRef(undefined);
 const webglError = ref<string | undefined>(undefined);
+
+let mapInstance: MapLibreMap | undefined;
+let resizeObserver: ResizeObserver | undefined;
 
 const hasMap = computed(() => !!mymap.value);
 
@@ -569,8 +574,22 @@ onMounted(() => {
             },
         });
 
+        mapInstance = map;
+        resizeObserver = new ResizeObserver(() => map.resize());
+        resizeObserver.observe(mapContainer.value);
+        map.on("click", event => {
+            if (props.pickLocation) emit("selectLocation", { lng: event.lngLat.wrap().lng, lat: event.lngLat.lat });
+        });
         map.on("load", () => {
             mymap.value = map;
+            const bounds = new LngLatBounds();
+            for (const place of [props.abfahrtsort, props.zielort]) {
+                if (place) {
+                    const [lng, lat] = place.geometry.coordinates;
+                    if (lng !== undefined && lat !== undefined) bounds.extend([lng, lat]);
+                }
+            }
+            if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60, maxZoom: 13, duration: 0 });
             map.on("move", invalidateProjection);
             map.on("resize", invalidateProjection);
             map.on("movestart", leaveRoute);
@@ -616,20 +635,21 @@ onBeforeUnmount(() => {
     startMarker?.remove();
     destMarker?.remove();
     selectedMarker?.remove();
-    mymap.value?.remove();
+    resizeObserver?.disconnect();
+    mapInstance?.remove();
     mymap.value = undefined;
 });
 </script>
 
 <template>
-    <q-card flat class="transparent column col">
+    <q-card flat class="transparent column col wx-map-wrap" :style="height ? { height, flex: 'none' } : undefined">
         <slot name="search"></slot>
         <q-card-section v-if="webglError" class="fit flex column items-center justify-center text-center q-pa-xl">
             <div class="text-h6 q-mb-md">Karte konnte nicht geladen werden</div>
             <div class="text-body2">{{ webglError }}</div>
         </q-card-section>
         <q-card-section v-else class="col column q-pa-none">
-            <div id="map" ref="map" class="col"></div>
+            <div ref="map" class="col map-canvas"></div>
             <MapLegend v-if="hasRoute" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
             <div v-if="hasWindProfile" class="wx-wind-legend text-caption">
                 <q-item-label caption>
@@ -650,9 +670,9 @@ onBeforeUnmount(() => {
     container-type: inline-size;
 }
 
-#map {
+.map-canvas {
     width: 100%;
-    height: 100%;
+    min-height: 240px;
 }
 
 /* Bottom-left: maplibre's attribution owns the bottom-right corner. */

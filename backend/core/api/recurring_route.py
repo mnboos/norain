@@ -1,18 +1,21 @@
 """RecurringRoute API: schemas, CRUD, and per-departure forecasts."""
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+from asgiref.sync import sync_to_async
 from django.db.models import Q
 from django.http import HttpRequest
 from ninja import Router
 from ninja.errors import HttpError
 from pydantic import Field, field_validator
 
+from .. import telemetry
 from ..auth.backend import session_auth
+from ..departures import route_job_params
 from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut
-from ..models import ForecastJob, RecurringRoute, route_point
+from ..models import ForecastJob, RecurringRoute, User, route_point
 from ..ride_quality import worst_frost_level, worst_rain_level, worst_ride_score
 from ..schedule import check_schedule_cron, forecast_available_at, next_departure
 from ..schemas import CamelSchema
@@ -114,10 +117,10 @@ class RecurringRouteOut(CamelSchema):
     thumbnail: RouteThumbnail | None = None
 
 
-async def _current_user(request: HttpRequest):
+async def _current_user(request: HttpRequest) -> User:
     """Return the authenticated session user established by the router."""
     user = getattr(request, "auth", None)
-    if not user or not user.is_authenticated:
+    if not isinstance(user, User) or not user.is_authenticated:
         raise HttpError(401, "Authentication required.")
     return user
 
@@ -200,6 +203,10 @@ async def _assert_route_quota(user, *, exclude_id: UUID | None = None) -> None:
     if exclude_id is not None:
         existing = existing.exclude(id=exclude_id)
     if await existing.acount() >= limits.max_routes:
+        telemetry.event(
+            "route.action", action="quota", outcome="rejected",
+            **{"user.id": str(user.pk), "plan": str(limits.plan)},
+        )
         raise HttpError(
             402,
             f"Der {limits.plan}-Tarif erlaubt {limits.max_routes} aktive Routen. "
@@ -218,6 +225,11 @@ async def create_route(request: HttpRequest, data: RecurringRouteIn):
         start_point=route_point(data.start_lat, data.start_lon),
         destination_point=route_point(data.dest_lat, data.dest_lon),
         **values,
+    )
+    telemetry.event(
+        "route.action", action="created", outcome="success",
+        **telemetry.route_context(route),
+        **await sync_to_async(telemetry.user_context)(user),
     )
     await refresh_route_geometry.aenqueue(str(route.id))
     return _route_to_out(route)
@@ -252,6 +264,12 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
     route.destination_point = route_point(data.dest_lat, data.dest_lon)
     await route.asave()
 
+    telemetry.event(
+        "route.action", action="updated", outcome="success",
+        **telemetry.route_context(route),
+        **await sync_to_async(telemetry.user_context)(await _current_user(request)),
+    )
+
     if needs_geometry:
         route.sample_points = None
         route.polyline = None
@@ -267,13 +285,33 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
 async def delete_route(request: HttpRequest, route_id: UUID):
     """Delete a recurring route."""
     route = await _owned_route(request, route_id)
+    context = {
+        **telemetry.route_context(route),
+        **await sync_to_async(telemetry.user_context)(await _current_user(request)),
+    }
     await route.adelete()
+    telemetry.event("route.action", action="deleted", outcome="success", **context)
     return 204, None
 
 
 # ---------------------------------------------------------------------------
 # Forecast for a specific departure
 # ---------------------------------------------------------------------------
+
+# Sent by the dashboard when it loads a forecast ahead of a click. Such a request is not the
+# user opening the route, so it must not mark the route as viewed.
+PREFETCH_HEADER = "X-NoRain-Prefetch"
+
+# The comparison query refetches every 60 s; without this a viewed route is written each time.
+VIEW_RECORD_INTERVAL = timedelta(hours=1)
+
+
+async def _record_view(route: RecurringRoute) -> None:
+    """Remember that the owner opened this route, so the hourly pass pre-builds its forecast."""
+    now = datetime.now(tz=UTC)
+    await RecurringRoute.objects.filter(id=route.id).filter(
+        Q(last_viewed_at__isnull=True) | Q(last_viewed_at__lt=now - VIEW_RECORD_INTERVAL)
+    ).aupdate(last_viewed_at=now)
 
 
 @router.get("/routes/{route_id}/forecast", response={200: ForecastJobOut, 202: ForecastJobOut})
@@ -297,14 +335,19 @@ async def route_forecast(
     if not route.sample_points:
         raise HttpError(409, "Route geometry not yet computed. Try again in a few seconds.")
 
+    if request.headers.get(PREFETCH_HEADER) != "1":
+        await _record_view(route)
+
+    departure = f"{date}T{time}"
+    before = (
+        route.departure_flex_before_minutes if departure_flex_before_minutes is None else departure_flex_before_minutes
+    )
+    after = route.departure_flex_after_minutes if departure_flex_after_minutes is None else departure_flex_after_minutes
+    flexibility_params(departure, before, after)  # validation only: 422 on a bad window
     job = await start_forecast_job(
         ForecastJob.Kind.ROUTE,
         await _current_user(request),
-        {"route_id": str(route.id), "departure_time": f"{date}T{time}", **flexibility_params(
-            f"{date}T{time}",
-            route.departure_flex_before_minutes if departure_flex_before_minutes is None else departure_flex_before_minutes,
-            route.departure_flex_after_minutes if departure_flex_after_minutes is None else departure_flex_after_minutes,
-        )},
+        route_job_params(route.id, departure, before, after),
     )
     status = 200 if job.status == ForecastJob.Status.DONE else 202
     return status, job_out(job)

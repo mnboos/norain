@@ -91,7 +91,12 @@ Sentry.init({
         Sentry.contextLinesIntegration(),
         Sentry.extraErrorDataIntegration(),
         // 503 is left out: the billing endpoints answer it on purpose when Stripe is not configured.
-        Sentry.httpClientIntegration({ failedRequestStatusCodes: [[500, 502], [504, 599]] }),
+        Sentry.httpClientIntegration({
+            failedRequestStatusCodes: [
+                [500, 502],
+                [504, 599],
+            ],
+        }),
         Sentry.reportingObserverIntegration(),
         Sentry.feedbackIntegration({
             colorScheme: "system",
@@ -113,7 +118,7 @@ Sentry.init({
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
 
-    release: import.meta.env.VITE_VUE_APP_VERSION || undefined,
+    release: import.meta.env.VITE_VUE_APP_VERSION ?? undefined,
 });
 
 async function bootstrap() {

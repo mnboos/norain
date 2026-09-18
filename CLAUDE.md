@@ -122,6 +122,18 @@ webhook POST. The signature check authenticates it instead. Every `event.id` goe
 `ProcessedStripeEvent` and is applied once — Stripe retries on any non-2xx. Tier changes
 come only from webhook events; the Checkout success redirect proves nothing.
 
+**`current_period_end` is not on the subscription any more.** Stripe moved it onto the
+subscription *items* in API version 2025-03-31.basil, and the SDK pins a version well past
+that, so a live payload has no top-level field. `_period_end` reads the field off
+`items.data[]` and falls back to the old place for payloads from an older endpoint — do not
+simplify it back to one lookup. Leaving it null costs the renewal date in the UI and
+the expiry guard in `_entitlements_for_subscription`. Tests cover both shapes.
+
+Use `client.v1.*` for every Stripe call (`v1.customers`, `v1.checkout`, `v1.billing_portal`):
+the accessors without `v1` are deprecated. `stripe.Webhook.construct_event` is deliberately
+*not* the client method — the webhook needs only `STRIPE_WEBHOOK_SECRET`, and
+`client.construct_event` would make it need a secret key too.
+
 ### Every heavy operation is a task
 
 No HTTP request performs a provider fetch, a GraphHopper call or a Plotly render. The
@@ -348,6 +360,24 @@ route, so one slow route no longer holds up the pass, and it purges the Stripe l
 expired `ForecastJob` rows. A successful SPA sign-in (`login_view`) also enqueues
 `refresh_user_forecasts`, which scans just that account's routes through the same
 `_prewarm_routes` quota; a failure to enqueue never fails the sign-in.
+
+Both passes also **pre-build the finished forecast** (`prebuild_route_forecast`), so opening a
+route returns 200 at once. It is built only for routes inside that same quota, opened in the last
+14 days (`RecurringRoute.last_viewed_at`, set by `route_forecast` at most hourly), whose next
+departure is within 48 h. Rules that hold this together:
+
+- **The params must match the page exactly.** The job key hashes them. The page sends
+  `nextDeparture` split as a string (`nextDepartureParts` in `queries/recurringRoutes.ts`:
+  `slice(0, 10)` and `slice(11)`, offset kept), the endpoint joins them back, and the task uses
+  `next_departure(...).isoformat()` directly. Both build the dict with
+  `departures.route_job_params`. Never parse and reformat the time on either side.
+- **`min_remaining`.** The task asks `get_or_start_job` to rebuild a job with less than 75 min
+  left, or a job built early would expire between hourly passes.
+- **No station calls.** A Pro ride near now is skipped; that job would spend Weather
+  Underground calls and only live 10 min.
+- **Staggered 30 s apart**, because `compute` and `forecasts` each have one worker and a user's
+  own forecast would otherwise queue behind every build.
+- The dashboard's own prefetch sends `X-NoRain-Prefetch: 1`, which does not count as a view.
 
 ## Testing
 

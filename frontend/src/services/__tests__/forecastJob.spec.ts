@@ -3,6 +3,9 @@ import type { UseWebSocketOptions } from "@vueuse/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { awaitForecastJob, ForecastJobError, type ForecastProgress } from "../forecastJob";
+import { milestone } from "../telemetry";
+
+vi.mock("../telemetry", () => ({ milestone: vi.fn() }));
 
 interface WebSocketMockState {
     close: ReturnType<typeof vi.fn>;
@@ -98,6 +101,7 @@ function disconnect(options: UseWebSocketOptions): void {
 
 describe("awaitForecastJob", () => {
     beforeEach(() => {
+        vi.mocked(milestone).mockClear();
         vi.useFakeTimers();
         webSocket.close.mockReset();
         webSocket.options = undefined;
@@ -112,7 +116,8 @@ describe("awaitForecastJob", () => {
 
     it("uses VueUse to stream progress and resolve the completed forecast", async () => {
         const progress: ForecastProgress[] = [];
-        const resultPromise = awaitForecastJob(pendingJob, update => progress.push(update));
+        const delivery = vi.fn();
+        const resultPromise = awaitForecastJob(pendingJob, update => progress.push(update), undefined, delivery);
         const options = socketOptions();
 
         expect(webSocket.url).toBe("ws://localhost:8000/ws/forecast/job-1/");
@@ -129,6 +134,8 @@ describe("awaitForecastJob", () => {
             { status: "done", cellsSettled: 0, cellsTotal: 0 },
         ]);
         expect(webSocket.close).toHaveBeenCalledOnce();
+        expect(delivery).toHaveBeenCalledExactlyOnceWith("websocket");
+        expect(milestone).not.toHaveBeenCalled();
     });
 
     it("ignores malformed messages and surfaces a failed job", async () => {
@@ -151,7 +158,8 @@ describe("awaitForecastJob", () => {
                 headers: { "Content-Type": "application/json" },
             }),
         );
-        const resultPromise = awaitForecastJob(pendingJob);
+        const delivery = vi.fn();
+        const resultPromise = awaitForecastJob(pendingJob, undefined, undefined, delivery);
         const options = socketOptions();
 
         if (callback === "onError") failSocket(options);
@@ -160,6 +168,11 @@ describe("awaitForecastJob", () => {
         await expect(resultPromise).resolves.toMatchObject({ jobId: "job-1", version: "v1" });
         expect(fetch).toHaveBeenCalledOnce();
         expect(webSocket.close).toHaveBeenCalledOnce();
+        expect(delivery.mock.calls).toEqual([["websocket"], ["polling"]]);
+        expect(milestone).toHaveBeenCalledExactlyOnceWith("forecast.delivery_fallback", {
+            "job.id": "job-1",
+            outcome: "polling",
+        });
     });
 
     it("falls back to polling when the connection does not open", async () => {
@@ -184,6 +197,7 @@ describe("awaitForecastJob", () => {
         await expect(resultPromise).rejects.toMatchObject({ name: "AbortError" });
         expect(fetch).not.toHaveBeenCalled();
         expect(webSocket.close).toHaveBeenCalledOnce();
+        expect(milestone).not.toHaveBeenCalled();
     });
 
     it("returns an initially completed job without opening a socket", async () => {

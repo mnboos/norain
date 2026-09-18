@@ -9,12 +9,13 @@ enter in the app, plus one-time backup codes for when the phone is lost.
 
 from base64 import b32encode
 
-from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.db.models import Q
 from django_otp.plugins.otp_static.models import StaticDevice, StaticToken
 from django_otp.plugins.otp_totp.models import TOTPDevice
+
+from core.models import User
 
 
 class Command(BaseCommand):
@@ -27,7 +28,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         value = options["identifier"].strip().lower()
-        User = get_user_model()
         try:
             user = User.objects.get(Q(email__iexact=value) | Q(username__iexact=value))
         except User.DoesNotExist:

@@ -18,8 +18,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from asgiref.sync import sync_to_async
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.contrib.auth.models import AnonymousUser
 
-from .models import Plan, Subscription
+from .forecast_schemas import WeatherSample
+from .models import Plan, Subscription, User
 
 
 @dataclass(frozen=True)
@@ -35,7 +38,7 @@ class Entitlements:
     def is_pro(self) -> bool:
         return self.plan == Plan.PRO
 
-    def result_marker(self) -> dict:
+    def result_marker(self) -> dict[str, bool]:
         """The limits that shape a stored forecast, recorded in it so a tier change can be detected.
 
         Compared by ``get_or_start_job``: a result built for another tier is never reused.
@@ -60,7 +63,7 @@ def _entitlements_for_subscription(subscription: Subscription | None) -> Entitle
     return PRO
 
 
-def entitlements_for_sync(user) -> Entitlements:
+def entitlements_for_sync(user: AbstractBaseUser | AnonymousUser | None) -> Entitlements:
     """Tier for a user. Anonymous users, and users with no Subscription row, are free."""
     if user is None or not getattr(user, "is_authenticated", False):
         return FREE
@@ -68,16 +71,16 @@ def entitlements_for_sync(user) -> Entitlements:
     return _entitlements_for_subscription(subscription)
 
 
-async def entitlements_for(user) -> Entitlements:
+async def entitlements_for(user: AbstractBaseUser | AnonymousUser | None) -> Entitlements:
     return await sync_to_async(entitlements_for_sync)(user)
 
 
-def subscription_for_sync(user) -> Subscription:
+def subscription_for_sync(user: User) -> Subscription:
     """The user's Subscription row, created on the free tier if absent."""
     return Subscription.objects.get_or_create(user=user)[0]
 
 
-def strip_uncertainty(samples) -> None:
+def strip_uncertainty(samples: list[WeatherSample]) -> None:
     """Remove the ensemble spread from samples in place, for accounts without it.
 
     Mutates the samples, so it is only safe on a per-request object. Both call sites build

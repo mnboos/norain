@@ -52,6 +52,7 @@ CORS_ALLOW_HEADERS = (
     "baggage",  # for sentry
     "sentry-trace",  # for sentry
     "Access-Control-Allow-Origin",
+    "X-NoRain-Prefetch",  # dashboard prefetch; see route_forecast
 )
 
 SESSION_COOKIE_HTTPONLY = True
@@ -225,9 +226,12 @@ def homebrew_library(filename: str) -> str | None:
     return None
 
 
-if gdal_library_path := os.environ.get("GDAL_LIBRARY_PATH") or homebrew_library("libgdal.dylib"):
+gdal_library_path = os.environ.get("GDAL_LIBRARY_PATH") or homebrew_library("libgdal.dylib")
+if gdal_library_path:
     GDAL_LIBRARY_PATH = gdal_library_path
-if geos_library_path := os.environ.get("GEOS_LIBRARY_PATH") or homebrew_library("libgeos_c.dylib"):
+
+geos_library_path = os.environ.get("GEOS_LIBRARY_PATH") or homebrew_library("libgeos_c.dylib")
+if geos_library_path:
     GEOS_LIBRARY_PATH = geos_library_path
 
 

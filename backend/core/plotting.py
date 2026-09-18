@@ -148,7 +148,10 @@ def generate_forecast_figures(forecast: RouteWeatherOut, *, departure_time: str 
                         legendgroup=metric,
                         showlegend=metric not in with_ensemble,
                         visible=True if index == 0 else "legendonly",
-                        hovertemplate=f"%{{customdata[1]}} Uhr · %{{y:.1f}} {unit}<extra>{label}: Einzelprognose</extra>",
+                        hovertemplate=(
+                            f"%{{customdata[1]}} Uhr · %{{y:.1f}} {unit}"
+                            f"<extra>{label}: Einzelprognose</extra>"
+                        ),
                     )
                 )
             # A lone series needs no legend - the chart title already names it.

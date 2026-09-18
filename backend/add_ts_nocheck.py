@@ -11,7 +11,7 @@ MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "packages", "api", "m
 
 count = 0
 for filepath in glob.glob(os.path.join(MODELS_DIR, "*.ts")):
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, encoding="utf-8") as f:
         content = f.read()
 
     if content.startswith("// @ts-nocheck"):

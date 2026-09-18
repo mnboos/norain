@@ -4,6 +4,7 @@ import { RouteWeatherApi } from "@norain/api/apis";
 import type { PlacesSearchResult } from "@norain/api/models";
 
 import { reportForecastProgress, useForecastProgress } from "@/queries/forecastProgress";
+import { measureForecastLoad } from "@/services/telemetry";
 import { awaitForecastJob } from "@/services/forecastJob";
 
 const api = new RouteWeatherApi();
@@ -60,17 +61,30 @@ export function useRouteWeather(
             const destinationValue = toValue(destination);
             if (!destinationValue) throw new Error("A destination is required.");
             const to = destinationValue.geometry.coordinates;
-            const job = await api.coreApiRouteWeatherRouteWeather({
-                startLat: from[1] ?? 0,
-                startLon: from[0] ?? 0,
-                destLat: to[1] ?? 0,
-                destLon: to[0] ?? 0,
-                profile: toValue(profile),
-                departureTime: toValue(departure),
-                departureFlexBeforeMinutes: toValue(before),
-                departureFlexAfterMinutes: toValue(after),
-            });
-            return await awaitForecastJob(job, reportForecastProgress(client, key), signal);
+            return await measureForecastLoad(
+                async onDelivery => {
+                    const job = await api.coreApiRouteWeatherRouteWeather({
+                        startLat: from[1] ?? 0,
+                        startLon: from[0] ?? 0,
+                        destLat: to[1] ?? 0,
+                        destLon: to[0] ?? 0,
+                        profile: toValue(profile),
+                        departureTime: toValue(departure),
+                        departureFlexBeforeMinutes: toValue(before),
+                        departureFlexAfterMinutes: toValue(after),
+                    });
+                    return await awaitForecastJob(job, reportForecastProgress(client, key), signal, onDelivery);
+                },
+                {
+                    feature: "adhoc",
+                    profile: toValue(profile),
+                    start_lat: from[1] ?? 0,
+                    start_lon: from[0] ?? 0,
+                    dest_lat: to[1] ?? 0,
+                    dest_lon: to[0] ?? 0,
+                },
+                signal,
+            );
         },
         staleTime: 5 * 60 * 1000,
     });

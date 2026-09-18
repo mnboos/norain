@@ -7,6 +7,7 @@ import {
     symSharpPedalBike,
     symSharpSchedule,
 } from "@quasar/extras/material-symbols-sharp";
+import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
 import { placeLabel } from "@/utils/placeLabel";
@@ -201,6 +202,8 @@ function onClose() {
                         />
                     </template>
                 </q-select>
+
+                <RouteLocationPicker v-model:start="start" v-model:dest="dest" />
 
                 <div>
                     <div class="text-caption q-mb-sm">Tage</div>

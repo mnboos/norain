@@ -35,7 +35,7 @@ def stored_comparison(rains=(2, 0, 2)):
                 "complete": True,
                 "samples": [sample(0, rain), sample(3600, rain)],
             }
-            for t, rain in zip(times, rains)
+            for t, rain in zip(times, rains, strict=True)
         ],
     }
 

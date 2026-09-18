@@ -6,6 +6,7 @@
 </route>
 
 <script setup lang="ts">
+import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import DepartureComparison from "@/components/DepartureComparison.vue";
 import WeatherSummaryCard from "@/components/WeatherSummaryCard.vue";
@@ -32,20 +33,10 @@ const selectedDeparture = ref<string | null>(null);
 
 function defaultDepartureTime(): string {
     const now = new Date();
+    now.setHours(now.getHours() + 1, 0, 0, 0);
     const pad = (n: number) => String(n).padStart(2, "0");
     // Default to the next full hour, a typical "leaving soon" commute.
-    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours() + 1)}:00`;
-}
-
-// Open-Meteo only forecasts ~16 days out, so limit the picker to today .. +15 days.
-// Quasar passes each candidate date as "YYYY/MM/DD".
-function departureDateOptions(d: string): boolean {
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const today = new Date();
-    const max = new Date();
-    max.setDate(max.getDate() + 15);
-    const fmt = (x: Date) => `${x.getFullYear()}/${pad(x.getMonth() + 1)}/${pad(x.getDate())}`;
-    return d >= fmt(today) && d <= fmt(max);
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:00`;
 }
 
 const profiles = [
@@ -230,31 +221,29 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             </template>
                         </q-select>
 
-                        <q-date
-                            :model-value="departureTime"
-                            label="Abfahrtsdatum"
-                            minimal
-                            mask="YYYY-MM-DD"
-                            :options="departureDateOptions"
-                            @update:model-value="val => (departureTime = val + departureTime.slice(10))"
+                        <RouteLocationPicker
+                            :start="abfahrtsort"
+                            :dest="zielort"
+                            @update:start="
+                                value => {
+                                    if (value) abfahrtsort = value;
+                                }
+                            "
+                            @update:dest="
+                                value => {
+                                    zielort = value ?? undefined;
+                                }
+                            "
                         />
-                        <q-time
-                            :model-value="departureTime"
-                            format24h
+                        <q-input
+                            v-model="departureTime"
+                            type="datetime-local"
                             label="Abfahrtszeit"
-                            now-btn
-                            :minute-options="[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55]"
-                            @update:model-value="val => (departureTime = departureTime.slice(0, 10) + 'T' + val)"
+                            dense
+                            outlined
+                            stack-label
                         />
                         <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
-                        <!--                        <q-input-->
-                        <!--                            v-model="departureTime"-->
-                        <!--                            type="datetime-local"-->
-                        <!--                            label="Abfahrtszeit"-->
-                        <!--                            dense-->
-                        <!--                            outlined-->
-                        <!--                            stack-label-->
-                        <!--                        />-->
 
                         <q-btn-toggle
                             v-model="profile"

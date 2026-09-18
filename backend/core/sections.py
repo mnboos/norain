@@ -10,10 +10,9 @@ from .forecast_schemas import RouteSection, WeatherSample
 def _condition(rain_mm: float) -> str:
     if rain_mm < 0.1:
         return "dry"
-    elif rain_mm < 2.5:
+    if rain_mm < 2.5:
         return "rain"
-    else:
-        return "heavy_rain"
+    return "heavy_rain"
 
 
 CONDITION_LABELS = {

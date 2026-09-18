@@ -16,6 +16,7 @@ the implementation, and explanation develops understanding.
 ## How-to guides — accomplish a task
 
 - [Run background jobs and pre-warm forecasts](how-to/background-jobs.md).
+- [Monitor product usage, forecasts, and workers with Sentry](how-to/sentry-metrics.md).
 - [Change the geographic coverage](how-to/change-region.md).
 - [Rebuild the routing graph, or build it elsewhere and ship it to the VPS](how-to/build-routing-graph.md).
 - [Develop, test, and regenerate the API client](how-to/development.md).

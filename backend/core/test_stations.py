@@ -420,8 +420,12 @@ class StationJobTests(_NearNowRoute, TestCase):
                 {"id": "FRESH", "lat": 47.001, "lon": 9.0, "qc": 1, "updated": None},
                 {"id": "STALE", "lat": 47.002, "lon": 9.0, "qc": 1, "updated": None},
             ])
-        StationObservation.objects.create(station_id="FRESH", lat=47.001, lon=9.0, observed_at=self.observed_at, temp=16)
-        StationObservation.objects.create(station_id="STALE", lat=47.002, lon=9.0, observed_at=self.observed_at, temp=16)
+        StationObservation.objects.create(
+            station_id="FRESH", lat=47.001, lon=9.0, observed_at=self.observed_at, temp=16
+        )
+        StationObservation.objects.create(
+            station_id="STALE", lat=47.002, lon=9.0, observed_at=self.observed_at, temp=16
+        )
         StationObservation.objects.filter(station_id="STALE").update(fetched_at=self.observed_at - timedelta(hours=1))
 
         fetch_observation = AsyncMock(return_value=None)

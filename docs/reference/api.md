@@ -60,6 +60,12 @@ underlying weather data is hourly.
 
 ## Endpoints
 
+The session endpoint (`GET /api/auth/session`) and successful login responses
+contain `user: {id, email, username}` for authenticated accounts. `id` is a stable
+string account identifier used to correlate Sentry product metrics. The frontend
+also accepts older responses without `id` during deployment. Signed-out sessions
+return `user: null`.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/api/search` | Search Photon for places |

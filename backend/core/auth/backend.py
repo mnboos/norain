@@ -1,11 +1,12 @@
 """Django identity backend and session authentication for Ninja routes."""
 
-from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
 from django.db.models import Q
 from django.http import HttpRequest
 from ninja.errors import HttpError
 from ninja.utils import check_csrf
+
+from ..models import User
 
 
 async def session_auth(request: HttpRequest):
@@ -36,7 +37,6 @@ class IdentityBackend(ModelBackend):
         if not value or password is None:
             return None
 
-        User = get_user_model()
         try:
             user = User.objects.get(Q(email__iexact=value) | Q(username__iexact=value))
         except (User.DoesNotExist, User.MultipleObjectsReturned):

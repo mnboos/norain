@@ -203,7 +203,10 @@ class UncertaintyTests(SimpleTestCase):
         self.assertEqual(len(bands), 2)
         pop = next(t for t in figures[1]["data"] if t.get("yaxis") == "y2")
         self.assertEqual(list(pop["y"]), [50.0, None, 0.0])
-        gust = next(t for t in figures[2]["data"] if t.get("legendgroup") == "windGust" and t["line"].get("dash") == "dot")
+        gust = next(
+            t for t in figures[2]["data"]
+            if t.get("legendgroup") == "windGust" and t["line"].get("dash") == "dot"
+        )
         self.assertEqual(list(gust["y"]), [None, None, None])
         # One legend entry per metric; a lone series (temperature) gets no legend at all.
         self.assertFalse(figures[0]["layout"]["showlegend"])

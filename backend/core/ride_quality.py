@@ -3,7 +3,8 @@
 This is the only implementation of the scoring. The curves, weights and sensitivity are the
 app's own judgement of what makes a ride bad, so they stay on the server: the API sends the
 results (``ride_score``, ``ride_label``, ``wind_effort_level``, ``wind_effort``, and the rain
-and frost levels as words) and the frontend only turns a score into a colour. Never ship a curve or a breakpoint to the client,
+and frost levels as words) and the frontend only turns a score into a colour. Never ship a
+curve or a breakpoint to the client,
 not even indirectly - a threshold in the bundle gives the curve away.
 
 Scores are computed when a response is *served* (``core.jobs.forecast_view``,
@@ -19,6 +20,7 @@ grey, never a colour from the ramp.
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from itertools import pairwise
 from typing import Literal
 
 RideFactor = Literal["rain", "wind", "temp", "frost"]
@@ -142,7 +144,7 @@ def _piecewise(x: float, points) -> float:
     """Linear interpolation through a sorted (x, y) table, flat outside the ends."""
     if x <= points[0][0]:
         return points[0][1]
-    for (x0, y0), (x1, y1) in zip(points, points[1:]):
+    for (x0, y0), (x1, y1) in pairwise(points):
         if x <= x1:
             span = x1 - x0
             return y1 if span == 0 else y0 + (x - x0) / span * (y1 - y0)

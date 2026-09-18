@@ -117,7 +117,8 @@ class RideQualityConfigTests(SimpleTestCase):
     rain_weight = RIDE_QUALITY.weights["rain"]
 
     def test_heavy_rain_alone_stops_at_the_rain_weight(self):
-        self.assertAlmostEqual(ride_score(self.heavy_rain, replace(RIDE_QUALITY, sensitivity=1)).score, self.rain_weight)
+        scored = ride_score(self.heavy_rain, replace(RIDE_QUALITY, sensitivity=1))
+        self.assertAlmostEqual(scored.score, self.rain_weight)
 
     def test_a_heavier_weight_pushes_one_factor_to_the_dark_end(self):
         config = replace(RIDE_QUALITY, weights={**RIDE_QUALITY.weights, "rain": 1})
@@ -149,7 +150,8 @@ class RainImpactTests(SimpleTestCase):
         dry_but_risky = sample(rain_rate_mm_h=0, pop=0.3, rain_if_wet=2)
         default = replace(RIDE_QUALITY, rain_risk_aversion=2)
         self.assertAlmostEqual(rain_impact(dry_but_risky, default), self.CURVE_2MM * 0.3**0.5)
-        self.assertAlmostEqual(rain_impact(dry_but_risky, replace(RIDE_QUALITY, rain_risk_aversion=1)), self.CURVE_2MM * 0.3)
+        impact = rain_impact(dry_but_risky, replace(RIDE_QUALITY, rain_risk_aversion=1))
+        self.assertAlmostEqual(impact, self.CURVE_2MM * 0.3)
         self.assertEqual(ride_score(dry_but_risky, default).rain, rain_impact(dry_but_risky, default))
 
     def test_the_main_run_wins_when_it_is_worse(self):

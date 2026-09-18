@@ -9,12 +9,14 @@ the socket cannot be opened).
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from channels.exceptions import ChannelFull
 from channels.layers import get_channel_layer
 from loguru import logger
 from redis.exceptions import RedisError
 
+from . import telemetry
 from .departures import candidate_times, comparison_view
 from .entitlements import entitlements_for
 from .geo import simplify_line
@@ -87,7 +89,7 @@ def job_snapshot(job: ForecastJob, *, include_result: bool = True) -> dict:
     parse a WebSocket frame and an HTTP response with one function -- the generated
     client's ``ForecastJobOutFromJSON`` -- instead of two.
     """
-    snapshot = {
+    snapshot: dict[str, Any] = {
         "job_id": str(job.id),
         "status": job.status,
         "cells_settled": job.cells_settled,
@@ -215,7 +217,8 @@ def forecast_view(job: ForecastJob) -> dict:
     the route page would each compute their own job for the same forecast.
     """
     result = job.result or {}
-    view = {key: value for key, value in result.items() if key not in ("figures", "wind_segments", "entitlements", "departure_inputs")}
+    dropped = ("figures", "wind_segments", "entitlements", "departure_inputs")
+    view = {key: value for key, value in result.items() if key not in dropped}
     if result.get("departure_inputs"):
         view["departure_comparison"] = comparison_view(result["departure_inputs"])
     view["line"] = line_at_detail(result, "coarse")
@@ -267,9 +270,18 @@ async def publish(job: ForecastJob) -> None:
 
 async def set_status(job: ForecastJob, status: str, *, error: str = "") -> None:
     """Move a job to a new state, persist it and tell the watchers."""
-    job.status = status
-    job.error = error
-    await job.asave(update_fields=["status", "error", "updated_at"])
+    if status == ForecastJob.Status.FAILED:
+        won = await ForecastJob.objects.filter(pk=job.pk, status=job.status, updated_at=job.updated_at).exclude(
+            status__in=ForecastJob.TERMINAL_STATUSES,
+        ).aupdate(status=status, error=error, updated_at=datetime.now(tz=UTC))
+        if not won:
+            return
+        await job.arefresh_from_db()
+        telemetry.completed(job, "failed")
+    else:
+        job.status = status
+        job.error = error
+        await job.asave(update_fields=["status", "error", "updated_at"])
     await publish(job)
 
 
@@ -296,12 +308,18 @@ async def _built_for_current_tier(job: ForecastJob, owner) -> bool:
     return (job.result or {}).get("entitlements") == (await entitlements_for(owner)).result_marker()
 
 
-async def get_or_start_job(kind: str, owner, params: dict) -> tuple[ForecastJob, bool]:
+async def get_or_start_job(
+    kind: str, owner, params: dict, *, min_remaining: timedelta = timedelta(0)
+) -> tuple[ForecastJob, bool]:
     """Find or create the job for this request.
 
     Returns ``(job, needs_planning)``. ``needs_planning`` is False when a fresh result is
     already available or an identical job is still in flight -- in both cases the caller
     just subscribes instead of starting a second fan-out.
+
+    ``min_remaining`` treats a finished result as stale once less than that much of its
+    lifetime is left. The hourly pre-build passes it so a job it leaves in place cannot
+    expire before the next pass.
     """
     key = job_key(kind, owner.id if owner is not None else None, params)
     now = datetime.now(tz=UTC)
@@ -310,7 +328,10 @@ async def get_or_start_job(kind: str, owner, params: dict) -> tuple[ForecastJob,
         key=key,
         defaults={"kind": kind, "owner": owner, "params": params},
     )
+    context = await telemetry.job_context(job)
+    context["trigger"] = "prewarm" if min_remaining > timedelta(0) else "request"
     if created:
+        telemetry.event("forecast.request", outcome="new", **context)
         return job, True
 
     # A finished forecast stays valid exactly as long as the cells behind it would have --
@@ -319,12 +340,17 @@ async def get_or_start_job(kind: str, owner, params: dict) -> tuple[ForecastJob,
     done = job.status == ForecastJob.Status.DONE
     if done and now - job.updated_at > STATION_JOB_LIFETIME and await _uses_stations(job, owner, now):
         lifetime = STATION_JOB_LIFETIME
-    if done and now - job.updated_at <= lifetime and await _built_for_current_tier(job, owner):
+    if done and now - job.updated_at <= lifetime - min_remaining and await _built_for_current_tier(job, owner):
+        telemetry.event("forecast.request", outcome="cached" if done else "joined", **context)
         return job, False
 
     # Still working, and recently enough that its worker is plausibly alive.
     if not job.is_terminal and now - job.updated_at <= JOB_STALL_TIMEOUT:
+        telemetry.event("forecast.request", outcome="cached" if done else "joined", **context)
         return job, False
+
+    outcome = "restart_expired" if done else "restart_failed" if job.is_terminal else "restart_stalled"
+    telemetry.event("forecast.request", outcome=outcome, **context)
 
     # Stale result, previous failure, or a job whose worker died: start over.
     job.status = ForecastJob.Status.PENDING

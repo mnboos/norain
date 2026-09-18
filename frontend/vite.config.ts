@@ -86,7 +86,7 @@ export default defineConfig(({ command, mode }) => {
                           org: env.SENTRY_ORG,
                           project: env.SENTRY_PROJECT_FRONTEND,
                           authToken: env.SENTRY_AUTH_TOKEN,
-                          release: { name: env.SENTRY_RELEASE || undefined },
+                          release: { name: env.SENTRY_RELEASE ?? undefined },
                           sourcemaps: { filesToDeleteAfterUpload: ["./dist/**/*.map"] },
                           telemetry: false,
                       }),

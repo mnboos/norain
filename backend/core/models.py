@@ -151,13 +151,19 @@ class RecurringRoute(models.Model):
         help_text="[{lat, lon, lat_r, lon_r, elapsed_s, idx}, ...] pre-computed sample points with rounded coords",
     )
     geometry_fetched_at = models.DateTimeField(null=True, blank=True)
-    vertex_times = models.JSONField(null=True, blank=True, help_text="Floating-point elapsed seconds at every polyline vertex")
+    vertex_times = models.JSONField(
+        null=True, blank=True, help_text="Floating-point elapsed seconds at every polyline vertex"
+    )
 
     # Pre-rendered route-list glyph: simplified path + the weather fields the frontend
     # scorer reads, for the next departure. Written by refresh_route_thumbnail so the
     # list endpoint never has to parse a forecast cell. See core/thumbnails.py.
     thumbnail = models.JSONField(null=True, blank=True)
     thumbnail_computed_at = models.DateTimeField(null=True, blank=True)
+
+    # When the owner last opened this route's forecast. The hourly pass pre-builds the
+    # finished forecast only for routes opened recently; see prebuild_route_forecast.
+    last_viewed_at = models.DateTimeField(null=True, blank=True)
 
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -11,7 +11,7 @@ from django.db.models import F
 from django.tasks import task
 from loguru import logger
 
-from core import departures
+from core import departures, telemetry
 from core.claims import claim_cell, release_cell
 from core.entitlements import entitlements_for, entitlements_for_sync, strip_uncertainty
 from core.forecast_schemas import RouteWeatherOut
@@ -24,7 +24,7 @@ from core.grid import (
 from core.jobs import MAX_PLAN_ATTEMPTS, PLAN_RETRY_DELAY, get_or_start_job, publish, set_status
 from core.models import ForecastJob, ProcessedStripeEvent, RecurringRoute, route_line
 from core.plotting import generate_forecast_figures
-from core.schedule import forecast_available_at, local_today, upcoming_departures
+from core.schedule import forecast_available_at, local_today, next_departure, upcoming_departures
 from core.sections import compute_sections
 from core.stations import api_key, purge_station_data, refresh_stations_for_ride, ride_in_window
 from core.thumbnails import compute_route_thumbnail
@@ -307,6 +307,7 @@ def plan_forecast_job(job_id: str) -> None:
     async_to_sync(_plan_forecast_job_async)(job_id)
 
 
+@telemetry.stage("planning")
 async def _plan_forecast_job_async(job_id: str) -> None:
     job = await ForecastJob.objects.select_related("owner").filter(id=job_id).afirst()
     if job is None:
@@ -315,6 +316,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     if job.status == ForecastJob.Status.DONE:
         return
 
+    await telemetry.bind_job(job)
     await set_status(job, ForecastJob.Status.PLANNING)
 
     try:
@@ -345,7 +347,8 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     # `cells` worker is fast enough to settle a cell while this function is still running,
     # and a settle against cells_total=0 would hand the job to assembly with no data.
     job.geometry = geometry
-    job.cells_total = len(cells) * len(windows) * 2 + (1 if with_stations else 0)  # deterministic + ensemble (+ stations)
+    # deterministic + ensemble per cell per window, plus one unit for the station fetch.
+    job.cells_total = len(cells) * len(windows) * 2 + (1 if with_stations else 0)
     job.cells_settled = 0
     job.cells_failed = 0
     job.status = ForecastJob.Status.FETCHING
@@ -394,7 +397,10 @@ async def _plan_forecast_job_async(job_id: str) -> None:
 
 async def _wants_stations(job: ForecastJob, total_seconds: float | None) -> bool:
     """Whether this job should spend Weather Underground calls: a key, a Pro owner, a ride near now."""
-    if not api_key() or not any(ride_in_window(t, total_seconds, datetime.now(tz=UTC)) for t in departures.candidate_times(job.params)):
+    now = datetime.now(tz=UTC)
+    if not api_key() or not any(
+        ride_in_window(t, total_seconds, now) for t in departures.candidate_times(job.params)
+    ):
         return False
     return (await entitlements_for(job.owner)).station_correction
 
@@ -409,6 +415,7 @@ async def _fail_forecast_stage(job: ForecastJob, error: str) -> None:
         status=ForecastJob.Status.FAILED, error=error, computed_weather=None, updated_at=datetime.now(tz=UTC)
     ):
         await job.arefresh_from_db()
+        telemetry.completed(job, "failed")
         await publish(job)
 
 
@@ -429,11 +436,13 @@ def compute_route_weather_job(job_id: str) -> None:
     async_to_sync(_compute_route_weather_job_async)(job_id)
 
 
+@telemetry.stage("computation")
 async def _compute_route_weather_job_async(job_id: str) -> None:
     job = await ForecastJob.objects.select_related("owner").filter(id=job_id).afirst()
     if job is None or job.status != ForecastJob.Status.ASSEMBLING or job.computed_weather is not None:
         return
 
+    await telemetry.bind_job(job)
     params = job.params
     geometry = job.geometry or {}
     try:
@@ -464,6 +473,7 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
         }
 
         comparison = None
+        times: list[datetime] = []
         if departures.enabled(params):
             times = departures.candidate_times(params)
             windows = departures.fetch_windows(params, geometry["sample_points"], local_today())
@@ -504,7 +514,12 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
             await _fail_forecast_stage(job, "Noch keine Wetterdaten verfügbar.")
             return
         await sync_to_async(_store_computed_weather)(
-            job, {"forecast": forecast.model_dump(mode="json"), "entitlements": limits.result_marker(), "departure_inputs": comparison}
+            job,
+            {
+                "forecast": forecast.model_dump(mode="json"),
+                "entitlements": limits.result_marker(),
+                "departure_inputs": comparison,
+            },
         )
     except Exception:
         await _fail_forecast_stage(job, "Wetterdaten konnten nicht berechnet werden.")
@@ -517,11 +532,13 @@ def assemble_forecast_job(job_id: str) -> None:
     async_to_sync(_assemble_forecast_job_async)(job_id)
 
 
+@telemetry.stage("assembly")
 async def _assemble_forecast_job_async(job_id: str) -> None:
     job = await ForecastJob.objects.select_related("owner").filter(id=job_id).afirst()
     if job is None or job.status != ForecastJob.Status.ASSEMBLING:
         return
 
+    await telemetry.bind_job(job)
     params = job.params
     try:
         computed = job.computed_weather
@@ -558,16 +575,19 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
     if won:
         await job.arefresh_from_db()
         await publish(job)
+        telemetry.completed(job, "success")
         logger.info(f"Forecast job {job.id} done ({len(forecast.samples)} samples)")
 
 
-async def start_forecast_job(kind: str, owner, params: dict) -> ForecastJob:
+async def start_forecast_job(
+    kind: str, owner, params: dict, *, min_remaining: timedelta = timedelta(0)
+) -> ForecastJob:
     """Find or start the job for a request, enqueueing planning only when it is new."""
     if kind == ForecastJob.Kind.ROUTE:
         route = await RecurringRoute.objects.only("geometry_fetched_at").filter(id=params["route_id"]).afirst()
         revision = route.geometry_fetched_at.isoformat() if route and route.geometry_fetched_at else None
         params = {**params, "geometry_revision": revision}
-    job, needs_planning = await get_or_start_job(kind, owner, params)
+    job, needs_planning = await get_or_start_job(kind, owner, params, min_remaining=min_remaining)
     if needs_planning:
         await plan_forecast_job.aenqueue(str(job.id))
     return job
@@ -582,6 +602,19 @@ FORECAST_JOB_RETENTION = timedelta(days=1)
 # How long after a route scan its thumbnail is rebuilt, leaving the cell fetches it just
 # enqueued time to land.
 THUMBNAIL_DELAY = timedelta(minutes=2)
+
+# The hourly pass also builds the finished forecast for a route's next departure, so opening
+# the route returns it at once. Only for departures this close...
+PREBUILD_HORIZON = timedelta(hours=48)
+# ...on routes the owner opened this recently (RecurringRoute.last_viewed_at)...
+PREBUILD_VIEWED_WITHIN = timedelta(days=14)
+# ...and a job is rebuilt once less than this is left of its lifetime: one pass interval
+# (run_forecast_scheduler runs hourly) plus slack, so it cannot expire between passes.
+PREBUILD_MIN_REMAINING = timedelta(minutes=75)
+# Gap between pre-builds. `compute` and `forecasts` each run one worker process, so a burst
+# of builds would queue a user's own forecast behind all of them. Past ~120 routes the tail
+# runs into the next pass, which enqueues those again; the job lookup makes that a no-op.
+PREBUILD_STAGGER = timedelta(seconds=30)
 
 
 def _purge_processed_events() -> int:
@@ -633,8 +666,8 @@ async def _prewarm_routes(owner_id: int | None = None) -> list[RecurringRoute]:
     async for route in query:
         by_owner.setdefault(route.owner_id, []).append(route)
 
-    for owner_id, routes in by_owner.items():
-        if owner_id is None:
+    for route_owner_id, routes in by_owner.items():
+        if route_owner_id is None:
             # Ownerless legacy routes belong to nobody and are invisible in the UI; see
             # the claim_routes management command.
             continue
@@ -654,6 +687,65 @@ async def _enqueue_scans(routes: list[RecurringRoute]) -> int:
     return scanned
 
 
+async def _enqueue_prebuilds(routes: list[RecurringRoute]) -> int:
+    """One pre-build task per route the owner opened recently, spaced PREBUILD_STAGGER apart.
+
+    ``routes`` comes from `_prewarm_routes`, so the tier quota already applies. Whether the
+    next departure is close enough is decided in the task, when it runs.
+    """
+    now = datetime.now(tz=UTC)
+    enqueued = 0
+    for route in routes:
+        if (
+            not route.sample_points
+            or route.last_viewed_at is None
+            or now - route.last_viewed_at > PREBUILD_VIEWED_WITHIN
+        ):
+            continue
+        await prebuild_route_forecast.using(run_after=now + enqueued * PREBUILD_STAGGER).aenqueue(str(route.id))
+        enqueued += 1
+    return enqueued
+
+
+@task()
+def prebuild_route_forecast(route_id: str) -> dict:
+    """Build the finished forecast for a route's next departure before anyone asks for it."""
+    return async_to_sync(_prebuild_route_forecast_async)(route_id)
+
+
+async def _prebuild_route_forecast_async(route_id: str) -> dict:
+    route = await (
+        RecurringRoute.objects.select_related("owner").defer("polyline", "thumbnail").filter(id=route_id).afirst()
+    )
+    if route is None or not route.active or not route.sample_points or route.owner is None:
+        return {"built": False, "reason": "not eligible"}
+
+    now = datetime.now(tz=UTC)
+    departure = next_departure(route.schedule_cron)
+    if departure is None or departure - now > PREBUILD_HORIZON or not forecast_available_at(departure):
+        return {"built": False, "reason": "no departure soon"}
+
+    # isoformat() of the same next_departure the route API serves as `nextDeparture`: the
+    # page splits that string into date and time, and the endpoint joins them back, so both
+    # sides hash the same departure_time and land on the same job.
+    params = departures.route_job_params(
+        route.id, departure.isoformat(), route.departure_flex_before_minutes, route.departure_flex_after_minutes
+    )
+
+    # Planning would spend Weather Underground calls on a ride this close to now, for a job
+    # that only lives STATION_JOB_LIFETIME. The background pass never fetches stations.
+    if (
+        api_key()
+        and any(ride_in_window(t, route.total_seconds, now) for t in departures.candidate_times(params))
+        and (await entitlements_for(route.owner)).station_correction
+    ):
+        return {"built": False, "reason": "station window"}
+
+    job = await start_forecast_job(ForecastJob.Kind.ROUTE, route.owner, params, min_remaining=PREBUILD_MIN_REMAINING)
+    logger.debug(f"prebuild_route_forecast({route.name}): job {job.id} {job.status}")
+    return {"built": True, "job_id": str(job.id)}
+
+
 @task()
 def refresh_user_forecasts(user_id: int) -> dict:
     """Check one account's routes for forecasts to refresh, right after it signs in.
@@ -666,9 +758,11 @@ def refresh_user_forecasts(user_id: int) -> dict:
 
 
 async def _refresh_user_forecasts_async(user_id: int) -> dict:
-    scanned = await _enqueue_scans(await _prewarm_routes(owner_id=user_id))
-    logger.debug(f"refresh_user_forecasts({user_id}): {scanned} route scans enqueued")
-    return {"routes": scanned}
+    routes = await _prewarm_routes(owner_id=user_id)
+    scanned = await _enqueue_scans(routes)
+    prebuilds = await _enqueue_prebuilds(routes)
+    logger.debug(f"refresh_user_forecasts({user_id}): {scanned} route scans, {prebuilds} pre-builds enqueued")
+    return {"routes": scanned, "prebuilds": prebuilds}
 
 
 async def _refresh_upcoming_forecasts_async() -> dict:
@@ -677,7 +771,9 @@ async def _refresh_upcoming_forecasts_async() -> dict:
     The scan itself used to walk every route's sample points inline, so one slow route held
     up the whole pass and none of it ever reached the queue.
     """
-    scanned = await _enqueue_scans(await _prewarm_routes())
+    routes = await _prewarm_routes()
+    scanned = await _enqueue_scans(routes)
+    prebuilds = await _enqueue_prebuilds(routes)
 
     # Both ledgers only exist to reject repeats and to answer polls; without a purge they
     # grow forever.
@@ -686,12 +782,13 @@ async def _refresh_upcoming_forecasts_async() -> dict:
     stations_purged = await sync_to_async(purge_station_data)()
 
     logger.info(
-        f"refresh_upcoming_forecasts: {scanned} route scans enqueued, "
+        f"refresh_upcoming_forecasts: {scanned} route scans enqueued, {prebuilds} pre-builds enqueued, "
         f"{purged} stripe events purged, {jobs_purged} forecast jobs purged, "
         f"{stations_purged} station rows purged"
     )
     return {
         "routes": scanned,
+        "prebuilds": prebuilds,
         "stripe_events_purged": purged,
         "forecast_jobs_purged": jobs_purged,
         "station_rows_purged": stations_purged,

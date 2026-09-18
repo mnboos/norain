@@ -127,16 +127,17 @@ watch(forecast, () => {
             </q-item>
         </q-card-section>
         <q-card-section>
-            <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
-            <q-btn
-                v-if="windowChanged"
-                flat
-                no-caps
-                label="Für diese Route speichern"
-                :loading="saveWindow.isPending.value"
-                @click="saveFlexibility"
-            />
-            <div v-if="saveWindow.isError.value" role="alert">Zeitfenster konnte nicht gespeichert werden.</div>
+            <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter">
+                <q-btn
+                    v-if="windowChanged"
+                    flat
+                    no-caps
+                    label="Für diese Route speichern"
+                    :loading="saveWindow.isPending.value"
+                    @click="saveFlexibility"
+                />
+                <div v-if="saveWindow.isError.value" role="alert">Zeitfenster konnte nicht gespeichert werden.</div>
+            </DepartureFlexibility>
             <DepartureComparison
                 v-if="departureComparison"
                 :comparison="departureComparison"

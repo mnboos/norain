@@ -6,26 +6,34 @@
 </route>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import { symSharpArrowBack } from "@quasar/extras/material-symbols-sharp";
 import RouteDetailPanel from "@/components/RouteDetailPanel.vue";
-import { useRecurringRoute } from "@/queries/recurringRoutes";
+import { useSession } from "@/composables/useSession";
+import { nextDepartureParts, useRecurringRoute } from "@/queries/recurringRoutes";
+import { recordRouteOpened } from "@/utils/recentRoutes";
 
 const currentRoute = useRoute();
 const routeId = computed(() => String(currentRoute.params.id));
+const { session } = useSession();
 
 const { data: route, isLoading, error } = useRecurringRoute(routeId);
 
-const departureDate = computed(() => {
-    const next = route.value?.nextDeparture;
-    return next ? new Date(next).toISOString().slice(0, 10) : "";
-});
+// Remembered so the dashboard can load this route's forecast ahead next time.
+watch(
+    routeId,
+    id => {
+        const user = session.value.user;
+        recordRouteOpened(user?.id ?? user?.username ?? "", id);
+    },
+    { immediate: true },
+);
 
-const departureTime = computed(() => {
-    const next = route.value?.nextDeparture;
-    return next ? new Date(next).toTimeString().slice(0, 5) : "";
-});
+// The same departure the dashboard prefetches, so the forecast is found in the cache.
+const departure = computed(() => (route.value ? nextDepartureParts(route.value) : { date: "", time: "" }));
+const departureDate = computed(() => departure.value.date);
+const departureTime = computed(() => departure.value.time);
 </script>
 
 <template>

@@ -7,11 +7,10 @@ owner=None. `list_routes()` filters by owner, which makes those routes invisible
 without deleting them. On a fresh database this is a no-op.
 """
 
-from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
-from core.models import RecurringRoute
+from core.models import RecurringRoute, User
 
 
 class Command(BaseCommand):
@@ -23,7 +22,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         value = options["identifier"].strip().lower()
-        User = get_user_model()
         try:
             user = User.objects.get(Q(email__iexact=value) | Q(username__iexact=value))
         except User.DoesNotExist:

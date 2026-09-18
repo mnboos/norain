@@ -6,13 +6,14 @@ from io import StringIO
 from axes.models import AccessAttempt
 from django.conf import settings
 from django.contrib import admin
-from django.contrib.auth import get_user_model
 from django.core.management import CommandError, call_command
 from django.test import Client, TestCase
 from django_otp.admin import OTPAdminSite
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_static.models import StaticToken
 from django_otp.plugins.otp_totp.models import TOTPDevice
+
+from core.models import User
 
 PASSWORD = "Correct horse battery staple 2026!"
 ADMIN = f"/{settings.ADMIN_PATH}/"
@@ -23,7 +24,7 @@ class LoginLockoutTests(TestCase):
 
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
-        self.user = get_user_model().objects.create_user(
+        self.user = User.objects.create_user(
             username="Rider", email="rider@example.test", password=PASSWORD, email_verified=True
         )
 
@@ -79,7 +80,7 @@ class AdminTwoFactorTests(TestCase):
     """The admin needs a code from an authenticator app as well as the password."""
 
     def setUp(self):
-        self.staff = get_user_model().objects.create_superuser(
+        self.staff = User.objects.create_superuser(
             username="boss", email="boss@example.test", password=PASSWORD
         )
 
@@ -122,7 +123,6 @@ class AdminTwoFactorTests(TestCase):
 
 class AddTotpDeviceCommandTests(TestCase):
     def setUp(self):
-        User = get_user_model()
         self.staff = User.objects.create_superuser(username="boss", email="boss@example.test", password=PASSWORD)
         self.rider = User.objects.create_user(username="rider", email="rider@example.test", password=PASSWORD)
 

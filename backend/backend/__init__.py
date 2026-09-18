@@ -4,7 +4,6 @@ from pathlib import Path
 import dotenv
 from loguru import logger
 
-
 DEFAULT_DOTENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 
 

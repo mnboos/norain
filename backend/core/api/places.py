@@ -2,12 +2,15 @@
 
 import os
 from collections import defaultdict
+from time import perf_counter
 
 import httpx
+from asgiref.sync import sync_to_async
 from async_lru import alru_cache
 from django.http import HttpRequest
 from ninja import Router
 
+from .. import telemetry
 from ..schemas import CamelSchema
 
 router = Router(tags=["Places"])
@@ -55,16 +58,42 @@ def process_features_for_ambiguity(features: list[dict]) -> list[dict]:
 
 @router.get("/search", response=list[PlacesSearchResult])
 async def search(request: HttpRequest, query: str, zoom: float, lat: float, lon: float):
-    places = await retrieve_places(query=query, zoom=zoom, lat=lat, lon=lon)
-    return process_features_for_ambiguity(places)
+    started, outcome = perf_counter(), "success"
+    user = await request.auser()
+    context = {
+        **await sync_to_async(telemetry.user_context)(user),
+        "search.query": query,
+        "search.lat": lat,
+        "search.lon": lon,
+        "search.zoom": zoom,
+    }
+    try:
+        places = await retrieve_places(query=query, zoom=zoom, lat=lat, lon=lon)
+        outcome = "success" if places else "empty"
+        telemetry.emit("distribution", "search.results", len(places), **context)
+        return process_features_for_ambiguity(places)
+    except Exception:
+        outcome = "error"
+        raise
+    finally:
+        telemetry.event("search.completed", outcome=outcome, **context)
+        telemetry.emit(
+            "distribution", "search.duration", perf_counter() - started, unit="second", outcome=outcome, **context
+        )
 
 
 @alru_cache(maxsize=32)
+@telemetry.provider("photon")
 async def retrieve_places(*, query: str, lat: float, lon: float, zoom: float) -> list:
     assert query
+    # Required, with no default: without it there is nothing to search against, and the
+    # named error is far easier to act on than whatever httpx makes of None.
+    geocoder_url = os.environ.get("GEOCODER_API_URL")
+    if not geocoder_url:
+        raise RuntimeError("GEOCODER_API_URL is not set; place search is unavailable.")
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            os.environ.get("GEOCODER_API_URL"),
+            geocoder_url,
             params={
                 "q": query,
                 "limit": 5,

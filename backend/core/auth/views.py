@@ -4,7 +4,9 @@ import json
 from urllib.parse import urlencode
 
 from django.conf import settings
-from django.contrib.auth import authenticate, get_user_model, login, logout
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.validators import UnicodeUsernameValidator
@@ -13,13 +15,15 @@ from django.core.mail import send_mail
 from django.core.validators import validate_email
 from django.db import transaction
 from django.db.models import Q
-from django.http import HttpRequest, JsonResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 from loguru import logger
 
+from core import telemetry
+from core.models import User
 from core.tasks import refresh_user_forecasts
 
 from .tokens import email_verification_token_generator
@@ -45,9 +49,9 @@ def _username(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def _account_payload(user) -> dict:
+def _account_payload(user: AbstractBaseUser | AnonymousUser | None) -> dict:
     if user and user.is_authenticated:
-        return {"authenticated": True, "user": {"email": user.email, "username": user.username}}
+        return {"authenticated": True, "user": {"id": str(user.pk), "email": user.email, "username": user.username}}
     return {"authenticated": False, "user": None}
 
 
@@ -57,7 +61,7 @@ def _identity_taken(value: str) -> bool:
     Checked across both columns in both directions: if one account's username could equal
     another's email, the login lookup would match two rows and lock both users out.
     """
-    return get_user_model().objects.filter(Q(email__iexact=value) | Q(username__iexact=value)).exists()
+    return User.objects.filter(Q(email__iexact=value) | Q(username__iexact=value)).exists()
 
 
 def _frontend_link(path: str, **query: str) -> str:
@@ -65,7 +69,7 @@ def _frontend_link(path: str, **query: str) -> str:
     return f"{frontend_url}{path}?{urlencode(query)}"
 
 
-def _send_verification_email(user) -> None:
+def _send_verification_email(user: User) -> None:
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     token = email_verification_token_generator.make_token(user)
     link = _frontend_link("/account", uid=uid, token=token)
@@ -77,7 +81,7 @@ def _send_verification_email(user) -> None:
     )
 
 
-def _send_password_reset_email(user) -> None:
+def _send_password_reset_email(user: User) -> None:
     uid = urlsafe_base64_encode(force_bytes(user.pk))
 
     token = default_token_generator.make_token(user)
@@ -90,27 +94,28 @@ def _send_password_reset_email(user) -> None:
     )
 
 
-def _user_from_uid(uid: str):
+def _user_from_uid(uid: str) -> User | None:
     try:
         user_id = force_str(urlsafe_base64_decode(uid))
     except (TypeError, ValueError, OverflowError):
         return None
     try:
-        return get_user_model().objects.get(pk=user_id)
-    except get_user_model().DoesNotExist:
+        return User.objects.get(pk=user_id)
+    except User.DoesNotExist:
         return None
 
 
 @require_GET
 @ensure_csrf_cookie
-def session_view(request: HttpRequest):
+def session_view(request: HttpRequest) -> HttpResponse:
     """Return session state and establish a CSRF cookie for SPA requests."""
     return JsonResponse(_account_payload(request.user))
 
 
 @require_POST
 @csrf_protect
-def signup_view(request: HttpRequest):
+@telemetry.action("account", "signup")
+def signup_view(request: HttpRequest) -> HttpResponse:
     """Create an inactive account and send its one-time verification link."""
     data = _json_body(request)
     email = _email(data.get("email"))
@@ -127,7 +132,6 @@ def signup_view(request: HttpRequest):
     except ValidationError as exc:
         return JsonResponse({"detail": " ".join(exc.messages)}, status=400)
 
-    User = get_user_model()
     user = User(username=username, email=email, is_active=False)
     try:
         validate_password(password, user)
@@ -147,15 +151,24 @@ def signup_view(request: HttpRequest):
             user.set_password(password)
             user.save()
             _send_verification_email(user)
+            context = telemetry.user_context(user)
+            transaction.on_commit(
+                lambda: telemetry.event("account.action", action="created", outcome="success", **context)
+            )
     elif not existing.email_verified:
         _send_verification_email(existing)
+        telemetry.event(
+            "account.action", action="verification_resent", outcome="success",
+            **telemetry.user_context(existing),
+        )
 
     return JsonResponse({"detail": "If this address is available, check your email to confirm it."}, status=201)
 
 
 @require_POST
 @csrf_protect
-def verify_email_view(request: HttpRequest):
+@telemetry.action("account", "verify_email")
+def verify_email_view(request: HttpRequest) -> HttpResponse:
     """Activate a user only after proving control of the verification mailbox."""
     data = _json_body(request)
     user = _user_from_uid(str(data.get("uid", "")))
@@ -163,15 +176,19 @@ def verify_email_view(request: HttpRequest):
     if not user or not email_verification_token_generator.check_token(user, token):
         return JsonResponse({"detail": "This verification link is invalid or has expired."}, status=400)
 
+    was_verified = user.email_verified
     user.is_active = True
     user.email_verified = True
     user.save(update_fields=["is_active", "email_verified"])
+    if not was_verified:
+        telemetry.event("account.action", action="verified", outcome="success", **telemetry.user_context(user))
     return JsonResponse({"detail": "Email verified. You can now sign in."})
 
 
 @require_POST
 @csrf_protect
-def login_view(request: HttpRequest):
+@telemetry.action("account", "login")
+def login_view(request: HttpRequest) -> HttpResponse:
     """Authenticate an activated account by email or username, rotating its session id."""
     data = _json_body(request)
     # "identifier" is an email address or a username; "email" stays accepted so an older
@@ -179,7 +196,7 @@ def login_view(request: HttpRequest):
     identifier = _email(data.get("identifier") if data.get("identifier") is not None else data.get("email"))
     password = _password(data.get("password"))
     user = authenticate(request, identifier=identifier, password=password)
-    if not user:
+    if not isinstance(user, User):
         return JsonResponse({"detail": "Invalid credentials, or the email has not been verified."}, status=401)
 
     login(request, user)
@@ -187,27 +204,29 @@ def login_view(request: HttpRequest):
     return JsonResponse(_account_payload(user))
 
 
-def _refresh_forecasts_after_login(user) -> None:
+def _refresh_forecasts_after_login(user: User) -> None:
     """Queue the check for stale forecasts on the user's routes. Never fails the sign-in."""
     try:
         refresh_user_forecasts.enqueue(user.pk)
-    except Exception:  # a sign-in that worked must not turn into a 500 over pre-warming
+    except Exception:  # noqa: BLE001 -- a sign-in that worked must not turn into a 500 over pre-warming
         logger.exception(f"Could not enqueue refresh_user_forecasts for user {user.pk}")
 
 
 @require_POST
 @csrf_protect
-def logout_view(request: HttpRequest):
+@telemetry.action("account", "logout")
+def logout_view(request: HttpRequest) -> HttpResponse:
     logout(request)
     return JsonResponse({"authenticated": False, "user": None})
 
 
 @require_POST
 @csrf_protect
-def password_reset_view(request: HttpRequest):
+@telemetry.action("account", "password_reset")
+def password_reset_view(request: HttpRequest) -> HttpResponse:
     """Send a reset link without disclosing whether an email is registered."""
     email = _email(_json_body(request).get("email"))
-    user = get_user_model().objects.filter(email__iexact=email, email_verified=True, is_active=True).first()
+    user = User.objects.filter(email__iexact=email, email_verified=True, is_active=True).first()
     if user:
         _send_password_reset_email(user)
     return JsonResponse({"detail": "If an active account exists, a password-reset link has been sent."})
@@ -215,7 +234,8 @@ def password_reset_view(request: HttpRequest):
 
 @require_POST
 @csrf_protect
-def password_reset_confirm_view(request: HttpRequest):
+@telemetry.action("account", "password_reset_confirm")
+def password_reset_confirm_view(request: HttpRequest) -> HttpResponse:
     """Set a new password when presented with a valid, one-time reset token."""
     data = _json_body(request)
     user = _user_from_uid(str(data.get("uid", "")))
@@ -231,4 +251,5 @@ def password_reset_confirm_view(request: HttpRequest):
 
     user.set_password(password)
     user.save(update_fields=["password"])
+    telemetry.event("account.action", action="password_changed", outcome="success", **telemetry.user_context(user))
     return JsonResponse({"detail": "Password updated. You can now sign in."})

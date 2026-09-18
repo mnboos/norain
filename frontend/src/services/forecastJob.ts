@@ -1,6 +1,8 @@
 import { ForecastJobOutFromJSON, type ForecastJobOut, type RouteForecastOut } from "@norain/api/models";
 import { useWebSocket } from "@vueuse/core";
 
+import { milestone } from "@/services/telemetry";
+
 import { useBackendHost } from "@/utils";
 
 /** How far along a forecast job is, for a progress indicator. */
@@ -30,7 +32,10 @@ function isTerminal(job: ForecastJobOut): boolean {
 function settle(job: ForecastJobOut): RouteForecastOut {
     if (job.status === "failed" || !job.result) {
         // An empty error string means the backend gave no reason, same as a missing one.
-        const reason = job.error !== undefined && job.error !== "" ? job.error : "Die Wettervorhersage konnte nicht berechnet werden.";
+        const reason =
+            job.error !== undefined && job.error !== ""
+                ? job.error
+                : "Die Wettervorhersage konnte nicht berechnet werden.";
         throw new ForecastJobError(reason);
     }
     return job.result;
@@ -56,17 +61,24 @@ export async function awaitForecastJob(
     job: ForecastJobOut,
     onProgress?: (progress: ForecastProgress) => void,
     signal?: AbortSignal,
+    onDelivery?: (delivery: string) => void,
 ): Promise<RouteForecastOut> {
     reportProgress(job, onProgress);
-    if (isTerminal(job)) return settle(job);
+    if (isTerminal(job)) {
+        onDelivery?.("immediate");
+        return settle(job);
+    }
 
     try {
+        onDelivery?.("websocket");
         return await watchOverSocket(job, onProgress, signal);
     } catch (error) {
         if (error instanceof ForecastJobError) throw error;
         if (signal?.aborted) throw error;
         // The socket never opened or dropped before the job finished; polling still gets
         // the answer, just less promptly.
+        onDelivery?.("polling");
+        milestone("forecast.delivery_fallback", { "job.id": job.jobId, outcome: "polling" });
         return await pollUntilDone(job, onProgress, signal);
     }
 }
@@ -170,6 +182,6 @@ async function pollUntilDone(
         const update = ForecastJobOutFromJSON(await response.json());
         reportProgress(update, onProgress);
         if (isTerminal(update)) return settle(update);
-        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+        await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
     }
 }

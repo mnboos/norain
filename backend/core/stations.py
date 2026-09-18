@@ -23,6 +23,8 @@ import os
 import statistics
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from time import perf_counter
+from typing import Any
 
 import httpx
 from asgiref.sync import sync_to_async
@@ -30,6 +32,7 @@ from django.core.cache import cache
 from loguru import logger
 from redis.exceptions import RedisError
 
+from . import telemetry
 from .geo import haversine_m
 from .models import StationLookup, StationObservation
 from .schedule import LOCAL_TZ
@@ -120,20 +123,31 @@ async def _get_json(url: str, params: dict) -> dict | None:
     if not await sync_to_async(_spend_call)():
         logger.info("Weather Underground call skipped: budget reached")
         return None
+    started, outcome = perf_counter(), "success"
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, params={**params, "format": "json", "apiKey": key}, timeout=15)
         if resp.status_code == 204:
             return {}
         if resp.status_code == 429:
+            outcome = "rate_limited"
             logger.warning("Weather Underground answered 429, pausing calls")
             await sync_to_async(_block_calls)()
             return None
         resp.raise_for_status()
         data = resp.json()
+        if not isinstance(data, dict):
+            outcome = "invalid_response"
     except (httpx.HTTPError, ValueError) as exc:
+        outcome = telemetry.error_outcome(exc)
         logger.warning(f"Weather Underground request failed: {exc}")
         return None
+    finally:
+        telemetry.emit("count", "provider.request", provider="weather-underground", outcome=outcome)
+        telemetry.emit(
+            "distribution", "provider.duration", perf_counter() - started,
+            unit="second", provider="weather-underground", outcome=outcome,
+        )
     return data if isinstance(data, dict) else None
 
 
@@ -247,11 +261,15 @@ def _lookup_cell(lat: float, lon: float) -> tuple[float, float]:
 def _usable_station(station: dict, now: datetime) -> bool:
     if station.get("qc") == 0:
         return False
-    updated = station.get("updated")
-    return updated is None or now - datetime.fromtimestamp(updated, tz=UTC) <= STALE_STATION
+    updated: Any = station.get("updated")
+    if updated is None:
+        return True  # No timestamp at all is not a reason to discard the station.
+    return now - datetime.fromtimestamp(updated, tz=UTC) <= STALE_STATION
 
 
-def pick_stations(points: list[tuple[float, float]], candidates: list[dict], limit: int = MAX_STATIONS_PER_JOB) -> list[str]:
+def pick_stations(
+    points: list[tuple[float, float]], candidates: list[dict], limit: int = MAX_STATIONS_PER_JOB
+) -> list[str]:
     """Choose up to ``limit`` stations so that as many points as possible get ``MIN_STATIONS``.
 
     Points are ride samples in eta order, so the earliest part of the ride -- where the

@@ -54,6 +54,18 @@ def candidate_times(params: dict) -> list[datetime]:
     return [departure + timedelta(minutes=n) for n in range(-before, after + 1, STEP_MINUTES)]
 
 
+def route_job_params(route_id, departure_time: str, before: int, after: int) -> dict:
+    """Params of a saved route's forecast job.
+
+    The job key hashes this dict, so the endpoint and the background pre-build must build it
+    the same way, down to the departure string. The flex keys are left out when both are 0.
+    """
+    params = {"route_id": str(route_id), "departure_time": departure_time}
+    if before or after:
+        params |= {"departure_flex_before_minutes": before, "departure_flex_after_minutes": after}
+    return params
+
+
 def fetch_windows(params: dict, sample_points: list[dict], today) -> list[tuple[str, int]]:
     """One shared horizon per departure date, including the ordinary baseline forecast."""
     from .weather import forecast_days_for
@@ -114,7 +126,7 @@ def aggregate(values: list[float], samples: list[dict]) -> float:
     average = (
         sum(
             (a + b) / 2 * (end["elapsed_s"] - start["elapsed_s"])
-            for a, b, start, end in zip(values, values[1:], samples, samples[1:])
+            for a, b, start, end in zip(values, values[1:], samples, samples[1:], strict=False)
         )
         / duration
         if duration > 0
@@ -150,7 +162,7 @@ def comparison_view(stored: dict, now: datetime | None = None) -> dict:
                 "available": bool(available),
                 "ride_score": score,
                 "ride_label": ride_quality.BAND_LABELS[ride_quality.score_band(score)]
-                if available
+                if score is not None
                 else "Keine vollständigen Wetterdaten",
             }
         )
@@ -176,7 +188,7 @@ def comparison_view(stored: dict, now: datetime | None = None) -> dict:
                 f: factors[baseline["departure_time"]][f] - factors[recommended["departure_time"]][f]
                 for f in ride_quality.FACTORS
             }
-            factor = max(improvements, key=improvements.get)
+            factor = max(improvements, key=lambda name: improvements[name])
             positive = sum(max(0, x) for x in improvements.values())
             if positive and improvements[factor] / positive >= ride_quality.MIN_WORST_SHARE:
                 explanation = {

@@ -13,6 +13,7 @@ import type { RecurringRouteIn, RecurringRouteOut } from "@norain/api/models";
 import RouteListPanel from "@/components/RouteListPanel.vue";
 import RouteFormDialog from "@/components/RouteFormDialog.vue";
 import { useEntitlements } from "@/composables/useEntitlements";
+import { usePrefetchRoutes } from "@/composables/usePrefetchRoutes";
 import { isQuotaExceeded } from "@/services/http";
 import { useCreateRecurringRoute, useDeleteRecurringRoute, useRecurringRoutes } from "@/queries/recurringRoutes";
 
@@ -22,6 +23,8 @@ const showAddDialog = ref(false);
 const { maxRoutes, atRouteLimit } = useEntitlements();
 
 const { data: routes, isLoading } = useRecurringRoutes();
+// Load the likely next routes' forecasts now, so opening one shows it at once.
+usePrefetchRoutes(routes);
 
 const routesList = computed<RecurringRouteOut[]>(() => routes.value ?? []);
 
