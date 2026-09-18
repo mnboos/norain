@@ -76,7 +76,17 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", f"http://localhost:{os.environ.get
 # failing obscurely, and every entitlement can still be set by hand in the admin.
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-STRIPE_PRICE_ID_PRO = os.environ.get("STRIPE_PRICE_ID_PRO", "")
+STRIPE_PRICE_ID_PRO = os.environ.get("STRIPE_PRICE_ID_PRO", "")  # legacy annual price
+STRIPE_PRICE_ID_PLUS_ANNUAL = os.environ.get("STRIPE_PRICE_ID_PLUS_ANNUAL", "")
+STRIPE_PRICE_ID_PLUS_MONTHLY = os.environ.get("STRIPE_PRICE_ID_PLUS_MONTHLY", "")
+# Explicit launch switch: beta remains usable without enabling commercial checkout.
+BILLING_ENABLED = os.environ.get("BILLING_ENABLED", "false").lower() == "true"
+VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "")
+BRIEFING_EMAIL_ENABLED = os.environ.get("BRIEFING_EMAIL_ENABLED", "false").lower() == "true"
+# Only known browser push services: never allow a user-supplied URL to reach internal services.
+PUSH_ENDPOINT_HOSTS = ("fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com")
 
 # Application definition
 

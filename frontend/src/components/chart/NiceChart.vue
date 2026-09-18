@@ -140,19 +140,16 @@ function temperatureBands(ink: string, dark: boolean): Pick<Layout, "shapes" | "
 
 function buildLayout(): Partial<Layout> {
     const incoming = structuredClone(toRaw(figure.value.layout ?? {}));
-    // The card decides the size, so any fixed height/width from the backend
-    // would fight the container - drop it and let Plotly autosize.
+    // The card decides the size: drop any fixed height/width and let Plotly autosize.
     delete incoming.height;
     delete incoming.width;
-    // The backend sets template="plotly_white" for a sane default when charts are viewed
-    // outside this app; here we own theming instead, so every chrome color (axes, grid,
-    // fonts - never the per-series data colors, those stay the backend's) follows the
-    // app's light/dark state.
+    // Every chrome color (axes, grid, fonts - never the per-series data colors, those come
+    // from utils/forecastCharts.ts) follows the app's light/dark state.
     const dark = $q.dark.isActive;
     const ink = dark ? "#e8eef2" : "#1b2733";
     // Decluttered: no gridlines or axis lines - the tick labels carry the scale. Only the zero
     // line stays, as a faint baseline, since it matters for head- vs. tailwind. Charts that cannot
-    // cross zero switch it off in the backend, where it would just redraw the plot's bottom border.
+    // cross zero switch it off, where it would just redraw the plot's bottom border.
     const baseline = dark ? "rgba(232, 238, 242, 0.25)" : "rgba(27, 39, 51, 0.2)";
     const axisTheme = { color: ink, showgrid: false, showline: false, zerolinecolor: baseline, zerolinewidth: 1 };
     const revision: unknown = incoming.uirevision;
@@ -164,7 +161,6 @@ function buildLayout(): Partial<Layout> {
         paper_bgcolor: "transparent",
         font: { family: FONT_FAMILY, color: ink },
         // Reserve space above the plot for the legend in the shallow forecast cards.
-        // Server figures may position legends below the axes, outside the card's bounds.
         title: { ...incoming.title, font: { ...incoming.title?.font, size: 14 }, y: 0.98, yanchor: "top" },
         margin: { ...incoming.margin, t: 100, b: 48, l: 44, r: 44 },
         legend: {
@@ -197,7 +193,6 @@ function buildLayout(): Partial<Layout> {
             : {}),
         ...(props.directionalWind
             ? {
-                  title: { text: "Gegenwind / Rückenwind", font: { size: 14 }, y: 0.98, yanchor: "top" },
                   showlegend: false,
                   annotations: [
                       ...(incoming.annotations ?? []),
@@ -221,8 +216,8 @@ function buildLayout(): Partial<Layout> {
  *  the map: the full layout's margins alone would fill it. The tooltip still names each series and its unit, so the legend, the axis titles
  *  and the band labels go. The temperature bands themselves stay. */
 function compactLayout(layout: Partial<Layout>, incoming: Partial<Layout>): Partial<Layout> {
-    // The backend's plotly_white template turns automargin on, which would grow the zero margins
-    // back to fit the tick labels. The labels go inside the plot instead.
+    // The figures turn automargin on, which would grow the zero margins back to fit the tick
+    // labels. The labels go inside the plot instead.
     const axis = (base: Partial<Plotly.LayoutAxis> | undefined) => ({
         ...base,
         title: { text: "" },
@@ -251,44 +246,35 @@ function isScatter(trace: Data): trace is Partial<Plotly.ScatterData> {
     return !trace.type || trace.type === "scatter";
 }
 function buildData(): Data[] {
-    return structuredClone(toRaw(figure.value.data ?? []))
-        .filter(
-            trace =>
-                !props.directionalWind ||
-                (isScatter(trace) &&
-                    (trace.legendgroup === "headwind" ||
-                        (!trace.legendgroup && (trace.name ?? "").startsWith("Gegen")))),
-        )
-        .map(trace => {
-            if (!isScatter(trace)) return trace;
-            const scatter: Partial<Plotly.ScatterData> = trace;
-            // Keep gaps and true values; only remove the permanent point markers.
-            const values = Array.isArray(scatter.y) ? scatter.y : [];
-            const isolated = values.map((value, index) =>
-                scatter.hoverinfo !== "skip" &&
-                scatter.line?.width !== 0 &&
-                value != null &&
-                values[index - 1] == null &&
-                values[index + 1] == null
-                    ? 4
-                    : 0,
-            );
-            return {
-                ...scatter,
-                ...(props.directionalWind ? { visible: true } : {}),
-                mode: isolated.some(Boolean) ? "lines+markers" : "lines",
-                marker: { ...scatter.marker, size: isolated },
-                name: scatter.name?.replace(/:\s*(Ensemble-Median|Median|Einzelprognose)/g, ""),
-                hoverinfo: scatter.hoverinfo === "skip" ? "skip" : "none",
-                hovertemplate: undefined,
-                meta: { tooltipTemplate: scatter.hovertemplate },
-                line: {
-                    ...scatter.line,
-                    width: scatter.line?.width === 0 ? 0 : 1.2,
-                    dash: scatter.line?.dash === "dot" ? "dash" : scatter.line?.dash,
-                },
-            };
-        });
+    return structuredClone(toRaw(figure.value.data ?? [])).map(trace => {
+        if (!isScatter(trace)) return trace;
+        const scatter: Partial<Plotly.ScatterData> = trace;
+        // Keep gaps and true values; only remove the permanent point markers.
+        const values = Array.isArray(scatter.y) ? scatter.y : [];
+        const isolated = values.map((value, index) =>
+            scatter.hoverinfo !== "skip" &&
+            scatter.line?.width !== 0 &&
+            value != null &&
+            values[index - 1] == null &&
+            values[index + 1] == null
+                ? 4
+                : 0,
+        );
+        return {
+            ...scatter,
+            mode: isolated.some(Boolean) ? "lines+markers" : "lines",
+            marker: { ...scatter.marker, size: isolated },
+            name: scatter.name?.replace(/:\s*(Ensemble-Median|Median|Einzelprognose)/g, ""),
+            hoverinfo: scatter.hoverinfo === "skip" ? "skip" : "none",
+            hovertemplate: undefined,
+            meta: { tooltipTemplate: scatter.hovertemplate },
+            line: {
+                ...scatter.line,
+                width: scatter.line?.width === 0 ? 0 : 1.2,
+                dash: scatter.line?.dash === "dot" ? "dash" : scatter.line?.dash,
+            },
+        };
+    });
 }
 const data = ref<Data[]>(buildData());
 const layout = ref<Partial<Layout>>(buildLayout());

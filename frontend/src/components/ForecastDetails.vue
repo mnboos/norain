@@ -40,7 +40,7 @@ const partial = computed(() => props.forecast.uncertaintyPartial);
                 Die Fläche zeigt, wie stark das Wetter schwanken könnte. Auch Werte ausserhalb sind möglich.
             </p>
             <q-banner v-if="uncertaintyLocked" dense class="bg-tint-warn q-mb-md">
-                Mögliche Wetterschwankungen siehst du mit Pro. Die Wettervorhersage und das Regenrisiko sind kostenlos.
+                Mögliche Wetterschwankungen siehst du mit Plus. Die Wettervorhersage und das Regenrisiko sind kostenlos.
                 <template #action>
                     <q-btn flat dense color="primary" label="Upgrade" to="/account" />
                 </template>

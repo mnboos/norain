@@ -71,15 +71,15 @@ class Plan(models.TextChoices):
     """Billing tiers. Entitlements for each live in core/entitlements.py."""
 
     FREE = "free", "Free"
-    PRO = "pro", "Pro"
+    PRO = "pro", "Plus"
 
 
 class Subscription(models.Model):
     """What an account is entitled to, and the Stripe objects backing it.
 
-    State is only ever written from verified Stripe webhook events — never from the
-    Checkout success redirect, which a user can load, skip, or forge. An account with no
-    row here is on the free tier.
+    Paid state comes from verified Stripe events, never the Checkout redirect.
+    Local trial and complimentary expiry fields grant independent beta access.
+    An account without a row is on the free tier.
     """
 
     # Statuses Stripe reports that still mean "this account has paid access".
@@ -91,8 +91,13 @@ class Subscription(models.Model):
 
     stripe_customer_id = models.CharField(max_length=255, blank=True, default="", db_index=True)
     stripe_subscription_id = models.CharField(max_length=255, blank=True, default="")
+    checkout_session_id = models.CharField(max_length=255, blank=True, default="")
+    checkout_interval = models.CharField(max_length=10, blank=True, default="")
     current_period_end = models.DateTimeField(null=True, blank=True)
     cancel_at_period_end = models.BooleanField(default=False)
+    complimentary_until = models.DateTimeField(null=True, blank=True)
+    trial_started_at = models.DateTimeField(null=True, blank=True)
+    trial_ends_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -174,6 +179,13 @@ class RecurringRoute(models.Model):
     # finished forecast only for routes opened recently; see prebuild_route_forecast.
     last_viewed_at = models.DateTimeField(null=True, blank=True)
 
+    return_of = models.OneToOneField(
+        "self", null=True, blank=True, on_delete=models.CASCADE, related_name="return_journey"
+    )
+    free_selected = models.BooleanField(default=False)
+    briefing_channel = models.CharField(
+        max_length=10, default="", blank=True, choices=[("", "Off"), ("email", "Email"), ("push", "Push")]
+    )
     active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -385,3 +397,33 @@ class ForecastJob(models.Model):
     @property
     def is_terminal(self) -> bool:
         return self.status in self.TERMINAL_STATUSES
+
+
+class PushSubscription(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="push_subscriptions")
+    endpoint = models.URLField(max_length=2048, unique=True)
+    keys = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class RideBriefing(models.Model):
+    """One scheduled briefing per route/departure, including its delivery claim.
+
+    External delivery is at-most-once: a crashed/ambiguous send is not retried, since
+    email and push providers do not offer a shared idempotency protocol.
+    """
+
+    route = models.ForeignKey(RecurringRoute, on_delete=models.CASCADE, related_name="briefings")
+    departure = models.DateTimeField()
+    earliest_departure = models.DateTimeField()
+    due_at = models.DateTimeField(db_index=True)
+    channel = models.CharField(max_length=10)
+    job = models.ForeignKey("ForecastJob", null=True, on_delete=models.SET_NULL)
+    status = models.CharField(max_length=16, default="pending")
+    body = models.TextField(blank=True)
+    delivery_started_at = models.DateTimeField(null=True)
+    sent_at = models.DateTimeField(null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["route", "departure"], name="unique_ride_briefing")]

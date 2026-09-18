@@ -19,7 +19,7 @@ flowchart TD
     WF --> GH[GraphHopper: routing and travel times]
     WD --> GH
     WC --> Grid[Forecast grid layer]
-    WF --> Plot[Plotly figures and weather sections]
+    WF --> Plot[Weather sections]
     Grid --> DB
     Grid --> OM[Open-Meteo: deterministic and ensemble]
     Grid --> OWM[OpenWeatherMap: deterministic fallback]
@@ -103,7 +103,7 @@ next scan. A finished job whose ride is near now is reused for only 10 minutes.
 
 ## Requests enqueue; workers compute
 
-No HTTP request performs a provider fetch, a routing call or a Plotly render. A forecast
+No HTTP request performs a provider fetch or a routing call. A forecast
 request creates a `ForecastJob` and returns a job id; `plan_forecast_job` resolves the
 route geometry and fans out one task per distinct ~1 km² grid cell; the last cell to settle
 hands the job to `assemble_forecast_job`, which builds the payload from cells that are warm
@@ -112,11 +112,11 @@ fallback.
 
 The job stores the complete payload but sends the browser a slim view of it: a route line
 simplified to about 50 m, wind arrows about 2 km apart instead of up to 500 wind
-segments, and no chart figures or per-model ensemble breakdown. Those parts
-are fetched from their own endpoints by the components that show them — the charts on the
-route page, a finer line and denser wind arrows once the map is zoomed in, the model table once the details panel
-is opened. A long route's job message drops from about 260 KB to about 60 KB this way, and
-the map page never downloads chart data at all.
+segments, and no per-model ensemble breakdown. Those parts are fetched from their own
+endpoints by the components that show them — a finer line and denser wind arrows once the
+map is zoomed in, the model table once the details panel is opened. A long route's job
+message drops from about 260 KB to about 60 KB this way. The charts need no request: the
+frontend draws them from the samples in the job message (`utils/forecastCharts.ts`).
 
 The queues are split because the database task backend runs one task per worker process at
 a time: `cells` carries the provider fan-out across several replicas, `forecasts` carries
@@ -165,7 +165,7 @@ job identity to avoid reusing older calculations after a geometry backfill.
 | `backend/core/consumers.py`, `routing.py` | WebSocket delivery of job progress |
 | `backend/core/api/recurring_route.py` | Saved-route CRUD and forecast assembly |
 | `backend/backend/settings/` | Shared, development, and production Django settings |
-| `backend/core/plotting.py`, `sections.py` | Plotly figures and condition groups |
+| `backend/core/sections.py` | Condition groups |
 | `frontend/src/pages/`, `components/` | Route UI, maps, summaries, charts |
 | `frontend/src/queries/` | TanStack query keys, fetch hooks, mutations, and cache invalidation |
 | `packages/api/` | Shared generated TypeScript API client |

@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from asgiref.sync import sync_to_async
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest
 from ninja import Router
@@ -13,9 +14,9 @@ from pydantic import Field, field_validator
 from .. import telemetry
 from ..auth.backend import session_auth
 from ..departures import route_job_params
-from ..entitlements import entitlements_for
+from ..entitlements import allowed_route_ids, entitlements_for, entitlements_for_sync
 from ..forecast_schemas import ForecastJobOut
-from ..models import ForecastJob, RecurringRoute, User, route_point
+from ..models import ForecastJob, RecurringRoute, RideBriefing, User, route_point
 from ..ride_quality import worst_frost_level, worst_rain_level, worst_ride_score
 from ..schedule import check_schedule_cron, forecast_available_at, next_departure
 from ..schemas import CamelSchema
@@ -40,6 +41,13 @@ class RecurringRouteIn(CamelSchema):
     departure_flex_before_minutes: int = Field(default=0, ge=0, le=120, multiple_of=15)
     departure_flex_after_minutes: int = Field(default=0, ge=0, le=120, multiple_of=15)
     active: bool = True
+    return_schedule_cron: str | None = None
+    return_schedule_description: str = ""
+
+    @field_validator("return_schedule_cron")
+    @classmethod
+    def check_return_schedule(cls, value):
+        return check_schedule_cron(value) if value else value
 
     _profile = field_validator("profile")(check_routing_profile)
     _schedule_cron = field_validator("schedule_cron")(check_schedule_cron)
@@ -115,6 +123,11 @@ class RecurringRouteOut(CamelSchema):
     created_at: datetime | None = None
     updated_at: datetime | None = None
     thumbnail: RouteThumbnail | None = None
+    return_route_id: UUID | None = None
+    parent_route_id: UUID | None = None
+    return_schedule_cron: str | None = None
+    return_schedule_description: str = ""
+    return_next_departure: str | None = None
 
 
 async def _current_user(request: HttpRequest) -> User:
@@ -129,7 +142,7 @@ async def _owned_route(request: HttpRequest, route_id: UUID) -> RecurringRoute:
     """Fetch a route owned by the current user, hiding other accounts' routes."""
     user = await _current_user(request)
     try:
-        return await RecurringRoute.objects.aget(id=route_id, owner=user)
+        return await RecurringRoute.objects.select_related("return_journey").aget(id=route_id, owner=user)
     except RecurringRoute.DoesNotExist:
         raise HttpError(404, "Route not found.") from None
 
@@ -137,8 +150,15 @@ async def _owned_route(request: HttpRequest, route_id: UUID) -> RecurringRoute:
 def _route_to_out(route: RecurringRoute) -> RecurringRouteOut:
     """Build a RecurringRouteOut from a model instance, computing schedule fields."""
     nd = next_departure(route.schedule_cron)
+    returning = route._state.fields_cache.get("return_journey")
+    return_departure = next_departure(returning.schedule_cron) if returning else None
     return RecurringRouteOut(
         id=route.id,
+        return_route_id=returning.id if returning else None,
+        parent_route_id=route.return_of_id,
+        return_schedule_cron=returning.schedule_cron if returning else None,
+        return_schedule_description=returning.schedule_description if returning else "",
+        return_next_departure=return_departure.isoformat() if return_departure else None,
         name=route.name,
         description=route.description,
         start_lat=route.start_lat,
@@ -157,9 +177,7 @@ def _route_to_out(route: RecurringRoute) -> RecurringRouteOut:
         total_distance_m=route.total_distance_m,
         # hasattr, not getattr-with-default: the default expression would be evaluated
         # eagerly and load the very field list_routes defers.
-        has_geometry=(
-            route.geometry_ready if hasattr(route, "geometry_ready") else route.sample_points is not None
-        ),
+        has_geometry=(route.geometry_ready if hasattr(route, "geometry_ready") else route.sample_points is not None),
         next_departure=nd.isoformat() if nd else None,
         forecast_available=forecast_available_at(nd) if nd else False,
         created_at=route.created_at,
@@ -183,7 +201,8 @@ async def list_routes(request: HttpRequest):
     # this endpoint is polled every 60 s. `has_geometry` is annotated so deferring
     # sample_points does not trigger a per-row query to test it.
     query = (
-        RecurringRoute.objects.filter(active=True, owner=user)
+        RecurringRoute.objects.filter(active=True, owner=user, return_of__isnull=True)
+        .select_related("return_journey")
         .defer("polyline", "sample_points", "vertex_times")
         .annotate(geometry_ready=Q(sample_points__isnull=False))
     )
@@ -199,12 +218,14 @@ async def _assert_route_quota(user, *, exclude_id: UUID | None = None) -> None:
     limits = await entitlements_for(user)
     if limits.max_routes is None:
         return
-    existing = RecurringRoute.objects.filter(owner=user, active=True)
+    existing = RecurringRoute.objects.filter(owner=user, active=True, return_of__isnull=True)
     if exclude_id is not None:
         existing = existing.exclude(id=exclude_id)
     if await existing.acount() >= limits.max_routes:
         telemetry.event(
-            "route.action", action="quota", outcome="rejected",
+            "route.action",
+            action="quota",
+            outcome="rejected",
             **{"user.id": str(user.pk), "plan": str(limits.plan)},
         )
         raise HttpError(
@@ -218,20 +239,39 @@ async def _assert_route_quota(user, *, exclude_id: UUID | None = None) -> None:
 async def create_route(request: HttpRequest, data: RecurringRouteIn):
     """Create a new recurring route. Enqueues a background task to fetch route geometry."""
     user = await _current_user(request)
-    await _assert_route_quota(user)
-    values = data.model_dump(exclude={"start_lat", "start_lon", "dest_lat", "dest_lon"})
-    route = await RecurringRoute.objects.acreate(
-        owner=user,
+    if (data.departure_flex_before_minutes or data.departure_flex_after_minutes) and not (
+        await entitlements_for(user)
+    ).departure_comparison:
+        raise HttpError(402, "Departure comparison requires Plus.")
+    values = data.model_dump(
+        exclude={
+            "start_lat",
+            "start_lon",
+            "dest_lat",
+            "dest_lon",
+            "return_schedule_cron",
+            "return_schedule_description",
+        }
+    )
+    route = await sync_to_async(_create_with_quota)(
+        user,
+        return_schedule_cron=data.return_schedule_cron,
+        return_schedule_description=data.return_schedule_description,
         start_point=route_point(data.start_lat, data.start_lon),
         destination_point=route_point(data.dest_lat, data.dest_lon),
         **values,
     )
     telemetry.event(
-        "route.action", action="created", outcome="success",
+        "route.action",
+        action="created",
+        outcome="success",
         **telemetry.route_context(route),
         **await sync_to_async(telemetry.user_context)(user),
     )
     await refresh_route_geometry.aenqueue(str(route.id))
+    returning = route._state.fields_cache.get("return_journey")
+    if returning:
+        await refresh_route_geometry.aenqueue(str(returning.id))
     return _route_to_out(route)
 
 
@@ -246,6 +286,16 @@ async def get_route(request: HttpRequest, route_id: UUID):
 async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRouteIn):
     """Update a recurring route. Re-fetches geometry if start, destination, or profile changed."""
     route = await _owned_route(request, route_id)
+    user = await _current_user(request)
+    if (
+        (data.departure_flex_before_minutes or data.departure_flex_after_minutes)
+        and (
+            data.departure_flex_before_minutes != route.departure_flex_before_minutes
+            or data.departure_flex_after_minutes != route.departure_flex_after_minutes
+        )
+        and not (await entitlements_for(user)).departure_comparison
+    ):
+        raise HttpError(402, "Departure comparison requires Plus.")
     # Reactivating a route consumes a slot just as creating one does.
     if data.active and not route.active:
         await _assert_route_quota(await _current_user(request), exclude_id=route_id)
@@ -257,15 +307,27 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
         or route.profile != data.profile
     )
 
-    values = data.model_dump(exclude={"start_lat", "start_lon", "dest_lat", "dest_lon"})
+    values = data.model_dump(
+        exclude={
+            "start_lat",
+            "start_lon",
+            "dest_lat",
+            "dest_lon",
+            "return_schedule_cron",
+            "return_schedule_description",
+        }
+    )
     for field, value in values.items():
         setattr(route, field, value)
     route.start_point = route_point(data.start_lat, data.start_lon)
     route.destination_point = route_point(data.dest_lat, data.dest_lon)
-    await route.asave()
+    await sync_to_async(_save_with_quota)(user, route, data.return_schedule_cron, data.return_schedule_description)
+    await RideBriefing.objects.filter(route=route, status="pending").aupdate(status="canceled")
 
     telemetry.event(
-        "route.action", action="updated", outcome="success",
+        "route.action",
+        action="updated",
+        outcome="success",
         **telemetry.route_context(route),
         **await sync_to_async(telemetry.user_context)(await _current_user(request)),
     )
@@ -278,6 +340,9 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
         await route.asave()
         await refresh_route_geometry.aenqueue(str(route.id))
 
+    returning = route._state.fields_cache.get("return_journey")
+    if returning and not returning.sample_points:
+        await refresh_route_geometry.aenqueue(str(returning.id))
     return _route_to_out(route)
 
 
@@ -309,9 +374,11 @@ VIEW_RECORD_INTERVAL = timedelta(hours=1)
 async def _record_view(route: RecurringRoute) -> None:
     """Remember that the owner opened this route, so the hourly pass pre-builds its forecast."""
     now = datetime.now(tz=UTC)
-    await RecurringRoute.objects.filter(id=route.id).filter(
-        Q(last_viewed_at__isnull=True) | Q(last_viewed_at__lt=now - VIEW_RECORD_INTERVAL)
-    ).aupdate(last_viewed_at=now)
+    await (
+        RecurringRoute.objects.filter(id=route.id)
+        .filter(Q(last_viewed_at__isnull=True) | Q(last_viewed_at__lt=now - VIEW_RECORD_INTERVAL))
+        .aupdate(last_viewed_at=now)
+    )
 
 
 @router.get("/routes/{route_id}/forecast", response={200: ForecastJobOut, 202: ForecastJobOut})
@@ -325,13 +392,19 @@ async def route_forecast(
 ):
     """Start (or join) the forecast for one departure of a saved route.
 
-    Returns 200 with the finished payload -- weather, Plotly figures and sections -- when
-    an identical forecast is already computed and still fresh, otherwise 202 and a job to
-    watch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither
-    is allowed on this path.
+    Returns 200 with the finished payload -- weather and sections -- when an identical
+    forecast is already computed and still fresh, otherwise 202 and a job to watch over
+    `wsUrl`. Cell fetching and assembly both happen on workers; neither is allowed on this
+    path.
     """
     route = await _owned_route(request, route_id)
 
+    user = await _current_user(request)
+    if route.id not in await sync_to_async(allowed_route_ids)(user):
+        raise HttpError(402, "This route is paused. Choose your active routes in your account or try Plus.")
+    limits = await entitlements_for(user)
+    if not limits.departure_comparison and (departure_flex_before_minutes or departure_flex_after_minutes):
+        raise HttpError(402, "Departure comparison requires Plus.")
     if not route.sample_points:
         raise HttpError(409, "Route geometry not yet computed. Try again in a few seconds.")
 
@@ -343,6 +416,8 @@ async def route_forecast(
         route.departure_flex_before_minutes if departure_flex_before_minutes is None else departure_flex_before_minutes
     )
     after = route.departure_flex_after_minutes if departure_flex_after_minutes is None else departure_flex_after_minutes
+    if not limits.departure_comparison:
+        before = after = 0
     flexibility_params(departure, before, after)  # validation only: 422 on a bad window
     job = await start_forecast_job(
         ForecastJob.Kind.ROUTE,
@@ -351,3 +426,74 @@ async def route_forecast(
     )
     status = 200 if job.status == ForecastJob.Status.DONE else 202
     return status, job_out(job)
+
+
+def _create_with_quota(user, return_schedule_cron=None, return_schedule_description="", **values):
+    with transaction.atomic():
+        User.objects.select_for_update().get(pk=user.pk)
+        limits = entitlements_for_sync(user)
+        if (
+            values.get("active", True)
+            and RecurringRoute.objects.filter(owner=user, active=True, return_of__isnull=True).count()
+            >= limits.max_routes
+        ):
+            telemetry.event("route.action", action="quota", outcome="rejected", **telemetry.user_context(user))
+            raise HttpError(402, "Your active route limit is reached. Plus includes 20 routes.")
+        route = RecurringRoute.objects.create(owner=user, **values)
+        _save_return(route, return_schedule_cron, return_schedule_description)
+        return route
+
+
+def _save_with_quota(user, route, return_schedule_cron=None, return_schedule_description=""):
+    with transaction.atomic():
+        User.objects.select_for_update().get(pk=user.pk)
+        existing = RecurringRoute.objects.get(pk=route.pk, owner=user)
+        if route.active and not existing.active:
+            limits = entitlements_for_sync(user)
+            if (
+                RecurringRoute.objects.filter(owner=user, active=True, return_of__isnull=True).count()
+                >= limits.max_routes
+            ):
+                raise HttpError(402, "Your active route limit is reached.")
+        route.save()
+        _save_return(route, return_schedule_cron, return_schedule_description)
+
+
+def _save_return(route, cron, description):
+    if route.return_of_id:
+        if cron:
+            raise HttpError(422, "A return journey cannot have another return journey.")
+        return
+    returning = RecurringRoute.objects.filter(return_of=route).first()
+    if cron is None and returning is None:
+        return
+    if cron == "":
+        if returning:
+            returning.delete()
+        route._state.fields_cache["return_journey"] = None
+        return
+    values = {
+        "owner": route.owner,
+        "name": f"{route.name[:188]} – Rückfahrt",
+        "description": route.description,
+        "start_point": route.destination_point,
+        "start_name": route.dest_name,
+        "destination_point": route.start_point,
+        "dest_name": route.start_name,
+        "profile": route.profile,
+        "schedule_cron": cron or returning.schedule_cron,
+        "schedule_description": description or (returning.schedule_description if returning else cron),
+        "active": route.active,
+        "briefing_channel": route.briefing_channel,
+        "departure_flex_before_minutes": route.departure_flex_before_minutes,
+        "departure_flex_after_minutes": route.departure_flex_after_minutes,
+    }
+    if returning and (
+        returning.start_point != values["start_point"]
+        or returning.destination_point != values["destination_point"]
+        or returning.profile != values["profile"]
+    ):
+        values.update(sample_points=None, polyline=None, vertex_times=None, geometry_fetched_at=None)
+    returning, _ = RecurringRoute.objects.update_or_create(return_of=route, defaults=values)
+    RideBriefing.objects.filter(route=returning, status="pending").update(status="canceled")
+    route._state.fields_cache["return_journey"] = returning

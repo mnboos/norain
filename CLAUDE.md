@@ -14,7 +14,6 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     weather.py       routing + sampling + wind logic, compute_route_weather, build_geometry
     grid.py          forecast grid cache (ForecastCell, EnsembleCell) + API fetch + extraction
     stations.py      Weather Underground stations: budgeted fetch, cache, near-now correction
-    plotting.py      Plotly figure generation (temp, precip, wind charts)
     models.py        User (custom, AUTH_USER_MODEL), Subscription, ProcessedStripeEvent,
                      RecurringRoute, ForecastCell, EnsembleCell, StationLookup,
                      StationObservation, ForecastJob
@@ -175,7 +174,7 @@ the accessors without `v1` are deprecated. `stripe.Webhook.construct_event` is d
 
 ### Every heavy operation is a task
 
-No HTTP request performs a provider fetch, a GraphHopper call or a Plotly render. The
+No HTTP request performs a provider fetch or a GraphHopper call. The
 forecast endpoints create a `ForecastJob`, enqueue `plan_forecast_job` and return **202**
 with a job id; a finished job that is still fresh returns **200** with its stored payload.
 
@@ -184,14 +183,14 @@ POST-ish GET  ->  ForecastJob (202)
                      plan_forecast_job     queue: forecasts   geometry + fan-out
                        refresh_forecast_cell  \ queue: cells   one task per ~1 km² cell
                        refresh_ensemble_cell  /
-                         assemble_forecast_job  queue: forecasts  cache_only + figures
+                         assemble_forecast_job  queue: forecasts  cache_only + sections
                            -> job.result, pushed over ws/forecast/<job_id>/
 ```
 
 The stored `job.result` is always complete. `job_snapshot` serves a slim view of it
 (`core.jobs.forecast_view`: a ~50 m line, wind arrows ~2 km apart instead of the wind
-segments, no figures, no per-model breakdown), and pages fetch those parts from
-`/api/forecast_jobs/{id}/figures`, `/map_detail?detail=` (line + arrows) and
+segments, no per-model breakdown), and pages fetch those parts from
+`/api/forecast_jobs/{id}/map_detail?detail=` (line + arrows) and
 `/samples/{i}/uncertainty` only when they draw them. Shape on read only — never let page
 shape into the job key, or two pages would compute two jobs for one forecast. Every line
 level must keep each sample's vertex exactly: the map finds samples on the line by equality.
@@ -225,7 +224,7 @@ pre-warm scan, whose task carries no `job_id` and would never report back.
 
 **Imports go at module scope — keep the layering that allows it.** The forecast payload
 schemas live in `core/forecast_schemas.py`, outside the `core.api` package, because the
-domain modules (`weather`, `uncertainty`, `plotting`, `sections`) need them and importing
+domain modules (`weather`, `uncertainty`, `sections`) need them and importing
 anything under `core.api` runs its `__init__`, which loads the routers, which import
 `core.tasks`. The direction is one way: `core.api.*` → `core.tasks` → domain modules →
 `forecast_schemas`. Never make a domain module import from `core.api`; that recreates the
@@ -362,14 +361,14 @@ blank chart.
 OWM One Call 3.0 returns `rain` as a float (mm); legacy 2.5 returns `{"1h": value}`.
 `_from_owm()` handles both.
 
-### Plotting
+### Charts
 
-`generate_forecast_figures()` returns 3 Plotly figure JSONs. It is plain synchronous CPU
-and is called only from `assemble_forecast_job`, never from a request — on one daphne
-process a Plotly render in a request coroutine stalls every other request. When
-`forecast.samples` is empty it returns placeholder figures with a "Keine Wetterdaten"
-annotation instead of crashing, though a job that assembles no samples fails before it
-gets that far.
+The backend draws no charts. `frontend/src/utils/forecastCharts.ts` builds the temperature,
+precipitation and headwind charts from the samples the job result already carries
+(`temp`, `rainRateMmH`, `pop`, `headwind` and the ensemble p10/median/p90), so they need no
+request of their own; `NiceChart.vue` adds the theme. The chart design lives only there:
+a chart that needs a new value needs it on the sample, not a figures endpoint. Results
+stored before this still carry a `figures` key; `forecast_view` drops it.
 
 ### Routing graph
 
@@ -436,7 +435,7 @@ API request, patch `core.weather.get_or_fetch_forecast_cell` *and*
 namespace, so patching `core.grid.*` does not intercept and the test passes while the code
 still fetches. The same rule everywhere: the route handlers use
 `core.api.recurring_route.refresh_route_geometry`, assembly uses `core.tasks.compute_route_weather`
-/ `core.tasks.generate_forecast_figures`, the cell tasks `core.tasks.get_or_fetch_*`, sign-in
+/ `core.tasks.compute_sections`, the cell tasks `core.tasks.get_or_fetch_*`, sign-in
 `core.auth.signals.refresh_user_forecasts`. A patch on the defining module is silently ignored —
 an `AssertionError` side effect then passes vacuously.
 

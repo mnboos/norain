@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.utils import timezone
 
 from .models import EnsembleCell, ForecastCell, ProcessedStripeEvent, RecurringRoute, Subscription, User
 
@@ -15,6 +18,18 @@ class UserAdmin(DjangoUserAdmin):
     list_filter = ("signup_completed", "is_active", "is_staff", "is_superuser")
     search_fields = ("username", "email")
     readonly_fields = ("created_at",)
+    actions = ["grant_beta_plus"]
+
+    @admin.action(description="Grant 90 days of complimentary Plus (no payment)")
+    def grant_beta_plus(self, request, queryset):
+        for user in queryset:
+            subscription, _ = Subscription.objects.get_or_create(user=user)
+            subscription.complimentary_until = max(
+                subscription.complimentary_until or timezone.now(), timezone.now() + timedelta(days=90)
+            )
+            subscription.save(update_fields=["complimentary_until", "updated_at"])
+        self.message_user(request, "Complimentary Plus granted; no payments or messages were sent.")
+
     fieldsets = (*DjangoUserAdmin.fieldsets, ("NoRain", {"fields": ["signup_completed", "created_at"]}))
 
 
@@ -22,7 +37,15 @@ class UserAdmin(DjangoUserAdmin):
 class SubscriptionAdmin(admin.ModelAdmin):
     """Set a tier by hand here — entitlements read this row, not Stripe."""
 
-    list_display = ("user", "plan", "status", "current_period_end", "cancel_at_period_end", "updated_at")
+    list_display = (
+        "user",
+        "plan",
+        "status",
+        "current_period_end",
+        "cancel_at_period_end",
+        "complimentary_until",
+        "updated_at",
+    )
     list_filter = ("plan", "status")
     search_fields = ("user__email", "user__username", "stripe_customer_id", "stripe_subscription_id")
     list_select_related = ("user",)

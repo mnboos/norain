@@ -14,6 +14,7 @@ const showExplanation = ref(false);
 const $q = useQuasar();
 const compact = computed(() => $q.screen.lt.md);
 const headline = computed(() => forecastHeadline(forecast.value.summary, forecast.value.samples));
+const rainy = computed(() => (forecast.value.summary.rainProbability ?? 0) > 0 || forecast.value.summary.willRain);
 const rainTime = computed(() =>
     forecast.value.samples.length &&
     forecast.value.summary.firstRainEta &&
@@ -21,7 +22,13 @@ const rainTime = computed(() =>
         ? swissTime(forecast.value.summary.firstRainEta)
         : null,
 );
-
+const status = computed(() =>
+    rainTime.value
+        ? props.forecast.summary.rainProbability == null
+            ? "Regen in der Einzelprognose"
+            : "Regen möglich"
+        : "Vorhersage",
+);
 const explanation = computed(() => {
     if (!forecast.value.samples.length) return "Für diese Fahrt liegen noch keine Wetterdaten vor.";
     const p = forecast.value.summary.rainProbability;
@@ -65,10 +72,10 @@ const note =
 <template>
     <q-card flat class="row">
         <q-card-section class="col-12 col-md-3" :class="compact ? 'q-px-sm q-py-xs' : 'q-pb-none'">
-            <!--            <q-item-label overline :class="rainy ? 'text-warning' : 'text-secondary'">-->
-            <!--                <q-badge rounded :color="rainy ? 'warning' : 'secondary'" class="q-mr-sm" />-->
-            <!--                {{ status }}-->
-            <!--            </q-item-label>-->
+            <q-item-label overline :class="rainy ? 'text-warning' : 'text-secondary'">
+                <q-badge rounded :color="rainy ? 'warning' : 'secondary'" class="q-mr-sm" />
+                {{ status }}
+            </q-item-label>
             <div class="row items-center no-wrap">
                 <h2 class="col text-weight-medium" :class="compact ? 'text-subtitle1 q-my-none' : 'text-h5 q-my-sm'">
                     <template v-if="rainTime">

@@ -94,5 +94,11 @@ export default defineConfigWithVueTs(
             },
         },
     },
+    {
+        // Plain scripts served as they are (the service worker). No tsconfig covers them, so
+        // they are linted without type information. Must come after the projectService block.
+        ...ts.configs.disableTypeChecked,
+        files: ["public/**/*.js"],
+    },
     prettierConfig,
 );

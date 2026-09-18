@@ -48,10 +48,10 @@ def event(name, **values):
 
 def user_context(user: AbstractBaseUser | AnonymousUser | None):
     try:
-        from .entitlements import entitlements_for_sync
+        from .entitlements import access_source, entitlements_for_sync
 
         return (
-            {"user.id": str(user.pk), "plan": str(entitlements_for_sync(user).plan)}
+            {"user.id": str(user.pk), "plan": str(entitlements_for_sync(user).plan), "access": access_source(user)}
             if user and user.is_authenticated
             else {"plan": "free"}
         )

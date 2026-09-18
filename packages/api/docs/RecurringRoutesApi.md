@@ -279,7 +279,7 @@ No authorization required
 
 Route Forecast
 
-Start (or join) the forecast for one departure of a saved route.  Returns 200 with the finished payload -- weather, Plotly figures and sections -- when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over &#x60;wsUrl&#x60;. Cell fetching and figure rendering both happen on workers; neither is allowed on this path.
+Start (or join) the forecast for one departure of a saved route.  Returns 200 with the finished payload -- weather and sections -- when an identical forecast is already computed and still fresh, otherwise 202 and a job to watch over &#x60;wsUrl&#x60;. Cell fetching and assembly both happen on workers; neither is allowed on this path.
 
 ### Example
 

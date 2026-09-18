@@ -18,7 +18,7 @@ from redis.exceptions import RedisError
 
 from . import telemetry
 from .departures import candidate_times, comparison_view
-from .entitlements import entitlements_for
+from .entitlements import entitlements_for, forecast_params_for
 from .geo import simplify_line
 from .grid import MAX_CELL_AGE
 from .models import ForecastJob
@@ -211,12 +211,13 @@ def forecast_view(job: ForecastJob) -> dict:
 
     The stored ``result`` stays complete; this only trims what goes over the wire. Parts
     that only some pages show are fetched on demand from ``/forecast_jobs/{id}/...``:
-    the chart figures, the finer route line and wind arrows, and each sample's per-model
-    breakdown.
+    the finer route line and wind arrows, and each sample's per-model breakdown. The
+    charts need no part: the frontend draws them from the samples.
     Shaping happens here, on read, and never enters the job key -- otherwise the map and
     the route page would each compute their own job for the same forecast.
     """
     result = job.result or {}
+    # "figures": results stored before the frontend drew the charts itself still carry them.
     dropped = ("figures", "wind_segments", "entitlements", "departure_inputs")
     view = {key: value for key, value in result.items() if key not in dropped}
     if result.get("departure_inputs"):
@@ -321,6 +322,7 @@ async def get_or_start_job(
     lifetime is left. The hourly pre-build passes it so a job it leaves in place cannot
     expire before the next pass.
     """
+    params = await forecast_params_for(owner, params)
     key = job_key(kind, owner.id if owner is not None else None, params)
     now = datetime.now(tz=UTC)
 
@@ -379,3 +381,17 @@ async def get_or_start_job(
         ]
     )
     return job, True
+
+
+def restrict_job_result(job, limits):
+    """Read-time expiry guard for polling and WebSocket delivery."""
+    from copy import deepcopy
+    if not job.result:
+        return
+    job.result = deepcopy(job.result)
+    if not limits.departure_comparison:
+        job.result.pop("departure_inputs", None)
+        job.result.pop("departure_comparison", None)
+    if not limits.ensemble_uncertainty:
+        for sample in job.result.get("samples", []):
+            sample["uncertainty"] = None

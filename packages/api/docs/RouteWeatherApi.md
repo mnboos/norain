@@ -5,7 +5,6 @@ All URIs are relative to *http://localhost*
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
 | [**coreApiRouteWeatherForecastJob**](RouteWeatherApi.md#coreapirouteweatherforecastjob) | **GET** /api/forecast_jobs/{job_id} | Forecast Job |
-| [**coreApiRouteWeatherForecastJobFigures**](RouteWeatherApi.md#coreapirouteweatherforecastjobfigures) | **GET** /api/forecast_jobs/{job_id}/figures | Forecast Job Figures |
 | [**coreApiRouteWeatherForecastJobMapDetail**](RouteWeatherApi.md#coreapirouteweatherforecastjobmapdetail) | **GET** /api/forecast_jobs/{job_id}/map_detail | Forecast Job Map Detail |
 | [**coreApiRouteWeatherForecastJobSampleUncertainty**](RouteWeatherApi.md#coreapirouteweatherforecastjobsampleuncertainty) | **GET** /api/forecast_jobs/{job_id}/samples/{index}/uncertainty | Forecast Job Sample Uncertainty |
 | [**coreApiRouteWeatherRouteWeather**](RouteWeatherApi.md#coreapirouteweatherrouteweather) | **GET** /api/route_weather | Route Weather |
@@ -60,73 +59,6 @@ example().catch(console.error);
 ### Return type
 
 [**ForecastJobOut**](ForecastJobOut.md)
-
-### Authorization
-
-No authorization required
-
-### HTTP request headers
-
-- **Content-Type**: Not defined
-- **Accept**: `application/json`
-
-
-### HTTP response details
-| Status code | Description | Response headers |
-|-------------|-------------|------------------|
-| **200** | OK |  -  |
-
-[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
-
-
-## coreApiRouteWeatherForecastJobFigures
-
-> Array&lt;{ [key: string]: any | null; }&gt; coreApiRouteWeatherForecastJobFigures(jobId)
-
-Forecast Job Figures
-
-The Plotly chart figures of a finished job, for the pages that draw charts.
-
-### Example
-
-```ts
-import {
-  Configuration,
-  RouteWeatherApi,
-} from '';
-import type { CoreApiRouteWeatherForecastJobFiguresRequest } from '';
-
-async function example() {
-  console.log("🚀 Testing  SDK...");
-  const api = new RouteWeatherApi();
-
-  const body = {
-    // string
-    jobId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
-  } satisfies CoreApiRouteWeatherForecastJobFiguresRequest;
-
-  try {
-    const data = await api.coreApiRouteWeatherForecastJobFigures(body);
-    console.log(data);
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-// Run the test
-example().catch(console.error);
-```
-
-### Parameters
-
-
-| Name | Type | Description  | Notes |
-|------------- | ------------- | ------------- | -------------|
-| **jobId** | `string` |  | [Defaults to `undefined`] |
-
-### Return type
-
-**Array<{ [key: string]: any | null; }>**
 
 ### Authorization
 

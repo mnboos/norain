@@ -14,17 +14,15 @@ export async function mockForecast(page: Page, saved: { id: string }, input: obj
                 ? { authenticated: true, user: { username: "test", email: "admin@example.com" } }
                 : path.includes("entitlements")
                   ? { plan: pro ? "pro" : "free", max_routes: 2, ensemble_uncertainty: pro }
-                  : path.endsWith("/figures")
-                    ? forecast.figures
-                    : path.endsWith("/map_detail")
-                      ? { line: forecast.line, wind_arrows: windArrows ?? [] }
-                      : sampleIndex != null
-                        ? (forecast.samples[Number(sampleIndex)]?.uncertainty ?? null)
-                        : path.includes("/forecast") || path.includes("/route_weather")
-                          ? { job_id: saved.id, status: "done", result: forecast }
-                          : path === "/api/routes"
-                            ? [saved]
-                            : saved;
+                  : path.endsWith("/map_detail")
+                    ? { line: forecast.line, wind_arrows: windArrows ?? [] }
+                    : sampleIndex != null
+                      ? (forecast.samples[Number(sampleIndex)]?.uncertainty ?? null)
+                      : path.includes("/forecast") || path.includes("/route_weather")
+                        ? { job_id: saved.id, status: "done", result: forecast }
+                        : path === "/api/routes"
+                          ? [saved]
+                          : saved;
             await route.fulfill({ json });
         },
     );

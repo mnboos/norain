@@ -19,6 +19,7 @@ export function useEntitlementsQuery() {
             return result;
         },
         enabled: isAuthenticated,
-        staleTime: 60_000,
+        staleTime: 30_000,
+        refetchInterval: 30_000,
     });
 }

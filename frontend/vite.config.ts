@@ -34,7 +34,7 @@ export default defineConfig(({ command, mode }) => {
             sourcemap: uploadSourceMaps ? "hidden" : false,
         },
         optimizeDeps: {
-            include: ["plotly.js/lib/core", "plotly.js/lib/bar"],
+            include: ["plotly.js/lib/core"],
         },
         server: {
             host: "127.0.0.1",

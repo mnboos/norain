@@ -6,6 +6,7 @@ from ninja import Router
 from ninja.errors import HttpError
 
 from ..departures import candidate_times, check_flexibility
+from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut, ForecastMapDetailOut, ForecastUncertainty
 from ..jobs import job_snapshot, line_at_detail, wind_arrows_at_detail
 from ..models import ForecastJob
@@ -66,6 +67,10 @@ async def route_weather(
     except ValueError as exc:
         raise HttpError(422, str(exc)) from None
 
+    if (departure_flex_before_minutes or departure_flex_after_minutes) and not (
+        await entitlements_for(getattr(request, "auth", None))
+    ).departure_comparison:
+        raise HttpError(402, "Departure comparison requires Plus. Try Plus free for 14 days.")
     job = await start_forecast_job(
         ForecastJob.Kind.ADHOC,
         getattr(request, "auth", None) or None,
@@ -94,13 +99,6 @@ async def forecast_job(request: HttpRequest, job_id: UUID):
     return job_out(await _readable_job(request, job_id))
 
 
-@router.get("/forecast_jobs/{job_id}/figures", response=list[dict])
-async def forecast_job_figures(request: HttpRequest, job_id: UUID):
-    """The Plotly chart figures of a finished job, for the pages that draw charts."""
-    job = await _readable_job(request, job_id, finished=True)
-    return job.result.get("figures") or []
-
-
 @router.get("/forecast_jobs/{job_id}/map_detail", response=ForecastMapDetailOut)
 async def forecast_job_map_detail(request: HttpRequest, job_id: UUID, detail: Literal["medium", "full"]):
     """The route line and wind arrows at more detail than the job result carries.
@@ -122,6 +120,8 @@ async def forecast_job_sample_uncertainty(request: HttpRequest, job_id: UUID, in
     samples = job.result.get("samples") or []
     if not 0 <= index < len(samples):
         raise HttpError(404, "Sample not found.")
+    if not (await entitlements_for(getattr(request, "auth", None))).ensemble_uncertainty:
+        return None
     return samples[index].get("uncertainty")
 
 
@@ -144,4 +144,7 @@ async def _readable_job(request: HttpRequest, job_id: UUID, *, finished: bool = 
 
     if finished and (job.status != ForecastJob.Status.DONE or not job.result):
         raise HttpError(404, "Forecast job is not finished.")
+    from ..jobs import restrict_job_result
+
+    restrict_job_result(job, await entitlements_for(getattr(request, "auth", None)))
     return job

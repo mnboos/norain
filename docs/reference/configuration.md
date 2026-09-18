@@ -175,3 +175,18 @@ See [VPS deployment](../how-to/deploy-vps.md) for the full production procedure,
 including image release, workers, backups, and recovery.
 
 [Documentation index](../README.md)
+
+## Free / Plus and briefings
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `BILLING_ENABLED` | `false` | Enables paid checkout after commercial launch readiness; trials and admin grants work independently |
+| `STRIPE_PRICE_ID_PLUS_ANNUAL` | Empty | Recurring €29/year EUR price; falls back to legacy `STRIPE_PRICE_ID_PRO` |
+| `STRIPE_PRICE_ID_PLUS_MONTHLY` | Empty | Recurring €3.90/month EUR price |
+| `BRIEFING_EMAIL_ENABLED` | `false` | Makes scheduled email briefings available, using the existing mail backend |
+| `VAPID_PUBLIC_KEY` | Empty | Base64url application-server public key exposed to the browser |
+| `VAPID_PRIVATE_KEY` | Empty | Private VAPID key or PEM path, available to delivery workers |
+| `VAPID_SUBJECT` | Empty | VAPID contact URI, e.g. `mailto:admin@example.com` |
+
+See [running the freemium beta](../how-to/freemium-beta.md) for activation, complimentary
+colleague access, paired rides, notification delivery and commercial launch steps.

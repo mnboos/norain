@@ -8,7 +8,8 @@ the daphne process, relays each event to the browsers watching that job.
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
-from .jobs import group_name, job_snapshot
+from .entitlements import entitlements_for_sync
+from .jobs import group_name, job_snapshot, restrict_job_result
 from .models import ForecastJob
 
 
@@ -37,7 +38,12 @@ class ForecastJobConsumer(AsyncJsonWebsocketConsumer):
 
     async def forecast_event(self, event):
         """Channel-layer handler for messages of type ``forecast.event``."""
-        await self.send_json(event["payload"])
+        job = await self._load_job()
+        if job is None:
+            await self.close(code=4004)
+            return
+        payload = event["payload"] if event["payload"].get("status") != ForecastJob.Status.DONE else job_snapshot(job)
+        await self.send_json(payload)
 
     @database_sync_to_async
     def _load_job(self) -> ForecastJob | None:
@@ -53,4 +59,5 @@ class ForecastJobConsumer(AsyncJsonWebsocketConsumer):
             user = self.scope.get("user")
             if user is None or not user.is_authenticated or user.id != job.owner_id:
                 return None
+        restrict_job_result(job, entitlements_for_sync(self.scope.get("user")))
         return job

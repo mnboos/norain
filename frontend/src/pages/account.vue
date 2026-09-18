@@ -12,15 +12,12 @@ import { useRoute, useRouter } from "vue-router";
 import CompleteSignupForm from "@/components/account/CompleteSignupForm.vue";
 import SignInForms from "@/components/account/SignInForms.vue";
 import { authApi, type SessionState } from "@/services/auth";
-import { billingApi } from "@/services/billing";
+import PlanPanel from "@/components/account/PlanPanel.vue";
 import { useSession } from "@/composables/useSession";
-import { useEntitlements } from "@/composables/useEntitlements";
 
 const route = useRoute();
 const router = useRouter();
 const { isAuthenticated, session, setSession, refreshSession } = useSession();
-const { entitlements, isPro, maxRoutes } = useEntitlements();
-const billingBusy = ref(false);
 
 const error = ref("");
 
@@ -40,26 +37,6 @@ async function onSignupCompleted(state: SessionState) {
     await router.push(nextPath());
 }
 
-/** Both Stripe flows hand back a hosted URL; the browser leaves the SPA to reach it. */
-async function openBilling(flow: "checkout" | "portal") {
-    error.value = "";
-    billingBusy.value = true;
-    try {
-        window.location.href = (await billingApi[flow]()).url;
-    } catch (err) {
-        error.value = err instanceof Error ? err.message : "Die Zahlungsseite ist nicht erreichbar.";
-        billingBusy.value = false;
-    }
-}
-
-function planCaption(): string {
-    const e = entitlements.value;
-    if (!e) return "";
-    const routes = maxRoutes.value == null ? "unbegrenzt viele Routen" : `${e.routeCount}/${maxRoutes.value} Routen`;
-    const spread = e.ensembleUncertainty ? "mit Wetterbereich" : "ohne Wetterbereich";
-    return `${routes} · ${spread}`;
-}
-
 async function signOut() {
     error.value = "";
     try {
@@ -75,7 +52,7 @@ async function signOut() {
 
 <template>
     <q-page class="row justify-center q-pa-md">
-        <q-card class="col-12 q-pa-lg" style="max-width: 430px">
+        <q-card class="col-12 q-pa-lg" style="max-width: 620px">
             <template v-if="isAuthenticated && session.user?.signupComplete === false">
                 <CompleteSignupForm :suggested-username="session.user.username" @completed="onSignupCompleted" />
                 <q-banner v-if="error" class="bg-negative text-white q-mt-md" dense>{{ error }}</q-banner>
@@ -91,37 +68,7 @@ async function signOut() {
 
                 <q-separator class="q-my-md" />
 
-                <div v-if="entitlements" class="q-mb-md">
-                    <div class="row items-center justify-between">
-                        <span class="text-subtitle2">Tarif</span>
-                        <q-chip :color="isPro ? 'primary' : 'grey-6'" text-color="white" dense square>
-                            {{ isPro ? "Pro" : "Free" }}
-                        </q-chip>
-                    </div>
-                    <div class="text-caption text-grey">{{ planCaption() }}</div>
-                    <div v-if="entitlements.cancelAtPeriodEnd" class="text-caption text-warning">
-                        Wird zum Ende der Laufzeit gekündigt.
-                    </div>
-                </div>
-
-                <div class="q-gutter-sm q-mb-md">
-                    <q-btn
-                        v-if="entitlements?.billingConfigured && !isPro"
-                        color="primary"
-                        label="Upgrade auf Pro"
-                        :loading="billingBusy"
-                        unelevated
-                        @click="openBilling('checkout')"
-                    />
-                    <q-btn
-                        v-if="entitlements?.billingConfigured && isPro"
-                        color="primary"
-                        label="Abo verwalten"
-                        :loading="billingBusy"
-                        outline
-                        @click="openBilling('portal')"
-                    />
-                </div>
+                <PlanPanel class="q-mb-lg" />
 
                 <q-btn color="primary" label="Abmelden" flat @click="signOut" />
             </template>

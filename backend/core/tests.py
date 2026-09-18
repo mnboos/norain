@@ -56,7 +56,6 @@ from core.models import (
     route_line,
     route_point,
 )
-from core.plotting import generate_forecast_figures
 from core.schedule import LOCAL_TZ, local_today, next_departure, upcoming_departures
 from core.tasks import (
     _assemble_forecast_job_async,
@@ -565,103 +564,6 @@ class ForecastDaysTests(SimpleTestCase):
         self.assertEqual(_forecast_days(datetime(2026, 6, 10, 0, 0, tzinfo=LOCAL_TZ), today), 1)
 
 
-class PlottingTests(SimpleTestCase):
-    """Tests for figure generation with empty/invalid input."""
-
-    @staticmethod
-    def _make_forecast(samples: list[WeatherSample] | None = None) -> RouteWeatherOut:
-        return RouteWeatherOut(
-            line=[[9.5, 47.5], [9.6, 47.6]],
-            total_seconds=600,
-            total_distance_m=5000.0,
-            samples=samples or [],
-            summary=RouteWeatherSummary(
-                will_rain=False,
-                first_rain_eta=None,
-                first_rain_place=None,
-                max_rain_mm=0.0,
-                rain_probability=None,
-                rain_amount=0.0,
-                max_headwind=0.0,
-                source="open-meteo",
-            ),
-        )
-
-    def test_empty_samples_returns_placeholder_figures(self):
-        forecast = self._make_forecast([])
-        figures = generate_forecast_figures(forecast)
-
-        self.assertEqual(len(figures), 3)
-        for fig in figures:
-            self.assertIn("data", fig)
-            self.assertIn("layout", fig)
-
-    def test_placeholder_figures_contain_message(self):
-        forecast = self._make_forecast([])
-        figures = generate_forecast_figures(forecast)
-
-        # All 3 figures are Cartesian placeholders with the no-data message.
-        for fig in figures:
-            annotation_texts = [a.get("text", "") for a in fig["layout"].get("annotations", [])]
-            self.assertTrue(
-                any("Keine Wetterdaten" in t for t in annotation_texts),
-                f"Expected 'Keine Wetterdaten' in annotations, got {annotation_texts}",
-            )
-
-    def test_figures_only_use_cartesian_traces(self):
-        """Figures must stick to scatter/bar - the frontend registers only those."""
-        samples = [
-            WeatherSample(
-                lat=47.5,
-                lon=9.5,
-                elapsed_s=0,
-                eta="2026-06-20T14:00",
-                rain_mm=0.0,
-                temp=18.0,
-                wind_speed=10.0,
-                wind_dir=270.0,
-                headwind=5.0,
-                crosswind=2.0,
-                weather_desc="klar",
-            ),
-            WeatherSample(
-                lat=47.55,
-                lon=9.55,
-                elapsed_s=300,
-                eta="2026-06-20T14:05",
-                rain_mm=2.5,
-                temp=17.0,
-                wind_speed=12.0,
-                wind_dir=180.0,
-                headwind=10.0,
-                crosswind=0.0,
-                weather_desc="Regen",
-            ),
-            WeatherSample(
-                lat=47.6,
-                lon=9.6,
-                elapsed_s=600,
-                eta="2026-06-20T14:10",
-                rain_mm=0.3,
-                temp=19.0,
-                wind_speed=8.0,
-                wind_dir=90.0,
-                headwind=0.0,
-                crosswind=5.0,
-                weather_desc="bewölkt",
-            ),
-        ]
-        forecast = self._make_forecast(samples)
-        figures = generate_forecast_figures(forecast)
-
-        self.assertEqual(len(figures), 3)
-        trace_types = {t.get("type", "scatter") for fig in figures for t in fig["data"]}
-        self.assertTrue(
-            trace_types <= {"scatter", "bar"},
-            f"Unexpected trace types for the trimmed plotly.js bundle: {trace_types}",
-        )
-
-
 class CellCacheTests(TestCase):
     """Tests for forecast_days-aware cell cache freshness."""
 
@@ -1163,7 +1065,7 @@ class EntitlementTests(TestCase):
         self.add_route("archived", active=False)
         self.assertEqual(self.post_route("second").status_code, 200)
 
-    def test_pro_tier_is_not_capped(self):
+    def test_pro_allows_more_than_two_routes(self):
         self.make_pro()
         for i in range(4):
             self.assertEqual(self.post_route(f"route-{i}").status_code, 200)
@@ -1219,7 +1121,7 @@ class EntitlementTests(TestCase):
 
     # -- pre-warm fan-out (the actual API spend) -------------------------
 
-    def test_prewarm_keeps_the_oldest_routes_of_a_downgraded_account(self):
+    def test_prewarm_stops_for_a_downgraded_account(self):
         oldest = self.add_route("oldest")
         middle = self.add_route("middle")
         newest = self.add_route("newest")
@@ -1228,17 +1130,17 @@ class EntitlementTests(TestCase):
             RecurringRoute.objects.filter(id=route.id).update(created_at=datetime(2026, 1, day, tzinfo=UTC))
 
         selected = async_to_sync(_prewarm_routes)()
-        self.assertEqual([r.name for r in selected], ["oldest", "middle"])
+        self.assertEqual(selected, [])
 
     def test_prewarm_skips_ownerless_routes(self):
         self.add_route("orphan", owner=None)
         self.assertEqual(async_to_sync(_prewarm_routes)(), [])
 
-    def test_prewarm_covers_every_route_for_pro(self):
+    def test_prewarm_requires_briefing_opt_in_for_pro(self):
         self.make_pro()
         for i in range(4):
             self.add_route(f"route-{i}")
-        self.assertEqual(len(async_to_sync(_prewarm_routes)()), 4)
+        self.assertEqual(async_to_sync(_prewarm_routes)(), [])
 
     def test_sign_in_refresh_scans_only_that_accounts_routes_within_quota(self):
         points = [{"lat": 47.5, "lon": 9.3, "lat_r": 47.5, "lon_r": 9.3, "elapsed_s": 0, "idx": 0}]
@@ -1254,9 +1156,9 @@ class EntitlementTests(TestCase):
         with patch("core.tasks.scan_route_forecasts", SimpleNamespace(aenqueue=enqueue)):
             result = async_to_sync(_refresh_user_forecasts_async)(self.user.id)
 
-        # Free: the two oldest, exactly as the hourly pass would pick them.
-        self.assertEqual(result, {"routes": 2, "prebuilds": 0})
-        self.assertEqual([c.args[0] for c in enqueue.await_args_list], [str(mine[0].id), str(mine[1].id)])
+        # Free forecasts are demand-driven. Sign-in does not spend provider calls.
+        self.assertEqual(result, {"routes": 0, "prebuilds": 0})
+        enqueue.assert_not_awaited()
 
 
 @override_settings(STRIPE_WEBHOOK_SECRET="whsec_test", STRIPE_SECRET_KEY="sk_test", STRIPE_PRICE_ID_PRO="price_test")
@@ -1460,7 +1362,7 @@ class BillingEndpointTests(TestCase):
         )
         self.assertEqual(response.status_code, 503)
 
-    @override_settings(STRIPE_SECRET_KEY="sk_test", STRIPE_PRICE_ID_PRO="price_test")
+    @override_settings(BILLING_ENABLED=True, STRIPE_SECRET_KEY="sk_test", STRIPE_PRICE_ID_PRO="price_test")
     def test_a_checkout_session_with_no_url_is_reported_as_such(self):
         """Only a hosted, still-active session carries a URL, so it can come back empty.
 
@@ -1553,7 +1455,6 @@ def _finished_payload() -> dict:
             "source": "open-meteo",
         },
         "departure_time": "2026-09-14T08:00",
-        "figures": [],
         "sections": [],
         "entitlements": FREE.result_marker(),
     }
@@ -2005,15 +1906,14 @@ class ForecastJobTests(TestCase):
         self.assertEqual(job.status, ForecastJob.Status.ASSEMBLING)
         self.assertEqual(DBTaskResult.objects.filter(task_path="core.tasks.assemble_forecast_job").count(), 1)
 
-        with patch("core.tasks.compute_route_weather", AsyncMock(side_effect=AssertionError("recomputed"))), patch(
-            "core.tasks.generate_forecast_figures", return_value=[]
-        ) as figures:
+        with patch("core.tasks.compute_route_weather", AsyncMock(side_effect=AssertionError("recomputed"))):
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
-        figures.assert_called_once()
         job.refresh_from_db()
         self.assertEqual(job.status, ForecastJob.Status.DONE)
         self.assertIsNone(job.computed_weather)
+        # The frontend draws the charts from the samples; the result carries no figures.
+        self.assertNotIn("figures", job.result)
 
     def test_stale_computation_cannot_overwrite_or_fail_the_next_stage(self):
         from django_tasks_db.models import DBTaskResult
@@ -2065,7 +1965,7 @@ class ForecastJobTests(TestCase):
         job, forecast = self._compute_fixture()
         with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)):
             async_to_sync(_compute_route_weather_job_async)(str(job.id))
-        with patch("core.tasks.generate_forecast_figures", side_effect=RuntimeError("chart failed")), patch(
+        with patch("core.tasks.compute_sections", side_effect=RuntimeError("sections failed")), patch(
             "core.tasks.publish", AsyncMock()
         ) as publish, self.assertRaises(RuntimeError):
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
@@ -2107,8 +2007,8 @@ class ForecastJobTests(TestCase):
     def test_missing_and_terminal_jobs_skip_both_stages(self):
         job = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
         with patch("core.tasks.compute_route_weather", AsyncMock()) as compute, patch(
-            "core.tasks.generate_forecast_figures"
-        ) as figures:
+            "core.tasks.compute_sections"
+        ) as sections:
             for status in (ForecastJob.Status.DONE, ForecastJob.Status.FAILED):
                 ForecastJob.objects.filter(id=job.id).update(status=status)
                 async_to_sync(_compute_route_weather_job_async)(str(job.id))
@@ -2118,7 +2018,7 @@ class ForecastJobTests(TestCase):
             async_to_sync(_compute_route_weather_job_async)(job_id)
             async_to_sync(_assemble_forecast_job_async)(job_id)
         compute.assert_not_awaited()
-        figures.assert_not_called()
+        sections.assert_not_called()
 
     # -- entitlements --------------------------------------------------------------
 
@@ -2143,9 +2043,7 @@ class ForecastJobTests(TestCase):
                 will_rain=False, max_rain_mm=0.0, rain_amount=0.0, max_headwind=0.0, source="open-meteo"
             ),
         )
-        with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)), patch(
-            "core.tasks.generate_forecast_figures", return_value=[]
-        ):
+        with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)):
             async_to_sync(_compute_route_weather_job_async)(str(job.id))
             job.refresh_from_db()
             self.assertIsNone(job.computed_weather["forecast"]["samples"][0]["uncertainty"])
@@ -2195,10 +2093,12 @@ class ForecastJobTests(TestCase):
 
     def test_prebuilt_job_is_the_one_the_route_page_opens(self):
         """The page sends nextDeparture split at "T"; the endpoint must hash the same params."""
+        Subscription.objects.create(user=self.user, plan=Plan.PRO)
+        RecurringRoute.objects.filter(pk=self.route.pk).update(briefing_channel="email")
         result = self._prebuild()
         self.assertTrue(result["built"])
         ForecastJob.objects.filter(id=result["job_id"]).update(
-            status=ForecastJob.Status.DONE, result=_finished_payload()
+            status=ForecastJob.Status.DONE, result={**_finished_payload(), "entitlements": PRO.result_marker()}
         )
 
         next_departure_iso = _route_to_out(self.route).next_departure
@@ -2265,13 +2165,18 @@ class ForecastJobTests(TestCase):
         with patch.dict(os.environ, {"WEATHERUNDERGROUND_API_KEY": "test-key"}), patch(
             "core.tasks.next_departure", return_value=soon
         ):
-            self.assertTrue(self._prebuild()["built"])
+            self.assertFalse(self._prebuild()["built"])
+            RecurringRoute.objects.filter(pk=self.route.pk).update(briefing_channel="email")
             ForecastJob.objects.all().delete()
             Subscription.objects.update_or_create(user=self.user, defaults={"plan": Plan.PRO, "status": "active"})
             self.assertFalse(self._prebuild()["built"])
         self.assertEqual(ForecastJob.objects.count(), 0)
 
     def test_sign_in_prebuilds_only_recently_opened_routes(self):
+        Subscription.objects.create(user=self.user, plan=Plan.PRO)
+        self.route.briefing_channel = "email"
+        self.route.schedule_cron = "0 * * * *"
+        self.route.save()
         stale = RecurringRoute.objects.create(
             owner=self.user, name="Old", start_point=route_point(47.0, 9.0), start_name="Start",
             destination_point=route_point(47.01, 9.01), dest_name="Destination",
@@ -2326,6 +2231,7 @@ def _long_payload(vertices: int = 2000, every: int = 150) -> dict:
         **_finished_payload(),
         "line": line,
         "samples": samples,
+        # Results stored before the frontend drew the charts itself still carry figures.
         "figures": [{"data": [], "layout": {}}],
         "wind_segments": _wind_segments(10_000),
     }
@@ -2461,12 +2367,6 @@ class ForecastViewTests(TestCase):
         self.assertNotIn("figures", result)
         self.assertLess(len(result["line"]), 2000)
 
-    def test_figures_endpoint(self):
-        job = self._job()
-        response = self.client.get(f"/api/forecast_jobs/{job.id}/figures")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [{"data": [], "layout": {}}])
-
     def test_line_detail_levels(self):
         job = self._job()
         coarse = len(forecast_view(job)["line"])
@@ -2526,6 +2426,7 @@ class ForecastViewTests(TestCase):
         self.assertIsNone(arrows[0]["wind_power_w"])
 
     def test_sample_uncertainty_endpoint(self):
+        Subscription.objects.create(user=self.user, plan=Plan.PRO)
         job = self._job()
         response = self.client.get(f"/api/forecast_jobs/{job.id}/samples/1/uncertainty")
         self.assertEqual(response.status_code, 200)
@@ -2549,11 +2450,10 @@ class ForecastViewTests(TestCase):
         self.assertTrue(body["result"]["version"])
         self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "medium"}).status_code, 200)
         self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/samples/0/uncertainty").status_code, 200)
-        self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/figures").status_code, 200)
 
     def test_parts_are_404_before_the_job_is_done_and_for_other_accounts(self):
         pending = self._job(result={}, key="pending", status=ForecastJob.Status.FETCHING)
-        for path in ("figures", "map_detail?detail=full", "samples/0/uncertainty"):
+        for path in ("map_detail?detail=full", "samples/0/uncertainty"):
             self.assertEqual(self.client.get(f"/api/forecast_jobs/{pending.id}/{path}").status_code, 404, path)
 
         job = self._job()
@@ -2562,7 +2462,7 @@ class ForecastViewTests(TestCase):
         )
         client = Client(enforce_csrf_checks=True)
         client.force_login(other)
-        for path in ("figures", "map_detail?detail=full", "samples/0/uncertainty"):
+        for path in ("map_detail?detail=full", "samples/0/uncertainty"):
             self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}/{path}").status_code, 404, path)
 
 

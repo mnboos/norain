@@ -76,6 +76,14 @@ export interface RecurringRouteIn {
      * 
      */
     active?: boolean;
+    /**
+     * 
+     */
+    returnScheduleCron?: string | null;
+    /**
+     * 
+     */
+    returnScheduleDescription?: string;
 }
 
 /**
@@ -118,6 +126,8 @@ export function RecurringRouteInFromJSONTyped(json: any, ignoreDiscriminator: bo
         'departureFlexBeforeMinutes': json['departureFlexBeforeMinutes'] == null ? undefined : json['departureFlexBeforeMinutes'],
         'departureFlexAfterMinutes': json['departureFlexAfterMinutes'] == null ? undefined : json['departureFlexAfterMinutes'],
         'active': json['active'] == null ? undefined : json['active'],
+        'returnScheduleCron': json['returnScheduleCron'] === undefined ? undefined : json['returnScheduleCron'] === null ? null : json['returnScheduleCron'],
+        'returnScheduleDescription': json['returnScheduleDescription'] == null ? undefined : json['returnScheduleDescription'],
     };
 }
 
@@ -146,6 +156,8 @@ export function RecurringRouteInToJSONTyped(value?: RecurringRouteIn | null, ign
         'departureFlexBeforeMinutes': value['departureFlexBeforeMinutes'],
         'departureFlexAfterMinutes': value['departureFlexAfterMinutes'],
         'active': value['active'],
+        'returnScheduleCron': value['returnScheduleCron'],
+        'returnScheduleDescription': value['returnScheduleDescription'],
     };
 }
 

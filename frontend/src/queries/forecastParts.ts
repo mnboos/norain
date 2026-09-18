@@ -1,5 +1,5 @@
 import { computed, onBeforeUnmount, ref, toValue, watch, type MaybeRefOrGetter } from "vue";
-import { keepPreviousData, useQuery, type QueryClient } from "@tanstack/vue-query";
+import { keepPreviousData, useQuery } from "@tanstack/vue-query";
 import { CoreApiRouteWeatherForecastJobMapDetailDetailEnum as MapDetailParam, RouteWeatherApi } from "@norain/api/apis";
 import type { ForecastUncertainty } from "@norain/api/models";
 
@@ -18,7 +18,6 @@ export type LineDetail = "coarse" | "medium" | "full";
 export const forecastPartKeys = {
     all: ["forecastParts"] as const,
     job: (jobId: string, version: string) => [...forecastPartKeys.all, jobId, version] as const,
-    figures: (jobId: string, version: string) => [...forecastPartKeys.job(jobId, version), "figures"] as const,
     mapDetail: (jobId: string, version: string, detail: LineDetail) =>
         [...forecastPartKeys.job(jobId, version), "mapDetail", detail] as const,
     sampleUncertainty: (jobId: string, version: string, index: number) =>
@@ -33,26 +32,6 @@ const MAP_DETAIL_PARAM: Record<Exclude<LineDetail, "coarse">, MapDetailParam> = 
 
 /** A finished job's result never changes under one version, so a part never goes stale. */
 const PART_STALE_TIME = Infinity;
-
-export function useForecastFigures(jobId: MaybeRefOrGetter<string>, version: MaybeRefOrGetter<string>) {
-    return useQuery({
-        queryKey: computed(() => forecastPartKeys.figures(toValue(jobId), toValue(version))),
-        queryFn: () => api.coreApiRouteWeatherForecastJobFigures({ jobId: toValue(jobId) }),
-        staleTime: PART_STALE_TIME,
-    });
-}
-
-/** Load a finished job's figures before its charts are drawn. Failures are left for the page to retry. */
-export async function prefetchForecastFigures(client: QueryClient, jobId: string, version: string): Promise<void> {
-    await client
-        .query({
-            queryKey: forecastPartKeys.figures(jobId, version),
-            queryFn: () => api.coreApiRouteWeatherForecastJobFigures({ jobId }),
-            staleTime: PART_STALE_TIME,
-            gcTime: 30 * 60 * 1000,
-        })
-        .catch(() => undefined);
-}
 
 /** The route line and wind arrows at one detail level finer than the job result's. */
 export function useForecastMapDetail(

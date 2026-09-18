@@ -158,45 +158,6 @@
                 ]
             }
         },
-        "/api/forecast_jobs/{job_id}/figures": {
-            "get": {
-                "operationId": "core_api_route_weather_forecast_job_figures",
-                "summary": "Forecast Job Figures",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "job_id",
-                        "schema": {
-                            "format": "uuid",
-                            "title": "Job Id",
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "items": {
-                                        "additionalProperties": true,
-                                        "type": "object"
-                                    },
-                                    "title": "Response",
-                                    "type": "array"
-                                }
-                            }
-                        }
-                    }
-                },
-                "description": "The Plotly chart figures of a finished job, for the pages that draw charts.",
-                "tags": [
-                    "Route weather"
-                ]
-            }
-        },
         "/api/forecast_jobs/{job_id}/map_detail": {
             "get": {
                 "operationId": "core_api_route_weather_forecast_job_map_detail",
@@ -541,7 +502,7 @@
                         }
                     }
                 },
-                "description": "Start (or join) the forecast for one departure of a saved route.\n\nReturns 200 with the finished payload -- weather, Plotly figures and sections -- when\nan identical forecast is already computed and still fresh, otherwise 202 and a job to\nwatch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither\nis allowed on this path.",
+                "description": "Start (or join) the forecast for one departure of a saved route.\n\nReturns 200 with the finished payload -- weather and sections -- when an identical\nforecast is already computed and still fresh, otherwise 202 and a job to watch over\n`wsUrl`. Cell fetching and assembly both happen on workers; neither is allowed on this\npath.",
                 "tags": [
                     "Recurring routes"
                 ]
@@ -1122,7 +1083,7 @@
                 "type": "object"
             },
             "RouteForecastOut": {
-                "description": "A finished forecast as the job endpoint and the WebSocket serve it.\n\nSlimmer than what the job stores (see ``core.jobs.forecast_view``): ``line`` is the\ncoarse route line, ``wind_arrows`` are about 2 km apart and the samples carry no\nper-model breakdown. The chart figures, finer map detail and one sample's breakdown\neach come from their own endpoint, keyed by ``job_id``; ``version`` changes whenever\nthe job is recomputed under the same id.",
+                "description": "A finished forecast as the job endpoint and the WebSocket serve it.\n\nSlimmer than what the job stores (see ``core.jobs.forecast_view``): ``line`` is the\ncoarse route line, ``wind_arrows`` are about 2 km apart and the samples carry no\nper-model breakdown. Finer map detail and one sample's breakdown each come from their\nown endpoint, keyed by ``job_id``; ``version`` changes whenever the job is recomputed\nunder the same id. The frontend draws the charts from ``samples``.",
                 "properties": {
                     "job_id": {
                         "format": "uuid",
@@ -1879,6 +1840,57 @@
                                 "type": "null"
                             }
                         ]
+                    },
+                    "return_route_id": {
+                        "anyOf": [
+                            {
+                                "format": "uuid",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Return Route Id"
+                    },
+                    "parent_route_id": {
+                        "anyOf": [
+                            {
+                                "format": "uuid",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Parent Route Id"
+                    },
+                    "return_schedule_cron": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Return Schedule Cron"
+                    },
+                    "return_schedule_description": {
+                        "default": "",
+                        "title": "Return Schedule Description",
+                        "type": "string"
+                    },
+                    "return_next_departure": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Return Next Departure"
                     }
                 },
                 "required": [
@@ -2095,6 +2107,22 @@
                         "default": true,
                         "title": "Active",
                         "type": "boolean"
+                    },
+                    "returnScheduleCron": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Returnschedulecron"
+                    },
+                    "returnScheduleDescription": {
+                        "default": "",
+                        "title": "Returnscheduledescription",
+                        "type": "string"
                     }
                 },
                 "required": [

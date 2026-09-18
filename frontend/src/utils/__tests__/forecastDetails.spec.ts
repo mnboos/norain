@@ -24,7 +24,16 @@ const wireSample = {
         fetched_at: "2026-09-10T09:00:00Z",
     },
 };
-function forecast(pop: number | null, { rainAmount = 0, rainRate = 0 } = {}) {
+interface ForecastOptions {
+    rainAmount?: number;
+    rainRate?: number;
+    windLevel?: string | null;
+    frostLevel?: string | null;
+}
+function forecast(
+    pop: number | null,
+    { rainAmount = 0, rainRate = 0, windLevel = null, frostLevel = null }: ForecastOptions = {},
+) {
     return RouteForecastOutFromJSON({
         job_id: "00000000-0000-0000-0000-000000000001",
         version: "2026-09-10T09:00:00+00:00",
@@ -40,6 +49,8 @@ function forecast(pop: number | null, { rainAmount = 0, rainRate = 0 } = {}) {
             max_rain_mm: 0,
             rain_amount: rainAmount,
             max_headwind: 10,
+            max_wind_effort_level: windLevel,
+            max_frost_level: frostLevel,
             source: "open-meteo",
         },
     });
@@ -65,6 +76,30 @@ describe("forecast uncertainty presentation", () => {
         const f = forecast(0.1, { rainRate: 0.5 });
         expect(forecastHeadline(f.summary, f.samples)).toContain("Regen möglich");
         expect(peakRain(f)).toBe("0.5");
+    });
+    it("names the wind when the ride is dry", () => {
+        const headline = (windLevel: string | null, pop: number | null = 0) => {
+            const f = forecast(pop, { windLevel });
+            return forecastHeadline(f.summary, f.samples);
+        };
+        expect(headline("mittel")).toBe("Trocken, etwas Gegenwind");
+        expect(headline("hoch")).toBe("Trocken, starker Gegenwind");
+        expect(headline("sehr hoch")).toBe("Trocken, sehr starker Gegenwind");
+        expect(headline("Wind hilft")).toBe("Trocken mit Rückenwind");
+        expect(headline("niedrig")).toBe("Voraussichtlich trocken");
+        expect(headline("keiner")).toBe("Voraussichtlich trocken");
+        // No ensemble: the dry verdict still names the wind.
+        expect(headline("hoch", null)).toBe("Trocken, starker Gegenwind");
+    });
+    it("puts frost before wind on a dry ride", () => {
+        const f = forecast(0, { windLevel: "hoch", frostLevel: "mässig" });
+        expect(forecastHeadline(f.summary, f.samples)).toBe("Trocken, aber Glättegefahr");
+        const light = forecast(0, { windLevel: "hoch", frostLevel: "leicht" });
+        expect(forecastHeadline(light.summary, light.samples)).toBe("Trocken, leichte Glättegefahr");
+    });
+    it("keeps the rain headline when rain is possible, whatever the wind", () => {
+        const f = forecast(0.25, { windLevel: "sehr hoch", frostLevel: "stark" });
+        expect(forecastHeadline(f.summary, f.samples)).toBe("Regen möglich ab ca. 12:00 Uhr");
     });
     it("shows the wet members' amount when rain is expected", () => {
         expect(peakRain(forecast(0.4, { rainAmount: 1.2 }))).toBe("1.2");

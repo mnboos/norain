@@ -1,46 +1,48 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, toRefs } from "vue";
-import { useForecastFigures } from "@/queries/forecastParts";
-import type { TimedSample } from "@/utils/forecastSelection";
+import { computed, defineAsyncComponent, defineComponent, h, toRefs } from "vue";
+import { QSkeleton } from "quasar";
+import { forecastCharts, type ChartSample } from "@/utils/forecastCharts";
 
 defineEmits<{ selectSample: [index: number] }>();
 
+/** Holds a chart's place while the Plotly chunk downloads. Takes only the tile's class, not the chart props. */
+const ChartSkeleton = defineComponent({
+    inheritAttrs: false,
+    setup(_, { attrs }) {
+        return () =>
+            h(
+                "div",
+                { class: attrs.class },
+                h(QSkeleton, { square: true, height: "100%", "aria-label": "Diagramm wird geladen" }),
+            );
+    },
+});
+
 // Loaded lazily so Plotly ends up in its own chunk, fetched only once a forecast is shown.
-const NiceChart = defineAsyncComponent(() => import("@/components/chart/NiceChart.vue"));
+const NiceChart = defineAsyncComponent({
+    loader: () => import("@/components/chart/NiceChart.vue"),
+    loadingComponent: ChartSkeleton,
+    delay: 0,
+});
 
 const props = defineProps<{
-    jobId: string;
     version: string;
     selectedSample: number;
-    samples: TimedSample[];
+    samples: ChartSample[];
 }>();
 
-const { jobId, version, selectedSample, samples } = toRefs(props);
+const { version, selectedSample, samples } = toRefs(props);
 
-// The chart data is not part of the job result either: only pages that draw charts fetch it.
-const { data, isPending, isError } = useForecastFigures(jobId, version);
-
-// Opaque JSON dicts in the API client; NiceChart treats both `data` and `layout` as optional.
-const figures = computed(() => data.value ?? []);
-
-/** The backend draws temperature, precipitation and wind; hold their places while loading. */
-const PLACEHOLDER_TILES = 3;
+// Drawn from the samples the forecast already carries: the charts need no request of their own.
+const figures = computed(() => forecastCharts(samples.value));
 </script>
 
 <template>
     <q-card class="fit">
-        <q-card-section v-if="isPending" class="no-padding chart-grid">
-            <div v-for="i in PLACEHOLDER_TILES" :key="i" class="chart-tile">
-                <q-skeleton square height="100%" aria-label="Diagramm wird geladen" />
-            </div>
-        </q-card-section>
-        <q-card-section v-else-if="isError" class="no-padding">
-            <q-banner dense class="bg-tint-error rounded-borders">Diagramme konnten nicht geladen werden.</q-banner>
-        </q-card-section>
-        <q-card-section v-else-if="figures.length" class="no-padding chart-grid">
+        <q-card-section v-if="figures.length" class="no-padding chart-grid">
             <NiceChart
                 v-for="(fig, i) in figures"
-                :key="`${jobId}:${version}:${i}`"
+                :key="`${version}:${i}`"
                 class="chart-tile"
                 :figure="fig"
                 :selected-sample="selectedSample"
@@ -50,7 +52,7 @@ const PLACEHOLDER_TILES = 3;
                 @select-sample="$emit('selectSample', $event)"
             />
         </q-card-section>
-        <q-card-section v-if="!isPending && !isError && !figures.length" class="no-padding">
+        <q-card-section v-else class="no-padding">
             <q-banner dense>Keine Diagrammdaten verfügbar.</q-banner>
         </q-card-section>
     </q-card>

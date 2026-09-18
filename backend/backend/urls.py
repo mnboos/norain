@@ -22,7 +22,8 @@ from django.urls import include, path
 from django_otp.admin import OTPAdminSite
 
 from core.api import api
-from core.api.billing import checkout_view, entitlements_view, portal_view, webhook_view
+from core.api.billing import checkout_view, entitlements_view, free_routes_view, portal_view, trial_view, webhook_view
+from core.api.briefings import preferences_view, push_view
 from core.auth.views import complete_signup_view, session_view
 
 
@@ -45,6 +46,10 @@ urlpatterns = [
     path("api/allauth/", include("allauth.headless.urls")),
     # Billing lives outside the Ninja API: NinjaAPI(auth=session_auth) CSRF-checks every
     # route it owns, which would reject Stripe's webhook POST with 403.
+    path("api/briefings/preferences", preferences_view),
+    path("api/briefings/push", push_view),
+    path("api/billing/trial", trial_view),
+    path("api/billing/free-routes", free_routes_view),
     path("api/billing/entitlements", entitlements_view),
     path("api/billing/checkout", checkout_view),
     path("api/billing/portal", portal_view),

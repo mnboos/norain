@@ -166,7 +166,13 @@ class DepartureRankingTests(SimpleTestCase):
 
 @override_settings(CACHES=fixtures.LOCMEM_CACHE, CHANNEL_LAYERS=fixtures.INMEM_CHANNELS)
 class DepartureJobTests(TestCase):
-    setUp = fixtures.ForecastJobTests.setUp
+    def setUp(self):
+        fixtures.ForecastJobTests.setUp(self)
+        from .models import Plan, Subscription
+        Subscription.objects.create(user=self.user, plan=Plan.PRO)
+        self.route.briefing_channel = "email"
+        self.route.save()
+
     _job_params = fixtures.ForecastJobTests._job_params
     _make_job = fixtures.ForecastJobTests._make_job
 
@@ -232,10 +238,12 @@ class DepartureJobTests(TestCase):
         ensemble.reset_mock()
         with (
             patch("core.tasks.upcoming_departures", return_value=[dep]),
+            patch("core.tasks.datetime") as clock,
             patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast)),
             patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble)),
             patch("core.tasks.refresh_route_thumbnail") as thumbnail,
         ):
+            clock.now.return_value = dep - timedelta(hours=1)
             thumbnail.using.return_value.aenqueue = AsyncMock()
             async_to_sync(_scan_route_forecasts_async)(str(self.route.id))
         self.assertEqual(forecast.await_count, 4)

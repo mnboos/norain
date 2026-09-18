@@ -1,6 +1,92 @@
 {
     "components": {
         "schemas": {
+            "DepartureCandidate": {
+                "properties": {
+                    "arrival_time": {
+                        "title": "Arrival Time",
+                        "type": "string"
+                    },
+                    "available": {
+                        "title": "Available",
+                        "type": "boolean"
+                    },
+                    "departure_time": {
+                        "title": "Departure Time",
+                        "type": "string"
+                    },
+                    "ride_label": {
+                        "title": "Ride Label",
+                        "type": "string"
+                    },
+                    "ride_score": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Score"
+                    }
+                },
+                "required": [
+                    "departure_time",
+                    "arrival_time",
+                    "available",
+                    "ride_label"
+                ],
+                "title": "DepartureCandidate",
+                "type": "object"
+            },
+            "DepartureComparison": {
+                "properties": {
+                    "candidates": {
+                        "items": {
+                            "$ref": "#/components/schemas/DepartureCandidate"
+                        },
+                        "title": "Candidates",
+                        "type": "array"
+                    },
+                    "explanation": {
+                        "title": "Explanation",
+                        "type": "string"
+                    },
+                    "recommended_time": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Recommended Time"
+                    },
+                    "requested_time": {
+                        "title": "Requested Time",
+                        "type": "string"
+                    },
+                    "window_end": {
+                        "title": "Window End",
+                        "type": "string"
+                    },
+                    "window_start": {
+                        "title": "Window Start",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "requested_time",
+                    "window_start",
+                    "window_end",
+                    "candidates",
+                    "explanation"
+                ],
+                "title": "DepartureComparison",
+                "type": "object"
+            },
             "EnsembleModelStatistics": {
                 "properties": {
                     "metrics": {
@@ -668,6 +754,22 @@
                         "title": "Active",
                         "type": "boolean"
                     },
+                    "departureFlexAfterMinutes": {
+                        "default": 0,
+                        "maximum": 120,
+                        "minimum": 0,
+                        "multipleOf": 15,
+                        "title": "Departureflexafterminutes",
+                        "type": "integer"
+                    },
+                    "departureFlexBeforeMinutes": {
+                        "default": 0,
+                        "maximum": 120,
+                        "minimum": 0,
+                        "multipleOf": 15,
+                        "title": "Departureflexbeforeminutes",
+                        "type": "integer"
+                    },
                     "description": {
                         "default": "",
                         "title": "Description",
@@ -696,6 +798,22 @@
                     "profile": {
                         "default": "bike",
                         "title": "Profile",
+                        "type": "string"
+                    },
+                    "returnScheduleCron": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Returnschedulecron"
+                    },
+                    "returnScheduleDescription": {
+                        "default": "",
+                        "title": "Returnscheduledescription",
                         "type": "string"
                     },
                     "scheduleCron": {
@@ -755,6 +873,16 @@
                         ],
                         "title": "Created At"
                     },
+                    "departure_flex_after_minutes": {
+                        "default": 0,
+                        "title": "Departure Flex After Minutes",
+                        "type": "integer"
+                    },
+                    "departure_flex_before_minutes": {
+                        "default": 0,
+                        "title": "Departure Flex Before Minutes",
+                        "type": "integer"
+                    },
                     "description": {
                         "title": "Description",
                         "type": "string"
@@ -801,8 +929,59 @@
                         ],
                         "title": "Next Departure"
                     },
+                    "parent_route_id": {
+                        "anyOf": [
+                            {
+                                "format": "uuid",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Parent Route Id"
+                    },
                     "profile": {
                         "title": "Profile",
+                        "type": "string"
+                    },
+                    "return_next_departure": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Return Next Departure"
+                    },
+                    "return_route_id": {
+                        "anyOf": [
+                            {
+                                "format": "uuid",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Return Route Id"
+                    },
+                    "return_schedule_cron": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Return Schedule Cron"
+                    },
+                    "return_schedule_description": {
+                        "default": "",
+                        "title": "Return Schedule Description",
                         "type": "string"
                     },
                     "schedule_cron": {
@@ -889,8 +1068,18 @@
                 "type": "object"
             },
             "RouteForecastOut": {
-                "description": "A finished forecast as the job endpoint and the WebSocket serve it.\n\nSlimmer than what the job stores (see ``core.jobs.forecast_view``): ``line`` is the\ncoarse route line, ``wind_arrows`` are about 2 km apart and the samples carry no\nper-model breakdown. The chart figures, finer map detail and one sample's breakdown\neach come from their own endpoint, keyed by ``job_id``; ``version`` changes whenever\nthe job is recomputed under the same id.",
+                "description": "A finished forecast as the job endpoint and the WebSocket serve it.\n\nSlimmer than what the job stores (see ``core.jobs.forecast_view``): ``line`` is the\ncoarse route line, ``wind_arrows`` are about 2 km apart and the samples carry no\nper-model breakdown. Finer map detail and one sample's breakdown each come from their\nown endpoint, keyed by ``job_id``; ``version`` changes whenever the job is recomputed\nunder the same id. The frontend draws the charts from ``samples``.",
                 "properties": {
+                    "departure_comparison": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/DepartureComparison"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
                     "departure_time": {
                         "title": "Departure Time",
                         "type": "string"
@@ -1513,45 +1702,6 @@
                 ]
             }
         },
-        "/api/forecast_jobs/{job_id}/figures": {
-            "get": {
-                "description": "The Plotly chart figures of a finished job, for the pages that draw charts.",
-                "operationId": "core_api_route_weather_forecast_job_figures",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "job_id",
-                        "required": true,
-                        "schema": {
-                            "format": "uuid",
-                            "title": "Job Id",
-                            "type": "string"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "items": {
-                                        "additionalProperties": true,
-                                        "type": "object"
-                                    },
-                                    "title": "Response",
-                                    "type": "array"
-                                }
-                            }
-                        },
-                        "description": "OK"
-                    }
-                },
-                "summary": "Forecast Job Figures",
-                "tags": [
-                    "Route weather"
-                ]
-            }
-        },
         "/api/forecast_jobs/{job_id}/map_detail": {
             "get": {
                 "description": "The route line and wind arrows at more detail than the job result carries.\n\nThe map asks for this only once it is zoomed in far enough to show the difference.",
@@ -1715,6 +1865,26 @@
                         "schema": {
                             "default": 300,
                             "title": "Interval Seconds",
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "departure_flex_before_minutes",
+                        "required": false,
+                        "schema": {
+                            "default": 0,
+                            "title": "Departure Flex Before Minutes",
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "departure_flex_after_minutes",
+                        "required": false,
+                        "schema": {
+                            "default": 0,
+                            "title": "Departure Flex After Minutes",
                             "type": "integer"
                         }
                     }
@@ -1908,7 +2078,7 @@
         },
         "/api/routes/{route_id}/forecast": {
             "get": {
-                "description": "Start (or join) the forecast for one departure of a saved route.\n\nReturns 200 with the finished payload -- weather, Plotly figures and sections -- when\nan identical forecast is already computed and still fresh, otherwise 202 and a job to\nwatch over `wsUrl`. Cell fetching and figure rendering both happen on workers; neither\nis allowed on this path.",
+                "description": "Start (or join) the forecast for one departure of a saved route.\n\nReturns 200 with the finished payload -- weather and sections -- when an identical\nforecast is already computed and still fresh, otherwise 202 and a job to watch over\n`wsUrl`. Cell fetching and assembly both happen on workers; neither is allowed on this\npath.",
                 "operationId": "core_api_recurring_route_route_forecast",
                 "parameters": [
                     {
@@ -1937,6 +2107,38 @@
                         "schema": {
                             "title": "Time",
                             "type": "string"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "departure_flex_before_minutes",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "integer"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Departure Flex Before Minutes"
+                        }
+                    },
+                    {
+                        "in": "query",
+                        "name": "departure_flex_after_minutes",
+                        "required": false,
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "integer"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Departure Flex After Minutes"
                         }
                     }
                 ],
