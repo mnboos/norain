@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, toRefs, watch } from "vue";
-import { symSharpCloudOff } from "@quasar/extras/material-symbols-sharp";
+import { useQuasar } from "quasar";
+import { symSharpCloudOff, symSharpMap, symSharpPedalBike } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import DepartureComparison from "@/components/DepartureComparison.vue";
-import WeatherSummaryCard from "@/components/WeatherSummaryCard.vue";
-import WeatherCharts from "@/components/WeatherCharts.vue";
+import ForecastSummaryCard from "@/components/ForecastSummaryCard.vue";
+import KeyRideDataCard from "@/components/KeyRideDataCard.vue";
+import WindDistributionBar from "@/components/WindDistributionBar.vue";
+import WeatherChart from "@/components/WeatherChart.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import { useRecurringRoute, useRecurringRouteForecast, useUpdateRecurringRoute } from "@/queries/recurringRoutes";
 
@@ -23,6 +26,7 @@ const props = defineProps<{
 }>();
 
 const { route, departureDate, departureTime } = toRefs(props);
+const $q = useQuasar();
 const { isPro } = useEntitlements();
 
 const routeId = computed(() => route.value.id);
@@ -54,8 +58,8 @@ const comparisonQuery = useRecurringRouteForecast(
     departureDate,
     departureTime,
     () => hasGeometry.value && !!departureDate.value && !!departureTime.value,
-    () => isPro.value ? flexBefore.value : 0,
-    () => isPro.value ? flexAfter.value : 0,
+    () => (isPro.value ? flexBefore.value : 0),
+    () => (isPro.value ? flexAfter.value : 0),
 );
 const selectedQuery = useRecurringRouteForecast(
     routeId,
@@ -108,86 +112,139 @@ watch(forecast, () => {
 </script>
 
 <template>
-    <q-card flat class="col column transparent">
-        <q-card-section class="no-padding">
-            <q-item>
-                <q-item-section side>
-                    <slot name="back" />
-                </q-item-section>
-                <q-item-section>
-                    <q-item-label>
-                        <h1 class="text-subtitle1 text-weight-medium q-ma-none">{{ route.name }}</h1>
-                    </q-item-label>
-                    <q-item-label caption>
-                        {{ route.startName }} → {{ route.destName }} · {{ route.scheduleDescription }}
-                    </q-item-label>
-                    <q-item-label v-if="route.description" caption>{{ route.description }}</q-item-label>
-                </q-item-section>
-                <q-item-section side>
-                    <q-badge outline color="primary" :label="profileLabel" />
-                </q-item-section>
-            </q-item>
-        </q-card-section>
-        <q-card-section>
-            <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter">
-                <q-btn
-                    v-if="windowChanged"
-                    flat
-                    no-caps
-                    label="Für diese Route speichern"
-                    :loading="saveWindow.isPending.value"
-                    @click="saveFlexibility"
-                />
-                <div v-if="saveWindow.isError.value" role="alert">Zeitfenster konnte nicht gespeichert werden.</div>
-            </DepartureFlexibility>
-            <DepartureComparison
-                v-if="departureComparison"
-                :comparison="departureComparison"
-                :selected-time="selectedDeparture"
-                @select="selectedDeparture = $event"
-                @reset="selectedDeparture = null"
-            />
-        </q-card-section>
-        <q-separator />
+    <!-- Two parts share the height: the cards take what they need, the map fills the rest. -->
+    <div class="relative-position column">
+        <div class="row q-col-gutter-md col-auto">
+            <div class="col-12 col-sm-6 col-md-2">
+                <q-card class="full-height">
+                    <q-item class="q-pt-md">
+                        <q-item-section side>
+                            <slot name="back" />
+                        </q-item-section>
+                        <!-- Left out where this card is at its narrowest, so the name keeps its room. -->
+                        <q-item-section v-if="$q.screen.width >= 1280 || $q.screen.lt.md" avatar>
+                            <q-avatar rounded class="bg-tint-wet" text-color="primary" :icon="symSharpMap" />
+                        </q-item-section>
+                        <q-item-section>
+                            <q-item-label>
+                                <h1 class="text-h6 text-weight-bold q-ma-none">{{ route.name }}</h1>
+                            </q-item-label>
+                        </q-item-section>
+                    </q-item>
+                    <q-card-section class="q-pt-none text-caption text-muted">
+                        <div>{{ route.startName }} → {{ route.destName }}</div>
+                        <div>{{ route.scheduleDescription }}</div>
+                        <div v-if="route.description">{{ route.description }}</div>
+                        <q-chip
+                            dense
+                            outline
+                            color="primary"
+                            :icon="symSharpPedalBike"
+                            :label="profileLabel"
+                            class="q-ml-none q-mt-sm"
+                        />
+                    </q-card-section>
+                    <q-separator inset />
+                    <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter">
+                        <q-btn
+                            v-if="windowChanged"
+                            flat
+                            no-caps
+                            label="Für diese Route speichern"
+                            :loading="saveWindow.isPending.value"
+                            @click="saveFlexibility"
+                        />
+                        <div v-if="saveWindow.isError.value" role="alert">
+                            Zeitfenster konnte nicht gespeichert werden.
+                        </div>
+                    </DepartureFlexibility>
+                    <q-card-section v-if="departureComparison">
+                        <DepartureComparison
+                            :comparison="departureComparison"
+                            :selected-time="selectedDeparture"
+                            @select="selectedDeparture = $event"
+                            @reset="selectedDeparture = null"
+                        />
+                    </q-card-section>
+                </q-card>
+            </div>
 
-        <q-card-section class="no-padding">
-            <q-banner v-if="!hasGeometry" class="bg-tint-warn">
-                <template #avatar>
-                    <q-spinner-dots size="1.5rem" color="accent" />
-                </template>
-                Route wird berechnet...
-            </q-banner>
-            <q-banner v-else-if="forecastError" class="bg-tint-error">
-                Wetterdaten konnten nicht geladen werden. Ist diese Route nach Ablauf von Plus pausiert?
-                <q-btn flat to="/account" label="Aktive Routen und Tarif verwalten" no-caps />
-            </q-banner>
-            <q-banner v-else-if="!route.forecastAvailable && !forecastLoading" class="bg-tint-neutral">
-                <template #avatar>
-                    <q-icon :name="symSharpCloudOff" class="text-muted" />
-                </template>
-                Noch keine Vorhersage möglich. Die Wettervorhersage ist erst näher am Abfahrtstermin verfügbar.
-            </q-banner>
-        </q-card-section>
-        <q-card-section v-if="forecast" class="no-padding">
-            <WeatherSummaryCard :forecast="forecast" class="transparent" />
-        </q-card-section>
-        <q-card-section v-if="forecast" class="no-padding col forecast-stacked">
-            <q-card class="column forecast-map">
+            <template v-if="forecast">
+                <div class="col-12 col-sm-6 col-md-3">
+                    <q-card class="full-height">
+                        <q-card-section class="q-pb-none">
+                            <div class="text-subtitle2 q-mb-xs">Wind entlang der Strecke</div>
+                            <WindDistributionBar
+                                v-if="forecast.summary.windDistribution"
+                                :distribution="forecast.summary.windDistribution"
+                            />
+                        </q-card-section>
+                        <q-card-section style="height: 260px">
+                            <WeatherChart
+                                kind="headwind"
+                                :version="forecast.version"
+                                :selected-sample="selectedSample"
+                                :samples="forecast.samples"
+                                @select-sample="selectedSample = $event"
+                            />
+                        </q-card-section>
+                    </q-card>
+                </div>
+                <div class="col-12 col-sm-6 col-md-4">
+                    <!-- The key figures sit under the forecast, in the same card. -->
+                    <q-card class="full-height column">
+                        <ForecastSummaryCard flat :forecast="forecast" class="col" />
+                        <q-separator />
+                        <KeyRideDataCard flat :forecast="forecast" :columns="$q.screen.width >= 1280 ? 4 : 2" />
+                    </q-card>
+                </div>
+                <div class="col-12 col-sm-6 col-md-3">
+                    <q-card class="full-height column">
+                        <q-card-section class="col" style="min-height: 300px">
+                            <WeatherChart
+                                kind="temperature"
+                                :version="forecast.version"
+                                :selected-sample="selectedSample"
+                                :samples="forecast.samples"
+                                @select-sample="selectedSample = $event"
+                            />
+                        </q-card-section>
+                    </q-card>
+                </div>
+            </template>
+
+            <div v-if="!hasGeometry || forecastError || (!route.forecastAvailable && !forecastLoading)" class="col-12">
+                <q-banner v-if="!hasGeometry" rounded class="bg-tint-warn">
+                    <template #avatar>
+                        <q-spinner-dots size="1.5rem" color="accent" />
+                    </template>
+                    Route wird berechnet...
+                </q-banner>
+                <q-banner v-else-if="forecastError" rounded class="bg-tint-error">
+                    Wetterdaten konnten nicht geladen werden. Ist diese Route nach Ablauf von Plus pausiert?
+                    <q-btn flat to="/account" label="Aktive Routen und Tarif verwalten" no-caps />
+                </q-banner>
+                <q-banner v-else rounded class="bg-tint-neutral">
+                    <template #avatar>
+                        <q-icon :name="symSharpCloudOff" class="text-muted" />
+                    </template>
+                    Noch keine Vorhersage möglich. Die Wettervorhersage ist erst näher am Abfahrtstermin verfügbar.
+                </q-banner>
+            </div>
+        </div>
+
+        <!-- On phones the cards stack and the map keeps a fixed height; on a wide screen it
+             fills what the cards leave, but never less than 300 px. -->
+        <div v-if="forecast" class="col column q-mt-md" :style="$q.screen.lt.md ? undefined : 'min-height: 300px'">
+            <q-card class="col column overflow-hidden">
                 <NiceMap
                     :route-weather="forecast"
                     :selected-sample="selectedSample"
+                    :height="$q.screen.lt.md ? '45vh' : undefined"
                     @select-sample="selectedSample = $event"
                 />
             </q-card>
-            <q-card flat class="transparent forecast-charts">
-                <WeatherCharts
-                    :version="forecast.version"
-                    :selected-sample="selectedSample"
-                    :samples="forecast.samples"
-                    @select-sample="selectedSample = $event"
-                />
-            </q-card>
-        </q-card-section>
+        </div>
 
         <q-inner-loading :showing="forecastLoading && hasGeometry">
             <q-circular-progress
@@ -202,19 +259,5 @@ watch(forecast, () => {
             <q-spinner-dots v-else size="3rem" color="primary" />
             <div class="text-muted q-mt-sm">Wetterdaten werden geladen…</div>
         </q-inner-loading>
-    </q-card>
+    </div>
 </template>
-
-<style scoped>
-.forecast-stacked {
-    display: grid;
-    grid-template-rows: minmax(240px, 1fr) clamp(180px, 25dvh, 260px);
-    gap: 4px;
-    grid-template-columns: minmax(0, 1fr);
-}
-.forecast-map,
-.forecast-charts {
-    min-width: 0;
-    min-height: 0;
-}
-</style>

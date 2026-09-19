@@ -9,11 +9,13 @@ to avoid circular imports between weather.py <-> grid.py).
 
 import os
 from datetime import UTC, date, datetime, timedelta
+from itertools import batched
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import httpx
 from asgiref.sync import sync_to_async
+from django.db.models import Q
 from loguru import logger
 
 from .models import EnsembleCell, ForecastCell
@@ -47,6 +49,9 @@ MINUTELY_15_MAX_DELTA = timedelta(hours=2)
 ENSEMBLE_MODELS = "icon_seamless_eps,meteoswiss_icon_ch1_ensemble,meteoswiss_icon_ch2_ensemble"
 POP_MEMBER_MM = 0.1
 ENSEMBLE_REQUEST_VERSION = 2
+CELL_LOOKUP_BATCH_SIZE = 500
+
+type CellKey = tuple[float, float, date]
 
 
 # =============================================================================
@@ -336,6 +341,55 @@ def _store_ensemble_cell_sync(
 # =============================================================================
 # Public async API
 # =============================================================================
+
+
+def _cached_cell_keys_sync(
+    cells: list[tuple[float, float]], windows: list[tuple[str | date, int]]
+) -> tuple[set[CellKey], set[CellKey]]:
+    """Read availability metadata only, with two queries per batch of exact cell keys."""
+    requirements: dict[CellKey, int] = {}
+    for day_key, days in windows:
+        day = date.fromisoformat(day_key) if isinstance(day_key, str) else day_key
+        for lat_r, lon_r in cells:
+            key = (lat_r, lon_r, day)
+            requirements[key] = max(requirements.get(key, days), days)
+
+    cutoff = datetime.now(tz=UTC) - MAX_CELL_AGE
+    forecasts: set[CellKey] = set()
+    ensembles: set[CellKey] = set()
+    for batch in batched(requirements.items(), CELL_LOOKUP_BATCH_SIZE, strict=False):
+        requested = Q(
+            *(Q(lat_r=lat, lon_r=lon, day_key=day, forecast_days__gte=days) for (lat, lon, day), days in batch),
+            _connector=Q.OR,
+        )
+        sources: dict[CellKey, str] = {}
+        for lat, lon, day, source in ForecastCell.objects.filter(
+            requested, fetched_at__gte=cutoff, source__in=("open-meteo", "openweathermap")
+        ).values_list("lat_r", "lon_r", "day_key", "source"):
+            key = (lat, lon, day)
+            if key not in sources or source == "open-meteo":
+                sources[key] = source
+        forecasts.update(sources)
+        warm_ensembles = set(
+            EnsembleCell.objects.filter(
+                requested, fetched_at__gte=cutoff, data___norain_request_version=ENSEMBLE_REQUEST_VERSION
+            ).values_list("lat_r", "lon_r", "day_key")
+        )
+        ensembles.update(warm_ensembles)
+        for key, _ in batch:
+            if source := sources.get(key):
+                emit("count", "cache.lookup", kind="forecast", outcome="hit", source=source)
+            else:
+                emit("count", "cache.lookup", kind="forecast", outcome="miss")
+            emit("count", "cache.lookup", kind="ensemble", outcome="hit" if key in warm_ensembles else "miss")
+    return forecasts, ensembles
+
+
+async def get_cached_cell_keys(
+    cells: list[tuple[float, float]], windows: list[tuple[str | date, int]]
+) -> tuple[set[CellKey], set[CellKey]]:
+    """Return fresh deterministic/ensemble keys without fetching or loading weather JSON."""
+    return await sync_to_async(_cached_cell_keys_sync)(cells, windows)
 
 
 async def get_cached_forecast_cell(

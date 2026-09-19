@@ -10,7 +10,9 @@ import { useEntitlements } from "@/composables/useEntitlements";
 import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import DepartureComparison from "@/components/DepartureComparison.vue";
-import WeatherSummaryCard from "@/components/WeatherSummaryCard.vue";
+import ForecastSummaryCard from "@/components/ForecastSummaryCard.vue";
+import KeyRideDataCard from "@/components/KeyRideDataCard.vue";
+import WindDistributionBar from "@/components/WindDistributionBar.vue";
 import ForecastDetails from "@/components/ForecastDetails.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
@@ -278,7 +280,12 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         </q-banner>
 
                         <template v-else-if="routeWeather">
-                            <WeatherSummaryCard :forecast="routeWeather" />
+                            <ForecastSummaryCard flat :forecast="routeWeather" />
+                            <KeyRideDataCard flat :forecast="routeWeather" :columns="2" />
+                            <template v-if="routeWeather.summary.windDistribution">
+                                <div class="text-subtitle2">Wind entlang der Strecke</div>
+                                <WindDistributionBar :distribution="routeWeather.summary.windDistribution" />
+                            </template>
                             <ForecastDetails v-model:selected-sample="selectedSample" :forecast="routeWeather" />
                         </template>
 

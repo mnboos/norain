@@ -36,7 +36,7 @@ export function forecastHeadline(summary: RouteWeatherSummary, samples: Forecast
     const p = summary.rainProbability;
     if (p == null) return summary.willRain ? "Regen erwartet" : dryHeadline(summary);
     // `willRain` is the backend's ensemble verdict (POP_VERDICT). A few wet members below it
-    // are shown as the risk percentage, not as a headline next to a dry "Regen max.". The
+    // are shown as the risk percentage, not as a headline next to a dry "Regen" figure. The
     // main run raining still counts, or the headline would say dry beside a non-zero rate.
     if (!summary.willRain && !(mainRunPeakRate(samples) ?? 0)) return dryHeadline(summary);
     const time = summary.firstRainEta ? ` ab ca. ${swissTime(summary.firstRainEta)} Uhr` : "";
@@ -44,7 +44,7 @@ export function forecastHeadline(summary: RouteWeatherSummary, samples: Forecast
 }
 
 /**
- * The "Regen max." figure, from the same forecast as the headline: when the ensemble expects
+ * The "Regen" figure in the key ride data, from the same forecast as the headline: when the ensemble expects
  * rain, the amount its wet members predict (`rainAmount`, mm/h at the peak-risk point) —
  * the main run is a single scenario and is often dry exactly where the members are not.
  */

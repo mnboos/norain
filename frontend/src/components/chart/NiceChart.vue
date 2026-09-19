@@ -58,7 +58,6 @@ function selectPoint(event: PlotMouseEvent) {
 
 const props = defineProps<{
     figure: { data?: Data[]; layout?: Partial<Layout> };
-    directionalWind?: boolean;
     temperature?: boolean;
     selectedSample?: number;
     samples?: TimedSample[];
@@ -69,11 +68,17 @@ const { figure } = toRefs(props);
 const chart = useTemplateRef<Plotly.PlotlyHTMLElement | null>("chartRef");
 let resizeObserver: ResizeObserver | null = null;
 
-// The parent decides the chart's size. Below this the full layout's margins (148 px tall, 88 px
+// The parent decides the chart's size. Below this the full layout's margins (96 px tall, 88 px
 // wide) leave hardly any plot, so the chart switches to compactLayout.
 const COMPACT_WIDTH = 260;
-const COMPACT_HEIGHT = 280;
+const COMPACT_HEIGHT = 220;
 const compact = ref(false);
+// Below this width the legend no longer fits beside the title and moves under it.
+const NARROW_WIDTH = 520;
+const narrow = ref(false);
+function isNarrow(el: HTMLElement): boolean {
+    return el.getBoundingClientRect().width < NARROW_WIDTH;
+}
 function needsCompact(el: HTMLElement): boolean {
     const { width, height } = el.getBoundingClientRect();
     return width < COMPACT_WIDTH || height < COMPACT_HEIGHT;
@@ -147,11 +152,19 @@ function buildLayout(): Partial<Layout> {
     // from utils/forecastCharts.ts) follows the app's light/dark state.
     const dark = $q.dark.isActive;
     const ink = dark ? "#e8eef2" : "#1b2733";
-    // Decluttered: no gridlines or axis lines - the tick labels carry the scale. Only the zero
-    // line stays, as a faint baseline, since it matters for head- vs. tailwind. Charts that cannot
-    // cross zero switch it off, where it would just redraw the plot's bottom border.
+    // Faint gridlines, no axis lines. The zero line is a little stronger, since it matters for
+    // head- vs. tailwind. Charts that cannot cross zero switch it off, where it would just redraw
+    // the plot's bottom border.
     const baseline = dark ? "rgba(232, 238, 242, 0.25)" : "rgba(27, 39, 51, 0.2)";
-    const axisTheme = { color: ink, showgrid: false, showline: false, zerolinecolor: baseline, zerolinewidth: 1 };
+    const grid = dark ? "rgba(232, 238, 242, 0.08)" : "rgba(27, 39, 51, 0.08)";
+    const axisTheme = {
+        color: ink,
+        showgrid: true,
+        gridcolor: grid,
+        showline: false,
+        zerolinecolor: baseline,
+        zerolinewidth: 1,
+    };
     const revision: unknown = incoming.uirevision;
     const layout: Partial<Layout> = {
         ...incoming,
@@ -160,17 +173,18 @@ function buildLayout(): Partial<Layout> {
         plot_bgcolor: "transparent",
         paper_bgcolor: "transparent",
         font: { family: FONT_FAMILY, color: ink },
-        // Reserve space above the plot for the legend in the shallow forecast cards.
+        // The title sits top-left and the legend top-right, on the same line above the plot; on a
+        // narrow chart the legend moves onto a line of its own under the title.
         title: { ...incoming.title, font: { ...incoming.title?.font, size: 14 }, y: 0.98, yanchor: "top" },
-        margin: { ...incoming.margin, t: 100, b: 48, l: 44, r: 44 },
+        margin: { ...incoming.margin, t: narrow.value ? 96 : 48, b: 48, l: 44, r: 44 },
         legend: {
             ...incoming.legend,
             orientation: "h",
             traceorder: "normal",
             tracegroupgap: 0,
-            x: 0,
-            xanchor: "left",
-            y: 1.03,
+            x: narrow.value ? 0 : 1,
+            xanchor: narrow.value ? "left" : "right",
+            y: 1.02,
             yanchor: "bottom",
             font: { ...incoming.legend?.font, family: FONT_FAMILY, color: ink, size: 10 },
         },
@@ -190,23 +204,6 @@ function buildLayout(): Partial<Layout> {
                       annotations: [...(incoming.annotations ?? []), ...(bands.annotations ?? [])],
                   };
               })()
-            : {}),
-        ...(props.directionalWind
-            ? {
-                  showlegend: false,
-                  annotations: [
-                      ...(incoming.annotations ?? []),
-                      {
-                          text: "+ Gegenwind · − Rückenwind",
-                          x: 0.5,
-                          y: 1.15,
-                          xref: "paper",
-                          yref: "paper",
-                          showarrow: false,
-                          font: { size: 11, color: ink },
-                      },
-                  ],
-              }
             : {}),
     };
     return compact.value ? compactLayout(layout, incoming) : layout;
@@ -230,7 +227,6 @@ function compactLayout(layout: Partial<Layout>, incoming: Partial<Layout>): Part
         showlegend: false,
         title: {
             ...layout.title,
-            ...(props.directionalWind ? { text: "Gegenwind" } : {}),
             font: { ...layout.title?.font, size: 11 },
         },
         // No margins: the plot fills the whole tile, title and tick labels sit on top of it.
@@ -247,7 +243,11 @@ function isScatter(trace: Data): trace is Partial<Plotly.ScatterData> {
 }
 function buildData(): Data[] {
     return structuredClone(toRaw(figure.value.data ?? [])).map(trace => {
-        if (!isScatter(trace)) return trace;
+        // Bars get the same tooltip as the lines, in place of Plotly's own.
+        if (!isScatter(trace)) {
+            const template: unknown = Reflect.get(trace, "hovertemplate");
+            return { ...trace, hoverinfo: "none", hovertemplate: undefined, meta: { tooltipTemplate: template } };
+        }
         const scatter: Partial<Plotly.ScatterData> = trace;
         // Keep gaps and true values; only remove the permanent point markers.
         const values = Array.isArray(scatter.y) ? scatter.y : [];
@@ -270,8 +270,7 @@ function buildData(): Data[] {
             meta: { tooltipTemplate: scatter.hovertemplate },
             line: {
                 ...scatter.line,
-                width: scatter.line?.width === 0 ? 0 : 1.2,
-                dash: scatter.line?.dash === "dot" ? "dash" : scatter.line?.dash,
+                width: scatter.line?.width === 0 ? 0 : 1.5,
             },
         };
     });
@@ -390,16 +389,18 @@ async function render() {
 onMounted(async () => {
     if (chart.value) {
         compact.value = needsCompact(chart.value);
+        narrow.value = isNarrow(chart.value);
         layout.value = buildLayout();
         resizeObserver = new ResizeObserver(() => {
             const el = chart.value;
             if (!el) return;
-            if (needsCompact(el) === compact.value) {
+            if (needsCompact(el) === compact.value && isNarrow(el) === narrow.value) {
                 Plotly.Plots.resize(el);
                 return;
             }
-            // Crossed the threshold: swap layouts. render() resizes as well.
-            compact.value = !compact.value;
+            // Crossed a threshold: swap layouts. render() resizes as well.
+            compact.value = needsCompact(el);
+            narrow.value = isNarrow(el);
             hideTooltip();
             layout.value = buildLayout();
             void render();
@@ -453,7 +454,6 @@ onBeforeUnmount(() => {
 <template>
     <q-card
         flat
-        bordered
         class="chart-shell"
         :class="{ 'chart-shell--compact': compact }"
         @pointermove="moveTooltip"

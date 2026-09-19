@@ -14,8 +14,10 @@ Enforced at these places — miss any one and the limit is not real:
     Underground budget. The pre-warm scan never fetches stations at all.
 """
 
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from itertools import batched
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth.base_user import AbstractBaseUser
@@ -63,6 +65,7 @@ PRO = Entitlements(
 )
 
 BY_PLAN = {Plan.FREE: FREE, Plan.PRO: PRO}
+ELIGIBILITY_BATCH_SIZE = 500
 
 
 def _entitlements_for_subscription(subscription: Subscription | None) -> Entitlements:
@@ -115,35 +118,63 @@ def strip_uncertainty(samples: list[WeatherSample]) -> None:
         sample.uncertainty = None
 
 
+def _eligibility_routes(owner_ids):
+    """All active quota candidates, including roots without briefing opt-in."""
+    return RecurringRoute.objects.filter(owner_id__in=owner_ids, active=True).only(
+        "id", "owner_id", "return_of_id", "free_selected", "created_at", "briefing_channel"
+    )
+
+
+def _allowed_routes(routes: list[RecurringRoute], limits: Entitlements) -> list[RecurringRoute]:
+    roots = sorted(
+        (route for route in routes if route.return_of_id is None),
+        key=lambda route: (not route.free_selected, route.created_at, route.id),
+    )[: limits.max_routes]
+    root_ids = {route.id for route in roots}
+    return roots + [route for route in routes if route.return_of_id in root_ids]
+
+
+def _briefing_route_ids(routes: list[RecurringRoute], limits: Entitlements) -> list:
+    if not limits.max_briefing_routes:
+        return []
+    roots = sorted(
+        (
+            route for route in _allowed_routes(routes, limits)
+            if route.return_of_id is None and route.briefing_channel in {"email", "push"}
+        ),
+        key=lambda route: (route.created_at, route.id),
+    )[: limits.max_briefing_routes]
+    root_ids = {route.id for route in roots}
+    return [route.id for route in roots] + [
+        route.id for route in routes if route.return_of_id in root_ids and route.briefing_channel
+    ]
+
+
 def allowed_route_ids(user) -> list:
     if user is None or not user.is_authenticated:
         return []
     limits = entitlements_for_sync(user)
-    routes = RecurringRoute.objects.filter(owner=user, active=True, return_of__isnull=True).order_by(
-        "-free_selected", "created_at", "id"
-    )
-    roots = list(routes.values_list("id", flat=True)[: limits.max_routes])
-    return roots + list(
-        RecurringRoute.objects.filter(owner=user, active=True, return_of_id__in=roots).values_list("id", flat=True)
-    )
+    return [route.id for route in _allowed_routes(list(_eligibility_routes([user.pk])), limits)]
+
+
+def briefing_route_ids_by_owner(owner_ids: list[int]) -> dict[int, list]:
+    """Select briefing routes with two metadata queries per batch, rather than per owner."""
+    selected = {}
+    for batch in batched(dict.fromkeys(owner_ids), ELIGIBILITY_BATCH_SIZE, strict=False):
+        subscriptions = {sub.user_id: sub for sub in Subscription.objects.filter(user_id__in=batch)}
+        routes_by_owner = defaultdict(list)
+        for route in _eligibility_routes(batch):
+            routes_by_owner[route.owner_id].append(route)
+        for owner_id in batch:
+            limits = _entitlements_for_subscription(subscriptions.get(owner_id))
+            selected[owner_id] = _briefing_route_ids(routes_by_owner[owner_id], limits)
+    return selected
 
 
 def briefing_route_ids(user) -> list:
-    limits = entitlements_for_sync(user)
-    if not limits.max_briefing_routes:
+    if user is None or not user.is_authenticated:
         return []
-    roots = list(
-        RecurringRoute.objects.filter(
-            id__in=allowed_route_ids(user), return_of__isnull=True, briefing_channel__in=["email", "push"]
-        )
-        .order_by("created_at", "id")
-        .values_list("id", flat=True)[: limits.max_briefing_routes]
-    )
-    return roots + list(
-        RecurringRoute.objects.filter(owner=user, active=True, return_of_id__in=roots)
-        .exclude(briefing_channel="")
-        .values_list("id", flat=True)
-    )
+    return briefing_route_ids_by_owner([user.pk])[user.pk]
 
 
 async def forecast_params_for(user, params: dict) -> dict:

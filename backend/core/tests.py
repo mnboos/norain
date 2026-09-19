@@ -1995,9 +1995,18 @@ class ForecastJobTests(TestCase):
             with self.subTest(points=len(points)):
                 ForecastJob.objects.all().delete()
                 job = self._make_job(geometry={"sample_points": points, "polyline": []})
-                with patch("core.tasks.get_cached_forecast_cell", AsyncMock(return_value={})), patch(
-                    "core.tasks.get_cached_ensemble_cell", AsyncMock(return_value={})
-                ), patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())) as compute_task:
+                for lat, lon in {(sp["lat_r"], sp["lon_r"]) for sp in points}:
+                    ForecastCell.objects.create(
+                        lat_r=lat, lon_r=lon, day_key=self.departure.date(), forecast_days=16,
+                        source="open-meteo", data={},
+                    )
+                    EnsembleCell.objects.create(
+                        lat_r=lat, lon_r=lon, day_key=self.departure.date(), forecast_days=16,
+                        data={"_norain_request_version": ENSEMBLE_REQUEST_VERSION},
+                    )
+                with patch(
+                    "core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())
+                ) as compute_task:
                     async_to_sync(_plan_forecast_job_async)(str(job.id))
                 compute_task.aenqueue.assert_awaited_once_with(str(job.id))
                 job.refresh_from_db()

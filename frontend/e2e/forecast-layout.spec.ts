@@ -61,7 +61,7 @@ for (const width of [1400, 768, 390]) {
             const errors: string[] = [];
             page.on("pageerror", error => errors.push(error.message));
             await page.goto(`/routes/${saved.id}`);
-            await expect(page.locator(".js-plotly-plot")).toHaveCount(3);
+            await expect(page.locator(".js-plotly-plot")).toHaveCount(2);
             await expect(page.locator(".js-plotly-plot").last().locator(".main-svg").first()).toBeVisible();
             await expect(page.getByTestId("selected-map-sample")).toBeAttached();
             const charts = await page.locator(".js-plotly-plot").evaluateAll(elements =>
@@ -70,9 +70,15 @@ for (const width of [1400, 768, 390]) {
                     return { x: box.x, y: box.y, width: box.width, height: box.height };
                 }),
             );
-            expect(charts.every(chart => chart.height >= 250)).toBe(true);
-            if (width >= 1024) expect(Math.abs(charts[0].y - charts[2].y)).toBeLessThan(2);
-            else expect(charts[2].y).toBeGreaterThan(charts[0].y + charts[0].height);
+            expect(charts.every(chart => chart.height >= 200)).toBe(true);
+            // The headwind chart sits in the wind card, the temperature chart in a card of its own.
+            const [wind, temperature] = charts;
+            const apart =
+                wind.x + wind.width <= temperature.x ||
+                temperature.x + temperature.width <= wind.x ||
+                wind.y + wind.height <= temperature.y ||
+                temperature.y + temperature.height <= wind.y;
+            expect(apart).toBe(true);
             expect(
                 await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
             ).toBe(true);

@@ -3,7 +3,7 @@
 Background tasks for route geometry computation and forecast grid pre-warming.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from asgiref.sync import async_to_sync, sync_to_async
 from django.db import transaction
@@ -15,14 +15,14 @@ from core.claims import claim_cell, release_cell
 from core.entitlements import (
     allowed_route_ids,
     briefing_route_ids,
+    briefing_route_ids_by_owner,
     entitlements_for,
     forecast_params_for,
     strip_uncertainty,
 )
 from core.forecast_schemas import RouteWeatherOut
 from core.grid import (
-    get_cached_ensemble_cell,
-    get_cached_forecast_cell,
+    get_cached_cell_keys,
     get_or_fetch_ensemble_cell,
     get_or_fetch_forecast_cell,
 )
@@ -356,6 +356,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     windows = departures.fetch_windows(job.params, sample_points, local_today())
     cells = _cell_set(sample_points)
     with_stations = await _wants_stations(job, geometry.get("total_seconds"))
+    warm_forecasts, warm_ensembles = await get_cached_cell_keys(cells, windows)
 
     # Both counters and the status must be committed before the first task is enqueued: a
     # `cells` worker is fast enough to settle a cell while this function is still running,
@@ -363,13 +364,13 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     job.geometry = geometry
     # deterministic + ensemble per cell per window, plus one unit for the station fetch.
     job.cells_total = len(cells) * len(windows) * 2 + (1 if with_stations else 0)
-    job.cells_settled = 0
+    job.cells_settled = len(warm_forecasts) + len(warm_ensembles)
     job.cells_failed = 0
     job.status = ForecastJob.Status.FETCHING
     await job.asave(update_fields=["geometry", "cells_total", "cells_settled", "cells_failed", "status", "updated_at"])
     await publish(job)
 
-    if job.cells_total == 0:
+    if job.cells_settled == job.cells_total:
         won = await ForecastJob.objects.filter(id=job.id, status=ForecastJob.Status.FETCHING).aupdate(
             status=ForecastJob.Status.ASSEMBLING, updated_at=datetime.now(tz=UTC)
         )
@@ -379,17 +380,16 @@ async def _plan_forecast_job_async(job_id: str) -> None:
             await compute_route_weather_job.aenqueue(str(job.id))
         return
 
-    settled = 0
     for day_key, days in windows:
+        day = date.fromisoformat(day_key)
         for lat_r, lon_r in cells:
             # Ensemble cells are fetched for every tier: `pop` and `rain_if_wet` are not gated,
             # only the spread is, and the cells are shared between accounts anyway.
-            for kind, cached, cell_task in (
-                ("forecast", get_cached_forecast_cell, refresh_forecast_cell),
-                ("ensemble", get_cached_ensemble_cell, refresh_ensemble_cell),
+            for kind, warm_keys, cell_task in (
+                ("forecast", warm_forecasts, refresh_forecast_cell),
+                ("ensemble", warm_ensembles, refresh_ensemble_cell),
             ):
-                if await cached(lat_r, lon_r, day_key, days) is not None:
-                    settled += 1
+                if (lat_r, lon_r, day) in warm_keys:
                     continue
                 # Enqueued even when the claim is held elsewhere. The holder is usually the
                 # pre-warm scan, whose task carries no job_id and so would never report back --
@@ -403,10 +403,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         # Counted in cells_total above, so assembly waits for the readings to land.
         await refresh_station_observations.aenqueue(str(job.id))
 
-    logger.info(f"Forecast job {job.id}: {len(cells)} cells, {job.cells_total - settled} fetches enqueued")
-
-    for _ in range(settled):
-        await _settle_cell(str(job.id))
+    logger.info(f"Forecast job {job.id}: {len(cells)} cells, {job.cells_total - job.cells_settled} fetches enqueued")
 
 
 async def _wants_stations(job: ForecastJob, total_seconds: float | None) -> bool:
@@ -672,11 +669,10 @@ async def _prewarm_routes(owner_id: int | None = None) -> list[RecurringRoute]:
     )
     if owner_id is not None:
         query = query.filter(owner_id=owner_id)
-    eligible_by_owner = {}
+    routes = [route async for route in query]
+    eligible_by_owner = await sync_to_async(briefing_route_ids_by_owner)([route.owner_id for route in routes])
     now = datetime.now(tz=UTC)
-    async for route in query:
-        if route.owner_id not in eligible_by_owner:
-            eligible_by_owner[route.owner_id] = await sync_to_async(briefing_route_ids)(route.owner)
+    for route in routes:
         departure = next_departure(route.schedule_cron)
         if route.id in eligible_by_owner[route.owner_id] and departure and departure - now <= timedelta(hours=4):
             selected.append(route)
@@ -833,15 +829,18 @@ async def _scan_route_forecasts_async(route_id: str) -> dict:
             "departure_flex_before_minutes": route.departure_flex_before_minutes,
             "departure_flex_after_minutes": route.departure_flex_after_minutes,
         }
-        for day_key, days in departures.fetch_windows(params, route.sample_points, today):
+        windows = departures.fetch_windows(params, route.sample_points, today)
+        warm_forecasts, warm_ensembles = await get_cached_cell_keys(cells, windows)
+        for day_key, days in windows:
+            day = date.fromisoformat(day_key)
             # No station readings here: they are only good for minutes and this scan runs
             # hourly, so it would spend the Weather Underground budget on data nobody reads.
             for lat_r, lon_r in cells:
-                for kind, cached, cell_task in (
-                    ("forecast", get_cached_forecast_cell, refresh_forecast_cell),
-                    ("ensemble", get_cached_ensemble_cell, refresh_ensemble_cell),
+                for kind, warm_keys, cell_task in (
+                    ("forecast", warm_forecasts, refresh_forecast_cell),
+                    ("ensemble", warm_ensembles, refresh_ensemble_cell),
                 ):
-                    if await cached(lat_r, lon_r, day_key, days) is not None:
+                    if (lat_r, lon_r, day) in warm_keys:
                         continue
                     # The claim is what stops the same cell being enqueued once per sample
                     # point, once per route sharing it, and again by a live request.

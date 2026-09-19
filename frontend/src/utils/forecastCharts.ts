@@ -1,5 +1,5 @@
 /**
- * The forecast charts: temperature, precipitation and headwind along the ride.
+ * The forecast charts along the ride: temperature with the precipitation as bars, and headwind.
  *
  * Built here from the samples the job result already carries, so the charts need no request of
  * their own. Only the data changes between forecasts; the design is all in this file.
@@ -25,11 +25,10 @@ export interface ChartFigure {
     layout: Partial<Layout>;
 }
 
-// Cool, orange-free series hues at mid lightness, so one hex reads on both the light (#ffffff) and
-// the dark (#1c2533) card. The map markers and the light theme (utils/theme.ts) reuse these hues.
-const TEAL = "#1a9e8f";
-const ROSE = "#d24d78";
-const BLUE = "#2f7fd8";
+// Series hues at mid lightness, so one hex reads on both the light (#ffffff) and the dark
+// (#1c2533) card: a dark red for temperature, a blue for rain and wind.
+const RED = "#b0404e";
+const BLUE = "#3a70b8";
 
 // Visual-only smoothing: the curve still passes through every real sample, but a spline can
 // slightly over/undershoot between two points at abrupt changes. Moderate smoothing keeps that small.
@@ -46,6 +45,8 @@ interface Series {
     label: string;
     color: string;
     unit: string;
+    /** How the single forecast is drawn. */
+    dash: "dash" | "dot";
     value: (sample: ChartSample) => number | null | undefined;
 }
 
@@ -125,7 +126,7 @@ function singleForecastTrace(samples: readonly ChartSample[], series: Series, wi
         customdata: customdata(samples),
         mode: "lines+markers",
         marker: { size: 3 },
-        line: { dash: "dot", width: 1.5, color: series.color, ...SMOOTH },
+        line: { dash: series.dash, width: 1.5, color: series.color, ...SMOOTH },
         connectgaps: false,
         name: series.name,
         legendgroup: series.metric,
@@ -156,7 +157,7 @@ function baseLayout(title: string, unit: string): Partial<Layout> {
         },
         autosize: true,
         hovermode: "closest",
-        showlegend: false,
+        showlegend: true,
         xaxis: { title: { text: "Fahrzeit (min)", standoff: 4 }, zeroline: false, automargin: true },
         yaxis: { title: { text: unit, standoff: 15 }, zeroline: true, automargin: true },
         legend: {
@@ -169,60 +170,40 @@ function baseLayout(title: string, unit: string): Partial<Layout> {
     };
 }
 
+/** Temperature as a line, and the main run's rain rate as bars on a second axis. */
 function temperatureChart(samples: readonly ChartSample[]): ChartFigure {
     const series: Series = {
         metric: "temperature",
         name: "Temperatur",
         label: "Temperatur",
-        color: ROSE,
+        color: RED,
         unit: "°C",
+        dash: "dash",
         value: sample => sample.temp,
     };
-    // A lone series needs no legend: the chart title already names it.
-    return { data: seriesTraces(samples, series), layout: baseLayout("Temperatur", "°C") };
-}
-
-function precipitationChart(samples: readonly ChartSample[]): ChartFigure {
-    const series: Series = {
-        metric: "precipitation",
-        name: "Niederschlag",
-        label: "Niederschlag",
-        color: BLUE,
-        unit: "mm/h",
-        value: sample => sample.rainRateMmH,
-    };
-    const base = baseLayout("Niederschlag", "mm/h");
-    // Rain rate can't be negative: without rangemode an all-dry route autoranges to -1..1 mm/h, and a
-    // spline dipping below 0 near a rain onset would be drawn as negative rain. No zeroline: the
-    // range starts at 0, so it would only redraw the plot's bottom border.
-    const layout: Partial<Layout> = { ...base, yaxis: { ...base.yaxis, zeroline: false, rangemode: "nonnegative" } };
+    const layout = baseLayout("Temperatur", "°C");
     const data = seriesTraces(samples, series);
-    if (samples.some(sample => sample.pop != null)) {
-        data.push({
-            type: "scatter",
+    if (samples.some(sample => sample.rainRateMmH != null)) {
+        data.unshift({
+            type: "bar",
             x: minutes(samples),
-            y: samples.map(sample => (sample.pop != null ? sample.pop * 100 : null)),
+            y: samples.map(sample => sample.rainRateMmH ?? null),
             customdata: customdata(samples),
-            name: "Regenrisiko (%)",
-            legendgroup: "pop",
-            mode: "lines+markers",
-            marker: { size: 3 },
-            connectgaps: false,
-            line: { color: TEAL, dash: "dot", width: 1.5, ...SMOOTH },
+            name: "Niederschlag",
+            legendgroup: "precipitation",
+            marker: { color: BLUE, opacity: 0.45 },
             yaxis: "y2",
-            hovertemplate: "%{customdata[1]} Uhr · %{y:.0f}%<extra>Regenrisiko am Punkt</extra>",
+            hovertemplate: "%{customdata[1]} Uhr · %{y:.1f} mm/h<extra>Niederschlag</extra>",
         });
-        layout.showlegend = true;
-        // Plotly otherwise syncs an overlaying axis's ticks to the primary axis, giving labels like
-        // 23.7 / 71.3 %; round percentage steps read better. No zeroline: both axes start at 0, so it
-        // would be drawn twice on the same pixel row.
+        // Rain can't be negative, and a dry ride would otherwise autorange to -1..1 mm/h. The
+        // axis is at least 0..1 so a drizzle does not fill the whole chart height.
+        const peak = Math.max(1, ...samples.map(sample => sample.rainRateMmH ?? 0));
         layout.yaxis2 = {
             overlaying: "y",
             side: "right",
-            range: [0, 100],
-            title: { text: "%", standoff: 15 },
-            tickmode: "linear",
-            dtick: 25,
+            range: [0, peak * 1.1],
+            tickformat: ".1f",
+            title: { text: "mm/h", standoff: 15 },
             zeroline: false,
             automargin: true,
         };
@@ -233,17 +214,26 @@ function precipitationChart(samples: readonly ChartSample[]): ChartFigure {
 function headwindChart(samples: readonly ChartSample[]): ChartFigure {
     const series: Series = {
         metric: "headwind",
-        name: "Gegenwind",
+        name: "Gegenwind (+) / Rückenwind (−)",
         label: "Gegen-(+)/Rückenwind(−)",
-        color: ROSE,
+        color: BLUE,
         unit: "km/h",
+        dash: "dot",
         value: sample => sample.headwind,
     };
-    return { data: seriesTraces(samples, series), layout: baseLayout("Gegenwind / Rückenwind", "km/h") };
+    return { data: seriesTraces(samples, series), layout: baseLayout("Gegenwind", "km/h") };
 }
 
-/** Temperature, precipitation and headwind, in that order; none without samples. */
+export type ChartKind = "temperature" | "headwind";
+
+/** Temperature (with precipitation) and headwind, in that order; none without samples. */
 export function forecastCharts(samples: readonly ChartSample[]): ChartFigure[] {
     if (!samples.length) return [];
-    return [temperatureChart(samples), precipitationChart(samples), headwindChart(samples)];
+    return [temperatureChart(samples), headwindChart(samples)];
+}
+
+/** One of the charts; undefined without samples. */
+export function forecastChart(kind: ChartKind, samples: readonly ChartSample[]): ChartFigure | undefined {
+    if (!samples.length) return undefined;
+    return kind === "temperature" ? temperatureChart(samples) : headwindChart(samples);
 }

@@ -22,7 +22,7 @@ const tallLine = [
 ];
 
 async function expectSeparate(page: Page, tiles: Locator) {
-    await expect(tiles).toHaveCount(3);
+    await expect(tiles).toHaveCount(2);
     await expect
         .poll(async () => {
             const map = await page.locator("#map").boundingBox();

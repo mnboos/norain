@@ -37,17 +37,17 @@ const departureTime = computed(() => departure.value.time);
 </script>
 
 <template>
-    <q-page class="column">
+    <q-page class="q-pa-md column">
         <!-- Once the route is loaded, the back button moves into the panel's one-line header. -->
-        <q-btn v-if="!route" flat :icon="symSharpArrowBack" label="Zurück" to="/" class="q-ma-sm" />
+        <q-btn v-if="!route" flat :icon="symSharpArrowBack" label="Zurück" to="/" class="self-start" />
 
         <div v-if="isLoading" class="text-center q-mt-xl">
             <q-spinner-dots size="3rem" />
         </div>
 
-        <q-banner v-else-if="error || !route" class="bg-tint-error q-ma-md" rounded>Route nicht gefunden.</q-banner>
+        <q-banner v-else-if="error || !route" class="bg-tint-error q-mt-md" rounded>Route nicht gefunden.</q-banner>
 
-        <q-tabs v-if="route?.returnRouteId || route?.parentRouteId" dense>
+        <q-tabs v-if="route?.returnRouteId || route?.parentRouteId" dense align="left" class="q-mb-md">
             <q-route-tab :to="`/routes/${route.parentRouteId ?? route.id}`" label="Hinfahrt" exact />
             <q-route-tab :to="`/routes/${route.returnRouteId ?? route.id}`" label="Rückfahrt" exact />
         </q-tabs>

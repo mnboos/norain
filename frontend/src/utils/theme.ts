@@ -13,7 +13,8 @@ const STORAGE_KEY = "norain-theme";
  */
 const PALETTE: Record<"light" | "dark", Record<string, string>> = {
     light: {
-        primary: "#2b6cb0",
+        // Steel navy, the colour of the header.
+        primary: "#2d5a8e",
         secondary: "#0f766e",
         accent: "#1a9e8f",
         positive: "#2a9d8f",

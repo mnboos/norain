@@ -11,9 +11,9 @@ const colors = ["negative", "primary", "secondary", "blue-grey-3", "grey-7"];
 </script>
 
 <template>
-    <q-card flat class="col-12 text-caption" data-testid="wind-distribution">
+    <q-card flat class="text-caption" data-testid="wind-distribution">
+        <!-- The card around this names it ("Wind entlang der Strecke"). -->
         <div class="row items-center q-gutter-x-sm">
-            <span class="text-uppercase text-muted">Wind entlang der Strecke</span>
             <span v-if="total > 0 && distribution.meanFeltSpeed != null" class="text-muted">
                 Gefühlt im Mittel {{ distribution.meanFeltSpeed.toFixed(1) }} km/h (geschätzt)
                 <span v-if="distribution.feltCoveredM < total - 0.01">

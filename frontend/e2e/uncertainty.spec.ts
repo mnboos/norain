@@ -31,10 +31,9 @@ test("expands uncertainty, selects chart points, and highlights the map", async 
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(`/routes/${saved.id}`);
     await expect(page.getByText("Regenrisiko", { exact: true })).toBeVisible();
-    const windChart = page.locator(".js-plotly-plot").nth(2);
-    await expect(windChart.locator(".gtitle")).toHaveText("Gegenwind / Rückenwind");
-    await expect(windChart.locator(".legend")).toHaveCount(0);
-    await expect(windChart).toContainText("+ Gegenwind · − Rückenwind");
+    const windChart = page.locator(".js-plotly-plot").nth(0);
+    await expect(windChart.locator(".gtitle")).toHaveText("Gegenwind");
+    await expect(windChart.locator(".legend")).toContainText("Gegenwind (+) / Rückenwind (−)");
     await page.getByText("Vorhersage-Details", { exact: true }).click();
     const details = page.getByTestId("forecast-details");
     await expect(
