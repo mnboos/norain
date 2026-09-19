@@ -197,3 +197,27 @@ claude-deepseek:
     claude --model opus --effort max
 
 alias claude := claude-deepseek
+
+[unix]
+install-osmium-tool:
+    apt-get install -y osmium-tool
+
+[doc("Download and process OSM PBF files for bicycle routing.")]
+[windows]
+download-pbf:
+    wsl bash -c "chmod +x scripts/download-pbf.sh && ./scripts/download-pbf.sh"
+
+[windows]
+download-photon-dumps:
+    wsl bash -c "chmod +x scripts/download-photon-dumps.sh && ./scripts/download-photon-dumps.sh"
+
+[doc("Download and process OSM PBF files for bicycle routing.")]
+[linux]
+download-pbf:
+    chmod +x scripts/download-pbf.sh
+    ./scripts/download-pbf.sh
+
+[linux]
+download-photon-dumps:
+    chmod +x scripts/download-photon-dumps.sh
+    ./scripts/download-photon-dumps.sh

@@ -13,3 +13,5 @@ backend/db.sqlite3
 # large artifacts that must never be committed
 data/otp/*.obj
 *.sqlite3
+
+osm_workspace/
