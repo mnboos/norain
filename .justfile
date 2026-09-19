@@ -14,8 +14,12 @@ export GDAL_VERSION := "3.13.1"
 
 image_prefix := "ghcr.io/mnboos/norain"
 
-# podman on Windows, docker elsewhere; override with CONTAINER_ENGINE.
-container := env("CONTAINER_ENGINE", if os_family() == "windows" { "podman" } else { "docker" })
+# podman on Windows, docker elsewhere, podman when there is no docker binary (a shell alias
+# `docker=podman` doesn't count: recipes run in a non-interactive shell); override with CONTAINER_ENGINE.
+container := env("CONTAINER_ENGINE", if os_family() == "windows" { "podman" } else { `command -v docker >/dev/null && echo docker || echo podman` })
+
+# The extract every graph build uses; same default as docker-compose.base.yml.
+osm_data_url := env("OSM_DATA_URL", "https://download.geofabrik.de/europe/switzerland-latest.osm.pbf")
 
 # List the recipes by group.
 default:
@@ -97,7 +101,7 @@ thumbnail-refresh $route_id:
 routing-backfill *args:
     uv run python manage.py backfill_route_vertex_times {{ args }}
 
-[doc("Rebuild the local routing graph after editing graphhopper-config.yaml or data/graphhopper/models/ (ride speeds live there). Deletes data/graphhopper/cache and builds it again; the OSM extract and elevation tiles are kept. Takes minutes.")]
+[doc("Rebuild the local routing graph after editing graphhopper-config.yaml or data/graphhopper/models/ (ride speeds live there). Deletes data/graphhopper/cache and builds it again from the bike-filtered extract; the OSM extract and elevation tiles are kept. Takes minutes.")]
 [group('geodata')]
 [confirm("This deletes the local routing graph and builds it again. Continue?")]
 routing-build:
@@ -117,17 +121,75 @@ routing-speeds *args:
 routing-refresh-routes:
     uv run python manage.py shell -c "from core.models import RecurringRoute; from core.tasks import refresh_route_geometry; print(sum(refresh_route_geometry.enqueue(str(i)) is not None for i in RecurringRoute.objects.values_list('id', flat=True)), 'routes queued')"
 
-[doc("Import a ready-to-use index that you can download from the Graphhopper page.")]
+[doc("Build the routing graph from local .osm.pbf files instead of downloading OSM_DATA_URL, e.g. just osm-import ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Filters them for bikes like every build and merges several into one. One file must have OSM_DATA_URL's file name; for several, set OSM_DATA_URL to a plain file name for the merged set, e.g. dach.osm.pbf. Deletes the current graph first; the elevation tiles are kept. Takes minutes.")]
 [group('geodata')]
-setup-geocoder:
-    # wget https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst
-    {{ container }} compose run --entrypoint bash -v ./photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst:/photon-dump.jsonl.zst photon -c /import-photon-dump.sh
-    #podman compose run --entrypoint bash -v ./photon-dump-austria-1.0-latest.jsonl.zst:/photon-dump.jsonl.zst photon -c /import-photon-dump.sh
+[confirm("This deletes the local routing graph and builds a new one from the files. Continue?")]
+[positional-arguments]
+osm-import +files:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Every build (routing-build, a fresh start) reads /osm_data/bike-<OSM_DATA_URL's file name>,
+    # so the import writes that file, or the next rebuild would use other data.
+    name="{{ file_name(osm_data_url) }}"
+    if [ $# -eq 1 ] && [ "$(basename "$1")" != "$name" ]; then
+        echo "OSM_DATA_URL in .env ends in $name. Set it to a URL, or just the file name, ending in $(basename "$1")." >&2
+        exit 1
+    fi
+    if [ $# -gt 1 ] && [[ "{{ osm_data_url }}" == *://* ]]; then
+        echo "Several files are merged into one, and no download matches that. Set OSM_DATA_URL in .env to a plain file name for the merged set, e.g. dach.osm.pbf." >&2
+        exit 1
+    fi
+    # File names are relative to where just was run. Each file is mounted at /import/<its name>.
+    cd "{{ invocation_directory() }}"
+    declare -A seen=()
+    mounts=() inputs=()
+    for file in "$@"; do
+        base=$(basename "$file")
+        [ -f "$file" ] || { echo "Not a file: $file" >&2; exit 1; }
+        [ -z "${seen[$base]:-}" ] || { echo "Two files are named $base." >&2; exit 1; }
+        seen[$base]=1
+        mounts+=(-v "$(cd "$(dirname "$file")" && pwd)/$base:/import/$base:ro,z")
+        inputs+=("/import/$base")
+    done
+    cd "{{ justfile_directory() }}"
+    compose=({{ container }} compose -f docker-compose.dev.yml)
+    "${compose[@]}" build graphhopper
+    "${compose[@]}" stop graphhopper
+    "${compose[@]}" run --rm --no-deps "${mounts[@]}" --entrypoint /graphhopper/filter-osm.sh graphhopper "/osm_data/bike-$name" "${inputs[@]}"
+    "${compose[@]}" run --rm --no-deps --entrypoint bash graphhopper -c 'rm -rf /graph-cache/..?* /graph-cache/.[!.]* /graph-cache/*'
+    # The filtered file is now newer than any extract in /osm_data, so the entrypoint builds from it without a download.
+    "${compose[@]}" run --rm --no-deps -e GRAPHHOPPER_BUILD_ONLY=true graphhopper
+    "${compose[@]}" up -d graphhopper
 
-[doc("Import the Switzerland OSM PBF into Photon for geocoding. This is a one-time setup step. Use this only if you want to re-import the PBF into Photon, e.g. after an OSM update. If possible, use the exported index from the Graphhopper page.")]
+[doc("Build the geocoder index from local Photon 1.0 dumps (.jsonl.zst or .jsonl; several become one index) or one prebuilt index (.tar.bz2), e.g. just photon-import photon_dumps/*.jsonl. The current index is replaced only once the new one is ready.")]
 [group('geodata')]
-photon-import-pbf:
-    {{ container }} compose run --entrypoint bash -v ./data/switzerland-latest.osm.pbf:/switzerland-latest.osm.pbf photon -osm-pbf=switzerland-latest.osm.pbf -country-codes="CH" -languages=de,fr,it,en
+[confirm("This replaces the local geocoder index with one built from the files. Continue?")]
+[positional-arguments]
+photon-import +files:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # File names are relative to where just was run. Each file is mounted at /import/<its name>;
+    # PHOTON_INDEX_FILE separates them with spaces, so a name must not have one.
+    cd "{{ invocation_directory() }}"
+    declare -A seen=()
+    mounts=() inputs=()
+    for file in "$@"; do
+        base=$(basename "$file")
+        [ -f "$file" ] || { echo "Not a file: $file" >&2; exit 1; }
+        [[ "$base" != *" "* ]] || { echo "File names with spaces don't work here: $base" >&2; exit 1; }
+        [ -z "${seen[$base]:-}" ] || { echo "Two files are named $base." >&2; exit 1; }
+        seen[$base]=1
+        mounts+=(-v "$(cd "$(dirname "$file")" && pwd)/$base:/import/$base:ro,z")
+        inputs+=("/import/$base")
+    done
+    cd "{{ justfile_directory() }}"
+    compose=({{ container }} compose -f docker-compose.dev.yml)
+    "${compose[@]}" build photon
+    "${compose[@]}" stop photon
+    "${compose[@]}" run --rm --no-deps "${mounts[@]}" \
+        -e PHOTON_INDEX_FILE="${inputs[*]}" -e PHOTON_REPLACE_INDEX=true \
+        -e PHOTON_IMPORT_ONLY=true -e PHOTON_ALLOW_DOWNLOAD=false photon
+    "${compose[@]}" up -d photon
 
 [group('api')]
 [working-directory("backend")]
@@ -198,25 +260,23 @@ claude-deepseek:
 
 alias claude := claude-deepseek
 
-[unix]
-install-osmium-tool:
-    apt-get install -y osmium-tool
-
-[doc("Download and process OSM PBF files for bicycle routing.")]
+[doc("Download the OSM extracts into data/downloads/osm (only what changed since); build the graph from them with just osm-import.")]
 [windows]
 download-pbf:
     wsl bash -c "chmod +x scripts/download-pbf.sh && ./scripts/download-pbf.sh"
 
+[doc("Download the Photon dumps into data/downloads/photon (only what changed since); build the index from them with just photon-import.")]
 [windows]
 download-photon-dumps:
     wsl bash -c "chmod +x scripts/download-photon-dumps.sh && ./scripts/download-photon-dumps.sh"
 
-[doc("Download and process OSM PBF files for bicycle routing.")]
+[doc("Download the OSM extracts into data/downloads/osm (only what changed since); build the graph from them with just osm-import.")]
 [linux]
 download-pbf:
     chmod +x scripts/download-pbf.sh
     ./scripts/download-pbf.sh
 
+[doc("Download the Photon dumps into data/downloads/photon (only what changed since); build the index from them with just photon-import.")]
 [linux]
 download-photon-dumps:
     chmod +x scripts/download-photon-dumps.sh

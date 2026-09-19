@@ -2,14 +2,15 @@
 set -euo pipefail
 
 # ==============================================================================
-# OSM Data Pipeline for Bicycle Routing (DACH + NL + BE + DK)
-# Optimized for GraphHopper instances running on constrained memory (e.g., 24GB RAM)
+# Download the OSM extracts for the routing graph (DACH + NL + BE + DK)
+#
+# Only downloads: `just osm-import` filters them for bikes and merges them in the
+# GraphHopper container, so nothing but wget is needed here. The files are kept,
+# and a run downloads again only what Geofabrik has updated since.
 # ==============================================================================
 
-WORK_DIR="./osm_workspace"
-OUTPUT_PBF="europe_cycling_combined.osm.pbf"
+TARGET_DIR="data/downloads/osm"
 
-# List of Geofabrik PBF files to download
 PBF_URLS=(
   "https://download.geofabrik.de/europe/germany-latest.osm.pbf"
   "https://download.geofabrik.de/europe/austria-latest.osm.pbf"
@@ -19,67 +20,26 @@ PBF_URLS=(
   "https://download.geofabrik.de/europe/denmark-latest.osm.pbf"
 )
 
-# ------------------------------------------------------------------------------
-# 1. Dependency Check
-# ------------------------------------------------------------------------------
-echo "==> Checking required tools..."
-for tool in osmium wget; do
-  if ! command -v "$tool" &> /dev/null; then
-    echo "Error: '$tool' is not installed."
-    echo "Install dependencies on Ubuntu/Debian via: sudo apt update && sudo apt install -y osmium-tool wget"
-    exit 1
-  fi
-done
+if ! command -v wget &> /dev/null; then
+  echo "Error: 'wget' is not installed." >&2
+  exit 1
+fi
 
-mkdir -p "$WORK_DIR"
-cd "$WORK_DIR"
+mkdir -p "$TARGET_DIR"
 
-# ------------------------------------------------------------------------------
-# 2. Download PBF Files
-# ------------------------------------------------------------------------------
-echo "==> Downloading regional OSM extracts from Geofabrik..."
-DOWNLOADED_FILES=()
-
+echo "==> Downloading OSM extracts from Geofabrik into $TARGET_DIR..."
 for url in "${PBF_URLS[@]}"; do
-  filename=$(basename "$url")
-  DOWNLOADED_FILES+=("$filename")
-
-  if [ -f "$filename" ]; then
-    echo " -> $filename already exists, skipping download."
-  else
-    echo " -> Downloading $filename..."
-    wget -q --show-progress "$url" -O "$filename"
-  fi
+  echo " -> $(basename "$url")"
+  # -N: download only when the server's file is newer than ours.
+  wget -N -q --show-progress -P "$TARGET_DIR" "$url"
 done
-
-# ------------------------------------------------------------------------------
-# 3. Merge PBF Files
-# ------------------------------------------------------------------------------
-echo "==> Merging PBF extracts into a single file..."
-RAW_MERGED="merged_raw.pbf"
-
-osmium merge "${DOWNLOADED_FILES[@]}" -o "$RAW_MERGED" --overwrite
-
-# ------------------------------------------------------------------------------
-# 4. Filter Non-Cycling Infrastructure
-# ------------------------------------------------------------------------------
-echo "==> Filtering out motorways and non-cyclable highways..."
-# Removes highways tagged as motorway or motorway_link to reduce graph size by ~15-20%
-osmium tags-filter "$RAW_MERGED" \
-  w/highway=motorway,motorway_link \
-  --invert-match \
-  -o "../$OUTPUT_PBF" \
-  --overwrite
-
-# ------------------------------------------------------------------------------
-# 5. Cleanup
-# ------------------------------------------------------------------------------
-echo "==> Cleaning up temporary raw PBF files..."
-cd ..
-rm -rf "$WORK_DIR"
 
 echo "=============================================================================="
-echo "Success! Combined and filtered dataset ready:"
-echo " Output File : $(pwd)/$OUTPUT_PBF"
-echo " Size        : $(du -h "$OUTPUT_PBF" | cut -f1)"
+echo "Done. Extracts in: $TARGET_DIR"
+echo "Build the routing graph from them (filtered for bikes and merged into one) with:"
+echo "  just osm-import $TARGET_DIR/*.osm.pbf"
+echo "Several files need a plain file name for the merged set in .env, for example:"
+echo "  OSM_DATA_URL=europe-cycling.osm.pbf"
+echo "This many countries need a large build heap: set GRAPHHOPPER_BUILD_HEAP and"
+echo "GRAPHHOPPER_MEM_LIMIT (see docs/how-to/build-routing-graph.md)."
 echo "=============================================================================="

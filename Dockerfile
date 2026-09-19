@@ -61,8 +61,14 @@ RUN update-ca-certificates
 
 RUN keytool -import -noprompt -alias zscaler-corp-cert -trustcacerts -keystore ${JAVA_HOME}/lib/security/cacerts -storepass changeit -file /usr/local/share/ca-certificates/zscaler-root.pem.crt
 
+# osmium cuts an OSM extract down to what the bike profiles use before every build.
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends osmium-tool && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY docker/graphhopper-entrypoint.sh entrypoint.sh
-RUN chmod +x /graphhopper/entrypoint.sh
+COPY docker/graphhopper-filter-osm.sh filter-osm.sh
+RUN chmod +x /graphhopper/entrypoint.sh /graphhopper/filter-osm.sh
 
 ENTRYPOINT ["/graphhopper/entrypoint.sh"]
 

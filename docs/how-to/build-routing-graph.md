@@ -61,12 +61,15 @@ GRAPHHOPPER_BUILD_ONLY=true GRAPHHOPPER_BUILD_HEAP=16g GRAPHHOPPER_MEM_LIMIT=20g
 ```
 
 Switzerland builds in a few GB of heap; DACH with three CH profiles needs roughly
-16–24 GB. The container exits with `Build finished` when the graph is ready. The
-downloaded extract and the elevation tiles stay in `data/graphhopper/osm/` and are not
-needed on the VPS.
+16–24 GB. The container exits with `Build finished` when the graph is ready. It builds
+from a copy of the extract that osmium has cut down to what the bike profiles use
+(`bike-<extract>`). The extract, that copy and the elevation tiles stay in
+`data/graphhopper/osm/` and are not needed on the VPS. To build from files you already
+have, or from several countries merged into one, use `just osm-import FILE…` as described in
+[build routing and search from downloaded files](import-geodata.md).
 
-Check the size — with `GRAPHHOPPER_DATAACCESS=RAM_STORE` it is roughly the heap the
-server needs:
+Check the size. With the default `GRAPHHOPPER_DATAACCESS=MMAP` the server pages it in from
+disk and a 3 GB heap is enough; with `RAM_STORE` the size is roughly the heap it needs:
 
 ```bash
 du -sh data/graphhopper/cache
@@ -93,10 +96,11 @@ docker compose --env-file .env -f docker-compose.prod.yml up -d graphhopper
 docker compose --env-file .env -f docker-compose.prod.yml logs -f graphhopper
 ```
 
-Size the server in `.env` first: `GRAPHHOPPER_HEAP` about 2 GB above the graph size and
-`GRAPHHOPPER_MEM_LIMIT` about 1–2 GB above the heap. If the graph is larger than the
-heap you can afford, set `GRAPHHOPPER_DATAACCESS=MMAP` and a 3 GB heap instead: the graph
-is then paged in from disk, with slower first queries.
+Size the server in `.env` first. With the default `GRAPHHOPPER_DATAACCESS=MMAP`, a 3 GB
+`GRAPHHOPPER_HEAP` is enough: the graph is paged in from disk, so the first queries after a
+start are slower. Memory above `GRAPHHOPPER_MEM_LIMIT`'s heap share goes to caching the graph
+file, and more of it means fewer disk reads. With `RAM_STORE` instead, set `GRAPHHOPPER_HEAP`
+about 2 GB above the graph size and `GRAPHHOPPER_MEM_LIMIT` about 1–2 GB above the heap.
 
 Once `/info` answers, delete `cache.old`. To keep the VPS from ever building its own graph
 (for example after someone empties the cache), set `GRAPHHOPPER_BUILD_GRAPH=false` in its

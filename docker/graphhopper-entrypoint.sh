@@ -3,8 +3,9 @@
 # Three paths, chosen by whether /graph-cache already holds a built graph:
 #   graph present                          -> serve it (no .pbf needed)
 #   graph missing, GRAPHHOPPER_BUILD_GRAPH=true (default)
-#                                          -> download OSM_DATA_URL, build the graph, then
-#                                             serve it (or exit, with GRAPHHOPPER_BUILD_ONLY=true)
+#                                          -> download OSM_DATA_URL, filter it for bikes
+#                                             (filter-osm.sh), build the graph, then serve it
+#                                             (or exit, with GRAPHHOPPER_BUILD_ONLY=true)
 #   graph missing, GRAPHHOPPER_BUILD_GRAPH=false
 #                                          -> fail; for a graph built on another machine and
 #                                             copied in (docs/how-to/build-routing-graph.md)
@@ -14,7 +15,7 @@ set -euo pipefail
 GRAPH_DIR=/graph-cache
 GRAPHHOPPER_HEAP="${GRAPHHOPPER_HEAP:-6g}"
 GRAPHHOPPER_BUILD_HEAP="${GRAPHHOPPER_BUILD_HEAP:-$GRAPHHOPPER_HEAP}"
-GRAPHHOPPER_DATAACCESS="${GRAPHHOPPER_DATAACCESS:-RAM_STORE}"
+GRAPHHOPPER_DATAACCESS="${GRAPHHOPPER_DATAACCESS:-MMAP}"
 
 if [ ! -f "$GRAPH_DIR/properties" ]; then
     if [ "${GRAPHHOPPER_BUILD_GRAPH:-true}" = "false" ]; then
@@ -25,23 +26,35 @@ if [ ! -f "$GRAPH_DIR/properties" ]; then
 
     : "${OSM_DATA_URL:?OSM_DATA_URL must be set to build a graph}"
     OSM_DATA_FILE="${OSM_DATA_DIR}/$(basename "$OSM_DATA_URL")"
+    BIKE_DATA_FILE="${OSM_DATA_DIR}/bike-$(basename "$OSM_DATA_URL")"
     echo "Requested OSM data: ${OSM_DATA_FILE}"
 
-    if [ ! -s "$OSM_DATA_FILE" ]; then
-        echo "Downloading OSM data"
-        wget \
-            --no-check-certificate \
-            --user-agent="norain" \
-            --show-progress \
-            --progress=bar:force:noscroll \
-            -O "$OSM_DATA_FILE" \
-            "$OSM_DATA_URL"
+    # The filtered copy is reused until the extract is newer than it. With only the filtered
+    # copy present (just osm-import), nothing is downloaded.
+    if [ ! -s "$BIKE_DATA_FILE" ] || [ "$OSM_DATA_FILE" -nt "$BIKE_DATA_FILE" ]; then
+        if [ ! -s "$OSM_DATA_FILE" ]; then
+            if [[ "$OSM_DATA_URL" != *://* ]]; then
+                echo "OSM_DATA_URL is a file name, but neither ${OSM_DATA_FILE} nor ${BIKE_DATA_FILE} exists."
+                echo "Put the file there, or run just osm-import with the extracts it was made from."
+                exit 1
+            fi
+            echo "Downloading OSM data"
+            wget \
+                --no-check-certificate \
+                --user-agent="norain" \
+                --show-progress \
+                --progress=bar:force:noscroll \
+                -O "$OSM_DATA_FILE" \
+                "$OSM_DATA_URL"
+        fi
+        echo "Filtering ${OSM_DATA_FILE} for bikes into ${BIKE_DATA_FILE}"
+        /graphhopper/filter-osm.sh "$BIKE_DATA_FILE" "$OSM_DATA_FILE"
     fi
 
     # GraphHopper calls building the graph "import".
-    echo "Building the graph from ${OSM_DATA_FILE} with a ${GRAPHHOPPER_BUILD_HEAP} heap"
+    echo "Building the graph from ${BIKE_DATA_FILE} with a ${GRAPHHOPPER_BUILD_HEAP} heap"
     java -Xmx"${GRAPHHOPPER_BUILD_HEAP}" \
-        -Ddw.graphhopper.datareader.file="${OSM_DATA_FILE}" \
+        -Ddw.graphhopper.datareader.file="${BIKE_DATA_FILE}" \
         -jar graphhopper.jar import /config.yaml
 
     if [ "${GRAPHHOPPER_BUILD_ONLY:-false}" = "true" ]; then

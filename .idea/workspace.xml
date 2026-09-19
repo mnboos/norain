@@ -4,31 +4,28 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="feat(route): color route thumbnail by ride score">
+    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="feat(web): improve layout">
+      <change beforePath="$PROJECT_DIR$/.env.template" beforeDir="false" afterPath="$PROJECT_DIR$/.env.template" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/entitlements.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/entitlements.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/grid.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/grid.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/tasks.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/tasks.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/tests.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/tests.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/e2e/chart-map-layout.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/e2e/chart-map-layout.spec.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/e2e/forecast-layout.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/e2e/forecast-layout.spec.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/e2e/uncertainty.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/e2e/uncertainty.spec.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/App.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/App.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/assets/base.css" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/assets/base.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/assets/quasar-variables.scss" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/assets/quasar-variables.scss" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/RouteDetailPanel.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/RouteDetailPanel.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/WeatherCharts.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/WeatherChart.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/WeatherSections.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/WeatherSections.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/WeatherSummaryCard.vue" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/WindDistributionBar.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/WindDistributionBar.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/chart/NiceChart.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/chart/NiceChart.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/chart/plotly.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/chart/plotly.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/map.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/map.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/routes/[id].vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/routes/[id].vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/utils/__tests__/forecastCharts.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/utils/__tests__/forecastCharts.spec.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/utils/forecastCharts.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/utils/forecastCharts.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/utils/forecastDetails.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/utils/forecastDetails.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/utils/theme.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/utils/theme.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.justfile" beforeDir="false" afterPath="$PROJECT_DIR$/.justfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/graphhopper/graphhopper-config.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/data/graphhopper/graphhopper-config.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/deploy/production.env.template" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/production.env.template" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker-compose.base.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.base.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker/graphhopper-entrypoint.sh" beforeDir="false" afterPath="$PROJECT_DIR$/docker/graphhopper-entrypoint.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker/photon-entrypoint.sh" beforeDir="false" afterPath="$PROJECT_DIR$/docker/photon-entrypoint.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/how-to/build-routing-graph.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/build-routing-graph.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/how-to/change-region.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/change-region.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/how-to/deploy-vps.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/deploy-vps.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/how-to/development.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/development.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/how-to/troubleshooting.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/troubleshooting.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/reference/configuration.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/reference/configuration.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/import-photon-dump.sh" beforeDir="false" afterPath="$PROJECT_DIR$/import-photon-dump.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/download-pbf.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/download-pbf.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/download-photon-dumps.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/download-photon-dumps.sh" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -94,61 +91,61 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.0" />
-      <entry key="MS500" value="1.0001958456264337" />
-      <entry key="S2" value="1.1253737990633308" />
-      <entry key="S5" value="1.638108619742857" />
-      <entry key="S10" value="2.432245484903853" />
-      <entry key="S30" value="5.094374371300447" />
-      <entry key="S60" value="8.124567019433641" />
-      <entry key="M2" value="11.483392938524279" />
-      <entry key="M5" value="14.836159312054686" />
-      <entry key="M10" value="16.30388192447885" />
-      <entry key="M15" value="16.841980152938902" />
-      <entry key="M30" value="17.4068425632304" />
-      <entry key="H1" value="17.70013937024362" />
-      <entry key="H2" value="18.0638262356964" />
-      <entry key="H4" value="24.270242733432532" />
-      <entry key="D1" value="326.96923530968235" />
-      <entry key="W1" value="1625.9893453903394" />
+      <entry key="MS100" value="1.7274855962404634" />
+      <entry key="MS500" value="4.066464791061063" />
+      <entry key="S2" value="5.401086172933727" />
+      <entry key="S5" value="6.141851342214988" />
+      <entry key="S10" value="8.956007651751555" />
+      <entry key="S30" value="21.708374848984832" />
+      <entry key="S60" value="30.33040603395799" />
+      <entry key="M2" value="36.37576996855573" />
+      <entry key="M5" value="40.736561139290245" />
+      <entry key="M10" value="42.459937658123074" />
+      <entry key="M15" value="43.6155054483988" />
+      <entry key="M30" value="47.63368391825835" />
+      <entry key="H1" value="53.75034142159228" />
+      <entry key="H2" value="59.51311944122945" />
+      <entry key="H4" value="68.3281988250015" />
+      <entry key="D1" value="365.08301771554966" />
+      <entry key="W1" value="1667.536449527077" />
     </decayedCancelled>
     <decayedSelected>
       <entry key="MS100" value="0.0" />
-      <entry key="MS500" value="9.9E-324" />
-      <entry key="S2" value="1.6866676039151763E-81" />
-      <entry key="S5" value="4.906951905813465E-33" />
-      <entry key="S10" value="7.004963886997184E-17" />
-      <entry key="S30" value="4.122259240796183E-6" />
-      <entry key="S60" value="0.0020303347607712827" />
-      <entry key="M2" value="0.04505923613168873" />
-      <entry key="M5" value="0.28940999785359856" />
-      <entry key="M10" value="0.5379683985640783" />
-      <entry key="M15" value="0.6614614065110641" />
-      <entry key="M30" value="0.8133027766532326" />
-      <entry key="H1" value="0.9018337371765003" />
-      <entry key="H2" value="0.9507295771918192" />
-      <entry key="H4" value="1.0285282088897947" />
-      <entry key="D1" value="27.230448841851707" />
-      <entry key="W1" value="167.6216970022945" />
+      <entry key="MS500" value="0.0" />
+      <entry key="S2" value="0.0" />
+      <entry key="S5" value="7.759679338035289E-306" />
+      <entry key="S10" value="2.785620099373799E-153" />
+      <entry key="S30" value="1.4070427598791533E-51" />
+      <entry key="S60" value="3.751056864243928E-26" />
+      <entry key="M2" value="1.9367645350542562E-13" />
+      <entry key="M5" value="8.219222354713232E-6" />
+      <entry key="M10" value="0.002866918616688181" />
+      <entry key="M15" value="0.020181041548623435" />
+      <entry key="M30" value="0.14205999277997916" />
+      <entry key="H1" value="0.3769087715844041" />
+      <entry key="H2" value="0.6146273592373663" />
+      <entry key="H4" value="0.8269774150190629" />
+      <entry key="D1" value="26.258366571102954" />
+      <entry key="W1" value="166.7534907895835" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="5.254293040640883E-7" />
-      <entry key="MS500" value="0.055485902057297455" />
-      <entry key="S2" value="0.5459391409885243" />
-      <entry key="S5" value="1.2397052038123682" />
-      <entry key="S10" value="2.13683578557801" />
-      <entry key="S30" value="4.906530897111511" />
-      <entry key="S60" value="7.9817976536830715" />
-      <entry key="M2" value="11.4258724632354" />
-      <entry key="M5" value="15.069847987885206" />
-      <entry key="M10" value="16.809882658390123" />
-      <entry key="M15" value="17.48099075858205" />
-      <entry key="M30" value="18.208275740861204" />
-      <entry key="H1" value="18.59586105062002" />
-      <entry key="H2" value="19.011452778539557" />
-      <entry key="H4" value="25.297198707938772" />
-      <entry key="D1" value="354.19681917999236" />
-      <entry key="W1" value="1793.6086060311861" />
+      <entry key="MS100" value="1.6479760666829535" />
+      <entry key="MS500" value="4.025378272893773" />
+      <entry key="S2" value="5.386475444708881" />
+      <entry key="S5" value="6.1228956799985115" />
+      <entry key="S10" value="8.92860768418637" />
+      <entry key="S30" value="21.6866030775628" />
+      <entry key="S60" value="30.316565866223065" />
+      <entry key="M2" value="36.367933853914344" />
+      <entry key="M5" value="40.73318557330126" />
+      <entry key="M10" value="42.46089903693968" />
+      <entry key="M15" value="43.633834225838335" />
+      <entry key="M30" value="47.773080526787645" />
+      <entry key="H1" value="54.124398281846986" />
+      <entry key="H2" value="60.12559118614595" />
+      <entry key="H4" value="69.15383706407961" />
+      <entry key="D1" value="391.33860904331766" />
+      <entry key="W1" value="1834.2875147810557" />
     </decayedShown>
   </component>
   <component name="ProjectColorInfo">{
@@ -536,7 +533,15 @@
       <option name="project" value="LOCAL" />
       <updated>1789746940897</updated>
     </task>
-    <option name="localTasksCounter" value="27" />
+    <task id="LOCAL-00027" summary="feat(web): improve layout">
+      <option name="closed" value="true" />
+      <created>1789818516155</created>
+      <option name="number" value="00027" />
+      <option name="presentableId" value="LOCAL-00027" />
+      <option name="project" value="LOCAL" />
+      <updated>1789818516156</updated>
+    </task>
+    <option name="localTasksCounter" value="28" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -573,7 +578,8 @@
     <MESSAGE value="feat(map): embed map styles" />
     <MESSAGE value="feat(web): improve loading and UX" />
     <MESSAGE value="feat(route): color route thumbnail by ride score" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(route): color route thumbnail by ride score" />
+    <MESSAGE value="feat(web): improve layout" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(web): improve layout" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -588,6 +594,6 @@
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1789800228570" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
+    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1789823650710" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
   </component>
 </project>

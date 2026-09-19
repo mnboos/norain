@@ -14,4 +14,5 @@ backend/db.sqlite3
 data/otp/*.obj
 *.sqlite3
 
-osm_workspace/
+# downloads from scripts/download-*.sh
+data/downloads/

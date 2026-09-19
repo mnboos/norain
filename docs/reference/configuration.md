@@ -25,15 +25,16 @@ take precedence over values loaded by `python-dotenv`.
 | `OPENWEATHERMAP_API_KEY` | Optional | Enables OWM fallback when primary fetching fails |
 | `WEATHERUNDERGROUND_API_KEY` | Optional | Pro only: corrects temperature and rain risk near now with nearby personal weather stations. Budgeted for the free PWS owner key (1500 calls/day, 30/min) |
 | `REDIS_URL` | `redis://localhost:6379` | In-flight grid-cell claims (DB 1) and the forecast-progress channel layer (DB 2); needed by the web process and every worker |
-| `OSM_DATA_URL` | `https://download.geofabrik.de/europe/switzerland-latest.osm.pbf` | The OSM extract GraphHopper builds its graph from, when `/graph-cache` is empty |
-| `GRAPHHOPPER_HEAP` | `6g` | GraphHopper serving JVM maximum heap; with `RAM_STORE` it must hold the whole graph |
+| `OSM_DATA_URL` | `https://download.geofabrik.de/europe/switzerland-latest.osm.pbf` | The OSM extract GraphHopper builds its graph from, when `/graph-cache` is empty. Every build reads `bike-<its file name>`, a copy filtered for bikes. A plain file name (no download) names a set merged by `just osm-import`, see [downloaded files](../how-to/import-geodata.md) |
+| `GRAPHHOPPER_HEAP` | `6g` | GraphHopper serving JVM maximum heap. With `MMAP` a few GB are enough; with `RAM_STORE` it must hold the whole graph |
 | `GRAPHHOPPER_BUILD_HEAP` | `GRAPHHOPPER_HEAP` | JVM maximum heap while building the graph |
-| `GRAPHHOPPER_DATAACCESS` | `RAM_STORE` | `RAM_STORE` keeps the graph in the heap; `MMAP` pages it in from disk with a small heap |
+| `GRAPHHOPPER_DATAACCESS` | `MMAP` | How the server holds the graph. `MMAP` lets the OS page it in from disk, so the heap stays small and the first queries after a start are slower; `RAM_STORE` keeps all of it in the heap. Serving only: the build always uses `graphhopper-config.yaml`'s `RAM_STORE`, and both write the same files, so switching needs no rebuild |
 | `GRAPHHOPPER_BUILD_GRAPH` | `true` | `true` builds the graph from `OSM_DATA_URL` when `/graph-cache` is empty. `false` exits with an error instead, for a graph [built elsewhere](../how-to/build-routing-graph.md) and copied in |
 | `GRAPHHOPPER_BUILD_ONLY` | `false` | `true` exits once the graph is built instead of serving it |
 | `GRAPHHOPPER_MEM_LIMIT` | `8g` | GraphHopper container memory and swap limit |
 | `PHOTON_INDEX_URL` | `https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst` | Photon import |
-| `PHOTON_INDEX_FILE` | Empty | Local artifact path inside the container; takes precedence over the URL |
+| `PHOTON_INDEX_FILE` | Empty | Local artifact path inside the container; takes precedence over the URL. Several `.jsonl.zst` / `.jsonl` dumps, separated by spaces, become one index |
+| `PHOTON_REPLACE_INDEX` | `false` | `true` imports even when an index exists, and swaps the old one out only once the new one is ready (`just photon-import` sets it) |
 | `PHOTON_ALLOW_DOWNLOAD` | `true`; production forces `false` | Permit downloading a missing index |
 | `PHOTON_IMPORT_ONLY` | `false` | Prepare/reuse the index and exit without serving |
 | `PHOTON_IMPORT_HEAP` | `4g` | Photon import JVM heap |
@@ -78,8 +79,9 @@ CORS allows `http://localhost:$FRONTEND_PORT` and `http://127.0.0.1:$FRONTEND_PO
 | Path | Contents |
 | --- | --- |
 | `${APP_STORAGE_PATH}/db/app/data/` | Development PostgreSQL/PostGIS data |
-| `data/graphhopper/osm/` | Downloaded OSM extract and elevation tiles (only read while building the graph) |
+| `data/graphhopper/osm/` | Downloaded OSM extract, its bike-filtered copy (`bike-*.osm.pbf`, the file the graph is built from) and elevation tiles (only read while building the graph) |
 | `data/graphhopper/cache/` | Built routing graph; empty it to build a new one |
+| `data/downloads/{osm,photon}/` | OSM extracts and Photon dumps from `just download-pbf` / `just download-photon-dumps`; not committed, only read by `osm-import` / `photon-import` |
 | `data/graphhopper/graphhopper-config.yaml` | Mounted routing configuration |
 | `data/graphhopper/models/` | Custom e-bike routing models |
 | `data/photon/` | Photon search data; inner `photon_data/` indicates an existing index |

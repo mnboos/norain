@@ -3,6 +3,10 @@
 Use this guide to route and search in a different region. You need the existing
 local setup and enough storage and memory to build the new graph.
 
+This covers one region that GraphHopper and Photon download themselves. To cover
+several countries at once, or to build from files you already have, follow
+[build routing and search from downloaded files](import-geodata.md) instead.
+
 1. Stop the geographic services from the repository root:
 
    ```bash

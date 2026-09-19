@@ -53,12 +53,12 @@ services:
       - OSM_DATA_DIR=/osm_data
       # Coverage area: any Geofabrik .osm.pbf (country/continent/planet). See .env.
       - OSM_DATA_URL=${OSM_DATA_URL:-https://download.geofabrik.de/europe/switzerland-latest.osm.pbf}
-      # Serving JVM heap (maximum). With RAM_STORE it must hold the whole graph.
+      # Serving JVM heap (maximum). With MMAP a few GB are enough; with RAM_STORE it must hold the whole graph.
       - GRAPHHOPPER_HEAP=${GRAPHHOPPER_HEAP:-6g}
       # Heap for building the graph, when this container builds it; defaults to GRAPHHOPPER_HEAP.
       - GRAPHHOPPER_BUILD_HEAP=${GRAPHHOPPER_BUILD_HEAP:-}
-      # RAM_STORE (graph in heap) or MMAP (graph paged in from disk, small heap).
-      - GRAPHHOPPER_DATAACCESS=${GRAPHHOPPER_DATAACCESS:-RAM_STORE}
+      # MMAP (graph paged in from disk by the OS, small heap) or RAM_STORE (whole graph in the heap).
+      - GRAPHHOPPER_DATAACCESS=${GRAPHHOPPER_DATAACCESS:-MMAP}
       # true: build the graph from OSM_DATA_URL when /graph-cache is empty. false: fail instead,
       # for a graph built elsewhere and copied in. See the entrypoint.
       - GRAPHHOPPER_BUILD_GRAPH=${GRAPHHOPPER_BUILD_GRAPH:-true}

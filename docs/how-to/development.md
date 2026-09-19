@@ -7,8 +7,9 @@ GeoDjango requires GEOS, PROJ, and GDAL on the host. On Debian/Ubuntu install
 `binutils libproj-dev gdal-bin`; on macOS, `brew install gdal` (or `just setup`, which
 also creates the backend virtual environment) — the settings find Homebrew's libraries on
 their own; on Windows, set `GDAL_LIBRARY_PATH` and `GEOS_LIBRARY_PATH` to the
-corresponding OSGeo4W DLLs. The geodata recipes in the justfile use `docker` (Windows:
-`podman`); set `CONTAINER_ENGINE` to override. Start PostGIS before Django:
+corresponding OSGeo4W DLLs. The geodata recipes in the justfile use `docker`, or `podman`
+on Windows and wherever no `docker` binary is installed (a `docker` shell alias doesn't
+count: recipes run in a non-interactive shell); set `CONTAINER_ENGINE` to override. Start PostGIS before Django:
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d db

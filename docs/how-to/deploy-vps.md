@@ -13,9 +13,9 @@ then clone this repository at `/srv/norain`.
 
 GraphHopper builds its routing graph on the VPS the first time it starts with an empty
 `graphhopper/cache`, from `OSM_DATA_URL`. Building needs more memory than serving:
-Switzerland needs a build heap (`GRAPHHOPPER_BUILD_HEAP`) of about 6 GB and a serving heap
-of about 3 GB; DACH a 16–24 GB build heap and a 10–14 GB serving heap, or a 3 GB serving
-heap with `GRAPHHOPPER_DATAACCESS=MMAP`. `GRAPHHOPPER_MEM_LIMIT` must fit the build heap.
+Switzerland needs a build heap (`GRAPHHOPPER_BUILD_HEAP`) of about 6 GB, DACH 16–24 GB.
+Serving uses `GRAPHHOPPER_DATAACCESS=MMAP`, so a 3 GB serving heap is enough for either
+(with `RAM_STORE`, DACH would need 10–14 GB). `GRAPHHOPPER_MEM_LIMIT` must fit the build heap.
 If the VPS cannot hold the build, [build the graph on another
 machine](build-routing-graph.md) and copy it in. Prepare Photon with a manual import before first startup (see below), using
 `PHOTON_IMPORT_HEAP` (4 GB by default). The published images are built for
@@ -133,8 +133,12 @@ kept; you can remove it after success. Plain `.jsonl` dumps and prebuilt `.tar.b
 indexes are also supported. Failed imports clean up their temporary index so a
 retry can start cleanly. Do not run multiple imports against the same data directory.
 
-An existing `photon_data` directory is always reused. To replace an index, stop
-Photon and move that directory to a backup location before importing. You can also
+To import several dumps into one index (one per country, say), list them all in
+`PHOTON_INDEX_FILE`, separated by spaces.
+
+An existing `photon_data` directory is reused. To replace an index, add
+`-e PHOTON_REPLACE_INDEX=true` to the import: the old index is swapped out only once the
+new one is ready. You can also
 copy a completed `photon_data` directory from another machine using the same Photon
 version; stop Photon on both machines during the copy.
 

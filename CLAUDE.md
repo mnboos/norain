@@ -380,6 +380,21 @@ machine (`GRAPHHOPPER_BUILD_ONLY=true`) and copied over (`docs/how-to/build-rout
 GraphHopper calls the build "import". It refuses a graph built with a different config or jar,
 so any change to `graphhopper-config.yaml` or `data/graphhopper/models/` means rebuilding.
 
+Every build reads `bike-<extract>`, not the extract itself: `docker/graphhopper-filter-osm.sh`
+(osmium) keeps only the ways, nodes and cycle-route relations the bike profiles use (a third of
+the Swiss file, same speeds), and the entrypoint redoes it when the extract is newer.
+`just osm-import FILE…` runs the same script on local files (several are filtered one by one,
+then merged) and writes `bike-<OSM_DATA_URL's file name>`, the file every rebuild reads: one file
+must have that name, several need `OSM_DATA_URL` set to a plain file name for the merged set.
+If a profile ever needs a tag the filter drops, add it to that script and rebuild.
+
+The whole download-and-import workflow is in `docs/how-to/import-geodata.md`.
+`just photon-import FILE…` imports several Photon dumps into **one** index (one dump per country).
+Photon's import takes one file and drops what the index already holds, so the entrypoint
+streams them as one, keeping the header and country-list lines from the first dump only.
+`PHOTON_REPLACE_INDEX=true` builds the new index beside the old one and swaps it in only when
+the import worked.
+
 **Ride speed lives in those model files**, nowhere in Python: every eta and every
 `rider_speed` comes from the travel times GraphHopper returns. Each profile's `speed` block
 starts from `bike_average_speed` (road type and surface), scales it, applies the
