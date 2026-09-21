@@ -12,6 +12,7 @@ import {
 } from "@quasar/extras/material-symbols-sharp";
 import type { RouteForecastOut } from "@norain/api/models";
 import { peakRain } from "@/utils/forecastDetails";
+import { headwindColor, temperatureColor } from "@/utils/statColors";
 
 const props = withDefaults(
     defineProps<{
@@ -27,7 +28,14 @@ const props = withDefaults(
 const { forecast } = toRefs(props);
 const showExplanation = ref(false);
 
+/** The colour of a tile with nothing to flag. */
+const NEUTRAL = "blue-grey-6";
+
 const peakRate = computed(() => peakRain(forecast.value));
+const meanTemp = computed(() => {
+    const temps = forecast.value.samples.map(s => s.temp);
+    return temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : null;
+});
 const tempRange = computed(() => {
     const temps = forecast.value.samples.map(s => Math.round(s.temp));
     if (!temps.length) return null;
@@ -35,6 +43,13 @@ const tempRange = computed(() => {
     return low === high ? `${low}` : `${low}–${high}`;
 });
 const stats = computed(() => [
+    {
+        label: "Temperatur",
+        icon: symSharpThermostat,
+        color: temperatureColor(meanTemp.value) ?? NEUTRAL,
+        value: tempRange.value,
+        unit: "°C",
+    },
     {
         label: "Regenrisiko",
         icon: symSharpRainy,
@@ -45,14 +60,6 @@ const stats = computed(() => [
                 : Math.round(forecast.value.summary.rainProbability * 100),
         unit: "%",
     },
-    { label: "Regen max.", icon: symSharpWaterDrop, color: "light-blue-7", value: peakRate.value, unit: "mm/h" },
-    {
-        label: "Gegenwind max.",
-        icon: symSharpAir,
-        color: "negative",
-        value: forecast.value.summary.maxHeadwind,
-        unit: "km/h",
-    },
     {
         label: "Wind\u00adaufwand max.",
         icon: symSharpSpeed,
@@ -61,28 +68,45 @@ const stats = computed(() => [
         unit: "",
     },
     {
+        label: "Distanz",
+        icon: symSharpStraighten,
+        color: "blue-grey-6",
+        value: (forecast.value.totalDistanceM / 1000).toFixed(1),
+        unit: "km",
+    },
+
+    {
         // "kein" and "Nicht verfügbar" are different answers: the first is the forecast
         // saying the road is fine, the second is having no forecast to read.
         label: "Frost",
         icon: symSharpAcUnit,
-        color: "light-blue-6",
+        // Blue only when the server found a frost risk somewhere on the ride.
+        color: forecast.value.summary.maxFrostLevel != null ? "light-blue-6" : NEUTRAL,
         value: forecast.value.samples.length ? (forecast.value.summary.maxFrostLevel ?? "kein") : null,
         unit: "",
     },
-    { label: "Temperatur", icon: symSharpThermostat, color: "red-5", value: tempRange.value, unit: "°C" },
+
+    {
+        label: "Regen max.",
+        icon: symSharpWaterDrop,
+        color: Number(peakRate.value) > 0 ? "light-blue-7" : NEUTRAL,
+        value: peakRate.value,
+        unit: "mm/h",
+    },
+
+    {
+        label: "Gegenwind max.",
+        icon: symSharpAir,
+        color: headwindColor(forecast.value.summary.maxHeadwind) ?? NEUTRAL,
+        value: forecast.value.summary.maxHeadwind,
+        unit: "km/h",
+    },
     {
         label: "Dauer",
         icon: symSharpSchedule,
         color: "blue-grey-6",
         value: Math.round(forecast.value.totalSeconds / 60),
         unit: "min",
-    },
-    {
-        label: "Distanz",
-        icon: symSharpStraighten,
-        color: "blue-grey-6",
-        value: (forecast.value.totalDistanceM / 1000).toFixed(1),
-        unit: "km",
     },
 ]);
 /** The stats cut into table rows of `columns` cells. */
@@ -109,7 +133,13 @@ const note =
                     <template v-for="(stat, c) in row" :key="stat.label">
                         <q-separator v-if="c > 0" vertical />
                         <q-item class="col column flex-center text-center q-px-xs">
-                            <q-icon :name="stat.icon" size="sm" :color="stat.color" />
+                            <!-- Quasar's color prop takes palette names only; a hex goes in style. -->
+                            <q-icon
+                                :name="stat.icon"
+                                size="sm"
+                                :color="stat.color.startsWith('#') ? undefined : stat.color"
+                                :style="stat.color.startsWith('#') ? { color: stat.color } : undefined"
+                            />
                             <q-item-label caption>{{ stat.label }}</q-item-label>
                             <q-item-label class="text-weight-bold">
                                 <template v-if="stat.value != null">

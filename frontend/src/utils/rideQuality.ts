@@ -54,12 +54,12 @@ function clamp01(x: number): number {
     return x < 0 ? 0 : x > 1 ? 1 : x;
 }
 
-function hexToRgb(hex: string): [number, number, number] {
+export function hexToRgb(hex: string): [number, number, number] {
     const n = Number.parseInt(hex.slice(1), 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-function rgbToHex(r: number, g: number, b: number): string {
+export function rgbToHex(r: number, g: number, b: number): string {
     const part = (v: number) =>
         Math.round(Math.min(255, Math.max(0, v)))
             .toString(16)
