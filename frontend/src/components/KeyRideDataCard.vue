@@ -103,12 +103,12 @@ const note =
 <template>
     <q-card>
         <!-- The grid runs to the card's edges; separators draw the lines between the cells. -->
-        <q-card-section aria-label="Kennzahlen der Fahrt" class="">
+        <q-card-section aria-label="Kennzahlen der Fahrt" class="q-pa-none">
             <template v-for="(row, r) in rows" :key="r">
                 <div class="row no-wrap">
                     <template v-for="(stat, c) in row" :key="stat.label">
                         <q-separator v-if="c > 0" vertical />
-                        <q-item class="col column flex-center text-center q-py-sm q-px-xs">
+                        <q-item class="col column flex-center text-center q-px-xs">
                             <q-icon :name="stat.icon" size="sm" :color="stat.color" />
                             <q-item-label caption>{{ stat.label }}</q-item-label>
                             <q-item-label class="text-weight-bold">

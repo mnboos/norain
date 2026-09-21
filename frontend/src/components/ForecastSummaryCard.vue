@@ -68,7 +68,7 @@ const note =
                 />
             </q-card-section>
             <q-card-section class="col">
-                <h2 class="text-h5 text-weight-medium q-mt-none q-mb-xs">{{ headline }}</h2>
+                <h5 class="text-weight-medium q-mb-sm">{{ headline }}</h5>
                 <p v-if="explanation" class="text-body2 q-mb-sm">{{ explanation }}</p>
                 <WeatherSections v-if="forecast.sections?.length" :sections="forecast.sections" />
             </q-card-section>
