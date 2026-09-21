@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import { useQuasar } from "quasar";
-import {
-    symSharpDarkMode,
-    symSharpLightMode,
-    symSharpPedalBike,
-    symSharpSettings,
-} from "@quasar/extras/material-symbols-sharp";
+import { symSharpDarkMode, symSharpLightMode, symSharpSettings } from "@quasar/extras/material-symbols-sharp";
 import { toggleDark } from "@/utils/theme";
 import { useSession } from "@/composables/useSession";
 
@@ -21,11 +16,14 @@ const { isAuthenticated, session } = useSession();
             :class="{ 'bg-dark': $q.dark.isActive }"
             :style="$q.dark.isActive ? undefined : 'background: linear-gradient(90deg, #1b365d, #2d5a8e)'"
         >
-            <q-toolbar class="q-px-xs-none q-px-md-sm q-py-none">
-                <q-toolbar-title class="text-subtitle1 text-weight-bold">
-                    <q-icon :name="symSharpPedalBike" size="sm" class="q-mr-sm" />
-                    Brisavia
-                </q-toolbar-title>
+            <q-toolbar class="q-px-xs-none q-px-md-sm overflow-hidden" style="height: 50px">
+                <img
+                    src="/brand/mark-master%20-%20Copy.png"
+                    alt="Brisavia Logo"
+                    class="q-mr-sm"
+                    style="height: 100%; width: auto; object-fit: contain; translate: 0 3px"
+                />
+                <q-toolbar-title class="text-subtitle1 text-weight-bold">Brisavia</q-toolbar-title>
                 <!--                <NavTabs v-if="!$q.screen.lt.sm" />-->
                 <q-btn flat dense no-caps size="sm" to="/account" :icon="symSharpSettings">
                     <q-tooltip v-if="isAuthenticated">{{ session.user?.email }}</q-tooltip>

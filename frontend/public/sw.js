@@ -2,8 +2,8 @@
 self.addEventListener("push", event => {
     let data;
     try { data = event.data.json(); } catch { return; }
-    event.waitUntil(self.registration.showNotification(data.title || "NoRain", {
-        body: data.body, tag: data.tag, data: { url: data.url }, icon: "/favicon.ico",
+    event.waitUntil(self.registration.showNotification(data.title || "Brisavia", {
+        body: data.body, tag: data.tag, data: { url: data.url }, icon: "/brand/icon-192.png",
     }));
 });
 self.addEventListener("notificationclick", event => {
