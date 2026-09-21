@@ -20,10 +20,10 @@ const { isAuthenticated, session } = useSession();
                 <img
                     src="/brand/mark-master%20-%20Copy.png"
                     alt="Brisavia Logo"
-                    class="q-mr-sm"
-                    style="height: 100%; width: auto; object-fit: contain; translate: 0 3px"
+                    class="q-ma-none"
+                    style="height: 100%; width: auto; object-fit: contain; translate: -10px 3px"
                 />
-                <q-toolbar-title class="text-subtitle1 text-weight-bold">Brisavia</q-toolbar-title>
+                <q-toolbar-title class="text-subtitle1 text-weight-bold q-pa-none">Brisavia</q-toolbar-title>
                 <!--                <NavTabs v-if="!$q.screen.lt.sm" />-->
                 <q-btn flat dense no-caps size="sm" to="/account" :icon="symSharpSettings">
                     <q-tooltip v-if="isAuthenticated">{{ session.user?.email }}</q-tooltip>

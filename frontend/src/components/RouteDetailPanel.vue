@@ -118,13 +118,13 @@ watch(forecast, () => {
             <div class="col-12 col-sm-6 col-md-2">
                 <q-card class="full-height">
                     <q-item class="q-pt-md">
-                        <q-item-section side>
-                            <slot name="back" />
-                        </q-item-section>
+                        <!--                        <q-item-section side>-->
+                        <!--                            <slot name="back" />-->
+                        <!--                        </q-item-section>-->
                         <!-- Left out where this card is at its narrowest, so the name keeps its room. -->
-                        <q-item-section v-if="$q.screen.width >= 1280 || $q.screen.lt.md" avatar>
-                            <q-avatar rounded class="bg-tint-wet" text-color="primary" :icon="symSharpMap" />
-                        </q-item-section>
+                        <!--                        <q-item-section v-if="$q.screen.width >= 1280 || $q.screen.lt.md" avatar>-->
+                        <!--                            <q-avatar rounded class="bg-tint-wet" text-color="primary" :icon="symSharpMap" />-->
+                        <!--                        </q-item-section>-->
                         <q-item-section>
                             <q-item-label>
                                 <h1 class="text-h6 text-weight-bold q-ma-none">{{ route.name }}</h1>
@@ -170,6 +170,14 @@ watch(forecast, () => {
             </div>
 
             <template v-if="forecast">
+                <div class="col-12 col-sm-6 col-md-4">
+                    <!-- The key figures sit under the forecast, in the same card. -->
+                    <q-card class="full-height column">
+                        <ForecastSummaryCard flat :forecast="forecast" class="col" />
+                        <q-separator />
+                        <KeyRideDataCard flat :forecast="forecast" :columns="$q.screen.width >= 1280 ? 4 : 2" />
+                    </q-card>
+                </div>
                 <div class="col-12 col-sm-6 col-md-3">
                     <q-card class="full-height">
                         <q-card-section class="q-pb-none">
@@ -190,14 +198,7 @@ watch(forecast, () => {
                         </q-card-section>
                     </q-card>
                 </div>
-                <div class="col-12 col-sm-6 col-md-4">
-                    <!-- The key figures sit under the forecast, in the same card. -->
-                    <q-card class="full-height column">
-                        <ForecastSummaryCard flat :forecast="forecast" class="col" />
-                        <q-separator />
-                        <KeyRideDataCard flat :forecast="forecast" :columns="$q.screen.width >= 1280 ? 4 : 2" />
-                    </q-card>
-                </div>
+
                 <div class="col-12 col-sm-6 col-md-3">
                     <q-card class="full-height column">
                         <q-card-section class="col" style="min-height: 300px">

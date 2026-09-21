@@ -194,7 +194,7 @@ onMounted(() => {
     </q-form>
 
     <template v-else>
-        <q-form class="q-gutter-md" @submit.prevent="submit">
+        <q-form class="" @submit.prevent="submit">
             <q-input
                 v-model="identifier"
                 :type="mode === 'login' ? 'text' : 'email'"
@@ -222,7 +222,7 @@ onMounted(() => {
                 outlined
                 :rules="[v => !!v || 'Pflichtfeld']"
             />
-            <q-btn type="submit" color="primary" :label="submitLabel" :loading="submitting" />
+            <q-btn type="submit" no-caps class="fit" color="primary" :label="submitLabel" :loading="submitting" />
         </q-form>
 
         <div class="q-mt-md q-gutter-sm">

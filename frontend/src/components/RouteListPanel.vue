@@ -70,7 +70,7 @@ const addButtonLabel = computed(() => (atRouteLimit.value ? "Tarifgrenze erreich
     <q-card
         :square="$q.screen.lt['sm']"
         :flat="$q.screen.lt['sm']"
-        class="q-ma-xs-none q-ma-sm-md col-sm-6 col-md-8 col column"
+        class="q-ma-xs-none q-ma-sm-md col-sm-9 col-md-6 col column"
     >
         <q-card-section v-if="!loading && routes.length" class="no-padding">
             <q-item-label header class="no-padding">
@@ -129,7 +129,8 @@ const addButtonLabel = computed(() => (atRouteLimit.value ? "Tarifgrenze erreich
                             {{ route.startName }} → {{ route.destName }} · {{ profileLabel(route.profile) }}
                         </q-item-label>
                         <q-item-label v-if="route.returnRouteId" caption>
-                            Rückfahrt: {{ route.returnScheduleDescription }} · {{ relativeTime(route.returnNextDeparture) }}
+                            Rückfahrt: {{ route.returnScheduleDescription }} ·
+                            {{ relativeTime(route.returnNextDeparture) }}
                         </q-item-label>
                         <!-- Rain and frost: the two readings that decide whether you ride. They add
                      to the wording above, never replace it, and the line is there only when
