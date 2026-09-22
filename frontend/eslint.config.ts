@@ -100,5 +100,20 @@ export default defineConfigWithVueTs(
         ...ts.configs.disableTypeChecked,
         files: ["public/**/*.js"],
     },
+    {
+        // Node build scripts, run as plain CommonJS. Like the service worker, no tsconfig
+        // covers them, so they are linted without type information.
+        ...ts.configs.disableTypeChecked,
+        files: ["scripts/**/*.cjs"],
+        languageOptions: {
+            sourceType: "commonjs",
+            parserOptions: { program: null, project: false, projectService: false },
+        },
+        rules: {
+            ...ts.configs.disableTypeChecked.rules,
+            // CommonJS: require() is the module system here.
+            "@typescript-eslint/no-require-imports": "off",
+        },
+    },
     prettierConfig,
 );
