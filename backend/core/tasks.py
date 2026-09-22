@@ -39,6 +39,7 @@ from core.weather import (  # reuse existing functions
     WeatherSnapshot,
     build_geometry,
     compute_route_weather,
+    routing_points,
 )
 from core.wind import valid_vertex_times
 
@@ -59,14 +60,7 @@ async def _refresh_route_geometry_async(route_id: str, *, backfill_only: bool = 
     if backfill_only and valid_vertex_times(route.polyline_coordinates, route.vertex_times):
         return
     try:
-        geometry = await build_geometry(
-            route.profile,
-            route.start_lat,
-            route.start_lon,
-            route.dest_lat,
-            route.dest_lon,
-            SAMPLE_INTERVAL_DEFAULT_S,
-        )
+        geometry = await build_geometry(route.profile, route.routing_points, SAMPLE_INTERVAL_DEFAULT_S)
     except ROUTING_ERRORS as e:
         # The old geometry stays in place; the next edit or backfill tries again.
         logger.error(f"Failed to fetch route geometry for {route.name}: {e}")
@@ -301,10 +295,7 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
 
     return await build_geometry(
         params["profile"],
-        params["start_lat"],
-        params["start_lon"],
-        params["dest_lat"],
-        params["dest_lon"],
+        routing_points(params["start_lat"], params["start_lon"], params["dest_lat"], params["dest_lon"]),
         params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S),
     )
 

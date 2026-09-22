@@ -67,6 +67,10 @@ export interface RecurringRouteOut {
     /**
      * 
      */
+    viaPoints?: Array<Array<number>>;
+    /**
+     * 
+     */
     profile: string;
     /**
      * 
@@ -181,6 +185,7 @@ export function RecurringRouteOutFromJSONTyped(json: any, ignoreDiscriminator: b
         'destLat': json['dest_lat'],
         'destLon': json['dest_lon'],
         'destName': json['dest_name'],
+        'viaPoints': json['via_points'] == null ? undefined : json['via_points'],
         'profile': json['profile'],
         'scheduleCron': json['schedule_cron'],
         'scheduleDescription': json['schedule_description'],
@@ -223,6 +228,7 @@ export function RecurringRouteOutToJSONTyped(value?: RecurringRouteOut | null, i
         'dest_lat': value['destLat'],
         'dest_lon': value['destLon'],
         'dest_name': value['destName'],
+        'via_points': value['viaPoints'],
         'profile': value['profile'],
         'schedule_cron': value['scheduleCron'],
         'schedule_description': value['scheduleDescription'],

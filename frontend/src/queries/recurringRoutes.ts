@@ -1,7 +1,13 @@
 import { computed, toValue, type MaybeRefOrGetter } from "vue";
 import { useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/vue-query";
 import { RecurringRoutesApi } from "@norain/api/apis";
-import type { RecurringRouteIn, RecurringRouteOut, RouteForecastOut } from "@norain/api/models";
+import type {
+    RecurringRouteIn,
+    RecurringRouteOut,
+    RouteForecastOut,
+    RoutePreviewIn,
+    RoutePreviewOut,
+} from "@norain/api/models";
 
 import { entitlementKeys } from "@/queries/entitlements";
 import { reportForecastProgress, useForecastProgress } from "@/queries/forecastProgress";
@@ -198,7 +204,20 @@ export function useUpdateRecurringRoute() {
             api.coreApiRecurringRouteUpdateRoute({ routeId: id, recurringRouteIn: data }),
         onSuccess: async route => {
             queryClient.setQueryData(recurringRouteKeys.detail(route.id), route);
+            // A reshaped route has no geometry until the server rebuilds it; its cached
+            // forecasts describe the old line, so mark them stale for when it is back.
+            if (!route.hasGeometry) {
+                await queryClient.invalidateQueries({ queryKey: recurringRouteKeys.detail(route.id), exact: false });
+            }
             await invalidateRouteLists(queryClient);
         },
     });
+}
+
+/**
+ * The line through start, via points and destination, for the route editor. Not a query:
+ * the editor calls it once per drag and cancels the previous call through `signal`.
+ */
+export function previewRoute(data: RoutePreviewIn, signal: AbortSignal): Promise<RoutePreviewOut> {
+    return api.coreApiRecurringRouteRoutePreview({ routePreviewIn: data }, { signal });
 }

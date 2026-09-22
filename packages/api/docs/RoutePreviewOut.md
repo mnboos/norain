@@ -1,32 +1,26 @@
 
-# DepartureComparison
+# RoutePreviewOut
 
 
 ## Properties
 
 Name | Type
 ------------ | -------------
-`candidates` | [Array&lt;DepartureCandidate&gt;](DepartureCandidate.md)
-`explanation` | string
-`recommendedTime` | string
-`requestedTime` | string
-`windowEnd` | string
-`windowStart` | string
+`coordinates` | Array&lt;Array&lt;number&gt;&gt;
+`distanceM` | number
+`timeS` | number
 
 ## Example
 
 ```typescript
-import type { DepartureComparison } from ''
+import type { RoutePreviewOut } from ''
 
 // TODO: Update the object below with actual values
 const example = {
-  "candidates": null,
-  "explanation": null,
-  "recommendedTime": null,
-  "requestedTime": null,
-  "windowEnd": null,
-  "windowStart": null,
-} satisfies DepartureComparison
+  "coordinates": null,
+  "distanceM": null,
+  "timeS": null,
+} satisfies RoutePreviewOut
 
 console.log(example)
 
@@ -35,7 +29,7 @@ const exampleJSON: string = JSON.stringify(example)
 console.log(exampleJSON)
 
 // Parse the JSON string back to an object
-const exampleParsed = JSON.parse(exampleJSON) as DepartureComparison
+const exampleParsed = JSON.parse(exampleJSON) as RoutePreviewOut
 console.log(exampleParsed)
 ```
 

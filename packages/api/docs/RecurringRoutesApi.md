@@ -9,6 +9,7 @@ All URIs are relative to *http://localhost*
 | [**coreApiRecurringRouteGetRoute**](RecurringRoutesApi.md#coreapirecurringroutegetroute) | **GET** /api/routes/{route_id} | Get Route |
 | [**coreApiRecurringRouteListRoutes**](RecurringRoutesApi.md#coreapirecurringroutelistroutes) | **GET** /api/routes | List Routes |
 | [**coreApiRecurringRouteRouteForecast**](RecurringRoutesApi.md#coreapirecurringrouterouteforecast) | **GET** /api/routes/{route_id}/forecast | Route Forecast |
+| [**coreApiRecurringRouteRoutePreview**](RecurringRoutesApi.md#coreapirecurringrouteroutepreview) | **POST** /api/routes/preview | Route Preview |
 | [**coreApiRecurringRouteUpdateRoute**](RecurringRoutesApi.md#coreapirecurringrouteupdateroute) | **PUT** /api/routes/{route_id} | Update Route |
 
 
@@ -349,6 +350,73 @@ No authorization required
 |-------------|-------------|------------------|
 | **200** | OK |  -  |
 | **202** | Accepted |  -  |
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+
+## coreApiRecurringRouteRoutePreview
+
+> RoutePreviewOut coreApiRecurringRouteRoutePreview(routePreviewIn)
+
+Route Preview
+
+The line through the given points, for the route editor.  The one request that calls GraphHopper directly: an editor cannot wait on a queue. It returns only the line — no sampling, no weather — and a saved route\&#39;s geometry still comes from &#x60;&#x60;refresh_route_geometry&#x60;&#x60;.
+
+### Example
+
+```ts
+import {
+  Configuration,
+  RecurringRoutesApi,
+} from '';
+import type { CoreApiRecurringRouteRoutePreviewRequest } from '';
+
+async function example() {
+  console.log("🚀 Testing  SDK...");
+  const api = new RecurringRoutesApi();
+
+  const body = {
+    // RoutePreviewIn
+    routePreviewIn: ...,
+  } satisfies CoreApiRecurringRouteRoutePreviewRequest;
+
+  try {
+    const data = await api.coreApiRecurringRouteRoutePreview(body);
+    console.log(data);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+// Run the test
+example().catch(console.error);
+```
+
+### Parameters
+
+
+| Name | Type | Description  | Notes |
+|------------- | ------------- | ------------- | -------------|
+| **routePreviewIn** | [RoutePreviewIn](RoutePreviewIn.md) |  | |
+
+### Return type
+
+[**RoutePreviewOut**](RoutePreviewOut.md)
+
+### Authorization
+
+No authorization required
+
+### HTTP request headers
+
+- **Content-Type**: `application/json`
+- **Accept**: `application/json`
+
+
+### HTTP response details
+| Status code | Description | Response headers |
+|-------------|-------------|------------------|
+| **200** | OK |  -  |
 
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 

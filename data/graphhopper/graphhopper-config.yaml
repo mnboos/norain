@@ -84,10 +84,10 @@ graphhopper:
   # usage) and the routing will also be slower than with `turn_costs: false`.
   # Prepared on the build machine (docs/how-to/build-routing-graph.md), so CH costs the VPS only
   # disk and RAM. It also keeps a query's working set small if the graph is served as MMAP.
-  profiles_ch:
-    - profile: bike
-    - profile: ebike
-    - profile: fast_ebike
+#  profiles_ch:
+#    - profile: bike
+#    - profile: ebike
+#    - profile: fast_ebike
 
   # Hybrid mode:
   # Similar to speed mode, the hybrid mode (Landmarks, LM) also speeds up routing by doing calculating auxiliary data
@@ -98,7 +98,10 @@ graphhopper:
   # profile for which an LM profile exists. Important: This only will give correct routing results if the weights
   # calculated for the profile are equal or larger (for every edge) than those calculated for the profile that was used
   # for the preparation (`my_other_profile`)
-  profiles_lm: []
+  profiles_lm:
+      - profile: bike
+      - profile: ebike
+      - profile: fast_ebike
 
 
   #### Encoded Values ####
@@ -155,7 +158,8 @@ graphhopper:
   graph.elevation.cache_dir: /osm_data/elevation
 
   # If you have a slow disk or plenty of RAM change the default MMAP to:
-  graph.elevation.dataaccess: RAM_STORE
+#  graph.elevation.dataaccess: RAM_STORE
+  graph.elevation.dataaccess: MMAP
 
 
 
@@ -250,7 +254,7 @@ graphhopper:
   graph.dataaccess.default_type: RAM_STORE
 
   # will write way names in the preferred language (language code as defined in ISO 639-1 or ISO 639-2):
-  # datareader.preferred_language: en
+  datareader.preferred_language: de
 
   #### Custom Areas ####
 
@@ -264,7 +268,7 @@ graphhopper:
 
   # GraphHopper applies country-specific routing rules during import (not enabled by default).
   # You need to redo the import for changes to take effect.
-  # country_rules.enabled: true
+  country_rules.enabled: true
 
 # Dropwizard server configuration
 server:

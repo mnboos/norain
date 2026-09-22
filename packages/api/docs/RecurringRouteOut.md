@@ -34,6 +34,7 @@ Name | Type
 `totalDistanceM` | number
 `totalSeconds` | number
 `updatedAt` | Date
+`viaPoints` | Array&lt;Array&lt;number&gt;&gt;
 
 ## Example
 
@@ -70,6 +71,7 @@ const example = {
   "totalDistanceM": null,
   "totalSeconds": null,
   "updatedAt": null,
+  "viaPoints": null,
 } satisfies RecurringRouteOut
 
 console.log(example)

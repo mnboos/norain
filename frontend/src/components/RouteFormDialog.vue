@@ -8,11 +8,13 @@ import {
     symSharpSchedule,
 } from "@quasar/extras/material-symbols-sharp";
 import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
+import RouteEditorDialog from "@/components/RouteEditorDialog.vue";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import type { PlacesSearchResult, RecurringRouteIn } from "@norain/api/models";
 import { usePlaceSearch } from "@/queries/places";
+import type { LonLat } from "@/utils/routeEditing";
 
 defineProps<{
     modelValue: boolean;
@@ -28,6 +30,16 @@ const description = ref("");
 const start = ref<PlacesSearchResult | null>(null);
 const dest = ref<PlacesSearchResult | null>(null);
 const profile = ref("bike");
+// Kept when start or destination changes: the user resets them in the editor if they no longer fit.
+const viaPoints = ref<LonLat[]>([]);
+const editing = ref(false);
+
+function lonLat(place: PlacesSearchResult | null): LonLat | null {
+    const [lon, lat] = place?.geometry.coordinates ?? [];
+    return lon === undefined || lat === undefined ? null : [lon, lat];
+}
+const startLonLat = computed(() => lonLat(start.value));
+const destLonLat = computed(() => lonLat(dest.value));
 const days = ref<number[]>([1, 2, 3, 4, 5]);
 const time = ref("08:00");
 const twoWay = ref(false);
@@ -121,6 +133,7 @@ function onSave() {
         destLat: dest.value.geometry.coordinates[1] ?? 0,
         destLon: dest.value.geometry.coordinates[0] ?? 0,
         destName: dest.value.properties.name,
+        viaPoints: viaPoints.value,
         profile: profile.value,
         scheduleCron: scheduleCron.value,
         departureFlexBeforeMinutes: flexBefore.value,
@@ -210,6 +223,21 @@ function onClose() {
                 </q-select>
 
                 <RouteLocationPicker v-model:start="start" v-model:dest="dest" />
+
+                <div v-if="startLonLat && destLonLat" class="row items-center q-gutter-sm">
+                    <q-btn outline no-caps label="Strecke anpassen" @click="editing = true" />
+                    <span v-if="viaPoints.length" class="text-caption">
+                        {{ viaPoints.length }} Zwischenpunkt{{ viaPoints.length === 1 ? "" : "e" }}
+                    </span>
+                    <RouteEditorDialog
+                        v-model="editing"
+                        :start="startLonLat"
+                        :dest="destLonLat"
+                        :profile="profile"
+                        :via-points="viaPoints"
+                        @apply="viaPoints = $event"
+                    />
+                </div>
 
                 <div>
                     <div class="text-caption q-mb-sm">Tage</div>

@@ -138,6 +138,12 @@ class RecurringRoute(models.Model):
     destination_point = models.PointField(srid=4326, geography=True)
     dest_name = models.CharField(max_length=300)
 
+    via_points = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="[[lon, lat], ...] points the route must pass, in riding order",
+    )
+
     profile = models.CharField(
         max_length=50,
         default="bike",
@@ -209,6 +215,12 @@ class RecurringRoute(models.Model):
     @property
     def dest_lon(self) -> float:
         return self.destination_point.x
+
+    @property
+    def routing_points(self) -> tuple[tuple[float, float], ...]:
+        """Start, via points and destination as (lon, lat), the order GraphHopper takes."""
+        via = tuple((float(lon), float(lat)) for lon, lat in self.via_points or ())
+        return ((self.start_lon, self.start_lat), *via, (self.dest_lon, self.dest_lat))
 
     @property
     def polyline_coordinates(self) -> list[list[float]] | None:

@@ -55,6 +55,10 @@ export interface RecurringRouteIn {
     /**
      * 
      */
+    viaPoints?: Array<Array<number>>;
+    /**
+     * 
+     */
     profile?: string;
     /**
      * 
@@ -120,6 +124,7 @@ export function RecurringRouteInFromJSONTyped(json: any, ignoreDiscriminator: bo
         'destLat': json['destLat'],
         'destLon': json['destLon'],
         'destName': json['destName'],
+        'viaPoints': json['viaPoints'] == null ? undefined : json['viaPoints'],
         'profile': json['profile'] == null ? undefined : json['profile'],
         'scheduleCron': json['scheduleCron'],
         'scheduleDescription': json['scheduleDescription'],
@@ -150,6 +155,7 @@ export function RecurringRouteInToJSONTyped(value?: RecurringRouteIn | null, ign
         'destLat': value['destLat'],
         'destLon': value['destLon'],
         'destName': value['destName'],
+        'viaPoints': value['viaPoints'],
         'profile': value['profile'],
         'scheduleCron': value['scheduleCron'],
         'scheduleDescription': value['scheduleDescription'],

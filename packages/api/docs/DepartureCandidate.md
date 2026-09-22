@@ -6,11 +6,11 @@
 
 Name | Type
 ------------ | -------------
-`departureTime` | string
 `arrivalTime` | string
 `available` | boolean
-`rideScore` | number
+`departureTime` | string
 `rideLabel` | string
+`rideScore` | number
 
 ## Example
 
@@ -19,11 +19,11 @@ import type { DepartureCandidate } from ''
 
 // TODO: Update the object below with actual values
 const example = {
-  "departureTime": null,
   "arrivalTime": null,
   "available": null,
-  "rideScore": null,
+  "departureTime": null,
   "rideLabel": null,
+  "rideScore": null,
 } satisfies DepartureCandidate
 
 console.log(example)

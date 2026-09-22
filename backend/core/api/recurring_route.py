@@ -4,12 +4,15 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from asgiref.sync import sync_to_async
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest
+from loguru import logger
 from ninja import Router
 from ninja.errors import HttpError
 from pydantic import Field, field_validator
+from redis.exceptions import RedisError
 
 from .. import telemetry
 from ..auth.backend import session_auth
@@ -21,9 +24,27 @@ from ..ride_quality import worst_frost_level, worst_rain_level, worst_ride_score
 from ..schedule import check_schedule_cron, forecast_available_at, next_departure
 from ..schemas import CamelSchema
 from ..tasks import refresh_route_geometry, start_forecast_job
+from ..weather import ROUTING_ERRORS, preview_route
 from .route_weather import check_routing_profile, flexibility_params, job_out
 
 router = Router(auth=session_auth, tags=["Recurring routes"])
+
+# Enough to bend a commute round a few spots, few enough to keep a GraphHopper call cheap.
+MAX_VIA_POINTS = 15
+
+
+def check_coordinates(points: list[list[float]]) -> list[list[float]]:
+    """[[lon, lat], ...], as lists: the stored JSON compares equal to it only in that shape."""
+    for point in points:
+        if len(point) != 2 or not (-180 <= point[0] <= 180 and -90 <= point[1] <= 90):
+            raise ValueError("each point is [lon, lat]")
+    return [[float(lon), float(lat)] for lon, lat in points]
+
+
+def check_via_points(points: list[list[float]]) -> list[list[float]]:
+    if len(points) > MAX_VIA_POINTS:
+        raise ValueError(f"at most {MAX_VIA_POINTS} via points")
+    return check_coordinates(points)
 
 
 class RecurringRouteIn(CamelSchema):
@@ -35,6 +56,7 @@ class RecurringRouteIn(CamelSchema):
     dest_lat: float = Field(ge=-90, le=90)
     dest_lon: float = Field(ge=-180, le=180)
     dest_name: str
+    via_points: list[list[float]] = Field(default_factory=list)
     profile: str = "bike"
     schedule_cron: str
     schedule_description: str
@@ -50,6 +72,7 @@ class RecurringRouteIn(CamelSchema):
         return check_schedule_cron(value) if value else value
 
     _profile = field_validator("profile")(check_routing_profile)
+    _via_points = field_validator("via_points")(check_via_points)
     _schedule_cron = field_validator("schedule_cron")(check_schedule_cron)
 
 
@@ -109,6 +132,7 @@ class RecurringRouteOut(CamelSchema):
     dest_lat: float
     dest_lon: float
     dest_name: str
+    via_points: list[list[float]] = Field(default_factory=list)
     profile: str
     schedule_cron: str
     schedule_description: str
@@ -167,6 +191,7 @@ def _route_to_out(route: RecurringRoute) -> RecurringRouteOut:
         dest_lat=route.dest_lat,
         dest_lon=route.dest_lon,
         dest_name=route.dest_name,
+        via_points=route.via_points or [],
         profile=route.profile,
         schedule_cron=route.schedule_cron,
         schedule_description=route.schedule_description,
@@ -275,6 +300,55 @@ async def create_route(request: HttpRequest, data: RecurringRouteIn):
     return _route_to_out(route)
 
 
+class RoutePreviewIn(CamelSchema):
+    profile: str = "bike"
+    # [[lon, lat], ...]: start, via points, destination.
+    points: list[list[float]] = Field(min_length=2, max_length=MAX_VIA_POINTS + 2)
+
+    _profile = field_validator("profile")(check_routing_profile)
+    _points = field_validator("points")(check_coordinates)
+
+
+class RoutePreviewOut(CamelSchema):
+    coordinates: list[list[float]]
+    distance_m: float
+    time_s: int
+
+
+# The editor asks once per drag, so a minute's worth of real editing stays far below this.
+PREVIEW_LIMIT_PER_MINUTE = 60
+
+
+def _preview_allowed(user_id: int) -> bool:
+    """Per-account limit on preview calls. Fails open, like the cell claims: the cache
+    guards GraphHopper's load, it never decides whether a user may edit."""
+    key = f"routepreview:{user_id}:{int(datetime.now(tz=UTC).timestamp() // 60)}"
+    try:
+        cache.add(key, 0, 90)
+        return cache.incr(key) <= PREVIEW_LIMIT_PER_MINUTE
+    except (RedisError, OSError, ValueError) as exc:
+        logger.warning(f"Route preview limit unavailable: {exc}")
+        return True
+
+
+@router.post("/routes/preview", response=RoutePreviewOut)
+async def route_preview(request: HttpRequest, data: RoutePreviewIn):
+    """The line through the given points, for the route editor.
+
+    The one request that calls GraphHopper directly: an editor cannot wait on a queue. It
+    returns only the line — no sampling, no weather — and a saved route's geometry still
+    comes from ``refresh_route_geometry``.
+    """
+    user = await _current_user(request)
+    if not _preview_allowed(user.pk):
+        raise HttpError(429, "Zu viele Routenberechnungen. Bitte kurz warten.")
+    try:
+        return await preview_route(data.profile, tuple((lon, lat) for lon, lat in data.points))
+    except ROUTING_ERRORS as exc:
+        logger.info(f"Route preview failed: {exc}")
+        raise HttpError(422, "Für diese Punkte wurde keine Route gefunden.") from None
+
+
 @router.get("/routes/{route_id}", response=RecurringRouteOut)
 async def get_route(request: HttpRequest, route_id: UUID):
     """Get a single recurring route by ID."""
@@ -305,6 +379,7 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
         or route.dest_lat != data.dest_lat
         or route.dest_lon != data.dest_lon
         or route.profile != data.profile
+        or route.via_points != data.via_points
     )
 
     values = data.model_dump(
@@ -480,6 +555,7 @@ def _save_return(route, cron, description):
         "start_name": route.dest_name,
         "destination_point": route.start_point,
         "dest_name": route.start_name,
+        "via_points": list(reversed(route.via_points or [])),
         "profile": route.profile,
         "schedule_cron": cron or returning.schedule_cron,
         "schedule_description": description or (returning.schedule_description if returning else cron),
@@ -492,6 +568,7 @@ def _save_return(route, cron, description):
         returning.start_point != values["start_point"]
         or returning.destination_point != values["destination_point"]
         or returning.profile != values["profile"]
+        or returning.via_points != values["via_points"]
     ):
         values.update(sample_points=None, polyline=None, vertex_times=None, geometry_fetched_at=None)
     returning, _ = RecurringRoute.objects.update_or_create(return_of=route, defaults=values)

@@ -16,6 +16,8 @@ export * from './PropertiesSchema';
 export * from './RecurringRouteIn';
 export * from './RecurringRouteOut';
 export * from './RouteForecastOut';
+export * from './RoutePreviewIn';
+export * from './RoutePreviewOut';
 export * from './RouteSection';
 export * from './RouteThumbnail';
 export * from './RouteWeatherSummary';

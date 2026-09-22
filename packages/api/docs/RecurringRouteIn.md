@@ -22,6 +22,7 @@ Name | Type
 `startLat` | number
 `startLon` | number
 `startName` | string
+`viaPoints` | Array&lt;Array&lt;number&gt;&gt;
 
 ## Example
 
@@ -46,6 +47,7 @@ const example = {
   "startLat": null,
   "startLon": null,
   "startName": null,
+  "viaPoints": null,
 } satisfies RecurringRouteIn
 
 console.log(example)

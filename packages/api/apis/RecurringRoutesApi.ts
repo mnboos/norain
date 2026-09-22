@@ -28,6 +28,16 @@ import {
     RecurringRouteOutFromJSON,
     RecurringRouteOutToJSON,
 } from '../models/RecurringRouteOut';
+import {
+    type RoutePreviewIn,
+    RoutePreviewInFromJSON,
+    RoutePreviewInToJSON,
+} from '../models/RoutePreviewIn';
+import {
+    type RoutePreviewOut,
+    RoutePreviewOutFromJSON,
+    RoutePreviewOutToJSON,
+} from '../models/RoutePreviewOut';
 
 export interface RecurringRoutesApiCoreApiRecurringRouteCreateRouteRequest {
     /**
@@ -71,6 +81,13 @@ export interface RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest {
      * 
      */
     departureFlexAfterMinutes?: number | null;
+}
+
+export interface RecurringRoutesApiCoreApiRecurringRouteRoutePreviewRequest {
+    /**
+     * 
+     */
+    routePreviewIn: RoutePreviewIn;
 }
 
 export interface RecurringRoutesApiCoreApiRecurringRouteUpdateRouteRequest {
@@ -344,6 +361,55 @@ export class RecurringRoutesApi extends runtime.BaseAPI {
      */
     async coreApiRecurringRouteRouteForecast(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
         const response = await this.coreApiRecurringRouteRouteForecastRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for coreApiRecurringRouteRoutePreview without sending the request
+     */
+    async coreApiRecurringRouteRoutePreviewRequestOpts(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRoutePreviewRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['routePreviewIn'] == null) {
+            throw new runtime.RequiredError(
+                'routePreviewIn',
+                'Required parameter "routePreviewIn" was null or undefined when calling coreApiRecurringRouteRoutePreview().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/api/routes/preview`;
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: RoutePreviewInToJSON(requestParameters['routePreviewIn']),
+        };
+    }
+
+    /**
+     * The line through the given points, for the route editor.  The one request that calls GraphHopper directly: an editor cannot wait on a queue. It returns only the line — no sampling, no weather — and a saved route\'s geometry still comes from ``refresh_route_geometry``.
+     * Route Preview
+     */
+    async coreApiRecurringRouteRoutePreviewRaw(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRoutePreviewRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RoutePreviewOut>> {
+        const requestOptions = await this.coreApiRecurringRouteRoutePreviewRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => RoutePreviewOutFromJSON(jsonValue));
+    }
+
+    /**
+     * The line through the given points, for the route editor.  The one request that calls GraphHopper directly: an editor cannot wait on a queue. It returns only the line — no sampling, no weather — and a saved route\'s geometry still comes from ``refresh_route_geometry``.
+     * Route Preview
+     */
+    async coreApiRecurringRouteRoutePreview(requestParameters: RecurringRoutesApiCoreApiRecurringRouteRoutePreviewRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RoutePreviewOut> {
+        const response = await this.coreApiRecurringRouteRoutePreviewRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

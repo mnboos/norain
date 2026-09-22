@@ -18,6 +18,8 @@ models/PropertiesSchema.ts
 models/RecurringRouteIn.ts
 models/RecurringRouteOut.ts
 models/RouteForecastOut.ts
+models/RoutePreviewIn.ts
+models/RoutePreviewOut.ts
 models/RouteSection.ts
 models/RouteThumbnail.ts
 models/RouteWeatherSummary.ts

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, toRefs, watch } from "vue";
 import { useQuasar } from "quasar";
-import { symSharpCloudOff, symSharpMap, symSharpPedalBike } from "@quasar/extras/material-symbols-sharp";
+import { symSharpCloudOff, symSharpPedalBike } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
@@ -11,6 +11,8 @@ import KeyRideDataCard from "@/components/KeyRideDataCard.vue";
 import WindDistributionBar from "@/components/WindDistributionBar.vue";
 import WeatherChart from "@/components/WeatherChart.vue";
 import NiceMap from "@/components/NiceMap.vue";
+import RouteEditorDialog from "@/components/RouteEditorDialog.vue";
+import { toLonLat, type LonLat } from "@/utils/routeEditing";
 import { useRecurringRoute, useRecurringRouteForecast, useUpdateRecurringRoute } from "@/queries/recurringRoutes";
 
 const PROFILE_LABELS: Record<string, string> = {
@@ -97,6 +99,18 @@ function saveFlexibility() {
     });
 }
 
+// Reshaping is done on the outbound route; the server mirrors its via points onto the return.
+const editing = ref(false);
+const saveShape = useUpdateRecurringRoute();
+const canEditShape = computed(() => !route.value.parentRouteId);
+const viaPoints = computed(() => (route.value.viaPoints ?? []).map(toLonLat));
+function saveViaPoints(points: LonLat[]) {
+    saveShape.mutate(
+        { id: route.value.id, data: { ...route.value, viaPoints: points } },
+        { onError: () => $q.notify({ type: "negative", message: "Die Strecke konnte nicht gespeichert werden." }) },
+    );
+}
+
 // The forecast is assembled from one grid cell per ~1 km² of route, fetched by background
 // workers. Showing how many have landed turns an indefinite wait into a determinate one.
 const forecastProgressPercent = computed(() => {
@@ -142,6 +156,26 @@ watch(forecast, () => {
                             :icon="symSharpPedalBike"
                             :label="profileLabel"
                             class="q-ml-none q-mt-sm"
+                        />
+                        <q-btn
+                            v-if="canEditShape"
+                            flat
+                            dense
+                            no-caps
+                            color="primary"
+                            label="Strecke anpassen"
+                            class="q-mt-sm"
+                            :loading="saveShape.isPending.value"
+                            @click="editing = true"
+                        />
+                        <RouteEditorDialog
+                            v-if="canEditShape"
+                            v-model="editing"
+                            :start="[route.startLon, route.startLat]"
+                            :dest="[route.destLon, route.destLat]"
+                            :profile="route.profile"
+                            :via-points="viaPoints"
+                            @apply="saveViaPoints"
                         />
                     </q-card-section>
                     <q-separator inset />

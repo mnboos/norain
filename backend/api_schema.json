@@ -839,6 +839,16 @@
                     "startName": {
                         "title": "Startname",
                         "type": "string"
+                    },
+                    "viaPoints": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Viapoints",
+                        "type": "array"
                     }
                 },
                 "required": [
@@ -1047,6 +1057,16 @@
                             }
                         ],
                         "title": "Updated At"
+                    },
+                    "via_points": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Via Points",
+                        "type": "array"
                     }
                 },
                 "required": [
@@ -1164,6 +1184,61 @@
                     "summary"
                 ],
                 "title": "RouteForecastOut",
+                "type": "object"
+            },
+            "RoutePreviewIn": {
+                "properties": {
+                    "points": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "maxItems": 17,
+                        "minItems": 2,
+                        "title": "Points",
+                        "type": "array"
+                    },
+                    "profile": {
+                        "default": "bike",
+                        "title": "Profile",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "points"
+                ],
+                "title": "RoutePreviewIn",
+                "type": "object"
+            },
+            "RoutePreviewOut": {
+                "properties": {
+                    "coordinates": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Coordinates",
+                        "type": "array"
+                    },
+                    "distance_m": {
+                        "title": "Distance M",
+                        "type": "number"
+                    },
+                    "time_s": {
+                        "title": "Time S",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "coordinates",
+                    "distance_m",
+                    "time_s"
+                ],
+                "title": "RoutePreviewOut",
                 "type": "object"
             },
             "RouteSection": {
@@ -1970,6 +2045,39 @@
                     }
                 },
                 "summary": "Create Route",
+                "tags": [
+                    "Recurring routes"
+                ]
+            }
+        },
+        "/api/routes/preview": {
+            "post": {
+                "description": "The line through the given points, for the route editor.\n\nThe one request that calls GraphHopper directly: an editor cannot wait on a queue. It\nreturns only the line — no sampling, no weather — and a saved route's geometry still\ncomes from ``refresh_route_geometry``.",
+                "operationId": "core_api_recurring_route_route_preview",
+                "parameters": [],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RoutePreviewIn"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RoutePreviewOut"
+                                }
+                            }
+                        },
+                        "description": "OK"
+                    }
+                },
+                "summary": "Route Preview",
                 "tags": [
                     "Recurring routes"
                 ]

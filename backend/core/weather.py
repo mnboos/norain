@@ -144,30 +144,51 @@ def _sample_indices(cum_s: list[float], interval_s: int) -> list[int]:
 # not JSON (ValueError), or a reply without a path (KeyError, IndexError).
 ROUTING_ERRORS = (httpx.HTTPError, ValueError, KeyError, IndexError)
 
-@alru_cache(maxsize=64)
-@provider("graphhopper")
-async def _fetch_route(profile: str, start_lat: float, start_lon: float, dest_lat: float, dest_lon: float) -> dict:
-    body = {
+# (lon, lat) pairs in riding order: start, any via points, destination. A tuple of tuples,
+# because alru_cache keys on the arguments.
+RoutingPoints = tuple[tuple[float, float], ...]
+
+
+def routing_points(start_lat: float, start_lon: float, dest_lat: float, dest_lon: float, via=()) -> RoutingPoints:
+    """Start, via points ([lon, lat] each) and destination as ``_fetch_route`` takes them."""
+    return ((start_lon, start_lat), *((float(lon), float(lat)) for lon, lat in via), (dest_lon, dest_lat))
+
+
+def _route_body(profile: str, points: RoutingPoints) -> dict:
+    """The one GraphHopper request, so the editor's preview and the saved geometry agree."""
+    return {
         "profile": profile,
-        "points": [[start_lon, start_lat], [dest_lon, dest_lat]],
+        "points": [list(p) for p in points],
         "points_encoded": False,
         "calc_points": True,
         "instructions": False,
         "details": ["time"],
     }
+
+
+@alru_cache(maxsize=64)
+@provider("graphhopper")
+async def _fetch_route(profile: str, points: RoutingPoints) -> dict:
     async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{GRAPHHOPPER_URL}/route", json=body, timeout=30)
+        resp = await client.post(f"{GRAPHHOPPER_URL}/route", json=_route_body(profile, points), timeout=30)
         resp.raise_for_status()
         return resp.json()
+
+
+async def preview_route(profile: str, points: RoutingPoints) -> dict:
+    """The line alone, for the route editor: no sampling, no weather."""
+    path = (await _fetch_route(profile, points))["paths"][0]
+    return {
+        "coordinates": path["points"]["coordinates"],
+        "distance_m": round(path.get("distance", 0.0), 1),
+        "time_s": int(path.get("time", 0) / 1000),
+    }
 
 
 # --------------------------------------------------------------------------- geometry
 async def build_geometry(
     profile: str,
-    start_lat: float,
-    start_lon: float,
-    dest_lat: float,
-    dest_lon: float,
+    points: RoutingPoints,
     interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
 ) -> dict:
     """Route with GraphHopper and sample it at fixed *time* intervals.
@@ -176,7 +197,7 @@ async def build_geometry(
     its rounded grid coordinates. Shared by the ad-hoc forecast path, the saved-route
     geometry task and forecast-job planning so all three sample a route identically.
     """
-    route = await _fetch_route(profile, start_lat, start_lon, dest_lat, dest_lon)
+    route = await _fetch_route(profile, points)
     path = route["paths"][0]
     coords: list[list[float]] = path["points"]["coordinates"]
     time_details = path.get("details", {}).get("time", [[0, len(coords) - 1, path.get("time", 0)]])
@@ -329,7 +350,7 @@ async def compute_route_weather(
     else:
         # Ad-hoc: fetch route from GraphHopper and compute sample points
         geometry = await build_geometry(
-            profile, start_lat, start_lon, dest_lat, dest_lon, interval_seconds
+            profile, routing_points(start_lat, start_lon, dest_lat, dest_lon), interval_seconds
         )
         coords = geometry["polyline"]
         sample_points = geometry["sample_points"]
