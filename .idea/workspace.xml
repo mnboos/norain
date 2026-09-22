@@ -4,28 +4,57 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="feat(web): improve layout">
-      <change beforePath="$PROJECT_DIR$/.env.template" beforeDir="false" afterPath="$PROJECT_DIR$/.env.template" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="chore(web): improve layout">
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources.local.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources.local.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources/36e8b038-9469-4e64-8ec4-130c0b0f15fc.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources/36e8b038-9469-4e64-8ec4-130c0b0f15fc/storage_v2/_src_/schema/main.uQUzAA.meta" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources/data_sources_history.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources/data_sources_history.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.justfile" beforeDir="false" afterPath="$PROJECT_DIR$/.justfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/graphhopper/graphhopper-config.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/data/graphhopper/graphhopper-config.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/deploy/production.env.template" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/production.env.template" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker-compose.base.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.base.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker/graphhopper-entrypoint.sh" beforeDir="false" afterPath="$PROJECT_DIR$/docker/graphhopper-entrypoint.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker/photon-entrypoint.sh" beforeDir="false" afterPath="$PROJECT_DIR$/docker/photon-entrypoint.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/how-to/build-routing-graph.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/build-routing-graph.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/how-to/change-region.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/change-region.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/how-to/deploy-vps.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/deploy-vps.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/how-to/development.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/development.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/how-to/troubleshooting.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/troubleshooting.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/reference/configuration.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/reference/configuration.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/import-photon-dump.sh" beforeDir="false" afterPath="$PROJECT_DIR$/import-photon-dump.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/download-pbf.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/download-pbf.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/scripts/download-photon-dumps.sh" beforeDir="false" afterPath="$PROJECT_DIR$/scripts/download-photon-dumps.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/backend/settings/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/backend/settings/base.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/core/api/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/core/api/places.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/places.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/core/api/recurring_route.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/recurring_route.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/core/api/route_weather.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/route_weather.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/core/auth/backend.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/auth/backend.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/core/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/core/tasks.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/tasks.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/core/test_route_editing.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/test_route_editing.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/openapi.json" beforeDir="false" afterPath="$PROJECT_DIR$/backend/openapi.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/uv.lock" beforeDir="false" afterPath="$PROJECT_DIR$/backend/uv.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/eslint.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/eslint.config.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/RouteDetailPanel.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/RouteDetailPanel.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/RouteEditorDialog.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/RouteEditorDialog.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/RouteFormDialog.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/RouteFormDialog.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/main.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/main.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/map.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/map.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/queries/__tests__/departureWindows.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/queries/__tests__/departureWindows.spec.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/queries/routeWeather.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/queries/routeWeather.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/.openapi-generator/FILES" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/.openapi-generator/FILES" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/apis/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/apis/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/DepartureCandidate.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/DepartureCandidate.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/DepartureComparison.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/DepartureComparison.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/EnsembleModelStatistics.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/EnsembleModelStatistics.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/EnsembleRange.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/EnsembleRange.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/ForecastJobOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ForecastJobOut.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/ForecastSampleOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ForecastSampleOut.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/ForecastUncertainty.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ForecastUncertainty.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/ForecastUncertaintySummary.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ForecastUncertaintySummary.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/GeometrySchema.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/GeometrySchema.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/PlacesSearchResult.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/PlacesSearchResult.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/PropertiesSchema.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/PropertiesSchema.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/RecurringRouteIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RecurringRouteIn.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/RecurringRouteOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RecurringRouteOut.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/RouteForecastOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RouteForecastOut.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/RoutePreviewIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RoutePreviewIn.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/RoutePreviewOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RoutePreviewOut.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/RouteSection.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RouteSection.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/RouteThumbnail.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RouteThumbnail.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/RouteWeatherSummary.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RouteWeatherSummary.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/WindArrow.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/WindArrow.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/WindDistribution.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/WindDistribution.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/index.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -82,7 +111,7 @@
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
     &quot;url&quot;: &quot;git@github.com:mnboos/norain.git&quot;,
-    &quot;accountId&quot;: &quot;57bf1470-7fa6-4c30-bb17-4df684649632&quot;
+    &quot;accountId&quot;: &quot;1e09e859-377f-4bd5-8229-57d727dba804&quot;
   }
 }</component>
   <component name="McpProjectServerCommands">
@@ -91,61 +120,61 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.7274855962404634" />
-      <entry key="MS500" value="4.066464791061063" />
-      <entry key="S2" value="5.401086172933727" />
-      <entry key="S5" value="6.141851342214988" />
-      <entry key="S10" value="8.956007651751555" />
-      <entry key="S30" value="21.708374848984832" />
-      <entry key="S60" value="30.33040603395799" />
-      <entry key="M2" value="36.37576996855573" />
-      <entry key="M5" value="40.736561139290245" />
-      <entry key="M10" value="42.459937658123074" />
-      <entry key="M15" value="43.6155054483988" />
-      <entry key="M30" value="47.63368391825835" />
-      <entry key="H1" value="53.75034142159228" />
-      <entry key="H2" value="59.51311944122945" />
-      <entry key="H4" value="68.3281988250015" />
-      <entry key="D1" value="365.08301771554966" />
-      <entry key="W1" value="1667.536449527077" />
+      <entry key="MS100" value="1.5891783632478929" />
+      <entry key="MS500" value="4.6564241215797155" />
+      <entry key="S2" value="9.467940396549015" />
+      <entry key="S5" value="12.439983172257701" />
+      <entry key="S10" value="15.645474537340027" />
+      <entry key="S30" value="23.356002882281896" />
+      <entry key="S60" value="29.183578249465125" />
+      <entry key="M2" value="35.35930404183633" />
+      <entry key="M5" value="42.0587137787363" />
+      <entry key="M10" value="45.534437637390475" />
+      <entry key="M15" value="48.75850247500675" />
+      <entry key="M30" value="69.69439758113288" />
+      <entry key="H1" value="125.04210613257082" />
+      <entry key="H2" value="197.89915038809121" />
+      <entry key="H4" value="262.7926484751073" />
+      <entry key="D1" value="609.8746873222627" />
+      <entry key="W1" value="1930.5744484476165" />
     </decayedCancelled>
     <decayedSelected>
       <entry key="MS100" value="0.0" />
       <entry key="MS500" value="0.0" />
       <entry key="S2" value="0.0" />
-      <entry key="S5" value="7.759679338035289E-306" />
-      <entry key="S10" value="2.785620099373799E-153" />
-      <entry key="S30" value="1.4070427598791533E-51" />
-      <entry key="S60" value="3.751056864243928E-26" />
-      <entry key="M2" value="1.9367645350542562E-13" />
-      <entry key="M5" value="8.219222354713232E-6" />
-      <entry key="M10" value="0.002866918616688181" />
-      <entry key="M15" value="0.020181041548623435" />
-      <entry key="M30" value="0.14205999277997916" />
-      <entry key="H1" value="0.3769087715844041" />
-      <entry key="H2" value="0.6146273592373663" />
-      <entry key="H4" value="0.8269774150190629" />
-      <entry key="D1" value="26.258366571102954" />
-      <entry key="W1" value="166.7534907895835" />
+      <entry key="S5" value="1.0849513806694838E-236" />
+      <entry key="S10" value="1.0416099945130526E-118" />
+      <entry key="S30" value="4.7050948139962414E-40" />
+      <entry key="S60" value="2.1691232522672413E-20" />
+      <entry key="M2" value="1.4739918210748507E-10" />
+      <entry key="M5" value="1.4077937573903223E-4" />
+      <entry key="M10" value="0.027746990314277804" />
+      <entry key="M15" value="0.22126674212831426" />
+      <entry key="M30" value="2.243744435645062" />
+      <entry key="H1" value="7.898791621148915" />
+      <entry key="H2" value="15.232571768836138" />
+      <entry key="H4" value="21.344657242509342" />
+      <entry key="D1" value="51.95507111260678" />
+      <entry key="W1" value="193.90457128689408" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="1.6479760666829535" />
-      <entry key="MS500" value="4.025378272893773" />
-      <entry key="S2" value="5.386475444708881" />
-      <entry key="S5" value="6.1228956799985115" />
-      <entry key="S10" value="8.92860768418637" />
-      <entry key="S30" value="21.6866030775628" />
-      <entry key="S60" value="30.316565866223065" />
-      <entry key="M2" value="36.367933853914344" />
-      <entry key="M5" value="40.73318557330126" />
-      <entry key="M10" value="42.46089903693968" />
-      <entry key="M15" value="43.633834225838335" />
-      <entry key="M30" value="47.773080526787645" />
-      <entry key="H1" value="54.124398281846986" />
-      <entry key="H2" value="60.12559118614595" />
-      <entry key="H4" value="69.15383706407961" />
-      <entry key="D1" value="391.33860904331766" />
-      <entry key="W1" value="1834.2875147810557" />
+      <entry key="MS100" value="1.5436083857659613" />
+      <entry key="MS500" value="4.627640272612092" />
+      <entry key="S2" value="9.452357437195348" />
+      <entry key="S5" value="12.431450934342003" />
+      <entry key="S10" value="15.63981941514026" />
+      <entry key="S30" value="23.35289182153165" />
+      <entry key="S60" value="29.181408217481803" />
+      <entry key="M2" value="35.35777943578406" />
+      <entry key="M5" value="42.05801883689283" />
+      <entry key="M10" value="45.561444903900956" />
+      <entry key="M15" value="48.97789303723936" />
+      <entry key="M30" value="71.92986697659707" />
+      <entry key="H1" value="132.92642147969826" />
+      <entry key="H2" value="213.11763824154536" />
+      <entry key="H4" value="284.1273532871536" />
+      <entry key="D1" value="661.825186087174" />
+      <entry key="W1" value="2124.4763213458714" />
     </decayedShown>
   </component>
   <component name="ProjectColorInfo">{
@@ -212,7 +241,7 @@
     &quot;python.packages.toolwindow.project.migrated.to.right.top.v2&quot;: &quot;true&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;settings.javascript.linters.eslint&quot;,
     &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
-    &quot;ts.external.directory.path&quot;: &quot;/home/martin/src/norain/frontend/node_modules/typescript/lib&quot;,
+    &quot;ts.external.directory.path&quot;: &quot;C:\\src\\norain\\frontend\\node_modules\\typescript\\lib&quot;,
     &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   },
   &quot;keyToStringList&quot;: {
@@ -289,7 +318,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-python-sdk-821f704e66d9-5bd6d13a2a75-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-262.9437.214" />
+        <option value="bundled-js-predefined-d6986cc7102b-4abd2a77f808-JavaScript-PY-262.10315.174" />
+        <option value="bundled-python-sdk-eff1e8def5f5-5bd6d13a2a75-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-262.10315.174" />
       </set>
     </attachedChunks>
   </component>
@@ -324,6 +354,10 @@
       <workItem from="1789547346153" duration="21093000" />
       <workItem from="1789579363327" duration="15345000" />
       <workItem from="1789732986662" duration="5176000" />
+      <workItem from="1789991112776" duration="3493000" />
+      <workItem from="1790014073558" duration="1527000" />
+      <workItem from="1790017542597" duration="4708000" />
+      <workItem from="1790091215762" duration="3558000" />
     </task>
     <task id="LOCAL-00001" summary="chore(ide): update settings">
       <option name="closed" value="true" />
@@ -541,7 +575,39 @@
       <option name="project" value="LOCAL" />
       <updated>1789818516156</updated>
     </task>
-    <option name="localTasksCounter" value="28" />
+    <task id="LOCAL-00028" summary="chore(web): add branding">
+      <option name="closed" value="true" />
+      <created>1790014280263</created>
+      <option name="number" value="00028" />
+      <option name="presentableId" value="LOCAL-00028" />
+      <option name="project" value="LOCAL" />
+      <updated>1790014280263</updated>
+    </task>
+    <task id="LOCAL-00029" summary="chore(web): improve layout">
+      <option name="closed" value="true" />
+      <created>1790019006226</created>
+      <option name="number" value="00029" />
+      <option name="presentableId" value="LOCAL-00029" />
+      <option name="project" value="LOCAL" />
+      <updated>1790019006227</updated>
+    </task>
+    <task id="LOCAL-00030" summary="chore(web): improve layout">
+      <option name="closed" value="true" />
+      <created>1790019864328</created>
+      <option name="number" value="00030" />
+      <option name="presentableId" value="LOCAL-00030" />
+      <option name="project" value="LOCAL" />
+      <updated>1790019864328</updated>
+    </task>
+    <task id="LOCAL-00031" summary="chore(web): improve layout">
+      <option name="closed" value="true" />
+      <created>1790021439105</created>
+      <option name="number" value="00031" />
+      <option name="presentableId" value="LOCAL-00031" />
+      <option name="project" value="LOCAL" />
+      <updated>1790021439105</updated>
+    </task>
+    <option name="localTasksCounter" value="32" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -579,21 +645,22 @@
     <MESSAGE value="feat(web): improve loading and UX" />
     <MESSAGE value="feat(route): color route thumbnail by ride score" />
     <MESSAGE value="feat(web): improve layout" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(web): improve layout" />
+    <MESSAGE value="chore(web): add branding" />
+    <MESSAGE value="chore(web): improve layout" />
+    <option name="LAST_COMMIT_MESSAGE" value="chore(web): improve layout" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
       <breakpoints>
         <line-breakpoint enabled="true" type="javascript">
           <url>file://$PROJECT_DIR$/frontend/src/components/KeyRideDataCard.vue</url>
-          <line>105</line>
-          <properties lambdaOrdinal="-1" />
+          <line>129</line>
           <option name="timeStamp" value="1" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1789823650710" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
+    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1790017716504" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
   </component>
 </project>
