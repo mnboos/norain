@@ -123,7 +123,7 @@ class RouteEditingTests(TestCase):
             self.assertEqual(self._preview().status_code, 422)
         self.assertEqual(self._preview([[9, 47]]).status_code, 422)
 
-    def test_preview_is_rate_limited_and_needs_sign_in(self):
+    def test_preview_is_rate_limited_and_allows_anonymous_planning(self):
         # One fixed minute, so the window cannot roll over mid-test.
         clock = SimpleNamespace(now=lambda tz: datetime(2030, 1, 1, 8, 0, 30, tzinfo=tz))
         with (
@@ -134,4 +134,5 @@ class RouteEditingTests(TestCase):
                 self.assertEqual(self._preview().status_code, 200)
             self.assertEqual(self._preview().status_code, 429)
         self.client.logout()
-        self.assertIn(self._preview().status_code, (401, 403))
+        with patch("core.weather._fetch_route", AsyncMock(return_value=GH_ROUTE)):
+            self.assertEqual(self._preview().status_code, 200)

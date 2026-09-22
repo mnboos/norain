@@ -155,6 +155,12 @@ class RecurringRoute(models.Model):
     departure_flex_before_minutes = models.PositiveSmallIntegerField(default=0)
     departure_flex_after_minutes = models.PositiveSmallIntegerField(default=0)
 
+    geometry_source = models.CharField(
+        max_length=20, default="graphhopper", choices=[("graphhopper", "GraphHopper"), ("imported", "Imported path")]
+    )
+    imported_coordinates = models.JSONField(default=list, blank=True)
+    duration_seconds = models.PositiveIntegerField(null=True, blank=True)
+
     # Pre-computed route geometry (populated by background task on create/update)
     polyline = models.LineStringField(
         srid=4326,

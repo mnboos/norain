@@ -6,6 +6,7 @@
 </route>
 
 <script setup lang="ts">
+import { GeometrySource } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
 import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
@@ -17,16 +18,34 @@ import ForecastDetails from "@/components/ForecastDetails.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
 import { placeLabel } from "@/utils/placeLabel";
-import { QSelect } from "quasar";
+import { QSelect, useQuasar } from "quasar";
+import { useQuery } from "@tanstack/vue-query";
+import { useSession } from "@/composables/useSession";
+import GpxImportDialog from "@/components/GpxImportDialog.vue";
+import RouteTimingFields from "@/components/RouteTimingFields.vue";
+import RouteFormDialog from "@/components/RouteFormDialog.vue";
+import { gpxApi, gpxError, exportDraft, routePlace, savedRoutePlan, routingProfile, parseDraft, type RouteDraft } from "@/services/gpx";
+import type { RoutePlanIn, RecurringRouteIn } from "@norain/api/models";
 import { computed, ref, watchEffect, watch } from "vue";
 import { symSharpElectricBike, symSharpElectricMoped, symSharpPedalBike } from "@quasar/extras/material-symbols-sharp";
 import type { PlacesSearchResult } from "@norain/api/models";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { usePlaceSearch } from "@/queries/places";
-import { useRecurringRoute } from "@/queries/recurringRoutes";
+import { useRecurringRoute, useCreateRecurringRoute } from "@/queries/recurringRoutes";
 import { useRouteWeather } from "@/queries/routeWeather";
 
 const route = useRoute();
+const router = useRouter();
+const $q = useQuasar();
+const { isAuthenticated } = useSession();
+const importing = ref(false);
+const showSave = ref(false);
+const draft = ref<RouteDraft | null>(null);
+const duration = ref(0);
+const viaPoints = ref<number[][]>([]);
+const exporting = ref(false);
+const createRoute = useCreateRecurringRoute();
+const exact = computed(() => draft.value?.plan.geometrySource === GeometrySource.Imported);
 const { isPro } = useEntitlements();
 
 const profile = ref("bike");
@@ -66,6 +85,11 @@ watchEffect(() => {
     const r = savedRoute.value;
     if (r) {
         profile.value = r.profile;
+        viaPoints.value = r.viaPoints ?? [];
+        if (r.geometrySource === GeometrySource.Imported && r.importedCoordinates?.length) {
+            draft.value = { plan: savedRoutePlan(r), preview: { coordinates: r.importedCoordinates, distanceM: r.totalDistanceM ?? 0, timeS: r.durationSeconds ?? 1 } };
+            duration.value = r.durationSeconds ?? 1;
+        } else draft.value = null;
         flexBefore.value = r.departureFlexBeforeMinutes ?? 0;
         flexAfter.value = r.departureFlexAfterMinutes ?? 0;
         abfahrtsort.value = {
@@ -96,7 +120,64 @@ const { data: placesStart, isFetching: isFetchingStart } = usePlaceSearch(filter
 const { data: placesDest, isFetching: isFetchingDest } = usePlaceSearch(filterDest, searchLocation);
 const ready = computed(() => !!zielort.value);
 
-const comparisonQuery = useRouteWeather(abfahrtsort, zielort, profile, departureTime, () => isPro.value ? flexBefore.value : 0, () => isPro.value ? flexAfter.value : 0);
+const plan = computed<RoutePlanIn | null>(() => {
+    if (!zielort.value) return null;
+    return { name: draft.value?.plan.name ?? "NoRain", geometrySource: exact.value ? GeometrySource.Imported : GeometrySource.Graphhopper,
+        coordinates: exact.value ? draft.value?.plan.coordinates ?? [] : [abfahrtsort.value.geometry.coordinates, ...viaPoints.value, zielort.value.geometry.coordinates],
+        profile: routingProfile(profile.value), durationSeconds: exact.value ? duration.value : null };
+});
+const validPlan = computed(() => !!plan.value && (!exact.value || (duration.value > 0 && duration.value <= 1382400)));
+const previewQuery = useQuery({
+    queryKey: computed(() => ["routePlanPreview", plan.value]),
+    enabled: validPlan,
+    queryFn: ({ signal }) => {
+        if (!plan.value) throw new Error("Bitte eine Strecke wählen.");
+        return gpxApi.coreApiGpxPreviewGpx({ routePlanIn: plan.value }, { signal });
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+});
+const currentDraft = computed<RouteDraft | null>(() => plan.value && previewQuery.data.value ? { plan: plan.value, preview: previewQuery.data.value } : null);
+function applyImport(value: RouteDraft) {
+    const points = value.plan.coordinates;
+    const first = points[0], last = points.at(-1);
+    if (!first || !last) return;
+    draft.value = value;
+    abfahrtsort.value = routePlace(first, "Start");
+    zielort.value = routePlace(last, "Ziel");
+    viaPoints.value = value.plan.geometrySource === GeometrySource.Graphhopper ? points.slice(1, -1) : [];
+    duration.value = value.plan.durationSeconds ?? value.preview.timeS;
+    profile.value = value.plan.profile ?? "bike";
+}
+function clearImport() { draft.value = null; viaPoints.value = []; }
+async function saveDraft() {
+    if (!currentDraft.value) return;
+    if (!isAuthenticated.value) {
+        sessionStorage.setItem("norain.plannerDraft", JSON.stringify(currentDraft.value));
+        await router.push({ path: "/account", query: { next: "/map?restoreDraft=1" } });
+    } else showSave.value = true;
+}
+if (route.query.restoreDraft === "1") {
+    try {
+        const value = parseDraft(sessionStorage.getItem("norain.plannerDraft"));
+        if (value) { applyImport(value); showSave.value = isAuthenticated.value; }
+    } catch { /* A stale browser draft can be discarded. */ }
+    sessionStorage.removeItem("norain.plannerDraft");
+}
+async function saveRoute(data: RecurringRouteIn) {
+    try {
+        const saved = await createRoute.mutateAsync(data);
+        await router.push({ path: "/routes/" + saved.id });
+    } catch (e) { $q.notify({ type: "negative", message: await gpxError(e) }); showSave.value = true; }
+}
+async function exportRoute() {
+    if (!currentDraft.value) return;
+    exporting.value = true;
+    try { await exportDraft(currentDraft.value); }
+    catch (e) { $q.notify({ type: "negative", message: await gpxError(e) }); }
+    finally { exporting.value = false; }
+}
+const comparisonQuery = useRouteWeather(abfahrtsort, zielort, profile, departureTime, () => isPro.value ? flexBefore.value : 0, () => isPro.value ? flexAfter.value : 0, validPlan, plan);
 const selectedQuery = useRouteWeather(
     abfahrtsort,
     zielort,
@@ -104,7 +185,8 @@ const selectedQuery = useRouteWeather(
     () => selectedDeparture.value ?? departureTime.value,
     0,
     0,
-    () => selectedDeparture.value !== null,
+    () => selectedDeparture.value !== null && validPlan.value,
+    plan,
 );
 const routeWeather = computed(() => (selectedDeparture.value ? selectedQuery.data.value : comparisonQuery.data.value));
 const isFetchingWeather = computed(() =>
@@ -115,7 +197,7 @@ const weatherError = computed(() =>
 );
 const departureComparison = computed(() => comparisonQuery.data.value?.departureComparison);
 watch(
-    [abfahrtsort, zielort, profile, departureTime, flexBefore, flexAfter],
+    [abfahrtsort, zielort, profile, departureTime, flexBefore, flexAfter, plan],
     () => {
         selectedDeparture.value = null;
     },
@@ -157,8 +239,11 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
 
 <template>
     <q-page class="fit flex justify-center">
+        <GpxImportDialog v-model="importing" :profile="profile" @apply="applyImport" />
+        <RouteFormDialog v-model="showSave" :initial-draft="currentDraft ?? draft" @save="saveRoute" />
         <NiceMap
             :route-weather="routeWeather"
+            :preview-line="previewQuery.data.value?.coordinates"
             :abfahrtsort="abfahrtsort"
             :zielort="zielort"
             :selected-sample="selectedSample"
@@ -171,8 +256,20 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                     style="z-index: 999; width: min(92vw, 420px); max-height: calc(100dvh - 60px); overflow-y: auto"
                 >
                     <q-card class="q-pa-md q-mt-md q-gutter-y-sm">
+                        <div class="row q-gutter-xs">
+                            <q-btn flat no-caps label="GPX importieren" @click="importing = true" />
+                            <q-btn flat no-caps label="GPX exportieren" :disable="!currentDraft" :loading="exporting" @click="exportRoute" />
+                            <q-btn flat no-caps label="Route speichern" :disable="!currentDraft" @click="saveDraft" />
+                        </div>
+                        <template v-if="draft">
+                            <div class="text-subtitle2">{{ draft.plan.name }}</div>
+                            <RouteTimingFields v-if="exact" v-model="duration" :distance-m="draft.preview.distanceM" />
+                            <q-btn flat dense no-caps label="Neue Route planen" @click="clearImport" />
+                        </template>
+                        <div v-if="previewQuery.error.value" class="text-negative" role="alert">Die Strecke konnte nicht berechnet werden.</div>
                         <q-select
                             v-model="abfahrtsort"
+                            :disable="exact"
                             label="Abfahrtsort"
                             dense
                             outlined
@@ -200,6 +297,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
 
                         <q-select
                             v-model="zielort"
+                            :disable="exact"
                             label="Zielort"
                             dense
                             outlined
@@ -226,6 +324,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         </q-select>
 
                         <RouteLocationPicker
+v-if="!exact"
                             :start="abfahrtsort"
                             :dest="zielort"
                             @update:start="

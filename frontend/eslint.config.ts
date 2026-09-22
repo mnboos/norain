@@ -100,5 +100,23 @@ export default defineConfigWithVueTs(
         ...ts.configs.disableTypeChecked,
         files: ["public/**/*.js"],
     },
+    {
+        // Standalone CommonJS build scripts are linted without a TypeScript project.
+        ...ts.configs.disableTypeChecked,
+        files: ["scripts/**/*.cjs"],
+        languageOptions: {
+            parser: ts.parser,
+            sourceType: "commonjs",
+            parserOptions: {
+                project: false,
+                projectService: false,
+                sourceType: "commonjs",
+            },
+        },
+        rules: {
+            ...ts.configs.disableTypeChecked.rules,
+            "@typescript-eslint/no-require-imports": "off",
+        },
+    },
     prettierConfig,
 );

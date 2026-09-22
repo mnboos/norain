@@ -11,16 +11,18 @@ from django.http import HttpRequest
 from loguru import logger
 from ninja import Router
 from ninja.errors import HttpError
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from redis.exceptions import RedisError
 
 from .. import telemetry
-from ..auth.backend import session_auth
+from ..auth.backend import optional_session_auth, session_auth
 from ..departures import route_job_params
 from ..entitlements import allowed_route_ids, entitlements_for, entitlements_for_sync
 from ..forecast_schemas import ForecastJobOut
+from ..gpx import MAX_DURATION_SECONDS, validate_track
 from ..models import ForecastJob, RecurringRoute, RideBriefing, User, route_point
 from ..ride_quality import worst_frost_level, worst_rain_level, worst_ride_score
+from ..route_input import GeometrySource
 from ..schedule import check_schedule_cron, forecast_available_at, next_departure
 from ..schemas import CamelSchema
 from ..tasks import refresh_route_geometry, start_forecast_job
@@ -57,6 +59,9 @@ class RecurringRouteIn(CamelSchema):
     dest_lon: float = Field(ge=-180, le=180)
     dest_name: str
     via_points: list[list[float]] = Field(default_factory=list)
+    geometry_source: GeometrySource = GeometrySource.GRAPHHOPPER
+    imported_coordinates: list[list[float]] | None = None
+    duration_seconds: int | None = Field(default=None, ge=1, le=MAX_DURATION_SECONDS)
     profile: str = "bike"
     schedule_cron: str
     schedule_description: str
@@ -65,6 +70,15 @@ class RecurringRouteIn(CamelSchema):
     active: bool = True
     return_schedule_cron: str | None = None
     return_schedule_description: str = ""
+
+    @model_validator(mode="after")
+    def check_import(self):
+        if self.imported_coordinates is not None and self.geometry_source == "imported":
+            self.imported_coordinates = validate_track(self.imported_coordinates)
+            self.start_lon, self.start_lat = self.imported_coordinates[0][:2]
+            self.dest_lon, self.dest_lat = self.imported_coordinates[-1][:2]
+            self.via_points = []
+        return self
 
     @field_validator("return_schedule_cron")
     @classmethod
@@ -133,6 +147,9 @@ class RecurringRouteOut(CamelSchema):
     dest_lon: float
     dest_name: str
     via_points: list[list[float]] = Field(default_factory=list)
+    geometry_source: GeometrySource = GeometrySource.GRAPHHOPPER
+    imported_coordinates: list[list[float]] | None = None
+    duration_seconds: int | None = None
     profile: str
     schedule_cron: str
     schedule_description: str
@@ -171,7 +188,7 @@ async def _owned_route(request: HttpRequest, route_id: UUID) -> RecurringRoute:
         raise HttpError(404, "Route not found.") from None
 
 
-def _route_to_out(route: RecurringRoute) -> RecurringRouteOut:
+def _route_to_out(route: RecurringRoute, *, detail=False) -> RecurringRouteOut:
     """Build a RecurringRouteOut from a model instance, computing schedule fields."""
     nd = next_departure(route.schedule_cron)
     returning = route._state.fields_cache.get("return_journey")
@@ -192,6 +209,9 @@ def _route_to_out(route: RecurringRoute) -> RecurringRouteOut:
         dest_lon=route.dest_lon,
         dest_name=route.dest_name,
         via_points=route.via_points or [],
+        geometry_source=route.geometry_source,
+        imported_coordinates=route.imported_coordinates if detail else None,
+        duration_seconds=route.duration_seconds,
         profile=route.profile,
         schedule_cron=route.schedule_cron,
         schedule_description=route.schedule_description,
@@ -228,7 +248,7 @@ async def list_routes(request: HttpRequest):
     query = (
         RecurringRoute.objects.filter(active=True, owner=user, return_of__isnull=True)
         .select_related("return_journey")
-        .defer("polyline", "sample_points", "vertex_times")
+        .defer("polyline", "sample_points", "vertex_times", "imported_coordinates")
         .annotate(geometry_ready=Q(sample_points__isnull=False))
     )
     routes = [r async for r in query]
@@ -268,6 +288,11 @@ async def create_route(request: HttpRequest, data: RecurringRouteIn):
         await entitlements_for(user)
     ).departure_comparison:
         raise HttpError(402, "Departure comparison requires Plus.")
+    if data.geometry_source == "imported" and (not data.imported_coordinates or not data.duration_seconds):
+        raise HttpError(422, "Bitte Strecke und Fahrzeit angeben.")
+    if data.geometry_source == "graphhopper":
+        data.imported_coordinates = []
+        data.duration_seconds = None
     values = data.model_dump(
         exclude={
             "start_lat",
@@ -297,7 +322,7 @@ async def create_route(request: HttpRequest, data: RecurringRouteIn):
     returning = route._state.fields_cache.get("return_journey")
     if returning:
         await refresh_route_geometry.aenqueue(str(returning.id))
-    return _route_to_out(route)
+    return _route_to_out(route, detail=True)
 
 
 class RoutePreviewIn(CamelSchema):
@@ -331,7 +356,7 @@ def _preview_allowed(user_id: int) -> bool:
         return True
 
 
-@router.post("/routes/preview", response=RoutePreviewOut)
+@router.post("/routes/preview", response=RoutePreviewOut, auth=optional_session_auth)
 async def route_preview(request: HttpRequest, data: RoutePreviewIn):
     """The line through the given points, for the route editor.
 
@@ -339,8 +364,9 @@ async def route_preview(request: HttpRequest, data: RoutePreviewIn):
     returns only the line — no sampling, no weather — and a saved route's geometry still
     comes from ``refresh_route_geometry``.
     """
-    user = await _current_user(request)
-    if not _preview_allowed(user.pk):
+    user = request.auth
+    identity = user.pk if user.is_authenticated else request.META.get("REMOTE_ADDR", "anonymous")
+    if not _preview_allowed(identity):
         raise HttpError(429, "Zu viele Routenberechnungen. Bitte kurz warten.")
     try:
         return await preview_route(data.profile, tuple((lon, lat) for lon, lat in data.points))
@@ -353,7 +379,7 @@ async def route_preview(request: HttpRequest, data: RoutePreviewIn):
 async def get_route(request: HttpRequest, route_id: UUID):
     """Get a single recurring route by ID."""
     route = await _owned_route(request, route_id)
-    return _route_to_out(route)
+    return _route_to_out(route, detail=True)
 
 
 @router.put("/routes/{route_id}", response=RecurringRouteOut)
@@ -373,8 +399,27 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
     # Reactivating a route consumes a slot just as creating one does.
     if data.active and not route.active:
         await _assert_route_quota(await _current_user(request), exclude_id=route_id)
+    if "geometry_source" not in data.model_fields_set:
+        data.geometry_source = route.geometry_source
+    if data.geometry_source == "imported":
+        if data.imported_coordinates is None:
+            data.imported_coordinates = route.imported_coordinates
+        if "duration_seconds" not in data.model_fields_set:
+            data.duration_seconds = route.duration_seconds
+        if not data.imported_coordinates or not data.duration_seconds:
+            raise HttpError(422, "Bitte Strecke und Fahrzeit angeben.")
+        data.imported_coordinates = validate_track(data.imported_coordinates)
+        data.start_lon, data.start_lat = data.imported_coordinates[0][:2]
+        data.dest_lon, data.dest_lat = data.imported_coordinates[-1][:2]
+        data.via_points = []
+    else:
+        data.imported_coordinates = []
+        data.duration_seconds = None
     needs_geometry = (
-        route.start_lat != data.start_lat
+        route.geometry_source != data.geometry_source
+        or route.imported_coordinates != data.imported_coordinates
+        or route.duration_seconds != data.duration_seconds
+        or route.start_lat != data.start_lat
         or route.start_lon != data.start_lon
         or route.dest_lat != data.dest_lat
         or route.dest_lon != data.dest_lon
@@ -396,6 +441,15 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
         setattr(route, field, value)
     route.start_point = route_point(data.start_lat, data.start_lon)
     route.destination_point = route_point(data.dest_lat, data.dest_lon)
+    if needs_geometry:
+        route.sample_points = None
+        route.polyline = None
+        route.vertex_times = None
+        route.geometry_fetched_at = None
+        route.total_seconds = None
+        route.total_distance_m = None
+        route.thumbnail = None
+        route.thumbnail_computed_at = None
     await sync_to_async(_save_with_quota)(user, route, data.return_schedule_cron, data.return_schedule_description)
     await RideBriefing.objects.filter(route=route, status="pending").aupdate(status="canceled")
 
@@ -408,17 +462,12 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
     )
 
     if needs_geometry:
-        route.sample_points = None
-        route.polyline = None
-        route.vertex_times = None
-        route.geometry_fetched_at = None
-        await route.asave()
         await refresh_route_geometry.aenqueue(str(route.id))
 
     returning = route._state.fields_cache.get("return_journey")
     if returning and not returning.sample_points:
         await refresh_route_geometry.aenqueue(str(returning.id))
-    return _route_to_out(route)
+    return _route_to_out(route, detail=True)
 
 
 @router.delete("/routes/{route_id}", response={204: None})
@@ -556,6 +605,9 @@ def _save_return(route, cron, description):
         "destination_point": route.start_point,
         "dest_name": route.start_name,
         "via_points": list(reversed(route.via_points or [])),
+        "geometry_source": route.geometry_source,
+        "imported_coordinates": list(reversed(route.imported_coordinates or [])),
+        "duration_seconds": route.duration_seconds,
         "profile": route.profile,
         "schedule_cron": cron or returning.schedule_cron,
         "schedule_description": description or (returning.schedule_description if returning else cron),
@@ -569,8 +621,18 @@ def _save_return(route, cron, description):
         or returning.destination_point != values["destination_point"]
         or returning.profile != values["profile"]
         or returning.via_points != values["via_points"]
+        or returning.geometry_source != values["geometry_source"]
+        or returning.imported_coordinates != values["imported_coordinates"]
+        or returning.duration_seconds != values["duration_seconds"]
     ):
-        values.update(sample_points=None, polyline=None, vertex_times=None, geometry_fetched_at=None)
+        values.update(
+            sample_points=None,
+            polyline=None,
+            vertex_times=None,
+            geometry_fetched_at=None,
+            thumbnail=None,
+            thumbnail_computed_at=None,
+        )
     returning, _ = RecurringRoute.objects.update_or_create(return_of=route, defaults=values)
     RideBriefing.objects.filter(route=returning, status="pending").update(status="canceled")
     route._state.fields_cache["return_journey"] = returning

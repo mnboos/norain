@@ -1,6 +1,8 @@
 import { computed, toValue, type MaybeRefOrGetter } from "vue";
 import { useQuery } from "@tanstack/vue-query";
 import { RouteWeatherApi } from "@norain/api/apis";
+import { gpxApi } from "@/services/gpx";
+import type { RoutePlanIn } from "@norain/api/models";
 import type { PlacesSearchResult } from "@norain/api/models";
 
 import { reportForecastProgress, useForecastProgress } from "@/queries/forecastProgress";
@@ -39,9 +41,10 @@ export function useRouteWeather(
     before: MaybeRefOrGetter<number> = 0,
     after: MaybeRefOrGetter<number> = 0,
     enabled: MaybeRefOrGetter<boolean> = true,
+    plan: MaybeRefOrGetter<RoutePlanIn | null> = null,
 ) {
-    const queryKey = computed(() =>
-        routeWeatherKeys.forecast(
+    const queryKey = computed(() => [
+        ...routeWeatherKeys.forecast(
             toValue(start),
             toValue(destination),
             toValue(profile),
@@ -49,7 +52,8 @@ export function useRouteWeather(
             toValue(before),
             toValue(after),
         ),
-    );
+        ...(toValue(plan) ? [toValue(plan)] : []),
+    ]);
     const query = useQuery({
         queryKey,
         enabled: () => !!toValue(destination) && toValue(enabled),
@@ -63,7 +67,11 @@ export function useRouteWeather(
             const to = destinationValue.geometry.coordinates;
             return await measureForecastLoad(
                 async onDelivery => {
-                    const job = await api.coreApiRouteWeatherRouteWeather({
+                    const shape = toValue(plan);
+                    const job = shape ? await gpxApi.coreApiGpxForecastRoutePlan({ routePlanForecastIn: {
+                        ...shape, departureTime: toValue(departure),
+                        departureFlexBeforeMinutes: toValue(before), departureFlexAfterMinutes: toValue(after),
+                    } }, { signal }) : await api.coreApiRouteWeatherRouteWeather({
                         startLat: from[1] ?? 0,
                         startLon: from[0] ?? 0,
                         destLat: to[1] ?? 0,

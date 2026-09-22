@@ -5,6 +5,7 @@ from django.http import HttpRequest
 from ninja import Router
 from ninja.errors import HttpError
 
+from ..auth.backend import optional_session_auth
 from ..departures import candidate_times, check_flexibility
 from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut, ForecastMapDetailOut, ForecastUncertainty
@@ -12,7 +13,7 @@ from ..jobs import job_snapshot, line_at_detail, wind_arrows_at_detail
 from ..models import ForecastJob
 from ..tasks import start_forecast_job
 
-router = Router(tags=["Route weather"])
+router = Router(auth=optional_session_auth, tags=["Route weather"])
 
 # The profiles GraphHopper is configured with (data/graphhopper/graphhopper-config.yaml). Checked on
 # input so an unknown one is a 422 here rather than a failed routing call on a worker.
@@ -73,7 +74,7 @@ async def route_weather(
         raise HttpError(402, "Departure comparison requires Plus. Try Plus free for 14 days.")
     job = await start_forecast_job(
         ForecastJob.Kind.ADHOC,
-        getattr(request, "auth", None) or None,
+        request.auth if request.auth.is_authenticated else None,
         {
             "start_lat": start_lat,
             "start_lon": start_lon,

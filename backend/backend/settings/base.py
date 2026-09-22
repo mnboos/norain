@@ -326,3 +326,6 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Bounded GPX drafts can include up to 100000 coordinates.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024

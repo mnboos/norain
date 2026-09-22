@@ -28,6 +28,7 @@ const props = defineProps<{
     dest: LonLat;
     profile: string;
     viaPoints: number[][];
+    originalCoordinates?: number[][];
 }>();
 
 const emit = defineEmits<{
@@ -114,6 +115,10 @@ function lineData(): Feature<LineString> {
 
 function addLayers(m: MapLibreMap) {
     if (m.getSource("edit-line")) return;
+    if (props.originalCoordinates?.length) {
+        m.addSource("original-line", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: props.originalCoordinates } } });
+        m.addLayer({ id: "original-line", type: "line", source: "original-line", paint: { "line-color": "#a25219", "line-width": 8, "line-opacity": 0.6 } });
+    }
     m.addSource("edit-line", { type: "geojson", data: lineData() });
     m.addLayer({
         id: "edit-casing",
@@ -220,6 +225,7 @@ watch(vias, renderMarkers);
 // --------------------------------------------------------------------------- drag the line
 
 function beginLineDrag(m: MapLibreMap, event: MapLayerMouseEvent | MapLayerTouchEvent) {
+    if (vias.value.length >= 15) return;
     if ("points" in event && event.points.length !== 1) return;
     event.preventDefault(); // keep the map from panning
     const origin = event.point;

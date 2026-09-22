@@ -47,7 +47,7 @@ export class AppropriateOptionsMiddleware implements Middleware {
             headers: {
                 ...currentHeaders,
                 "X-CSRFToken": getCookie("csrftoken") ?? "",
-                "Content-Type": "application/json",
+                ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
             },
         };
         return Promise.resolve({ url: context.url, init: context.init });

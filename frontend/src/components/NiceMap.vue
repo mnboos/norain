@@ -45,6 +45,7 @@ const DARK_STYLE = darkStyleUrl;
 
 const props = defineProps<{
     routeWeather: RouteForecastOut | undefined;
+    previewLine?: number[][];
     abfahrtsort?: PlacesSearchResult;
     zielort?: PlacesSearchResult;
     /** CSS height of the map canvas. Defaults to the full viewport. */
@@ -135,7 +136,7 @@ const { data: fetchedDetail } = useForecastMapDetail(
     () => routeWeather.value?.version,
     requestedDetail,
 );
-const drawnLine = computed(() => loadedDetail.value?.line ?? routeWeather.value?.line ?? []);
+const drawnLine = computed(() => loadedDetail.value?.line ?? routeWeather.value?.line ?? props.previewLine ?? []);
 const drawnWindArrows = computed(() => loadedDetail.value?.windArrows ?? routeWeather.value?.windArrows ?? []);
 
 const routeProgress = computed(() => lineProgress(drawnLine.value));
@@ -449,10 +450,10 @@ function createSampleMarker(map: MapLibreMap, s: ForecastSampleOut, index: numbe
 async function renderLine() {
     const map = mymap.value;
     const rw = routeWeather.value;
-    if (!map || !rw) return;
+    if (!map) return;
     const line = drawnLine.value;
 
-    const lineGeojson: Record<string, unknown> = {
+    const lineGeojson: import("geojson").Feature<import("geojson").LineString> = {
         type: "Feature",
         geometry: { type: "LineString", coordinates: line },
         properties: {},
@@ -463,8 +464,8 @@ async function renderLine() {
     // Every line level the backend serves keeps those vertices, so this works on whichever
     // line is drawn. gradientStops() then subdivides each span so the blend actually
     // travels through the ramp, and hard-edges any stretch we have no data for.
-    const stops = gradientStops(sampleProgress(line, rw.samples, rw.totalSeconds), scores.value);
-    const gradient: ExpressionSpecification = ["interpolate", ["linear"], ["line-progress"], ...stops];
+    const stops = gradientStops(sampleProgress(line, rw?.samples ?? [], rw?.totalSeconds ?? 0), scores.value);
+    const gradient: ExpressionSpecification = rw ? ["interpolate", ["linear"], ["line-progress"], ...stops] : ["interpolate", ["linear"], ["line-progress"], 0, "#2563eb", 1, "#2563eb"];
     const casing = $q.dark.isActive ? CASING_DARK : CASING_LIGHT;
 
     const existing = map.getSource("route-source");
@@ -533,11 +534,12 @@ async function renderRoute() {
 }
 
 watch(
-    [routeWeather, hasMap],
+    [routeWeather, () => props.previewLine, hasMap],
     async () => {
-        if (routeWeather.value && mymap.value) {
+        if ((routeWeather.value || props.previewLine?.length) && mymap.value) {
             await renderRoute();
         } else if (!routeWeather.value) {
+            void mymap.value?.getSource<GeoJSONSource>("route-source")?.setData({ type: "FeatureCollection", features: [] });
             clearSampleMarkers();
             clearWindMarkers();
         }

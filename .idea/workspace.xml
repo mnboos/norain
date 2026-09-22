@@ -4,11 +4,25 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="chore(web): improve layout">
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources.local.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources.local.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources/36e8b038-9469-4e64-8ec4-130c0b0f15fc.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources/36e8b038-9469-4e64-8ec4-130c0b0f15fc/storage_v2/_src_/schema/main.uQUzAA.meta" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources/data_sources_history.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources/data_sources_history.xml" afterDir="false" />
+    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="chore(ide): update config">
+      <change afterPath="$PROJECT_DIR$/backend/core/api/gpx.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backend/core/gpx.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backend/core/migrations/0017_recurringroute_gpx.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backend/core/route_input.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backend/core/test_gpx.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/e2e/gpx.spec.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/components/GpxImportDialog.vue" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/components/GpxPreviewMap.vue" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/components/RouteTimingFields.vue" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/services/gpx.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/packages/api/apis/GPXApi.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/packages/api/models/GeometrySource.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/packages/api/models/GpxExportIn.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/packages/api/models/GpxPathOut.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/packages/api/models/RoutePlanForecastIn.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/packages/api/models/RoutePlanIn.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/packages/api/models/RoutePlanOut.ts" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/packages/api/models/RoutingProfile.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/backend/settings/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/backend/settings/base.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/core/api/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/__init__.py" afterDir="false" />
@@ -23,6 +37,7 @@
       <change beforePath="$PROJECT_DIR$/backend/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/pyproject.toml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/uv.lock" beforeDir="false" afterPath="$PROJECT_DIR$/backend/uv.lock" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/eslint.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/eslint.config.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/package-lock.json" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/components/RouteDetailPanel.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/RouteDetailPanel.vue" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/components/RouteEditorDialog.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/RouteEditorDialog.vue" afterDir="false" />
@@ -102,12 +117,16 @@
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory">{
-  &quot;lastFilter&quot;: {
-    &quot;state&quot;: &quot;OPEN&quot;,
-    &quot;assignee&quot;: &quot;mnboos&quot;
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "history": [
+    {
+      "state": "OPEN"
+    }
+  ],
+  "lastFilter": {
+    "state": "OPEN"
   }
-}</component>
+}]]></component>
   <component name="GithubPullRequestsUISettings">{
   &quot;selectedUrlAndAccountId&quot;: {
     &quot;url&quot;: &quot;git@github.com:mnboos/norain.git&quot;,
@@ -120,61 +139,61 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.5891783632478929" />
-      <entry key="MS500" value="4.6564241215797155" />
-      <entry key="S2" value="9.467940396549015" />
-      <entry key="S5" value="12.439983172257701" />
-      <entry key="S10" value="15.645474537340027" />
-      <entry key="S30" value="23.356002882281896" />
-      <entry key="S60" value="29.183578249465125" />
-      <entry key="M2" value="35.35930404183633" />
-      <entry key="M5" value="42.0587137787363" />
-      <entry key="M10" value="45.534437637390475" />
-      <entry key="M15" value="48.75850247500675" />
-      <entry key="M30" value="69.69439758113288" />
-      <entry key="H1" value="125.04210613257082" />
-      <entry key="H2" value="197.89915038809121" />
-      <entry key="H4" value="262.7926484751073" />
-      <entry key="D1" value="609.8746873222627" />
-      <entry key="W1" value="1930.5744484476165" />
+      <entry key="MS100" value="1.455707847393858" />
+      <entry key="MS500" value="5.09528547283844" />
+      <entry key="S2" value="9.348954431161747" />
+      <entry key="S5" value="10.82758152024434" />
+      <entry key="S10" value="11.393342240213167" />
+      <entry key="S30" value="11.99829041618493" />
+      <entry key="S60" value="13.440311783291218" />
+      <entry key="M2" value="20.256957672113348" />
+      <entry key="M5" value="43.662995007395324" />
+      <entry key="M10" value="63.77295559795298" />
+      <entry key="M15" value="73.87598205840457" />
+      <entry key="M30" value="93.12827490724891" />
+      <entry key="H1" value="135.09782029925196" />
+      <entry key="H2" value="212.0269480183511" />
+      <entry key="H4" value="298.7935299193851" />
+      <entry key="D1" value="681.7041779808127" />
+      <entry key="W1" value="2016.6169858713215" />
     </decayedCancelled>
     <decayedSelected>
       <entry key="MS100" value="0.0" />
-      <entry key="MS500" value="0.0" />
-      <entry key="S2" value="0.0" />
-      <entry key="S5" value="1.0849513806694838E-236" />
-      <entry key="S10" value="1.0416099945130526E-118" />
-      <entry key="S30" value="4.7050948139962414E-40" />
-      <entry key="S60" value="2.1691232522672413E-20" />
-      <entry key="M2" value="1.4739918210748507E-10" />
-      <entry key="M5" value="1.4077937573903223E-4" />
-      <entry key="M10" value="0.027746990314277804" />
-      <entry key="M15" value="0.22126674212831426" />
-      <entry key="M30" value="2.243744435645062" />
-      <entry key="H1" value="7.898791621148915" />
-      <entry key="H2" value="15.232571768836138" />
-      <entry key="H4" value="21.344657242509342" />
-      <entry key="D1" value="51.95507111260678" />
-      <entry key="W1" value="193.90457128689408" />
+      <entry key="MS500" value="6.9586205248807525E-267" />
+      <entry key="S2" value="2.8919258560887762E-67" />
+      <entry key="S5" value="2.591244414603684E-27" />
+      <entry key="S10" value="6.221087734905253E-14" />
+      <entry key="S30" value="6.015620755411492E-5" />
+      <entry key="S60" value="0.010902299741712484" />
+      <entry key="M2" value="0.1474374128077006" />
+      <entry key="M5" value="0.7045319726538227" />
+      <entry key="M10" value="1.1870210232879719" />
+      <entry key="M15" value="1.4158723176965167" />
+      <entry key="M30" value="1.9610762055332267" />
+      <entry key="H1" value="4.625538098949923" />
+      <entry key="H2" value="10.971390500692392" />
+      <entry key="H4" value="18.415196229573475" />
+      <entry key="D1" value="51.74472437766987" />
+      <entry key="W1" value="194.70698796257815" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="1.5436083857659613" />
-      <entry key="MS500" value="4.627640272612092" />
-      <entry key="S2" value="9.452357437195348" />
-      <entry key="S5" value="12.431450934342003" />
-      <entry key="S10" value="15.63981941514026" />
-      <entry key="S30" value="23.35289182153165" />
-      <entry key="S60" value="29.181408217481803" />
-      <entry key="M2" value="35.35777943578406" />
-      <entry key="M5" value="42.05801883689283" />
-      <entry key="M10" value="45.561444903900956" />
-      <entry key="M15" value="48.97789303723936" />
-      <entry key="M30" value="71.92986697659707" />
-      <entry key="H1" value="132.92642147969826" />
-      <entry key="H2" value="213.11763824154536" />
-      <entry key="H4" value="284.1273532871536" />
-      <entry key="D1" value="661.825186087174" />
-      <entry key="W1" value="2124.4763213458714" />
+      <entry key="MS100" value="1.3943083450402065" />
+      <entry key="MS500" value="5.045866367859669" />
+      <entry key="S2" value="9.326914675944096" />
+      <entry key="S5" value="10.817487774472676" />
+      <entry key="S10" value="11.388054076262247" />
+      <entry key="S30" value="11.996499213383693" />
+      <entry key="S60" value="13.450003825676951" />
+      <entry key="M2" value="20.40243379649238" />
+      <entry key="M5" value="44.36459850434001" />
+      <entry key="M10" value="64.95757990640921" />
+      <entry key="M15" value="75.28993667274148" />
+      <entry key="M30" value="95.08719875278534" />
+      <entry key="H1" value="139.71763230655623" />
+      <entry key="H2" value="222.9896472069853" />
+      <entry key="H4" value="317.20088982371414" />
+      <entry key="D1" value="733.4444963583733" />
+      <entry key="W1" value="2211.321288150284" />
     </decayedShown>
   </component>
   <component name="ProjectColorInfo">{
@@ -260,7 +279,7 @@
       <recent name="C:\src\norain\frontend\src\components\chart" />
     </key>
   </component>
-  <component name="RunManager" selected="Compound.dev">
+  <component name="RunManager" selected="Docker.docker services">
     <configuration name="dev" type="CompoundRunConfigurationType">
       <toRun name="norain" type="Python.DjangoServer" />
       <toRun name="dev" type="js.build_tools.npm" />
@@ -357,7 +376,7 @@
       <workItem from="1789991112776" duration="3493000" />
       <workItem from="1790014073558" duration="1527000" />
       <workItem from="1790017542597" duration="4708000" />
-      <workItem from="1790091215762" duration="3558000" />
+      <workItem from="1790091215762" duration="4884000" />
     </task>
     <task id="LOCAL-00001" summary="chore(ide): update settings">
       <option name="closed" value="true" />
@@ -607,7 +626,15 @@
       <option name="project" value="LOCAL" />
       <updated>1790021439105</updated>
     </task>
-    <option name="localTasksCounter" value="32" />
+    <task id="LOCAL-00032" summary="chore(ide): update config">
+      <option name="closed" value="true" />
+      <created>1790099695007</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1790099695007</updated>
+    </task>
+    <option name="localTasksCounter" value="33" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -647,7 +674,8 @@
     <MESSAGE value="feat(web): improve layout" />
     <MESSAGE value="chore(web): add branding" />
     <MESSAGE value="chore(web): improve layout" />
-    <option name="LAST_COMMIT_MESSAGE" value="chore(web): improve layout" />
+    <MESSAGE value="chore(ide): update config" />
+    <option name="LAST_COMMIT_MESSAGE" value="chore(ide): update config" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -661,6 +689,6 @@
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1790017716504" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
+    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1790100048171" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
   </component>
 </project>

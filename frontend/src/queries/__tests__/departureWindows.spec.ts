@@ -2,12 +2,14 @@ import { defineComponent, h, ref } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { GeometrySource, type RoutePlanIn } from "@norain/api/models";
 import type { PlacesSearchResult } from "@norain/api/models";
 import { useRouteWeather } from "@/queries/routeWeather";
 import { useRecurringRouteForecast } from "@/queries/recurringRoutes";
 
-const api = vi.hoisted(() => ({ adhoc: vi.fn(), recurring: vi.fn() }));
+const api = vi.hoisted(() => ({ adhoc: vi.fn(), recurring: vi.fn(), plan: vi.fn() }));
 vi.mock("@norain/api/apis", () => ({
+    GPXApi: class { coreApiGpxForecastRoutePlan = api.plan; },
     RouteWeatherApi: class {
         coreApiRouteWeatherRouteWeather = api.adhoc;
     },
@@ -71,6 +73,19 @@ describe("departure-window queries", () => {
         resolveOld({ result: { departureTime: "old-window" } });
         await flushPromises();
         expect(harness.query?.data.value?.departureTime).toBe("new-window");
+        harness.cleanup();
+    });
+
+    it("keeps imported shape and timing in the forecast request and cache", async () => {
+        api.plan.mockResolvedValue({ result: { departureTime: "imported" } });
+        const plan = ref<RoutePlanIn>({ geometrySource: GeometrySource.Imported, coordinates: [[9, 47], [9.2, 47.2]], durationSeconds: 900 });
+        const harness = setup(() => useRouteWeather(place, place, "bike", "2030-06-01T08:00", 0, 0, true, plan));
+        await flushPromises();
+        expect(api.plan.mock.calls[0]?.[0]).toMatchObject({ routePlanForecastIn: { coordinates: plan.value.coordinates, durationSeconds: 900 } });
+        expect(api.adhoc).not.toHaveBeenCalled();
+        plan.value = { ...plan.value, durationSeconds: 1800 };
+        await flushPromises();
+        expect(api.plan).toHaveBeenCalledTimes(2);
         harness.cleanup();
     });
 

@@ -14,6 +14,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { GeometrySource } from './GeometrySource';
+import {
+    GeometrySourceFromJSON,
+    GeometrySourceFromJSONTyped,
+    GeometrySourceToJSON,
+    GeometrySourceToJSONTyped,
+} from './GeometrySource';
+
 /**
  * 
  * @export
@@ -59,6 +67,18 @@ export interface RecurringRouteIn {
     /**
      * 
      */
+    geometrySource?: GeometrySource;
+    /**
+     * 
+     */
+    importedCoordinates?: Array<Array<number>> | null;
+    /**
+     * 
+     */
+    durationSeconds?: number | null;
+    /**
+     * 
+     */
     profile?: string;
     /**
      * 
@@ -89,6 +109,8 @@ export interface RecurringRouteIn {
      */
     returnScheduleDescription?: string;
 }
+
+
 
 /**
  * Check if a given object implements the RecurringRouteIn interface.
@@ -125,6 +147,9 @@ export function RecurringRouteInFromJSONTyped(json: any, ignoreDiscriminator: bo
         'destLon': json['destLon'],
         'destName': json['destName'],
         'viaPoints': json['viaPoints'] == null ? undefined : json['viaPoints'],
+        'geometrySource': json['geometrySource'] == null ? undefined : GeometrySourceFromJSON(json['geometrySource']),
+        'importedCoordinates': json['importedCoordinates'] === undefined ? undefined : json['importedCoordinates'] === null ? null : json['importedCoordinates'],
+        'durationSeconds': json['durationSeconds'] === undefined ? undefined : json['durationSeconds'] === null ? null : json['durationSeconds'],
         'profile': json['profile'] == null ? undefined : json['profile'],
         'scheduleCron': json['scheduleCron'],
         'scheduleDescription': json['scheduleDescription'],
@@ -156,6 +181,9 @@ export function RecurringRouteInToJSONTyped(value?: RecurringRouteIn | null, ign
         'destLon': value['destLon'],
         'destName': value['destName'],
         'viaPoints': value['viaPoints'],
+        'geometrySource': GeometrySourceToJSON(value['geometrySource']),
+        'importedCoordinates': value['importedCoordinates'],
+        'durationSeconds': value['durationSeconds'],
         'profile': value['profile'],
         'scheduleCron': value['scheduleCron'],
         'scheduleDescription': value['scheduleDescription'],
