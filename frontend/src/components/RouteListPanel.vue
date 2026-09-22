@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { symSharpAdd, symSharpDelete, symSharpRoute } from "@quasar/extras/material-symbols-sharp";
+import { symSharpAdd, symSharpDelete, symSharpLuggage, symSharpRoute } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
 
 import RouteThumbnail from "@/components/RouteThumbnail.vue";
@@ -86,6 +86,7 @@ const addButtonLabel = computed(() => (atRouteLimit.value ? "Tarifgrenze erreich
                 >
                     <q-tooltip>{{ addButtonLabel }}</q-tooltip>
                 </q-btn>
+                <q-btn flat dense no-caps label="Reisen" :icon="symSharpLuggage" to="/journeys" />
             </q-item-label>
             <q-separator />
         </q-card-section>
@@ -96,6 +97,7 @@ const addButtonLabel = computed(() => (atRouteLimit.value ? "Tarifgrenze erreich
             <q-icon :name="symSharpRoute" size="3rem" />
             <q-item-label class="q-my-md">Noch keine Routen — leg los!</q-item-label>
             <q-btn color="primary" label="Route erstellen" @click="emit('add')" />
+            <q-btn flat no-caps color="primary" label="Oder eine Reise planen" to="/journeys" class="q-ml-sm" />
         </q-card-section>
         <q-card-section v-else class="q-pa-none col">
             <q-list separator class="col column">

@@ -12,6 +12,9 @@ Enforced at these places — miss any one and the limit is not real:
     the Open-Meteo budget. It is nowhere near the HTTP layer, so it is the easy one to forget.
   * plan_forecast_job (core/tasks.py) — the station task, which spends the Weather
     Underground budget. The pre-warm scan never fetches stations at all.
+  * create_journey (core/api/journey.py) — the journey count.
+  * plan_journey (core/tasks.py) — alternatives per day and weather-aware routing, which
+    spends the corridor cells. Read at planning time, so a downgrade applies to the next plan.
 """
 
 from collections import defaultdict
@@ -37,6 +40,9 @@ class Entitlements:
     station_correction: bool
     departure_comparison: bool = False
     max_briefing_routes: int = 0
+    max_journeys: int = 1
+    max_journey_alternatives: int = 1
+    weather_routing: bool = False
 
     @property
     def is_pro(self) -> bool:
@@ -62,6 +68,9 @@ PRO = Entitlements(
     station_correction=True,
     departure_comparison=True,
     max_briefing_routes=5,
+    max_journeys=10,
+    max_journey_alternatives=3,
+    weather_routing=True,
 )
 
 BY_PLAN = {Plan.FREE: FREE, Plan.PRO: PRO}

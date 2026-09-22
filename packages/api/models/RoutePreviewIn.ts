@@ -14,6 +14,14 @@
  */
 
 import { mapValues } from '../runtime';
+import type { RoadPrefsIn } from './RoadPrefsIn';
+import {
+    RoadPrefsInFromJSON,
+    RoadPrefsInFromJSONTyped,
+    RoadPrefsInToJSON,
+    RoadPrefsInToJSONTyped,
+} from './RoadPrefsIn';
+
 /**
  * 
  * @export
@@ -28,6 +36,10 @@ export interface RoutePreviewIn {
      * 
      */
     points: Array<Array<number>>;
+    /**
+     * 
+     */
+    roadPrefs?: RoadPrefsIn | null;
 }
 
 /**
@@ -50,6 +62,7 @@ export function RoutePreviewInFromJSONTyped(json: any, ignoreDiscriminator: bool
         
         'profile': json['profile'] == null ? undefined : json['profile'],
         'points': json['points'],
+        'roadPrefs': json['roadPrefs'] === undefined ? undefined : json['roadPrefs'] === null ? null : RoadPrefsInFromJSON(json['roadPrefs']),
     };
 }
 
@@ -66,6 +79,7 @@ export function RoutePreviewInToJSONTyped(value?: RoutePreviewIn | null, ignoreD
         
         'profile': value['profile'],
         'points': value['points'],
+        'roadPrefs': RoadPrefsInToJSON(value['roadPrefs']),
     };
 }
 

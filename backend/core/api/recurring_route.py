@@ -1,6 +1,7 @@
 """RecurringRoute API: schemas, CRUD, and per-departure forecasts."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import UUID
 
 from asgiref.sync import sync_to_async
@@ -21,6 +22,7 @@ from ..entitlements import allowed_route_ids, entitlements_for, entitlements_for
 from ..forecast_schemas import ForecastJobOut
 from ..models import ForecastJob, RecurringRoute, RideBriefing, User, route_point
 from ..ride_quality import worst_frost_level, worst_rain_level, worst_ride_score
+from ..road_prefs import RoadPrefs, road_prefs_model
 from ..schedule import check_schedule_cron, forecast_available_at, next_departure
 from ..schemas import CamelSchema
 from ..tasks import refresh_route_geometry, start_forecast_job
@@ -300,10 +302,24 @@ async def create_route(request: HttpRequest, data: RecurringRouteIn):
     return _route_to_out(route)
 
 
+class RoadPrefsIn(CamelSchema):
+    """Journey road preferences (``core.road_prefs.RoadPrefs``); every one is a penalty."""
+
+    surface: Literal["any", "avoid_unpaved", "paved_only"] = "any"
+    climbing: Literal["neutral", "avoid"] = "neutral"
+    traffic: Literal["neutral", "avoid_main", "avoid_off_network"] = "neutral"
+    towns: Literal["neutral", "avoid"] = "neutral"
+
+    def prefs(self) -> RoadPrefs:
+        return RoadPrefs(surface=self.surface, climbing=self.climbing, traffic=self.traffic, towns=self.towns)
+
+
 class RoutePreviewIn(CamelSchema):
     profile: str = "bike"
     # [[lon, lat], ...]: start, via points, destination.
     points: list[list[float]] = Field(min_length=2, max_length=MAX_VIA_POINTS + 2)
+    # A journey's editor draws the line its road preferences give.
+    road_prefs: RoadPrefsIn | None = None
 
     _profile = field_validator("profile")(check_routing_profile)
     _points = field_validator("points")(check_coordinates)
@@ -343,7 +359,8 @@ async def route_preview(request: HttpRequest, data: RoutePreviewIn):
     if not _preview_allowed(user.pk):
         raise HttpError(429, "Zu viele Routenberechnungen. Bitte kurz warten.")
     try:
-        return await preview_route(data.profile, tuple((lon, lat) for lon, lat in data.points))
+        model = road_prefs_model(data.road_prefs.prefs()) if data.road_prefs else None
+        return await preview_route(data.profile, tuple((lon, lat) for lon, lat in data.points), model)
     except ROUTING_ERRORS as exc:
         logger.info(f"Route preview failed: {exc}")
         raise HttpError(422, "Für diese Punkte wurde keine Route gefunden.") from None

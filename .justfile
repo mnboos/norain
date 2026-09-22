@@ -1,6 +1,6 @@
 set dotenv-load
 set windows-shell := ["pwsh.exe", "/c"]
-set shell := ["bash", "-c"]
+#set shell := ["bash", "-c"]
 
 localappdata := env("LOCALAPPDATA", "")
 gdal_path := localappdata + "\\Programs\\OSGeo4W"
@@ -156,10 +156,28 @@ osm-import +files:
     "${compose[@]}" build graphhopper
     "${compose[@]}" stop graphhopper
     "${compose[@]}" run --rm --no-deps "${mounts[@]}" --entrypoint /graphhopper/filter-osm.sh graphhopper "/osm_data/bike-$name" "${inputs[@]}"
+    # The journey planner's POIs come from the same files (just poi-import loads them).
+    "${compose[@]}" run --rm --no-deps "${mounts[@]}" --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/pois-${name%.osm.pbf}.geojsonseq" "${inputs[@]}"
     "${compose[@]}" run --rm --no-deps --entrypoint bash graphhopper -c 'rm -rf /graph-cache/..?* /graph-cache/.[!.]* /graph-cache/*'
     # The filtered file is now newer than any extract in /osm_data, so the entrypoint builds from it without a download.
     "${compose[@]}" run --rm --no-deps -e GRAPHHOPPER_BUILD_ONLY=true graphhopper
     "${compose[@]}" up -d graphhopper
+
+[doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) from the raw extract in data/graphhopper/osm, e.g. after a new download. Writes pois-<extract>.geojsonseq next to it; just poi-import loads it.")]
+[group('geodata')]
+poi-extract:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    name="{{ file_name(osm_data_url) }}"
+    compose=({{ container }} compose -f docker-compose.dev.yml)
+    "${compose[@]}" build graphhopper
+    "${compose[@]}" run --rm --no-deps --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/pois-${name%.osm.pbf}.geojsonseq" "/osm_data/$name"
+
+[doc("Replace the POI table with the file from just poi-extract. Readers keep the old POIs until the new set is in.")]
+[group('geodata')]
+[working-directory("backend")]
+poi-import:
+    uv run python manage.py import_pois "../data/graphhopper/osm/pois-{{ without_extension(without_extension(file_name(osm_data_url))) }}.geojsonseq"
 
 [doc("Build the geocoder index from local Photon 1.0 dumps (.jsonl.zst or .jsonl; several become one index) or one prebuilt index (.tar.bz2), e.g. just photon-import photon_dumps/*.jsonl. The current index is replaced only once the new one is ready.")]
 [group('geodata')]

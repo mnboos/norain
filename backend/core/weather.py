@@ -10,6 +10,7 @@ Given a start, a destination, a routing profile and a departure time, this:
 The route sampling is decoupled from the forecast resolution: GraphHopper gives the true
 per-road travel time, so we know exactly when you reach each point of the polyline.
 """
+import json
 import os
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -29,6 +30,7 @@ from .grid import (
     get_or_fetch_forecast_cell,
 )
 from .models import EnsembleCell
+from .road_prefs import model_key
 from .schedule import local_today
 from .stations import (
     RAIN_HORIZON,
@@ -154,9 +156,15 @@ def routing_points(start_lat: float, start_lon: float, dest_lat: float, dest_lon
     return ((start_lon, start_lat), *((float(lon), float(lat)) for lon, lat in via), (dest_lon, dest_lat))
 
 
-def _route_body(profile: str, points: RoutingPoints) -> dict:
-    """The one GraphHopper request, so the editor's preview and the saved geometry agree."""
-    return {
+def _route_body(profile: str, points: RoutingPoints, custom_model: dict | None = None, alternatives: int = 0) -> dict:
+    """The one GraphHopper request, so the editor's preview and the saved geometry agree.
+
+    ``custom_model`` is a request model on top of the profile's (journey road preferences and
+    weather zones, see ``core.road_prefs``); it must only add penalties, or LM gives wrong
+    routes. ``alternatives`` > 1 asks for that many paths, which GraphHopper only does between
+    two points and, on this graph, for up to about a day's ride (the node cap).
+    """
+    body = {
         "profile": profile,
         "points": [list(p) for p in points],
         "points_encoded": False,
@@ -164,20 +172,36 @@ def _route_body(profile: str, points: RoutingPoints) -> dict:
         "instructions": False,
         "details": ["time"],
     }
+    if custom_model:
+        body["custom_model"] = custom_model
+    if alternatives > 1:
+        body["algorithm"] = "alternative_route"
+        body["alternative_route.max_paths"] = alternatives
+    return body
 
 
 @alru_cache(maxsize=64)
 @provider("graphhopper")
-async def _fetch_route(profile: str, points: RoutingPoints) -> dict:
+async def _fetch_route(profile: str, points: RoutingPoints, custom_model: str = "", alternatives: int = 0) -> dict:
+    """``custom_model`` arrives as canonical JSON (``road_prefs.model_key``): the LRU keys on it."""
+    body = _route_body(profile, points, json.loads(custom_model) if custom_model else None, alternatives)
     async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{GRAPHHOPPER_URL}/route", json=_route_body(profile, points), timeout=30)
+        resp = await client.post(f"{GRAPHHOPPER_URL}/route", json=body, timeout=30)
         resp.raise_for_status()
         return resp.json()
 
 
-async def preview_route(profile: str, points: RoutingPoints) -> dict:
+async def _route(profile: str, points: RoutingPoints, custom_model: dict | None = None, alternatives: int = 0) -> dict:
+    """``_fetch_route`` with the request model in its hashable form; a plain request stays
+    ``(profile, points)``, so it shares LRU entries with every earlier caller."""
+    if not custom_model and alternatives < 2:
+        return await _fetch_route(profile, points)
+    return await _fetch_route(profile, points, model_key(custom_model), alternatives if alternatives > 1 else 0)
+
+
+async def preview_route(profile: str, points: RoutingPoints, custom_model: dict | None = None) -> dict:
     """The line alone, for the route editor: no sampling, no weather."""
-    path = (await _fetch_route(profile, points))["paths"][0]
+    path = (await _route(profile, points, custom_model))["paths"][0]
     return {
         "coordinates": path["points"]["coordinates"],
         "distance_m": round(path.get("distance", 0.0), 1),
@@ -186,19 +210,8 @@ async def preview_route(profile: str, points: RoutingPoints) -> dict:
 
 
 # --------------------------------------------------------------------------- geometry
-async def build_geometry(
-    profile: str,
-    points: RoutingPoints,
-    interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
-) -> dict:
-    """Route with GraphHopper and sample it at fixed *time* intervals.
-
-    Returns the polyline plus the sample points every later stage keys off, each carrying
-    its rounded grid coordinates. Shared by the ad-hoc forecast path, the saved-route
-    geometry task and forecast-job planning so all three sample a route identically.
-    """
-    route = await _fetch_route(profile, points)
-    path = route["paths"][0]
+def _path_geometry(path: dict, interval_seconds: int) -> dict:
+    """Sample one GraphHopper path at fixed *time* intervals."""
     coords: list[list[float]] = path["points"]["coordinates"]
     time_details = path.get("details", {}).get("time", [[0, len(coords) - 1, path.get("time", 0)]])
     cum_s = _cumulative_times_s(coords, time_details)
@@ -224,6 +237,38 @@ async def build_geometry(
         "total_seconds": int(cum_s[-1]) if cum_s else 0,
         "total_distance_m": round(path.get("distance", 0.0), 1),
     }
+
+
+async def build_geometry(
+    profile: str,
+    points: RoutingPoints,
+    interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
+    custom_model: dict | None = None,
+) -> dict:
+    """Route with GraphHopper and sample it at fixed *time* intervals.
+
+    Returns the polyline plus the sample points every later stage keys off, each carrying
+    its rounded grid coordinates. Shared by the ad-hoc forecast path, the saved-route
+    geometry task, forecast-job planning and journey planning so all sample a route identically.
+    """
+    route = await _route(profile, points, custom_model)
+    return _path_geometry(route["paths"][0], interval_seconds)
+
+
+async def build_geometries(
+    profile: str,
+    points: RoutingPoints,
+    alternatives: int,
+    interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
+    custom_model: dict | None = None,
+) -> list[dict]:
+    """Up to ``alternatives`` sampled paths between two points, best first.
+
+    Raises the routing errors like ``build_geometry``; a day too long for alternatives
+    (GraphHopper's node cap) is the caller's to retry with one path.
+    """
+    route = await _route(profile, points, custom_model, alternatives)
+    return [_path_geometry(path, interval_seconds) for path in route["paths"]]
 
 
 # --------------------------------------------------------------------------- forecast window

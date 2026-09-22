@@ -28,12 +28,17 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     entitlements.py  every tier limit, in one place
     thumbnails.py    route-list glyph: path simplification + cache-only weather
     ride_quality.py  ride-quality curves + RIDE_QUALITY config (secret; scored on read)
+    journeys.py      journey planning: day cuts, breaks, POI gaps, ranking on read
+    pois.py          POI categories (POI_RULES) + corridor query pois_along_sync
+    road_prefs.py    road preferences -> penalty-only GraphHopper custom model
+    weather_routing.py  rain/headwind zones -> custom-model areas
     schedule.py      croniter-based next_departure / forecast_available_at
     tasks.py         every heavy operation: geometry, cells, job planning/assembly, scans
     sections.py      route sectioning by weather condition
     tests.py         django tests (SimpleTestCase + TestCase + TransactionTestCase)
     schemas.py       shared Pydantic (CamelSchema)
-    management/commands/  verify_user, claim_routes, refresh_forecasts, run_forecast_scheduler
+    management/commands/  verify_user, claim_routes, refresh_forecasts, run_forecast_scheduler,
+                          import_pois
 frontend/         Vue 3 + Quasar + @tanstack/vue-query
   src/
     services/        http.ts (shared fetch+CSRF, allauthRequest), auth.ts, billing.ts — the
@@ -127,7 +132,9 @@ exists and fail with "Related model 'core.user' cannot be resolved" — so `0002
 ### Tiers and entitlements
 
 Every limit lives in `core/entitlements.py`: free = 2 active routes, no ensemble
-spread and no station correction. Enforced at **three** places, and a limit is only real if all three hold:
+spread and no station correction; journeys: free = 1 journey, 1 alternative per day and no
+weather-aware routing (enforced in `create_journey` and `plan_journey`). The route and forecast
+limits are enforced at **three** places, and a limit is only real if all three hold:
 
 1. `create_route` / `update_route` (`api/recurring_route.py`) — the route count, 402 when full.
 2. `assemble_forecast_job` (`tasks.py`) — `strip_uncertainty()` for free accounts. This is
@@ -424,6 +431,44 @@ request-level change, such as the planned weather-aware custom model (which need
 LM/hybrid), reaches the preview and the saved line alike. Don't build a second GraphHopper
 request body elsewhere.
 
+### Journeys
+
+A journey is a one-off ride over one or more days: start, end, date, a limit per day and per
+leg (time or distance), the POIs wanted on every leg, lodging kinds, road and weather
+preferences. `plan_journey` (queue `default`) routes the whole journey once with LM, cuts it
+into days at lodging (`journeys.split_days`), and hands over to `plan_journey_routes`, which
+gets each day's GraphHopper alternatives, fills POI gaps and places breaks. Rows:
+`Journey` → `JourneyDay` → `JourneyStage` (one per alternative, geometry like a
+`RecurringRoute`). Rules that hold this together:
+
+- **POIs are not in the graph.** The bike filter drops standalone amenity nodes, so
+  `docker/osm-extract-pois.sh` (`just poi-extract`) extracts them from the *raw* extract and
+  `manage.py import_pois` (`just poi-import`) replaces the `Poi` table in one transaction.
+  `POI_RULES` in `core/pois.py` is the one tag map; a test checks the script filters every tag
+  in it. Journeys store the POIs they use as JSON, never as FKs, so a re-import is free.
+  Postgres jsonb arrives as text on a raw cursor (Django's loader): parse it.
+- **Request custom models only penalise** (`multiply_by` ≤ 1). GraphHopper runs LM without CH,
+  and LM is only correct for a model that makes edges more expensive. "Prefer the cycle
+  network" is therefore `avoid_off_network`. Every GraphHopper request still goes through
+  `weather._route_body`; `_route` keeps a request without a model at `(profile, points)`.
+- **POIs steer the route by via points, not by the custom model.** "Water once per leg" is a
+  rule about the whole path and GraphHopper weighs edges; `journeys.gap_fixes` picks the POI
+  with the smallest detour and the planner routes through it.
+- **Alternatives are per day.** `alternative_route` takes two points only and exceeds the
+  2 M node cap beyond ~130 km, so a failure falls back to one path.
+- **Weather-aware routing** (Pro, days within `WEATHER_ROUTING_DAYS`): rain zones as request
+  `areas`, headwind as `in_<zone> && orientation …` (`urban_density` and `orientation` were
+  added to `graph.encoded_values`). Corridor cells are ordinary `ForecastCell`s on a 0.05°
+  lattice fetched by `refresh_forecast_cell`; `plan_journey_routes` re-defers until they are
+  warm (bounded), then reads `cache_only`. The multipliers are `ride_quality.ROUTING_*`.
+- **Stage weather is a normal forecast job** (`ForecastJob.Kind.JOURNEY_STAGE`, geometry from
+  the stage row, ownership checked in `plan_forecast_job`, never station calls). Reading a
+  journey starts or joins its stage jobs; the departure window reuses the departure
+  comparison (Plus). `rank_day` ranks a day's alternatives **on read** and serves results
+  and reasons only, never the weights.
+- **Revisions.** Every edit or re-plan bumps `plan_revision`; a planning task writes only
+  while its revision is current, and replaces the days in one transaction.
+
 ### Recurring routes
 
 Users configure routes with cron schedules. `next_departure()` computes the next departure,
@@ -479,6 +524,10 @@ Override both `CACHES` (locmem) and `CHANNEL_LAYERS` (`InMemoryChannelLayer`) fo
 touching claims or job progress, so tests need neither Redis nor a worker.
 
 ## Regenerating the client
+
+Easiest: `just export-openapi-schema && just update-api--build-only` (uses
+`backend/api-generator.typescript-fetch.additionalProperties.json`, which sets
+`prefixParameterInterfaces`; the manual command below without it renames every request type).
 
 `npm run update:api:generate_client` is broken: `openapi-generator-cli` is a *Python* dev
 dependency, and npm's package of that name is a dependency-confusion placeholder. Use the

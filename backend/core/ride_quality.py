@@ -99,6 +99,13 @@ FROST_CODES = {
     85: 0.85, 86: 1.0,  # Schneeschauer
 }
 
+# Weather-aware journey routing (core/weather_routing.py): how much more a road costs inside
+# a weather zone, as GraphHopper priority multipliers (< 1 = a penalty, the only kind LM allows).
+# The same judgement as the curves above, so it lives here and never leaves the server: the
+# custom model goes to GraphHopper, not to the browser. Checked worst first.
+ROUTING_RAIN_ZONES = ((0.5, 0.25), (0.2, 0.6))  # (rain_impact at least, multiplier)
+ROUTING_WIND_ZONES = ((30.0, 0.6), (18.0, 0.85))  # (wind km/h at least, multiplier on headwind roads)
+
 BAND_LABELS = ("sehr gut", "gut", "mässig", "schlecht", "sehr schlecht")
 FACTOR_LABELS: dict[RideFactor, str] = {
     "rain": "Regen", "wind": "Wind", "temp": "Temperatur", "frost": "Frost",

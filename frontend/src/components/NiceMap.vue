@@ -30,6 +30,7 @@ import { useForecastMapDetail, type LineDetail } from "@/queries/forecastParts";
 import { finerDetail, lineDetailForZoom } from "@/utils/mapDetail";
 import { groundArrowBearing, groundWindText, visibleWindArrows, windArrowSize, windPowerText } from "@/utils/wind";
 import { lineProgress, sampleAtRoutePoint, type ScreenPoint } from "@/utils/forecastSelection";
+import { poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
 
 maplibreConfig.WORKER_URL = maplibreWorkerUrl;
 
@@ -51,6 +52,8 @@ const props = defineProps<{
     height?: string;
     selectedSample?: number;
     pickLocation?: boolean;
+    /** Journey POIs: breaks, lodging, what is on the way. None by default. */
+    pois?: MapPoi[];
 }>();
 
 const { routeWeather, abfahrtsort, zielort } = toRefs(props);
@@ -452,7 +455,7 @@ async function renderLine() {
     if (!map || !rw) return;
     const line = drawnLine.value;
 
-    const lineGeojson: Record<string, unknown> = {
+    const lineGeojson: GeoJSON.Feature<GeoJSON.LineString> = {
         type: "Feature",
         geometry: { type: "LineString", coordinates: line },
         properties: {},
@@ -545,6 +548,57 @@ watch(
     { immediate: true },
 );
 
+// --- journey POIs: one circle layer, coloured by category, a popup with the name on click ---
+const POI_SOURCE = "journey-pois";
+const POI_LAYER = "journey-poi";
+
+async function renderPois() {
+    const map = mymap.value;
+    if (!map) return;
+    const data: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+        type: "FeatureCollection",
+        features: (props.pois ?? []).map(poi => ({
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [poi.lon, poi.lat] },
+            properties: {
+                color: poiCategory(poi.category).color,
+                label: `${poiCategory(poi.category).emoji} ${poiName(poi)}`,
+                emphasis: !!poi.emphasis,
+            },
+        })),
+    };
+    const existing = map.getSource(POI_SOURCE);
+    if (existing instanceof GeoJSONSource) {
+        await existing.setData(data);
+        return;
+    }
+    if (!data.features.length) return;
+    map.addSource(POI_SOURCE, { type: "geojson", data });
+    map.addLayer({
+        id: POI_LAYER,
+        type: "circle",
+        source: POI_SOURCE,
+        paint: {
+            "circle-radius": ["case", ["get", "emphasis"], 7, 4.5],
+            "circle-color": ["get", "color"],
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": ["case", ["get", "emphasis"], 2, 1],
+        },
+    });
+}
+watch([() => props.pois, hasMap], () => void renderPois());
+
+function showPoiPopup(event: MapMouseEvent & { features?: GeoJSON.Feature[] }) {
+    const map = mymap.value;
+    const feature = event.features?.[0];
+    if (!map || feature?.geometry.type !== "Point") return;
+    const [lng, lat] = feature.geometry.coordinates;
+    new Popup({ offset: 10 })
+        .setLngLat([lng ?? 0, lat ?? 0])
+        .setText(String(feature.properties?.label ?? ""))
+        .addTo(map);
+}
+
 // setStyle() replaces the whole style, which wipes our custom source/layers (but not the
 // DOM-based markers/popups, those survive) - re-add the line once the new style is ready.
 watch(
@@ -555,6 +609,7 @@ watch(
         map.setStyle(dark ? DARK_STYLE : LIGHT_STYLE);
         map.once("style.load", () => {
             void renderLine();
+            void renderPois();
         });
     },
 );
@@ -606,6 +661,13 @@ onMounted(() => {
                 map.getCanvas().style.cursor = "pointer";
             });
             map.on("mouseleave", "route-hit", leaveRoute);
+            map.on("click", POI_LAYER, showPoiPopup);
+            map.on("mouseenter", POI_LAYER, () => {
+                map.getCanvas().style.cursor = "pointer";
+            });
+            map.on("mouseleave", POI_LAYER, () => {
+                map.getCanvas().style.cursor = "";
+            });
             emitMapView(map);
             map.on("moveend", () => {
                 emitMapView(map);

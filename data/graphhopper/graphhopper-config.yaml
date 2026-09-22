@@ -131,7 +131,11 @@ graphhopper:
     mtb_rating,
     surface,
     smoothness,
-    track_type
+    track_type,
+    urban_density,
+    orientation
+  # urban_density ("avoid towns", core/road_prefs.py) and orientation (edge bearing both ways, for
+  # headwind zones in core/weather_routing.py) are read only by journey request custom models.
 
   #### Speed, hybrid and flexible mode ####
 
@@ -198,14 +202,14 @@ graphhopper:
 
   # This feature allows classifying roads into 'rural', 'residential' and 'city' areas (encoded value 'urban_density')
   # Use 1 or more threads to enable the feature
-  # graph.urban_density.threads: 8
+  graph.urban_density.threads: 2
   # Use higher/lower sensitivities if too little/many roads fall into the according categories.
   # Using smaller radii will speed up the classification, but only change these values if you know what you are doing.
   # If you do not need the (rather slow) city classification set city_radius to zero.
-  # graph.urban_density.residential_radius: 400
-  # graph.urban_density.residential_sensitivity: 6000
-  # graph.urban_density.city_radius: 1500
-  # graph.urban_density.city_sensitivity: 1000
+  graph.urban_density.residential_radius: 400
+  graph.urban_density.residential_sensitivity: 6000
+  graph.urban_density.city_radius: 1500
+  graph.urban_density.city_sensitivity: 1000
 
 
   #### Subnetworks ####
