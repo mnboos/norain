@@ -174,9 +174,9 @@ the accessors without `v1` are deprecated. `stripe.Webhook.construct_event` is d
 
 ### Every heavy operation is a task
 
-No HTTP request performs a provider fetch or a GraphHopper call. The
-forecast endpoints create a `ForecastJob`, enqueue `plan_forecast_job` and return **202**
-with a job id; a finished job that is still fresh returns **200** with its stored payload.
+No HTTP request performs a provider fetch or a GraphHopper call — with one deliberate
+exception, `POST /api/routes/preview` (see "Route editing"). The forecast endpoints create a
+`ForecastJob`, enqueue `plan_forecast_job` and return **202** with a job id; a finished job that is still fresh returns **200** with its stored payload.
 
 ```
 POST-ish GET  ->  ForecastJob (202)
@@ -402,6 +402,27 @@ starts from `bike_average_speed` (road type and surface), scales it, applies the
 jar's `bike.json` + `bike_elevation.json` and adds our factor in `bike_speed.json`, which
 must stay **last** in `custom_model_files` or the slope limits cut it. After a change, saved
 routes keep their old times until `refresh_route_geometry` runs for each one.
+
+### Route editing (via points)
+
+`RecurringRoute.via_points` is `[[lon, lat], ...]`, in riding order. GraphHopper routes
+`start → via… → dest` (`RecurringRoute.routing_points`, `weather.routing_points`), so speed
+and every eta still come from GraphHopper. Changing the via points in `update_route` clears the
+geometry and enqueues `refresh_route_geometry`, like a changed start or profile. The new
+`geometry_fetched_at` is in the job params (`start_forecast_job`), so no old forecast is reused.
+The return journey gets the via points reversed, set in `_save_return` like its swapped
+endpoints. To edit it, the user reshapes the outbound route; the UI offers no editor on a
+return route.
+
+The editor (`components/RouteEditorDialog.vue`) draws its line from `POST /api/routes/preview`,
+the **only** HTTP request that calls GraphHopper itself. An editor cannot wait on a queue.
+It returns the line, distance and time only, with no sampling and no weather. The editor
+calls it once per finished drag (debounced, and a new call cancels the previous one), and the
+server limits it per account (`PREVIEW_LIMIT_PER_MINUTE`, failing open like the claims). A saved
+route's geometry still comes only from the task. Both go through `weather._route_body`, so a
+request-level change, such as the planned weather-aware custom model (which needs CH off, so
+LM/hybrid), reaches the preview and the saved line alike. Don't build a second GraphHopper
+request body elsewhere.
 
 ### Recurring routes
 
