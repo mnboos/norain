@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, type Ref } from "vue";
+import { GeometrySource } from "@norain/api/models";
+import { computed, ref, watch, type Ref } from "vue";
 import { QSelect } from "quasar";
 import {
     symSharpElectricBike,
@@ -14,10 +15,14 @@ import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import type { PlacesSearchResult, RecurringRouteIn } from "@norain/api/models";
 import { usePlaceSearch } from "@/queries/places";
+import GpxImportDialog from "./GpxImportDialog.vue";
+import RouteTimingFields from "./RouteTimingFields.vue";
+import { routePlace, type RouteDraft } from "@/services/gpx";
 import type { LonLat } from "@/utils/routeEditing";
 
-defineProps<{
+const props = defineProps<{
     modelValue: boolean;
+    initialDraft?: RouteDraft | null;
 }>();
 
 const emit = defineEmits<{
@@ -33,6 +38,25 @@ const profile = ref("bike");
 // Kept when start or destination changes: the user resets them in the editor if they no longer fit.
 const viaPoints = ref<LonLat[]>([]);
 const editing = ref(false);
+const importing = ref(false);
+const imported = ref<RouteDraft | null>(null);
+const importedDuration = ref(0);
+const exact = computed(() => imported.value?.plan.geometrySource === GeometrySource.Imported);
+function applyImport(draft: RouteDraft) {
+    const points = draft.plan.coordinates;
+    const first = points[0], last = points.at(-1);
+    if (!first || !last) return;
+    imported.value = draft;
+    name.value = draft.plan.name ?? "Importierte Strecke";
+    start.value = routePlace(first, "Start");
+    dest.value = routePlace(last, "Ziel");
+    profile.value = draft.plan.profile ?? "bike";
+    viaPoints.value = draft.plan.geometrySource === GeometrySource.Graphhopper ? points.slice(1, -1).map(p => [p[0] ?? 0, p[1] ?? 0]) : [];
+    importedDuration.value = draft.plan.durationSeconds ?? draft.preview.timeS;
+}
+watch(() => props.modelValue, open => {
+    if (open && props.initialDraft) applyImport(props.initialDraft);
+});
 
 function lonLat(place: PlacesSearchResult | null): LonLat | null {
     const [lon, lat] = place?.geometry.coordinates ?? [];
@@ -119,7 +143,7 @@ const profileOptions = [
 ];
 
 const isValid = computed(
-    () => !!name.value.length && !!start.value && !!dest.value && !!days.value.length && !!parsedTime.value && (!twoWay.value || returnValid.value),
+    () => (!exact.value || (importedDuration.value > 0 && importedDuration.value <= 1382400)) && !!name.value.length && !!start.value && !!dest.value && !!days.value.length && !!parsedTime.value && (!twoWay.value || returnValid.value),
 );
 
 function onSave() {
@@ -135,6 +159,9 @@ function onSave() {
         destName: dest.value.properties.name,
         viaPoints: viaPoints.value,
         profile: profile.value,
+        geometrySource: exact.value ? GeometrySource.Imported : GeometrySource.Graphhopper,
+        importedCoordinates: exact.value ? imported.value?.plan.coordinates ?? [] : [],
+        durationSeconds: exact.value ? importedDuration.value : null,
         scheduleCron: scheduleCron.value,
         departureFlexBeforeMinutes: flexBefore.value,
         departureFlexAfterMinutes: flexAfter.value,
@@ -158,6 +185,12 @@ function onClose() {
             </q-card-section>
 
             <q-card-section class="q-gutter-md">
+                <q-btn outline no-caps label="GPX importieren" @click="importing = true" />
+                <GpxImportDialog v-model="importing" :profile="profile" @apply="applyImport" />
+                <template v-if="exact && imported">
+                    <div class="text-caption">Originalstrecke aus GPX</div>
+                    <RouteTimingFields v-model="importedDuration" :distance-m="imported.preview.distanceM" />
+                </template>
                 <q-input
                     v-model="name"
                     label="Name"
@@ -172,6 +205,7 @@ function onClose() {
 
                 <q-select
                     v-model="start"
+                    :disable="exact"
                     label="Start"
                     dense
                     outlined
@@ -198,6 +232,7 @@ function onClose() {
 
                 <q-select
                     v-model="dest"
+                    :disable="exact"
                     label="Ziel"
                     dense
                     outlined
@@ -222,9 +257,9 @@ function onClose() {
                     </template>
                 </q-select>
 
-                <RouteLocationPicker v-model:start="start" v-model:dest="dest" />
+                <RouteLocationPicker v-if="!exact" v-model:start="start" v-model:dest="dest" />
 
-                <div v-if="startLonLat && destLonLat" class="row items-center q-gutter-sm">
+                <div v-if="!exact && startLonLat && destLonLat" class="row items-center q-gutter-sm">
                     <q-btn outline no-caps label="Strecke anpassen" @click="editing = true" />
                     <span v-if="viaPoints.length" class="text-caption">
                         {{ viaPoints.length }} Zwischenpunkt{{ viaPoints.length === 1 ? "" : "e" }}

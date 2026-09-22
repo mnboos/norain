@@ -21,6 +21,13 @@ import {
     RouteThumbnailToJSON,
     RouteThumbnailToJSONTyped,
 } from './RouteThumbnail';
+import type { GeometrySource } from './GeometrySource';
+import {
+    GeometrySourceFromJSON,
+    GeometrySourceFromJSONTyped,
+    GeometrySourceToJSON,
+    GeometrySourceToJSONTyped,
+} from './GeometrySource';
 
 /**
  * 
@@ -68,6 +75,18 @@ export interface RecurringRouteOut {
      * 
      */
     viaPoints?: Array<Array<number>>;
+    /**
+     * 
+     */
+    geometrySource?: GeometrySource;
+    /**
+     * 
+     */
+    importedCoordinates?: Array<Array<number>> | null;
+    /**
+     * 
+     */
+    durationSeconds?: number | null;
     /**
      * 
      */
@@ -146,6 +165,8 @@ export interface RecurringRouteOut {
     returnNextDeparture?: string | null;
 }
 
+
+
 /**
  * Check if a given object implements the RecurringRouteOut interface.
  */
@@ -186,6 +207,9 @@ export function RecurringRouteOutFromJSONTyped(json: any, ignoreDiscriminator: b
         'destLon': json['dest_lon'],
         'destName': json['dest_name'],
         'viaPoints': json['via_points'] == null ? undefined : json['via_points'],
+        'geometrySource': json['geometry_source'] == null ? undefined : GeometrySourceFromJSON(json['geometry_source']),
+        'importedCoordinates': json['imported_coordinates'] === undefined ? undefined : json['imported_coordinates'] === null ? null : json['imported_coordinates'],
+        'durationSeconds': json['duration_seconds'] === undefined ? undefined : json['duration_seconds'] === null ? null : json['duration_seconds'],
         'profile': json['profile'],
         'scheduleCron': json['schedule_cron'],
         'scheduleDescription': json['schedule_description'],
@@ -229,6 +253,9 @@ export function RecurringRouteOutToJSONTyped(value?: RecurringRouteOut | null, i
         'dest_lon': value['destLon'],
         'dest_name': value['destName'],
         'via_points': value['viaPoints'],
+        'geometry_source': GeometrySourceToJSON(value['geometrySource']),
+        'imported_coordinates': value['importedCoordinates'],
+        'duration_seconds': value['durationSeconds'],
         'profile': value['profile'],
         'schedule_cron': value['scheduleCron'],
         'schedule_description': value['scheduleDescription'],

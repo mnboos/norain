@@ -101,17 +101,20 @@ export default defineConfigWithVueTs(
         files: ["public/**/*.js"],
     },
     {
-        // Node build scripts, run as plain CommonJS. Like the service worker, no tsconfig
-        // covers them, so they are linted without type information.
+        // Standalone CommonJS build scripts are linted without a TypeScript project.
         ...ts.configs.disableTypeChecked,
         files: ["scripts/**/*.cjs"],
         languageOptions: {
+            parser: ts.parser,
             sourceType: "commonjs",
-            parserOptions: { program: null, project: false, projectService: false },
+            parserOptions: {
+                project: false,
+                projectService: false,
+                sourceType: "commonjs",
+            },
         },
         rules: {
             ...ts.configs.disableTypeChecked.rules,
-            // CommonJS: require() is the module system here.
             "@typescript-eslint/no-require-imports": "off",
         },
     },

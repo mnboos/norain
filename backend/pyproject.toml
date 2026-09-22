@@ -10,6 +10,7 @@ dependencies = [
     "channels-redis==4.3.0",
     "croniter==6.2.4",
     "daphne==4.2.3",
+    "defusedxml>=0.7.1,<0.8",
     "django==6.1.1",
     "django-allauth==65.19.4",
     "django-axes==8.3.1",

@@ -22,6 +22,7 @@ from core.entitlements import (
     strip_uncertainty,
 )
 from core.forecast_schemas import RouteWeatherOut
+from core.gpx import exact_geometry
 from core.grid import (
     get_cached_cell_keys,
     get_or_fetch_ensemble_cell,
@@ -85,20 +86,32 @@ async def _refresh_route_geometry_async(route_id: str, *, backfill_only: bool = 
     if backfill_only and valid_vertex_times(route.polyline_coordinates, route.vertex_times):
         return
     try:
-        geometry = await build_geometry(route.profile, route.routing_points, SAMPLE_INTERVAL_DEFAULT_S)
+        geometry = (
+            exact_geometry(route.imported_coordinates, route.duration_seconds, SAMPLE_INTERVAL_DEFAULT_S)
+            if route.geometry_source == "imported"
+            else await build_geometry(route.profile, route.routing_points, SAMPLE_INTERVAL_DEFAULT_S)
+        )
     except ROUTING_ERRORS as e:
         # The old geometry stays in place; the next edit or backfill tries again.
         logger.error(f"Failed to fetch route geometry for {route.name}: {e}")
         return
 
     sample_points = geometry["sample_points"]
-    route.polyline = route_line(geometry["polyline"])
-    route.total_seconds = geometry["total_seconds"]
-    route.total_distance_m = geometry["total_distance_m"]
-    route.sample_points = sample_points
-    route.vertex_times = geometry["vertex_times"]
-    route.geometry_fetched_at = datetime.now(tz=UTC)
-    await route.asave()
+    now = datetime.now(tz=UTC)
+    stored = await RecurringRoute.objects.filter(id=route.id, updated_at=route.updated_at).aupdate(
+        polyline=route_line(geometry["polyline"]),
+        total_seconds=geometry["total_seconds"],
+        total_distance_m=geometry["total_distance_m"],
+        sample_points=sample_points,
+        vertex_times=geometry["vertex_times"],
+        geometry_fetched_at=now,
+        updated_at=now,
+    )
+    if not stored:
+        # An edit won while routing was in flight. Never write the stale model back.
+        if await RecurringRoute.objects.filter(id=route.id).aexists():
+            await refresh_route_geometry.aenqueue(str(route.id))
+        return
 
     logger.info(f"Route geometry stored for {route.name} ({len(sample_points)} sample points)")
 
@@ -331,9 +344,20 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
             "total_distance_m": stage.total_distance_m,
         }
 
+    if params.get("geometry_source") == "imported":
+        return exact_geometry(
+            params["coordinates"], params["duration_seconds"], params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S)
+        )
+
     return await build_geometry(
         params["profile"],
-        routing_points(params["start_lat"], params["start_lon"], params["dest_lat"], params["dest_lon"]),
+        routing_points(
+            params["start_lat"],
+            params["start_lon"],
+            params["dest_lat"],
+            params["dest_lon"],
+            params.get("via_points", []),
+        ),
         params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S),
     )
 
