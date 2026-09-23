@@ -11,6 +11,7 @@ The route sampling is decoupled from the forecast resolution: GraphHopper gives 
 per-road travel time, so we know exactly when you reach each point of the polyline.
 """
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -42,8 +43,8 @@ from .stations import (
     station_correction,
 )
 from .telemetry import provider
-from .uncertainty import extract_uncertainty
-from .wind import compute_wind_profile, normalize_wind, resolve_vertex_times
+from .uncertainty import EnsembleCentral, ensemble_central, ensemble_weight, extract_uncertainty
+from .wind import compute_wind_profile, felt_temperature, normalize_wind, resolve_vertex_times, sample_airspeed
 
 GRAPHHOPPER_URL = os.environ.get("GRAPHHOPPER_API_URL", "http://localhost:8989").rstrip("/")
 
@@ -290,6 +291,59 @@ def forecast_days_for(departure: datetime, sample_points: list[dict], today: dat
 
 
 # --------------------------------------------------------------------------- summarization
+def mean_felt_temp(samples: list[dict]) -> float | None:
+    """Time-weighted mean felt temperature of a ride, from stored sample dicts.
+
+    Each sample stands for half the riding time to each neighbour. Samples without
+    ``felt_temp`` (no timing, or stored before it existed) count with their air temperature.
+    """
+    points = [
+        (s["elapsed_s"], s["felt_temp"] if s.get("felt_temp") is not None else s["temp"])
+        for s in samples
+        if s.get("elapsed_s") is not None and s.get("temp") is not None
+    ]
+    if not points:
+        return None
+    if len(points) == 1:
+        return points[0][1]
+    weighted = total = 0.0
+    for (t0, v0), (t1, v1) in zip(points, points[1:]):
+        gap = max(0.0, t1 - t0)
+        weighted += gap * (v0 + v1) / 2
+        total += gap
+    return weighted / total if total > 0 else sum(v for _, v in points) / len(points)
+
+
+def _blend(value: float | None, central: float | None, weight: float) -> float | None:
+    """``value`` moved ``weight`` of the way to ``central``; the ensemble alone only at weight 1."""
+    if central is None:
+        return value
+    if value is None:
+        return central if weight >= 1 else None
+    return (1 - weight) * value + weight * central
+
+
+def _blend_with_ensemble(forecast: dict, central: EnsembleCentral, weight: float) -> None:
+    """Move the single run's temperature and wind toward the ensemble's central estimate.
+
+    Done in place, before the wind profile and the samples are built, so every later reader of
+    ``forecast`` (headwind, wind power, felt temperature, frost, arrows) sees the same number.
+    Rain and the weather code stay the single run's: the ride score already weighs the
+    ensemble's rain through ``pop`` and ``rain_if_wet``.
+    """
+    forecast["temp"] = _blend(forecast["temp"], central.temp, weight)
+    forecast["wind_gust"] = _blend(forecast.get("wind_gust"), central.wind_gust, weight)
+    if central.wind is None:
+        return
+    own = normalize_wind(forecast.get("wind_speed"), forecast.get("wind_dir"))
+    east = _blend(own.east if own else None, central.wind.east, weight)
+    north = _blend(own.north if own else None, central.wind.north, weight)
+    if east is None or north is None:
+        return
+    forecast["wind_speed"] = math.hypot(east, north)
+    forecast["wind_dir"] = math.degrees(math.atan2(east, north)) % 360
+
+
 def _summarize(samples: list[WeatherSample], source: str) -> RouteWeatherSummary:
     """Route-level verdict.
 
@@ -411,6 +465,7 @@ async def compute_route_weather(
     forecast_source = "open-meteo"
     forecasts: list[dict | None] = [None] * len(sample_points)
     ensemble_cells: list[EnsembleCell | None] = [None] * len(sample_points)
+    ensemble_weights: list[float | None] = [None] * len(sample_points)
     corrections: list[StationCorrection | None] = [None] * len(sample_points)
     readings: list[list[Reading]] = [[] for _ in sample_points]
     if station_correction_enabled:
@@ -471,6 +526,11 @@ async def compute_route_weather(
         else:
             ens_cell = await get_or_fetch_ensemble_cell(lat_r, lon_r, day_key_str, days)
         ensemble_cells[i] = ens_cell
+        if ens_cell is not None and (weight := ensemble_weight(eta, ens_cell.fetched_at)) > 0:
+            central = ensemble_central(ens_cell.data, eta, ENSEMBLE_MODELS.split(","))
+            if central is not None:
+                _blend_with_ensemble(forecast, central, weight)
+                ensemble_weights[i] = round(weight, 2)
 
     # Future anchors are now available. Integrate unrounded vectors over geometry once;
     # gaps retain their original indices rather than becoming adjacent valid samples.
@@ -518,6 +578,8 @@ async def compute_route_weather(
 
         headwind, crosswind = wind.samples[i].headwind, wind.samples[i].cross_abs_mean
         wind_power_w = wind.samples[i].wind_power_w
+        airspeed = sample_airspeed(wind.samples[i])
+        felt_temp = felt_temperature(forecast["temp"], airspeed) if airspeed is not None else None
 
         samples.append(
             WeatherSample(
@@ -535,6 +597,7 @@ async def compute_route_weather(
                 pop=round(pop, 2) if pop is not None else None,
                 rain_if_wet=round(rain_if_wet, 2) if rain_if_wet is not None else None,
                 temp=round(forecast["temp"], 1),
+                felt_temp=round(felt_temp, 1) if felt_temp is not None else None,
                 wind_speed=round(forecast["wind_speed"], 1) if forecast["wind_speed"] is not None else None,
                 wind_gust=round(forecast["wind_gust"], 1) if forecast["wind_gust"] is not None else None,
                 wind_dir=round(forecast["wind_dir"], 0) % 360 if forecast["wind_dir"] is not None else None,
@@ -544,6 +607,7 @@ async def compute_route_weather(
                 weather_code=forecast["weather_code"],
                 weather_desc=WMO_DE.get(forecast["weather_code"], "") if forecast["weather_code"] is not None else "",
                 station_count=station_count,
+                ensemble_weight=ensemble_weights[i],
             )
         )
 

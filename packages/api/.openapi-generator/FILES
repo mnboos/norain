@@ -16,13 +16,13 @@ models/ForecastSampleOut.ts
 models/ForecastUncertainty.ts
 models/ForecastUncertaintySummary.ts
 models/GeometrySchema.ts
+models/GeometrySource.ts
+models/GpxExportIn.ts
+models/GpxPathOut.ts
 models/JourneyDayOut.ts
 models/JourneyIn.ts
 models/JourneyOut.ts
 models/JourneyStageOut.ts
-models/GeometrySource.ts
-models/GpxExportIn.ts
-models/GpxPathOut.ts
 models/PlacesSearchResult.ts
 models/PoiOut.ts
 models/PropertiesSchema.ts

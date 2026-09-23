@@ -8,6 +8,10 @@ The claim lives in the cache rather than on the cell row on purpose: ``ForecastC
 and ``EnsembleCell`` set ``fetched_at`` with ``auto_now=True``, so saving a claim field
 would bump it and make a stale cell look fresh. A cache key also expires on its own, so
 a worker that dies mid-fetch needs no reaper.
+
+A claim only deduplicates *enqueuing*, and job planning enqueues past it on purpose, so it
+may fail open. That one cell is fetched at most once is ``core.cell_lease``'s job, which
+fails closed.
 """
 
 from datetime import date

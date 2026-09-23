@@ -17,12 +17,15 @@ from .uncertainty import extract_uncertainty
 from .weather import _summarize
 from .wind import (
     WeightedDirection,
+    SampleWind,
     compute_wind_profile,
+    felt_temperature,
     ground_bucket,
     normalize_wind,
     project_support,
     project_wind,
     resolve_vertex_times,
+    sample_airspeed,
     valid_vertex_times,
     wind_power,
 )
@@ -203,6 +206,25 @@ class WindTests(SimpleTestCase):
         self.assertAlmostEqual(result.distribution["max_wind_power_w"], max(s.wind_power_w for s in result.samples))
         self.assertTrue(all(s["wind_power_w"] is not None for s in result.segments))
 
+    def test_felt_temperature_is_the_wind_chill_and_never_warmer(self):
+        self.assertAlmostEqual(felt_temperature(0, 25), -5.9, delta=0.05)  # Environment Canada table: -6
+        self.assertEqual(felt_temperature(5, 3), 5)  # below the formula's airspeed floor
+        for temp in (-10, 0, 10, 20, 30):
+            self.assertLessEqual(felt_temperature(temp, 40), temp)
+        self.assertLess(felt_temperature(5, 40), felt_temperature(5, 20))
+
+    def test_airspeed_is_riding_speed_plus_wind(self):
+        self.assertIsNone(sample_airspeed(SampleWind(headwind=10, cross_abs_mean=0)))
+        self.assertEqual(sample_airspeed(SampleWind(rider_speed=20)), 20)
+        self.assertAlmostEqual(sample_airspeed(SampleWind(rider_speed=20, headwind=10, cross_abs_mean=0)), 30)
+        self.assertAlmostEqual(sample_airspeed(SampleWind(rider_speed=20, headwind=-5, cross_abs_mean=0)), 15)
+        self.assertAlmostEqual(sample_airspeed(SampleWind(rider_speed=20, headwind=0, cross_abs_mean=15)), 25)
+
+    def test_profile_sets_the_support_riding_speed(self):
+        result = profile([[0, 0], [0, 0.005], [0, 0.01]], speed=20)
+        for sample in result.samples:
+            self.assertAlmostEqual(sample.rider_speed, 20, delta=0.1)
+
     def test_wind_power_is_none_without_timing(self):
         coords = [[0, 0], [0, 0.001], [0, 0.002]]
         points, wind, _ = fixture(coords, anchor_indices=[0, 2])
@@ -210,6 +232,7 @@ class WindTests(SimpleTestCase):
             point["elapsed_s"] = 0
         result = compute_wind_profile(coords, points, wind, resolve_vertex_times(coords, points), 200)
         self.assertTrue(all(s.wind_power_w is None for s in result.samples))
+        self.assertTrue(all(s.rider_speed is None for s in result.samples))
         self.assertIsNotNone(result.samples[0].headwind)
         self.assertIsNone(result.distribution["max_wind_power_w"])
         self.assertTrue(all(s["wind_power_w"] is None for s in result.segments))

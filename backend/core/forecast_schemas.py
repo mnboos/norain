@@ -67,6 +67,9 @@ class WeatherSample(CamelSchema):
     pop: float | None = None  # probability of precipitation 0..1 (ensemble members; OWM as fallback)
     rain_if_wet: float | None = None  # mean precip (mm) of just the ensemble members forecasting rain
     temp: float  # °C
+    # °C, the wind chill at riding speed (core.wind.felt_temperature). None without ride timing,
+    # and on job results stored before it existed.
+    felt_temp: float | None = None
 
     wind_speed: float | None = None  # km/h
     wind_gust: float | None = None  # km/h
@@ -83,6 +86,9 @@ class WeatherSample(CamelSchema):
     # How many weather stations nudged this sample's temperature or rain probability.
     # None when the sample is the plain model forecast.
     station_count: int | None = None
+    # The ensemble's share in temp and wind (core.uncertainty.ensemble_weight): 0 up to 48 h lead,
+    # 1 from 72 h. None when the sample is the plain single run.
+    ensemble_weight: float | None = Field(default=None, ge=0, le=1)
 
 
 class WindSegment(CamelSchema):

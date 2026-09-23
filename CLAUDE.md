@@ -51,8 +51,9 @@ frontend/         Vue 3 + Quasar + @tanstack/vue-query
     components/RouteThumbnail.vue  the tiny route glyph in the list
 packages/api/     generated TypeScript client (see "Regenerating the client")
 .env             OSM_DATA_URL, PHOTON_INDEX_URL, GRAPHHOPPER_HEAP, OPENWEATHERMAP_API_KEY,
-                 WEATHERUNDERGROUND_API_KEY,
-                 REDIS_URL (claim cache + channel layer)
+                 WEATHERUNDERGROUND_API_KEY, OPEN_METEO_API_KEY (commercial, optional),
+                 OPEN_METEO_LIMIT_{MINUTE,HOUR,DAY,MONTH}, OPENWEATHERMAP_DAILY_CAP,
+                 REDIS_URL (claim cache, provider budgets, channel layer)
 ```
 
 ## Key architecture
@@ -223,11 +224,21 @@ assembly (someone is waiting), `default` for geometry, thumbnails, scans and mai
 Queue position no longer implies completion order, so anything that used to rely on FIFO —
 the thumbnail rebuild — now uses `.using(run_after=…)`.
 
-`core/claims.py` keeps one cell from being fetched by several tasks at once (`cache.add` is
+`core/claims.py` keeps one cell from being enqueued by every pass that wants it (`cache.add` is
 atomic). It fails **open** — a Redis outage costs deduplication, never forecasts — and the
 claim is released on failure too, or one dead cell would block retries for the whole TTL.
 A job still enqueues a cell whose claim is held elsewhere: the holder is usually the
 pre-warm scan, whose task carries no `job_id` and would never report back.
+
+The claim only deduplicates *enqueuing*. The guarantee that one cell is fetched **once** is
+the fetch lease (`core/cell_lease.py`, `CellFetchLease` rows), taken inside
+`grid.get_or_fetch_*`, so it covers every caller. It lives in Postgres and fails **closed**.
+The holder re-checks the cache under the lease before it fetches. A caller that finds the
+lease held waits for it, then only reads what the holder stored. If the holder stored
+nothing, the waiter returns `None` and does not fetch. It fetches only when the stored cell
+covers fewer `forecast_days` than it needs. Never make a waiter wait on the enqueue claim
+instead: a task still in the queue holds that, possibly behind the waiter itself.
+`LEASE_TTL` must stay above the Open-Meteo + OWM timeouts combined.
 
 **Imports go at module scope — keep the layering that allows it.** The forecast payload
 schemas live in `core/forecast_schemas.py`, outside the `core.api` package, because the
@@ -240,10 +251,10 @@ dies on import. Don't paper over a new cycle with a function-level import; fix t
 
 ### Route-list thumbnails
 
-`RecurringRoute.thumbnail` is a precomputed blob (simplified path ≤ 64 vertices + the nine
-weather fields per sample that `core.ride_quality` reads, `weather_code` among them — frost
-needs it, and without it the list would score frost from the thermometer alone and disagree
-with the map), written by the `refresh_route_thumbnail` task and only *read* by `list_routes`,
+`RecurringRoute.thumbnail` is a precomputed blob (simplified path ≤ 64 vertices + the ten
+weather fields per sample that `core.ride_quality` reads, `weather_code` and `felt_temp` among
+them — frost needs the code and the temperature factor the felt value, and without them the list
+would score from the thermometer alone and disagree with the map), written by the `refresh_route_thumbnail` task and only *read* by `list_routes`,
 which serves the path plus the worst sample's `ride_score` / `ride_label` and the ride's worst
 rain and frost (`rain_level`, `frost_level`, `rain_probability`, `max_rain_rate_mm_h`,
 `temp_min`) — never the raw samples. The rain and frost readings are the worst *point* of the
@@ -299,6 +310,14 @@ how fast the score climbs the colour ramp). It is the app's own judgement and st
   at face value; the ensemble adds the risk where it is dry. That is why thumbnails store `pop`
   / `rain_if_wet` and `compute_route_thumbnail` passes `include_uncertainty=True` (still
   `cache_only`) — without them the list would score the main run alone and disagree with the map.
+- **Temperature is felt, frost is air.** The temperature factor reads `felt_temp`: the wind chill
+  at riding speed (`wind.felt_temperature`, airspeed = the sample's support-average riding speed
+  plus head- and crosswind). It falls back to `temp` for samples stored without it, and
+  `departures.SAMPLE_FIELDS` / `thumbnails._SAMPLE_FIELDS` carry it, or the departure ranking
+  and the list would score the thermometer. Frost stays on `temp`: ice is a property of the
+  road, and wind chill does not cool a surface below the air. The key-ride tile shows the
+  ride's felt temperature averaged over riding time (`meanFeltTemp`, and `weather.mean_felt_temp`
+  for the briefing).
 - **Frost is a safety factor, not a comfort one** (`frost_impact`): `FROST_CURVE` is steep around
   freezing, scaled by how wet the road is (`FROST_DRY_SHARE` on a dry one, the whole curve where
   the rain penalty is worst), and `FROST_CODES` puts a floor under it for freezing drizzle,
@@ -312,7 +331,28 @@ how fast the score climbs the colour ramp). It is the app's own judgement and st
   alone can reach; a config may leave a factor out and `ride_score` reads weights with `.get`.
   Tests that check curve *shape* derive from or pin the config, so tuning `RIDE_QUALITY` does
   not break them. The frontend's `NiceChart` comfort band (14–22 °C) mirrors `TEMP_CURVE`'s
-  flat part.
+  flat part, and it applies to the chart's felt line.
+
+### Ensemble central estimate
+
+Past about two days the ensemble's central value verifies better than the single run, so
+`compute_route_weather` moves each sample's temperature and wind toward it: weight 0 up to 48 h
+lead, linear to 1 at 72 h (`uncertainty.ensemble_weight`, lead measured from the ensemble cell's
+`fetched_at`). Rules that hold this together:
+
+- **Blend before `compute_wind_profile`**, in the first loop beside the station correction, so
+  headwind, wind power, felt temperature, frost, arrows and the summary all read the blended value.
+- **Temperature is the pooled member median** (at weight 1 the chart's dotted line sits on the
+  median line). **Wind is the median member speed along the mean vector's direction.** A median
+  of directions is not defined. The mean vector's own length is no good as a speed: members that
+  disagree on direction would cancel into a calm none of them forecast. When the members agree on
+  no direction (`WIND_DIRECTION_AGREEMENT`), the single run's wind stays.
+- **Temperature and wind only.** Rain and `weather_code` stay the single run's. The ride score
+  already weighs the ensemble's rain through `pop` / `rain_if_wet`.
+- **Every tier.** Ensemble cells are fetched for free accounts anyway. Only the spread is Pro.
+- **Mark it.** Blended samples carry `ensemble_weight`. None means the plain single run.
+- Journey weather routing (corridor cells) still reads the single run, and so does every sample
+  past the ensemble's last hour (~7 days): `_members` returns None there and nothing is extrapolated.
 
 ### Weather-station correction
 
@@ -335,6 +375,44 @@ Rules that hold this together:
 
 In tests, patch `core.stations._fetch_nearby` / `_fetch_observation`, and set
 `WEATHERUNDERGROUND_API_KEY` with `patch.dict(os.environ, ...)` — `.env` may hold a real key.
+
+### Provider rate limits
+
+`core/ratelimit.py` budgets every external weather call in shared cache counters (the four
+`cells` replicas fetch side by side, so a per-process limit would mean nothing). A `Limit` is a
+set of fixed windows in the provider's own *weighted* calls. Open-Meteo counts a request with
+more than 10 variables or 14 days as several (`grid.open_meteo_weight`), so one forecast cell
+costs ~2.3. `acquire` spends against every window or refuses and returns the wait.
+Rules that hold this together:
+
+- **The gate sits in `grid._fetch_and_store_*`, inside the fetch lease and outside `@provider`.**
+  That covers every caller, and a skipped call is `provider.throttled`, never a
+  `provider.request`.
+- **Adaptive.** A 429 goes through `record_throttle`. That starts one cooldown shared by every
+  worker: `Retry-After`, else the hour/day the reply's `reason` names, else doubling from 60 s.
+  It also halves a factor on the *shortest* window, which climbs back 0.1 a quiet minute (halving
+  the hour would lock a half-spent hour and send every cell to OWM over a minute-level 429). The first 429
+  of a burst adapts, the rest don't. This is what corrects a weight we guessed too low
+  (the ensemble's weighting is undocumented).
+- **Fail open for Open-Meteo, closed for OWM and Weather Underground**, for the same reasons as
+  `claims.py` and `_spend_call` (which is now a thin wrapper over `ratelimit`). Open-Meteo's
+  forecast and ensemble APIs share one budget.
+- **`ProviderThrottled` must not subclass `httpx.HTTPError`/`ValueError`/`KeyError`**, or the
+  fetch paths swallow it and fall back to OWM. That fallback on every 429 was the old bug:
+  a 429 storm became a paid OWM storm.
+- **A throttled cell task defers, it does not settle.** `refresh_*_cell` asks for
+  `allow_fallback=False` / `raise_throttled=True` and re-enqueues itself with `run_after`
+  (`attempt` + 1, at most `MAX_CELL_DEFERS`). It touches the job's `updated_at` so the stall
+  check doesn't restart it and fan every cell out again. Waits of 1 s or less are slept in the
+  worker. Over `MAX_DEFER_WAIT` (the hourly or daily limit), or on the last attempt, the forecast
+  falls back to OWM within `OPENWEATHERMAP_DAILY_CAP` and the ensemble settles as failed.
+- **The free Open-Meteo API is non-commercial.** `OPEN_METEO_API_KEY` switches to the
+  `customer-*` hosts; set `OPEN_METEO_LIMIT_*` to the plan's limits too. Never log an httpx
+  status error as is, because its message holds the URL and the key: use `ratelimit.describe_failure`.
+
+In tests, use locmem `CACHES` (or the dev Redis's budget and cooldowns leak in), patch
+`core.grid._fetch_*`, and patch `core.ratelimit._now` rather than `time.time`, which would move
+the locmem cache's own expiry clock too.
 
 ### Forecast grid caching
 
@@ -368,12 +446,46 @@ blank chart.
 OWM One Call 3.0 returns `rain` as a float (mm); legacy 2.5 returns `{"1h": value}`.
 `_from_owm()` handles both.
 
+### Wind on the map
+
+`NiceMap.vue` shows wind either as animated particles (`map/windParticles.ts`, after
+mapbox/webgl-wind) or as the clickable arrows. A toggle in the wind legend switches between them,
+and the choice is kept in localStorage. Under `prefers-reduced-motion` the default is arrows,
+and the arrows remain the accessible mode (aria-label, effort popup). Rules that hold this
+together:
+
+- **The field is the route's own arrows, nothing else.** `utils/windField.ts` interpolates the
+  job's `windArrows` (IDW on u/v) over a corridor along the line. Each arrow carries the wind at
+  its own ETA. There is no API change and no extra provider call. Do not fill the whole
+  viewport: off the route, the forecast has no wind to show.
+- **The corridor width follows the zoom, the field does not.** The field is built once out to
+  `MAX_CORRIDOR_M` and stores each cell's distance to the route. `corridorHalfWidthM` picks the
+  width for the current zoom (about `CORRIDOR_HALF_WIDTH_PX` on screen, at least `MIN_CORRIDOR_M`)
+  and `corridorMask` fades it out every frame (smoothstep over `CORRIDOR_FADE_SHARE` of the
+  width, particle density thinning with it), so zooming never rebuilds anything. A cell blends only
+  the arrows around its nearest route segment, which relies on `windArrows` being in route
+  order (they are: `wind_arrows_at_detail` walks the segments). That keeps the build near
+  100 ms however wide the corridor is.
+- **Particles move on the CPU, trails are WebGL.** Offscreen drawing (fade and particles into
+  the trail texture) goes in `prerender`. `render` only composites, as MapLibre's custom-layer
+  contract requires. The field-to-clip matrix is composed in float64, or particles jitter at
+  street zoom.
+- **The layer keeps the map from going idle.** `renderRoute` stops the loop and restarts it from
+  its `once("idle")` handler, and chip thinning waits on that idle. Keep that order.
+- `setStyle()` (theme switch) drops custom layers, so `renderWindParticles` runs again after
+  `style.load`. The layer sits directly above `route-line`, below the basemap labels and
+  the invisible `route-hit` layer.
+
 ### Charts
 
 The backend draws no charts. `frontend/src/utils/forecastCharts.ts` builds the temperature,
 precipitation and headwind charts from the samples the job result already carries
 (`temp`, `rainRateMmH`, `pop`, `headwind` and the ensemble p10/median/p90), so they need no
-request of their own; `NiceChart.vue` adds the theme. The chart design lives only there:
+request of their own; `NiceChart.vue` adds the theme. Each metric is **one line**: the sample's
+own value (main run near now, the ensemble centre from 72 h, see "Ensemble central estimate").
+The band around it is the ensemble spread **recentred on that line**:
+`value + (p10 − median)` … `value + (p90 − median)`. It shows spread width, not the ensemble's
+absolute range, which the details panel still shows. Don't add a median line back. The chart design lives only there:
 a chart that needs a new value needs it on the sample, not a figures endpoint. Results
 stored before this still carry a `figures` key; `forecast_view` drops it.
 

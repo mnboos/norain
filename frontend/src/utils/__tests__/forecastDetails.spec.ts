@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { forecastHeadline, peakRain, peakRisk, rangeText, swissTime } from "../forecastDetails";
+import { forecastHeadline, meanFeltTemp, peakRain, peakRisk, rangeText, swissTime } from "../forecastDetails";
 import { RouteForecastOutFromJSON } from "@norain/api/models";
 
 const wireSample = {
@@ -125,5 +125,26 @@ describe("forecast uncertainty presentation", () => {
     it("renders Swiss local time independently of browser timezone", () => {
         expect(swissTime("2026-09-10T12:00")).toBe("12:00");
         expect(swissTime("2026-09-10T10:00:00Z")).toBe("12:00");
+    });
+});
+
+describe("meanFeltTemp", () => {
+    it("weights each sample by the riding time around it", () => {
+        // 10 min at 4-8 °C felt, then 30 min at 8-12 °C felt.
+        const samples = [
+            { elapsedS: 0, temp: 10, feltTemp: 4 },
+            { elapsedS: 600, temp: 12, feltTemp: 8 },
+            { elapsedS: 2400, temp: 14, feltTemp: 12 },
+        ];
+        expect(meanFeltTemp(samples)).toBeCloseTo((600 * 6 + 1800 * 10) / 2400);
+    });
+
+    it("counts a sample without a felt value with its air temperature", () => {
+        expect(meanFeltTemp([{ elapsedS: 0, temp: 10 }, { elapsedS: 600, temp: 12, feltTemp: null }])).toBe(11);
+    });
+
+    it("has no value without samples and the sample's own with one", () => {
+        expect(meanFeltTemp([])).toBeNull();
+        expect(meanFeltTemp([{ elapsedS: 0, temp: 10, feltTemp: 7 }])).toBe(7);
     });
 });

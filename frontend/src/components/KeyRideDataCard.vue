@@ -11,7 +11,7 @@ import {
     symSharpWaterDrop,
 } from "@quasar/extras/material-symbols-sharp";
 import type { RouteForecastOut } from "@norain/api/models";
-import { peakRain } from "@/utils/forecastDetails";
+import { meanFeltTemp, peakRain } from "@/utils/forecastDetails";
 import { headwindColor, temperatureColor } from "@/utils/statColors";
 
 const props = withDefaults(
@@ -32,22 +32,13 @@ const showExplanation = ref(false);
 const NEUTRAL = "blue-grey-6";
 
 const peakRate = computed(() => peakRain(forecast.value));
-const meanTemp = computed(() => {
-    const temps = forecast.value.samples.map(s => s.temp);
-    return temps.length ? temps.reduce((a, b) => a + b, 0) / temps.length : null;
-});
-const tempRange = computed(() => {
-    const temps = forecast.value.samples.map(s => Math.round(s.temp));
-    if (!temps.length) return null;
-    const [low, high] = [Math.min(...temps), Math.max(...temps)];
-    return low === high ? `${low}` : `${low}–${high}`;
-});
+const feltTemp = computed(() => meanFeltTemp(forecast.value.samples));
 const stats = computed(() => [
     {
-        label: "Temperatur",
+        label: "Gefühlt Ø",
         icon: symSharpThermostat,
-        color: temperatureColor(meanTemp.value) ?? NEUTRAL,
-        value: tempRange.value,
+        color: temperatureColor(feltTemp.value) ?? NEUTRAL,
+        value: feltTemp.value == null ? null : Math.round(feltTemp.value),
         unit: "°C",
     },
     {
@@ -120,6 +111,8 @@ const note =
     "Regen und Gegenwind zeigen die höchsten erwarteten Werte. " +
     "Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. " +
     "Der Windaufwand zeigt als Stufe (niedrig bis sehr hoch), wie viel zusätzliche Kraft du für dein Tempo brauchst. Er ist geschätzt. " +
+    "Gefühlt ist die Temperatur, die du im Fahrtwind spürst (Windchill bei deinem Tempo), " +
+    "gemittelt über die Fahrzeit. " +
     "Frost zeigt als Stufe (leicht bis stark), wie glatt die Strasse an der kältesten Stelle werden dürfte — " +
     "aus Temperatur, Nässe und Wettercode zusammen.";
 </script>

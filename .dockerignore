@@ -1,15 +1,23 @@
-.git
-.github
-.idea
-# `**/`: a bare name only matches at the context root, and backend/.venv would overwrite
-# the image's venv on `COPY backend/`.
+# Allowlist: every image is built from the repo root, which also holds multi-GB OSM
+# extracts and Photon dumps. Send only what the Dockerfile COPYs; add a line here when
+# it COPYs something new.
+*
+!backend/
+!frontend/
+!packages/api/
+!docker/
+!deploy/Caddyfile
+!import-photon-dump.sh
+
+# Inside the allowed directories. `**/`: backend/.venv would overwrite the image's venv
+# on `COPY backend/`.
 **/.venv
 **/node_modules
-data
-db
-backend/db.sqlite3
-.env
-.env.*
-*.sqlite3
 **/__pycache__
 **/.pytest_cache
+**/*.sqlite3
+**/.env
+**/.env.*
+frontend/dist
+frontend/playwright-report
+frontend/test-results

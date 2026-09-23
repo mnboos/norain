@@ -28,13 +28,12 @@ from typing import Any
 
 import httpx
 from asgiref.sync import sync_to_async
-from django.core.cache import cache
 from loguru import logger
-from redis.exceptions import RedisError
 
 from . import telemetry
 from .geo import haversine_m
 from .models import StationLookup, StationObservation
+from .ratelimit import Limit, acquire, describe_failure, record_throttle
 from .schedule import LOCAL_TZ
 
 WU_NEAR_URL = "https://api.weather.com/v3/location/near"
@@ -62,8 +61,7 @@ WET_RATE_MM_H = 0.1
 # The key allows 1500 a day and 30 a minute; stay under both with some margin.
 DAILY_CAP = 1400
 MINUTE_CAP = 25
-BLOCKED_KEY = "wu:blocked"
-BLOCKED_TTL = 900
+BLOCKED_TTL = 900  # the first pause after a 429; ``core.ratelimit`` doubles it on the next
 
 
 def api_key() -> str | None:
@@ -80,34 +78,21 @@ def as_aware(value: datetime) -> datetime:
 # =============================================================================
 
 
+def _limit() -> Limit:
+    # Built per call so the caps stay patchable in tests.
+    return Limit(
+        "weather-underground", ((60, MINUTE_CAP), (86400, DAILY_CAP)), fail_open=False, base_cooldown=BLOCKED_TTL
+    )
+
+
 def _spend_call() -> bool:
-    """Count one Weather Underground call, or refuse it when a cap is reached.
+    """Count one Weather Underground call, or refuse it when a cap is reached or a 429 is recent.
 
     Fails *closed*, unlike ``claims.py``: without the cache there is no counter, and going
     over the key's limit can get it switched off. Skipping a call only costs the
     correction, never the forecast.
     """
-    now = datetime.now(tz=UTC)
-    minute_key = f"wu:minute:{now:%Y%m%d%H%M}"
-    day_key = f"wu:day:{now:%Y%m%d}"
-    try:
-        if cache.get(BLOCKED_KEY):
-            return False
-        cache.add(minute_key, 0, 120)
-        if cache.incr(minute_key) > MINUTE_CAP:
-            return False
-        cache.add(day_key, 0, 2 * 86400)
-        return cache.incr(day_key) <= DAILY_CAP
-    except (RedisError, OSError) as exc:  # no counter means no call
-        logger.warning(f"Weather Underground call budget unavailable, skipping the call: {exc}")
-        return False
-
-
-def _block_calls() -> None:
-    try:
-        cache.set(BLOCKED_KEY, 1, BLOCKED_TTL)
-    except (RedisError, OSError) as exc:
-        logger.warning(f"Could not store the Weather Underground block flag: {exc}")
+    return not acquire(_limit())
 
 
 # =============================================================================
@@ -131,8 +116,7 @@ async def _get_json(url: str, params: dict) -> dict | None:
             return {}
         if resp.status_code == 429:
             outcome = "rate_limited"
-            logger.warning("Weather Underground answered 429, pausing calls")
-            await sync_to_async(_block_calls)()
+            await sync_to_async(record_throttle)(_limit(), resp)
             return None
         resp.raise_for_status()
         data = resp.json()
@@ -140,7 +124,7 @@ async def _get_json(url: str, params: dict) -> dict | None:
             outcome = "invalid_response"
     except (httpx.HTTPError, ValueError) as exc:
         outcome = telemetry.error_outcome(exc)
-        logger.warning(f"Weather Underground request failed: {exc}")
+        logger.warning(f"Weather Underground request failed: {describe_failure(exc)}")
         return None
     finally:
         telemetry.emit("count", "provider.request", provider="weather-underground", outcome=outcome)

@@ -99,7 +99,9 @@ function breakEta(elapsedS: number): string {
             <div class="col-12 col-md-4">
                 <q-card class="full-height">
                     <q-card-section>
-                        <div class="text-subtitle1 text-weight-bold">Tag {{ day.index + 1 }} · {{ dayLabel(day.date) }}</div>
+                        <div class="text-subtitle1 text-weight-bold">
+                            Tag {{ day.index + 1 }} · {{ dayLabel(day.date) }}
+                        </div>
                         <div v-if="stage" class="text-caption text-muted">
                             {{ km(stage.distanceM) }} · {{ duration(stage.totalSeconds) }} Fahrzeit
                         </div>
@@ -113,7 +115,9 @@ function breakEta(elapsedS: number): string {
                             <q-icon :name="symSharpBed" class="q-mr-sm" />
                             <div>
                                 <div class="text-body2">{{ poiName(day.lodging) }}</div>
-                                <div class="text-caption text-muted">Übernachtung · {{ km(day.lodging.offsetM) }} neben der Strecke</div>
+                                <div class="text-caption text-muted">
+                                    Übernachtung · {{ km(day.lodging.offsetM) }} neben der Strecke
+                                </div>
                             </div>
                         </div>
                         <q-banner v-else-if="day.lodgingMissing" dense rounded class="bg-tint-warn">
@@ -147,17 +151,27 @@ function breakEta(elapsedS: number): string {
                                     <q-item-section>
                                         <q-item-label>
                                             Variante {{ n + 1 }}
-                                            <q-icon v-if="alternative.recommended" :name="symSharpStar" color="accent" size="xs" />
+                                            <q-icon
+                                                v-if="alternative.recommended"
+                                                :name="symSharpStar"
+                                                color="accent"
+                                                size="xs"
+                                            />
                                         </q-item-label>
                                         <q-item-label caption>
                                             {{ km(alternative.distanceM) }} · {{ duration(alternative.totalSeconds) }}
-                                            <template v-if="alternative.rideLabel"> · {{ alternative.rideLabel }}</template>
+                                            <template v-if="alternative.rideLabel">
+                                                · {{ alternative.rideLabel }}
+                                            </template>
                                         </q-item-label>
                                         <q-item-label v-for="reason in alternative.reasons" :key="reason" caption>
                                             {{ reason }}
                                         </q-item-label>
                                     </q-item-section>
-                                    <q-item-section v-if="alternative.forecastStatus && alternative.forecastStatus !== 'done'" side>
+                                    <q-item-section
+                                        v-if="alternative.forecastStatus && alternative.forecastStatus !== 'done'"
+                                        side
+                                    >
                                         <q-spinner-dots size="1rem" />
                                     </q-item-section>
                                 </q-item>
@@ -169,7 +183,8 @@ function breakEta(elapsedS: number): string {
                         <q-separator inset />
                         <q-card-section>
                             <div v-if="stage.recommendedDeparture" class="text-body2 q-mb-sm">
-                                Empfohlene Abfahrt: <b>{{ clock(stage.recommendedDeparture) }} Uhr</b>
+                                Empfohlene Abfahrt:
+                                <b>{{ clock(stage.recommendedDeparture) }} Uhr</b>
                             </div>
                             <div class="text-caption q-mb-xs">Pausen</div>
                             <div v-if="!stage.breaks?.length" class="text-caption text-muted">Keine Pause nötig.</div>
@@ -179,13 +194,17 @@ function breakEta(elapsedS: number): string {
                                     :key="stop.alongM"
                                     :subtitle="`${km(stop.alongM)} · ${breakEta(stop.elapsedS)}`"
                                 >
-                                    <div v-if="!stop.pois?.length" class="text-caption text-muted">Hier gibt es nichts Gewünschtes.</div>
+                                    <div v-if="!stop.pois?.length" class="text-caption text-muted">
+                                        Hier gibt es nichts Gewünschtes.
+                                    </div>
                                     <div v-for="poi in stop.pois" :key="poi.osmRef" class="text-caption">
                                         {{ poiCategory(poi.category).emoji }} {{ poiName(poi) }}
                                     </div>
                                 </q-timeline-entry>
                             </q-timeline>
-                            <div v-for="gap in missingGaps" :key="gap" class="text-caption text-negative">{{ gap }}</div>
+                            <div v-for="gap in missingGaps" :key="gap" class="text-caption text-negative">
+                                {{ gap }}
+                            </div>
                             <div v-for="detour in stage.detours" :key="detour.osmRef" class="text-caption text-muted">
                                 Umweg zu {{ poiCategory(detour.category).emoji }} {{ poiName(detour) }}
                             </div>
@@ -202,7 +221,7 @@ function breakEta(elapsedS: number): string {
                 </div>
                 <div class="col-12 col-sm-6 col-md-4">
                     <q-card class="full-height column">
-                        <q-card-section class="col" style="min-height: 260px">
+                        <q-card-section class="col q-pa-none" style="min-height: 260px">
                             <WeatherChart
                                 kind="temperature"
                                 :version="forecast.version"
@@ -217,8 +236,8 @@ function breakEta(elapsedS: number): string {
             <div v-else-if="!day.forecastAvailable" class="col-12 col-md-8">
                 <q-banner rounded class="bg-tint-neutral">
                     <template #avatar><q-icon :name="symSharpCloudOff" class="text-muted" /></template>
-                    Für diesen Tag gibt es noch keine Vorhersage. Plane die Reise näher am Termin neu, dann
-                    richtet NoRain Strecke und Abfahrt nach dem Wetter.
+                    Für diesen Tag gibt es noch keine Vorhersage. Plane die Reise näher am Termin neu, dann richtet
+                    NoRain Strecke und Abfahrt nach dem Wetter.
                 </q-banner>
             </div>
             <div v-else-if="forecastQuery.error.value" class="col-12 col-md-8">
@@ -234,7 +253,12 @@ function breakEta(elapsedS: number): string {
                 @select-sample="selectedSample = $event"
             />
         </q-card>
-        <q-toggle v-if="forecast" v-model="showAllPois" dense label="Alle gewünschten Orte entlang der Strecke zeigen" />
+        <q-toggle
+            v-if="forecast"
+            v-model="showAllPois"
+            dense
+            label="Alle gewünschten Orte entlang der Strecke zeigen"
+        />
 
         <q-inner-loading :showing="forecastQuery.isFetching.value && !forecast">
             <q-circular-progress

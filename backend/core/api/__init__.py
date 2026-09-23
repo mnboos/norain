@@ -1,9 +1,9 @@
 from ninja import NinjaAPI
 
 from ..auth.backend import session_auth
+from .gpx import router as gpx_router
 from .journey import router as journey_router
 from .places import router as places_router
-from .gpx import router as gpx_router
 from .recurring_route import router as routes_router
 from .route_weather import router as weather_router
 

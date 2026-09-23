@@ -30,6 +30,8 @@ import { useForecastMapDetail, type LineDetail } from "@/queries/forecastParts";
 import { finerDetail, lineDetailForZoom } from "@/utils/mapDetail";
 import { groundArrowBearing, groundWindText, visibleWindArrows, windArrowSize, windPowerText } from "@/utils/wind";
 import { lineProgress, sampleAtRoutePoint, type ScreenPoint } from "@/utils/forecastSelection";
+import { buildWindField } from "@/utils/windField";
+import { WindParticleLayer } from "@/map/windParticles";
 import { poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
 
 maplibreConfig.WORKER_URL = maplibreWorkerUrl;
@@ -194,7 +196,7 @@ watch(fetchedDetail, fetched => {
         return;
     }
     loadedDetail.value = { detail, line: fetched.line, windArrows: fetched.windArrows };
-    void renderLine();
+    void renderLine().then(renderWindParticles);
     renderWindMarkers();
 });
 
@@ -203,6 +205,79 @@ const hasRoute = computed(() => (routeWeather.value?.samples.length ?? 0) > 0);
 /** Only claim a "Keine Daten" swatch when a stretch really is unknown. */
 const hasMissingScores = computed(() => scores.value.some(v => v === null));
 const hasWindProfile = computed(() => routeWeather.value?.summary.windDistribution != null);
+
+// --- wind display: animated particles (map/windParticles.ts) or the clickable arrows. The
+// arrows are the accessible mode and the default under reduced motion; the choice is kept
+// per browser. ---
+type WindMode = "animation" | "arrows";
+const WIND_MODE_KEY = "norain.windMode";
+function initialWindMode(): WindMode {
+    try {
+        const stored = localStorage.getItem(WIND_MODE_KEY);
+        if (stored === "animation" || stored === "arrows") return stored;
+    } catch {
+        // Storage blocked (private window, previews): fall through to the default.
+    }
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "arrows" : "animation";
+}
+const windMode = ref<WindMode>(initialWindMode());
+const windModeOptions = [
+    { label: "Animation", value: "animation" },
+    { label: "Pfeile", value: "arrows" },
+];
+/** Set when the particle layer could not start (no WebGL2 support for it): arrows then. */
+const particlesFailed = ref(false);
+const showParticles = computed(
+    () => windMode.value === "animation" && hasWindProfile.value && hasRoute.value && !particlesFailed.value,
+);
+const windField = computed(() => buildWindField(drawnWindArrows.value, drawnLine.value));
+const WIND_LAYER = "wind-particles";
+let windLayer: WindParticleLayer | undefined;
+/** False from a new route until the map has settled on it; see renderRoute. */
+let routeSettled = false;
+
+/**
+ * Add, update or remove the particle layer. It sits directly above the route line, so the
+ * wind reads over the route, and below the basemap labels like the line itself. setStyle()
+ * drops custom layers, so this also runs after every theme switch.
+ */
+function renderWindParticles() {
+    const map = mymap.value;
+    if (!map) return;
+    const field = showParticles.value ? windField.value : undefined;
+    if (!field) {
+        if (map.getLayer(WIND_LAYER)) map.removeLayer(WIND_LAYER);
+        return;
+    }
+    windLayer ??= new WindParticleLayer(WIND_LAYER);
+    windLayer.setDark($q.dark.isActive);
+    windLayer.setField(field);
+    windLayer.setRunning(routeSettled);
+    if (map.getLayer(WIND_LAYER)) return;
+    try {
+        // Insert before whatever follows the route line: the first basemap label, or the
+        // invisible route-hit layer when the style has no labels.
+        const layers = map.getStyle().layers;
+        const routeLine = layers.findIndex(layer => layer.id === "route-line");
+        map.addLayer(windLayer, routeLine >= 0 ? layers[routeLine + 1]?.id : undefined);
+    } catch (e) {
+        console.error("Wind animation unavailable:", e);
+        particlesFailed.value = true;
+    }
+}
+
+watch(windMode, mode => {
+    try {
+        localStorage.setItem(WIND_MODE_KEY, mode);
+    } catch {
+        // Not remembered; the toggle still works for this page.
+    }
+    renderWindMarkers();
+    renderWindParticles();
+});
+watch(particlesFailed, failed => {
+    if (failed) renderWindMarkers();
+});
 
 // --- sample marker: weather chip (condition glyph + temperature) with the wind arrow
 // attached beside it. The arrow points in the direction the wind blows TOWARD. ---
@@ -313,6 +388,10 @@ function createWindMarker(map: MapLibreMap, arrow: WindArrow): WindMarker {
 function renderWindMarkers() {
     const map = mymap.value;
     if (!map) return;
+    if (showParticles.value) {
+        clearWindMarkers();
+        return;
+    }
     const { clientWidth: width, clientHeight: height } = map.getCanvas();
     const arrows = visibleWindArrows(drawnWindArrows.value, arrow => {
         const point = map.project([arrow.lon, arrow.lat]);
@@ -402,10 +481,16 @@ function windText(s: ForecastSampleOut): string {
         : `${Math.round(s.crosswind)} km/h Seitenwind (Abschnittsmittel)`;
 }
 
+/** " (gefühlt 8°C)" where the wind chill at riding speed differs from the thermometer. */
+function feltText(s: ForecastSampleOut): string {
+    if (s.feltTemp == null || Math.round(s.feltTemp) === Math.round(s.temp)) return "";
+    return ` (gefühlt ${s.feltTemp.toFixed(0)}°C)`;
+}
+
 function samplePopupHtml(s: ForecastSampleOut): string {
     return `<div style="font:13px/1.4 var(--app-font);min-width:160px">
         <b>${fmtTime(s.eta)} Uhr</b> · ${s.weatherDesc || ""}<br>
-        🌧️ ${s.rainRateMmH == null ? "—" : s.rainRateMmH.toFixed(1)} mm/h &nbsp; 🌡️ ${s.temp.toFixed(0)}°C<br>
+        🌧️ ${s.rainRateMmH == null ? "—" : s.rainRateMmH.toFixed(1)} mm/h &nbsp; 🌡️ ${s.temp.toFixed(0)}°C${feltText(s)}<br>
         Regenrisiko: ${s.pop == null ? "Nicht verfügbar" : `${Math.round(s.pop * 100)}%`}<br>
         💨 ${s.windSpeed == null ? "Nicht verfügbar" : `${s.windSpeed.toFixed(0)} km/h über Grund`}${s.windGust ? ` (Böen ${s.windGust.toFixed(0)})` : ""}<br>
         <span class="${s.headwind != null && s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span><br>
@@ -528,8 +613,16 @@ async function renderRoute() {
     clearSampleMarkers();
     const bounds = new LngLatBounds();
     drawnLine.value.forEach(c => bounds.extend([c[0] ?? 0, c[1] ?? 0]));
+    // The particle loop repaints every frame, and a map that keeps repainting never goes
+    // idle - so the animation waits for the map to settle on the route and then starts.
+    routeSettled = false;
+    renderWindParticles();
     if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60 });
-    map.once("idle", applyMarkerThinning);
+    map.once("idle", () => {
+        applyMarkerThinning();
+        routeSettled = true;
+        windLayer?.setRunning(true);
+    });
     // A new forecast can put a different wind at the same spot, so no arrow carries over.
     clearWindMarkers();
     renderWindMarkers();
@@ -545,6 +638,7 @@ watch(
             void mymap.value?.getSource<GeoJSONSource>("route-source")?.setData({ type: "FeatureCollection", features: [] });
             clearSampleMarkers();
             clearWindMarkers();
+            renderWindParticles();
         }
     },
     { immediate: true },
@@ -610,7 +704,7 @@ watch(
         if (!map) return;
         map.setStyle(dark ? DARK_STYLE : LIGHT_STYLE);
         map.once("style.load", () => {
-            void renderLine();
+            void renderLine().then(renderWindParticles);
             void renderPois();
         });
     },
@@ -698,6 +792,7 @@ onBeforeUnmount(() => {
     leaveRoute();
     clearSampleMarkers();
     clearWindMarkers();
+    if (mymap.value?.getLayer(WIND_LAYER)) mymap.value.removeLayer(WIND_LAYER);
     mymap.value?.off("moveend", renderWindMarkers);
     mymap.value?.off("resize", renderWindMarkers);
     startMarker?.remove();
@@ -719,12 +814,31 @@ onBeforeUnmount(() => {
         <q-card-section v-else class="col column q-pa-none">
             <div ref="map" class="col map-canvas"></div>
             <MapLegend v-if="hasRoute" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
-            <div v-if="hasWindProfile" class="wx-wind-legend text-caption">
-                <q-item-label caption>
-                    <span aria-hidden="true">➤</span>
-                    Wind
-                </q-item-label>
-                <div>Pfeile zeigen Richtung und Stärke</div>
+            <div
+                v-if="hasWindProfile"
+                class="wx-wind-legend text-caption"
+                data-testid="wind-legend"
+                :data-wind-mode="showParticles ? 'animation' : 'arrows'"
+            >
+                <div class="row items-center no-wrap q-gutter-x-sm">
+                    <q-item-label caption>
+                        <span aria-hidden="true">➤</span>
+                        Wind
+                    </q-item-label>
+                    <q-btn-toggle
+                        v-model="windMode"
+                        :options="windModeOptions"
+                        dense
+                        no-caps
+                        unelevated
+                        size="sm"
+                        toggle-color="primary"
+                        text-color="white"
+                        aria-label="Winddarstellung"
+                    />
+                </div>
+                <div v-if="showParticles">Partikel zeigen Richtung und Stärke des Winds zur Fahrzeit</div>
+                <div v-else>Pfeile zeigen Richtung und Stärke</div>
             </div>
         </q-card-section>
     </q-card>

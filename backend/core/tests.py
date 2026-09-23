@@ -863,6 +863,13 @@ class RouteThumbnailTests(TestCase):
             # would score frost from the thermometer alone and disagree with the map.
             self.assertIn("weather_code", entry)
 
+        # The temperature factor scores the felt temperature, so the blob stores it: riding into
+        # a head wind at 15 °C feels colder. The route has no vertex_times, so the last sample,
+        # with no timing after it, has no riding speed and no felt value.
+        felt = [entry["felt_temp"] for entry in thumb["samples"] if entry["felt_temp"] is not None]
+        self.assertEqual(len(felt), len(self.sample_points) - 1)
+        self.assertTrue(all(value < 15.0 for value in felt))
+
     def test_warm_ensemble_cells_carry_the_rain_chance_and_amount(self):
         """The rain score combines chance and amount, so the blob must carry both - read cache-only."""
         times = [f"{self.departure.date().isoformat()}T{h:02d}:00" for h in range(24)]

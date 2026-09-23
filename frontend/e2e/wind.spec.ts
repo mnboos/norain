@@ -13,6 +13,7 @@ const fallback = {
     })),
     wind_arrows: fixture.samples.map(s => ({
         lat: s.lat, lon: s.lon, bearing: 30, wind_speed: 15, wind_dir: 60, wind_power_w: 90,
+        wind_effort_level: "mittel", wind_effort: 0.5,
     })),
     summary: { ...fixture.summary, max_wind_power_w: 90, wind_distribution: {
         headwind_m: 2000, crosswind_m: 1500, tailwind_m: 1000, calm_m: 300, unknown_m: 200,
@@ -52,6 +53,13 @@ test("wind profile renders on desktop and mobile", async ({ page }, info) => {
     await expect(page.getByTestId("wind-distribution")).toBeVisible();
     await expect(page.getByText("Gegenwind max.", { exact: true })).toBeVisible();
     await expect(page.getByText("Windaufwand max.", { exact: true })).toBeVisible();
+    // Animated particles by default; the arrows are one click away.
+    const legend = page.getByTestId("wind-legend");
+    await expect(legend).toHaveAttribute("data-wind-mode", "animation");
+    await expect(page.locator(".wx-wind-arrow")).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath("wind-desktop-animation.png"), fullPage: true });
+    await legend.getByRole("button", { name: "Pfeile" }).click();
+    await expect(legend).toHaveAttribute("data-wind-mode", "arrows");
     await expect(page.locator(".wx-wind-arrow").first()).toBeVisible();
     await expect(page.locator(".wx-wind-arrow").first()).toHaveAttribute("aria-label", /^Wind: 15 km\/h aus NO, von vorne rechts · Windaufwand mittel/);
     await page.screenshot({ path: info.outputPath("wind-desktop.png"), fullPage: true });
@@ -61,4 +69,15 @@ test("wind profile renders on desktop and mobile", async ({ page }, info) => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath("wind-mobile.png"), fullPage: true });
     expect(errors).toEqual([]);
+});
+
+test.describe("with reduced motion", () => {
+    test.use({ reducedMotion: "reduce" });
+
+    test("starts with the wind arrows", async ({ page }) => {
+        await mockForecast(page, saved, forecast, false);
+        await page.goto(`/routes/${id}`);
+        await expect(page.getByTestId("wind-legend")).toHaveAttribute("data-wind-mode", "arrows");
+        await expect(page.locator(".wx-wind-arrow").first()).toBeVisible();
+    });
 });

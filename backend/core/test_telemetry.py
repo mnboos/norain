@@ -21,6 +21,7 @@ from .models import ForecastJob, ProcessedStripeEvent, Subscription, User
 from .test_signup import TEST_SETTINGS
 
 
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
 class TelemetryTests(SimpleTestCase):
     def test_emission_failure_does_not_affect_application(self):
         with (
@@ -97,17 +98,6 @@ class TelemetryTests(SimpleTestCase):
         count.assert_called_once()
         self.assertEqual(count.call_args.kwargs["attributes"]["outcome"], "hit")
 
-    async def test_provider_failure_falls_back_and_reports_recovery(self):
-        with (
-            patch.object(grid, "get_cached_forecast_cell", new=AsyncMock(return_value=None)),
-            patch.object(grid, "_fetch_open_meteo", new=AsyncMock(side_effect=httpx.ReadTimeout("timeout"))),
-            patch.object(grid, "_fetch_owm", new=AsyncMock(return_value={"hourly": []})),
-            patch.object(grid, "_store_forecast_cell_sync", return_value="stored"),
-            patch.object(telemetry.metrics, "count") as count,
-        ):
-            self.assertEqual(await grid.get_or_fetch_forecast_cell(47, 9, "2026-09-17", 2), "stored")
-        self.assertEqual([c.kwargs["attributes"]["outcome"] for c in count.call_args_list], ["needed", "recovered"])
-
     def test_partial_and_empty_forecast_coverage(self):
         for samples, expected in [([{"station_count": 2}], 0.5), ([], 0)]:
             job = SimpleNamespace(
@@ -127,9 +117,22 @@ class TelemetryTests(SimpleTestCase):
             self.assertEqual(values["norain.forecast.candidate_coverage"], 0.5)
 
 
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
 class TelemetryDatabaseTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="metrics", email="metrics@example.test")
+
+    async def test_provider_failure_falls_back_and_reports_recovery(self):
+        # Here rather than in TelemetryTests: the fetch takes a cell lease, a DB row.
+        with (
+            patch.object(grid, "get_cached_forecast_cell", new=AsyncMock(return_value=None)),
+            patch.object(grid, "_fetch_open_meteo", new=AsyncMock(side_effect=httpx.ReadTimeout("timeout"))),
+            patch.object(grid, "_fetch_owm", new=AsyncMock(return_value={"hourly": []})),
+            patch.object(grid, "_store_forecast_cell_sync", return_value="stored"),
+            patch.object(telemetry.metrics, "count") as count,
+        ):
+            self.assertEqual(await grid.get_or_fetch_forecast_cell(47, 9, "2026-09-17", 2), "stored")
+        self.assertEqual([c.kwargs["attributes"]["outcome"] for c in count.call_args_list], ["needed", "recovered"])
 
     def test_job_reuse_and_restart_are_separate_from_completions(self):
         params = {"departure_time": "2026-09-18T08:00", "start_lat": 47, "start_lon": 9}

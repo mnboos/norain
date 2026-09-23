@@ -16,14 +16,17 @@ const { isAuthenticated, session } = useSession();
             :class="{ 'bg-dark': $q.dark.isActive }"
             :style="$q.dark.isActive ? undefined : 'background: linear-gradient(90deg, #1b365d, #2d5a8e)'"
         >
-            <q-toolbar class="q-px-xs-none q-px-md-sm overflow-hidden" style="height: 50px">
-                <img
-                    src="/brand/mark-master%20-%20Copy.png"
-                    alt="Brisavia Logo"
-                    class="q-ma-none"
-                    style="height: 100%; width: auto; object-fit: contain; translate: -10px 3px"
-                />
-                <q-toolbar-title class="text-subtitle1 text-weight-bold q-pa-none">Brisavia</q-toolbar-title>
+            <q-toolbar class="q-px-xs-none row overflow-hidden" style="height: 50px">
+                <router-link to="/" class="text-white q-ma-none q-pa-none full-height row" style="">
+                    <img
+                        src="/brand/mark-master%20-%20Copy.png"
+                        alt="Brisavia Logo"
+                        class="q-ma-none full-height"
+                        style="translate: -10px 3px"
+                    />
+                    <span class="text-subtitle1 self-center text-weight-bold">Brisavia</span>
+                </router-link>
+                <q-space />
                 <!--                <NavTabs v-if="!$q.screen.lt.sm" />-->
                 <q-btn flat dense no-caps size="sm" to="/account" :icon="symSharpSettings">
                     <q-tooltip v-if="isAuthenticated">{{ session.user?.email }}</q-tooltip>

@@ -21,6 +21,9 @@ container := env("CONTAINER_ENGINE", if os_family() == "windows" { "podman" } el
 # The extract every graph build uses; same default as docker-compose.base.yml.
 osm_data_url := env("OSM_DATA_URL", "https://download.geofabrik.de/europe/switzerland-latest.osm.pbf")
 
+# The file just poi-extract writes and just poi-import reads, next to the extract in data/graphhopper/osm.
+pois_file := "pois-" + without_extension(without_extension(file_name(osm_data_url))) + ".geojsonseq"
+
 # List the recipes by group.
 default:
     @just --list
@@ -125,89 +128,51 @@ routing-refresh-routes:
 [group('geodata')]
 [confirm("This deletes the local routing graph and builds a new one from the files. Continue?")]
 [positional-arguments]
+[unix]
 osm-import +files:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # Every build (routing-build, a fresh start) reads /osm_data/bike-<OSM_DATA_URL's file name>,
-    # so the import writes that file, or the next rebuild would use other data.
-    name="{{ file_name(osm_data_url) }}"
-    if [ $# -eq 1 ] && [ "$(basename "$1")" != "$name" ]; then
-        echo "OSM_DATA_URL in .env ends in $name. Set it to a URL, or just the file name, ending in $(basename "$1")." >&2
-        exit 1
-    fi
-    if [ $# -gt 1 ] && [[ "{{ osm_data_url }}" == *://* ]]; then
-        echo "Several files are merged into one, and no download matches that. Set OSM_DATA_URL in .env to a plain file name for the merged set, e.g. dach.osm.pbf." >&2
-        exit 1
-    fi
-    # File names are relative to where just was run. Each file is mounted at /import/<its name>.
-    cd "{{ invocation_directory() }}"
-    declare -A seen=()
-    mounts=() inputs=()
-    for file in "$@"; do
-        base=$(basename "$file")
-        [ -f "$file" ] || { echo "Not a file: $file" >&2; exit 1; }
-        [ -z "${seen[$base]:-}" ] || { echo "Two files are named $base." >&2; exit 1; }
-        seen[$base]=1
-        mounts+=(-v "$(cd "$(dirname "$file")" && pwd)/$base:/import/$base:ro,z")
-        inputs+=("/import/$base")
-    done
-    cd "{{ justfile_directory() }}"
-    compose=({{ container }} compose -f docker-compose.dev.yml)
-    "${compose[@]}" build graphhopper
-    "${compose[@]}" stop graphhopper
-    "${compose[@]}" run --rm --no-deps "${mounts[@]}" --entrypoint /graphhopper/filter-osm.sh graphhopper "/osm_data/bike-$name" "${inputs[@]}"
-    # The journey planner's POIs come from the same files (just poi-import loads them).
-    "${compose[@]}" run --rm --no-deps "${mounts[@]}" --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/pois-${name%.osm.pbf}.geojsonseq" "${inputs[@]}"
-    "${compose[@]}" run --rm --no-deps --entrypoint bash graphhopper -c 'rm -rf /graph-cache/..?* /graph-cache/.[!.]* /graph-cache/*'
-    # The filtered file is now newer than any extract in /osm_data, so the entrypoint builds from it without a download.
-    "${compose[@]}" run --rm --no-deps -e GRAPHHOPPER_BUILD_ONLY=true graphhopper
-    "${compose[@]}" up -d graphhopper
+    CONTAINER={{ quote(container) }} OSM_DATA_URL={{ quote(osm_data_url) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} bash scripts/osm-import.sh "$@"
+
+# Git Bash: just runs a shebang recipe through cygpath, which Git does not put on PATH, and
+# the bash on PATH is WSL's. [script] needs neither.
+[doc("Build the routing graph from local .osm.pbf files instead of downloading OSM_DATA_URL, e.g. just osm-import ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Filters them for bikes like every build and merges several into one. One file must have OSM_DATA_URL's file name; for several, set OSM_DATA_URL to a plain file name for the merged set, e.g. dach.osm.pbf. Deletes the current graph first; the elevation tiles are kept. Takes minutes.")]
+[group('geodata')]
+[confirm("This deletes the local routing graph and builds a new one from the files. Continue?")]
+[positional-arguments]
+[windows]
+[script("C:/Program Files/Git/bin/bash.exe", "-eu")]
+osm-import +files:
+    CONTAINER={{ quote(container) }} OSM_DATA_URL={{ quote(osm_data_url) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/osm-import.sh "$@"
 
 [doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) from the raw extract in data/graphhopper/osm, e.g. after a new download. Writes pois-<extract>.geojsonseq next to it; just poi-import loads it.")]
 [group('geodata')]
 poi-extract:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    name="{{ file_name(osm_data_url) }}"
-    compose=({{ container }} compose -f docker-compose.dev.yml)
-    "${compose[@]}" build graphhopper
-    "${compose[@]}" run --rm --no-deps --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/pois-${name%.osm.pbf}.geojsonseq" "/osm_data/$name"
+    {{ container }} compose -f docker-compose.dev.yml build graphhopper
+    {{ container }} compose -f docker-compose.dev.yml run --rm --no-deps --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/{{ pois_file }}" "/osm_data/{{ file_name(osm_data_url) }}"
 
 [doc("Replace the POI table with the file from just poi-extract. Readers keep the old POIs until the new set is in.")]
 [group('geodata')]
 [working-directory("backend")]
 poi-import:
-    uv run python manage.py import_pois "../data/graphhopper/osm/pois-{{ without_extension(without_extension(file_name(osm_data_url))) }}.geojsonseq"
+    uv run python manage.py import_pois "../data/graphhopper/osm/{{ pois_file }}"
 
 [doc("Build the geocoder index from local Photon 1.0 dumps (.jsonl.zst or .jsonl; several become one index) or one prebuilt index (.tar.bz2), e.g. just photon-import photon_dumps/*.jsonl. The current index is replaced only once the new one is ready.")]
 [group('geodata')]
 [confirm("This replaces the local geocoder index with one built from the files. Continue?")]
 [positional-arguments]
+[unix]
 photon-import +files:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # File names are relative to where just was run. Each file is mounted at /import/<its name>;
-    # PHOTON_INDEX_FILE separates them with spaces, so a name must not have one.
-    cd "{{ invocation_directory() }}"
-    declare -A seen=()
-    mounts=() inputs=()
-    for file in "$@"; do
-        base=$(basename "$file")
-        [ -f "$file" ] || { echo "Not a file: $file" >&2; exit 1; }
-        [[ "$base" != *" "* ]] || { echo "File names with spaces don't work here: $base" >&2; exit 1; }
-        [ -z "${seen[$base]:-}" ] || { echo "Two files are named $base." >&2; exit 1; }
-        seen[$base]=1
-        mounts+=(-v "$(cd "$(dirname "$file")" && pwd)/$base:/import/$base:ro,z")
-        inputs+=("/import/$base")
-    done
-    cd "{{ justfile_directory() }}"
-    compose=({{ container }} compose -f docker-compose.dev.yml)
-    "${compose[@]}" build photon
-    "${compose[@]}" stop photon
-    "${compose[@]}" run --rm --no-deps "${mounts[@]}" \
-        -e PHOTON_INDEX_FILE="${inputs[*]}" -e PHOTON_REPLACE_INDEX=true \
-        -e PHOTON_IMPORT_ONLY=true -e PHOTON_ALLOW_DOWNLOAD=false photon
-    "${compose[@]}" up -d photon
+    CONTAINER={{ quote(container) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} bash scripts/photon-import.sh "$@"
+
+# Git Bash: just runs a shebang recipe through cygpath, which Git does not put on PATH, and
+# the bash on PATH is WSL's. [script] needs neither.
+[doc("Build the geocoder index from local Photon 1.0 dumps (.jsonl.zst or .jsonl; several become one index) or one prebuilt index (.tar.bz2), e.g. just photon-import photon_dumps/*.jsonl. The current index is replaced only once the new one is ready.")]
+[group('geodata')]
+[confirm("This replaces the local geocoder index with one built from the files. Continue?")]
+[positional-arguments]
+[windows]
+[script("C:/Program Files/Git/bin/bash.exe", "-eu")]
+photon-import +files:
+    CONTAINER={{ quote(container) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/photon-import.sh "$@"
 
 [group('api')]
 [working-directory("backend")]

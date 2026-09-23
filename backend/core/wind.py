@@ -19,6 +19,8 @@ SPEED_EPS = 1e-6
 CALM_SPEED = 0.1
 AIR_DENSITY = 1.2  # kg/m³
 RIDER_CDA = 0.5  # m², upright rider
+# Environment Canada / JAG-TI wind chill. Below this airspeed the formula has no meaning.
+WIND_CHILL_MIN_SPEED = 4.8  # km/h
 
 
 def finite_number(value, *, nonnegative=False) -> float | None:
@@ -51,6 +53,7 @@ class SampleWind:
     headwind: float | None = None
     cross_abs_mean: float | None = None
     wind_power_w: float | None = None
+    rider_speed: float | None = None  # km/h, average over the sample's support
     coverage: float = 0.0
     support: list[WeightedDirection] = field(default_factory=list)
 
@@ -90,6 +93,28 @@ def wind_power(rider_kmh: float, head_kmh: float, cross_kmh: float) -> float:
     k = 0.5 * AIR_DENSITY * RIDER_CDA
     v, h, c = rider_kmh / 3.6, head_kmh / 3.6, cross_kmh / 3.6
     return k * v * (math.hypot(v + h, c) * (v + h) - v * v)
+
+
+def felt_temperature(temp_c: float, airspeed_kmh: float) -> float:
+    """What a rider moving through air at ``airspeed_kmh`` feels at ``temp_c``: the wind chill.
+
+    Never warmer than the air: at summer temperatures the formula lands at or just above the
+    air temperature, and the chill is simply gone.
+    """
+    if airspeed_kmh < WIND_CHILL_MIN_SPEED:
+        return temp_c
+    v = airspeed_kmh**0.16
+    return min(temp_c, 13.12 + 0.6215 * temp_c - 11.37 * v + 0.3965 * temp_c * v)
+
+
+def sample_airspeed(sample: SampleWind) -> float | None:
+    """The rider's airspeed at a sample (km/h): riding speed plus the wind, or the riding speed
+    alone where the wind is unknown. ``None`` without a riding speed."""
+    if sample.rider_speed is None:
+        return None
+    if sample.headwind is None or sample.cross_abs_mean is None:
+        return sample.rider_speed
+    return math.hypot(sample.rider_speed + sample.headwind, sample.cross_abs_mean)
 
 
 def wind_components(speed: float, direction: float, bearing: float) -> tuple[float, float]:
@@ -342,6 +367,7 @@ def compute_wind_profile(
 
     for p, (distance, n) in enumerate(positions):
         sample = result.samples[n]
+        sample.rider_speed = support_speeds[p]
         h, c, covered = sums[n]
         if covered > 0 and aligned_wind[n] is not None:
             sample.headwind, sample.cross_abs_mean = h / covered, c / covered

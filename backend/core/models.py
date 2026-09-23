@@ -293,6 +293,33 @@ class EnsembleCell(models.Model):
         return f"EnsembleCell({self.lat_r}, {self.lon_r}, {self.day_key})"
 
 
+class CellFetchLease(models.Model):
+    """Who is fetching a grid cell from the provider right now (see ``core.cell_lease``).
+
+    One row per cell while a fetch is in flight. ``forecast_days`` is deliberately not
+    in the key: a short and a long request for the same cell take turns rather than race.
+    """
+
+    class Kind(models.TextChoices):
+        FORECAST = "forecast"
+        ENSEMBLE = "ensemble"
+
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    lat_r = models.FloatField()
+    lon_r = models.FloatField()
+    day_key = models.DateField()
+    token = models.UUIDField(default=uuid.uuid4)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        constraints = (
+            models.UniqueConstraint(fields=["kind", "lat_r", "lon_r", "day_key"], name="unique_cell_fetch_lease"),
+        )
+
+    def __str__(self):
+        return f"CellFetchLease({self.kind}, {self.lat_r}, {self.lon_r}, {self.day_key})"
+
+
 class StationLookup(models.Model):
     """The Weather Underground stations nearest one lookup cell (~4-5 km).
 

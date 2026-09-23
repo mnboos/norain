@@ -3,6 +3,8 @@
 Background tasks for route geometry computation and forecast grid pre-warming.
 """
 
+import asyncio
+import random
 from datetime import UTC, date, datetime, timedelta
 
 from asgiref.sync import async_to_sync, sync_to_async
@@ -50,6 +52,7 @@ from core.models import (
     route_line,
 )
 from core.pois import pois_along_sync
+from core.ratelimit import ProviderThrottled
 from core.road_prefs import RoadPrefs, merge_models, road_prefs_model
 from core.schedule import LOCAL_TZ, forecast_available_at, local_today, next_departure, upcoming_departures
 from core.sections import compute_sections
@@ -163,56 +166,118 @@ async def _refresh_route_thumbnail_async(route_id: str) -> None:
 # --------------------------------------------------------------------------- grid cells
 # One task per ~1 km² cell: the unit the providers are actually billed in, and the unit
 # that is worth retrying on its own. These run on the `cells` queue, several workers wide.
+#
+# A rate-limited Open-Meteo (core.ratelimit) does not fail the cell: the task re-enqueues
+# itself a little later, without settling, so the job waits for the data instead of being
+# assembled without it. The deferrals are bounded well inside JOB_STALL_TIMEOUT, and each
+# one touches the job, or the stall check would restart it and fan every cell out again.
+# A longer wait (the hourly or daily limit) skips straight to the last attempt.
+
+MAX_CELL_DEFERS = 3
+MAX_DEFER_WAIT = 90  # seconds; beyond that the provider is out for the hour, not the minute
+SHORT_WAIT = 1.0  # waited out in the worker; anything longer would block the replica
+
+
+async def _cell_fetch(fetch, attempt: int):
+    """``fetch(last)``, once more after a wait of up to SHORT_WAIT. Raises ``ProviderThrottled`` to defer."""
+    last = attempt >= MAX_CELL_DEFERS
+    try:
+        return await fetch(last)
+    except ProviderThrottled as throttled:
+        if throttled.retry_after > MAX_DEFER_WAIT:
+            return await fetch(True)
+        if throttled.retry_after > SHORT_WAIT:
+            raise
+        await asyncio.sleep(throttled.retry_after)
+    return await fetch(last)
+
+
+async def _defer_cell(task, kind: str, args: tuple, job_id: str | None, attempt: int, wait: float) -> None:
+    delay = timedelta(seconds=wait + random.uniform(1, 10))  # noqa: S311 -- jitter, not a secret
+    logger.info(f"{kind} cell {args[:3]}: provider throttled, retrying in {delay.total_seconds():.0f} s")
+    await task.using(run_after=datetime.now(tz=UTC) + delay).aenqueue(*args, job_id, attempt=attempt + 1)
+    if job_id:
+        await ForecastJob.objects.filter(id=job_id, status=ForecastJob.Status.FETCHING).aupdate(
+            updated_at=datetime.now(tz=UTC)
+        )
 
 
 @task(queue_name="cells")
 def refresh_forecast_cell(
-    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None
+    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None, attempt: int = 0
 ) -> None:
     """Pre-fetch a single grid cell's deterministic weather and store it."""
-    async_to_sync(_refresh_forecast_cell_async)(lat_r, lon_r, day_key, forecast_days, job_id)
+    async_to_sync(_refresh_forecast_cell_async)(lat_r, lon_r, day_key, forecast_days, job_id, attempt)
 
 
 async def _refresh_forecast_cell_async(
-    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None
+    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None, attempt: int = 0
 ) -> None:
-    stored = False
+    stored = deferred = False
     try:
-        cell = await get_or_fetch_forecast_cell(lat_r, lon_r, day_key, forecast_days)
+        cell = await _cell_fetch(
+            lambda last: get_or_fetch_forecast_cell(lat_r, lon_r, day_key, forecast_days, allow_fallback=last),
+            attempt,
+        )
         stored = bool(cell)
         if stored:
             logger.debug(f"Forecast cell refreshed: ({lat_r}, {lon_r}, {day_key})")
         else:
             logger.warning(f"Forecast cell NOT stored: ({lat_r}, {lon_r}, {day_key}, days={forecast_days})")
+    except ProviderThrottled as throttled:
+        await _defer_cell(
+            refresh_forecast_cell,
+            "Forecast",
+            (lat_r, lon_r, day_key, forecast_days),
+            job_id,
+            attempt,
+            throttled.retry_after,
+        )
+        deferred = True
     finally:
         # Released on failure too: a cell both providers refused must stay claimable, or
         # one bad fetch would block every retry for the whole claim TTL.
         release_cell("forecast", lat_r, lon_r, day_key, forecast_days)
-        await _settle_cell(job_id, failed=not stored)
+        if not deferred:  # a deferred cell settles when its retry does
+            await _settle_cell(job_id, failed=not stored)
 
 
 @task(queue_name="cells")
 def refresh_ensemble_cell(
-    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None
+    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None, attempt: int = 0
 ) -> None:
     """Pre-fetch a single grid cell's ensemble data and store it."""
-    async_to_sync(_refresh_ensemble_cell_async)(lat_r, lon_r, day_key, forecast_days, job_id)
+    async_to_sync(_refresh_ensemble_cell_async)(lat_r, lon_r, day_key, forecast_days, job_id, attempt)
 
 
 async def _refresh_ensemble_cell_async(
-    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None
+    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None, attempt: int = 0
 ) -> None:
-    stored = False
+    stored = deferred = False
     try:
-        cell = await get_or_fetch_ensemble_cell(lat_r, lon_r, day_key, forecast_days)
+        cell = await _cell_fetch(
+            lambda last: get_or_fetch_ensemble_cell(lat_r, lon_r, day_key, forecast_days, raise_throttled=not last),
+            attempt,
+        )
         stored = bool(cell)
         if stored:
             logger.debug(f"Ensemble cell refreshed: ({lat_r}, {lon_r}, {day_key})")
         else:
             logger.warning(f"Ensemble cell NOT stored: ({lat_r}, {lon_r}, {day_key}, days={forecast_days})")
+    except ProviderThrottled as throttled:
+        await _defer_cell(
+            refresh_ensemble_cell,
+            "Ensemble",
+            (lat_r, lon_r, day_key, forecast_days),
+            job_id,
+            attempt,
+            throttled.retry_after,
+        )
+        deferred = True
     finally:
         release_cell("ensemble", lat_r, lon_r, day_key, forecast_days)
-        await _settle_cell(job_id, failed=not stored)
+        if not deferred:
+            await _settle_cell(job_id, failed=not stored)
 
 
 @task(queue_name="cells")
@@ -382,9 +447,12 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     }:
         await set_status(job, ForecastJob.Status.FAILED, error="Diese Route ist durch deinen Tarif pausiert.")
         return
-    if job.kind == ForecastJob.Kind.JOURNEY_STAGE and not await JourneyStage.objects.filter(
-        id=job.params.get("journey_stage_id"), day__journey__owner_id=job.owner_id
-    ).aexists():
+    if (
+        job.kind == ForecastJob.Kind.JOURNEY_STAGE
+        and not await JourneyStage.objects.filter(
+            id=job.params.get("journey_stage_id"), day__journey__owner_id=job.owner_id
+        ).aexists()
+    ):
         await set_status(job, ForecastJob.Status.FAILED, error="Diese Etappe gibt es nicht mehr.")
         return
     await telemetry.bind_job(job)
@@ -452,8 +520,9 @@ async def _plan_forecast_job_async(job_id: str) -> None:
                 # Enqueued even when the claim is held elsewhere. The holder is usually the
                 # pre-warm scan, whose task carries no job_id and so would never report back --
                 # counting the cell settled here would let assembly run before the data landed
-                # and store an empty forecast as a finished one. A duplicate task is cheap: by
-                # the time it runs the cell is normally warm and get_or_fetch_* just reads it.
+                # and store an empty forecast as a finished one. A duplicate task never fetches
+                # twice: get_or_fetch_* takes the cell's fetch lease (core.cell_lease), so it
+                # either reads the warm cell or waits for the holder and reads what it stored.
                 claim_cell(kind, lat_r, lon_r, day_key, days)
                 await cell_task.aenqueue(lat_r, lon_r, day_key, days, str(job.id))
 
@@ -953,9 +1022,7 @@ def _journey_is_current(journey_id, revision: int):
 
 
 async def _set_plan_status(journey_id, revision: int, status: str, error: str = "", **fields) -> bool:
-    return bool(
-        await _journey_is_current(journey_id, revision).aupdate(plan_status=status, plan_error=error, **fields)
-    )
+    return bool(await _journey_is_current(journey_id, revision).aupdate(plan_status=status, plan_error=error, **fields))
 
 
 def _day_seconds(journey: Journey) -> float:

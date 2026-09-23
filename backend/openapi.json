@@ -644,6 +644,162 @@
                 ]
             }
         },
+        "/api/gpx/import": {
+            "post": {
+                "operationId": "core_api_gpx_import_gpx",
+                "summary": "Import Gpx",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/GpxPathOut"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "GPX"
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "properties": {
+                                    "file": {
+                                        "format": "binary",
+                                        "title": "File",
+                                        "type": "string"
+                                    }
+                                },
+                                "required": [
+                                    "file"
+                                ],
+                                "title": "FileParams",
+                                "type": "object"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/gpx/export": {
+            "post": {
+                "operationId": "core_api_gpx_export_gpx",
+                "summary": "Export Gpx",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                },
+                "tags": [
+                    "GPX"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/GpxExportIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/routes/{route_id}/gpx": {
+            "get": {
+                "operationId": "core_api_gpx_export_saved_gpx",
+                "summary": "Export Saved Gpx",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                },
+                "tags": [
+                    "GPX"
+                ]
+            }
+        },
+        "/api/forecast_jobs/{job_id}/gpx": {
+            "get": {
+                "operationId": "core_api_gpx_export_job_gpx",
+                "summary": "Export Job Gpx",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Job Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                },
+                "tags": [
+                    "GPX"
+                ]
+            }
+        },
+        "/api/gpx/preview": {
+            "post": {
+                "operationId": "core_api_gpx_preview_gpx",
+                "summary": "Preview Gpx",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RoutePlanOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "GPX"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RoutePlanIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
         "/api/journeys": {
             "get": {
                 "operationId": "core_api_journey_list_journeys",
@@ -946,162 +1102,6 @@
                     "Journeys"
                 ]
             }
-        },
-        "/api/gpx/import": {
-            "post": {
-                "operationId": "core_api_gpx_import_gpx",
-                "summary": "Import Gpx",
-                "parameters": [],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "items": {
-                                        "$ref": "#/components/schemas/GpxPathOut"
-                                    },
-                                    "title": "Response",
-                                    "type": "array"
-                                }
-                            }
-                        }
-                    }
-                },
-                "tags": [
-                    "GPX"
-                ],
-                "requestBody": {
-                    "content": {
-                        "multipart/form-data": {
-                            "schema": {
-                                "properties": {
-                                    "file": {
-                                        "format": "binary",
-                                        "title": "File",
-                                        "type": "string"
-                                    }
-                                },
-                                "required": [
-                                    "file"
-                                ],
-                                "title": "FileParams",
-                                "type": "object"
-                            }
-                        }
-                    },
-                    "required": true
-                }
-            }
-        },
-        "/api/gpx/export": {
-            "post": {
-                "operationId": "core_api_gpx_export_gpx",
-                "summary": "Export Gpx",
-                "parameters": [],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    }
-                },
-                "tags": [
-                    "GPX"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/GpxExportIn"
-                            }
-                        }
-                    },
-                    "required": true
-                }
-            }
-        },
-        "/api/routes/{route_id}/gpx": {
-            "get": {
-                "operationId": "core_api_gpx_export_saved_gpx",
-                "summary": "Export Saved Gpx",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "route_id",
-                        "schema": {
-                            "format": "uuid",
-                            "title": "Route Id",
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    }
-                },
-                "tags": [
-                    "GPX"
-                ]
-            }
-        },
-        "/api/forecast_jobs/{job_id}/gpx": {
-            "get": {
-                "operationId": "core_api_gpx_export_job_gpx",
-                "summary": "Export Job Gpx",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "job_id",
-                        "schema": {
-                            "format": "uuid",
-                            "title": "Job Id",
-                            "type": "string"
-                        },
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    }
-                },
-                "tags": [
-                    "GPX"
-                ]
-            }
-        },
-        "/api/gpx/preview": {
-            "post": {
-                "operationId": "core_api_gpx_preview_gpx",
-                "summary": "Preview Gpx",
-                "parameters": [],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/RoutePlanOut"
-                                }
-                            }
-                        }
-                    }
-                },
-                "tags": [
-                    "GPX"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/RoutePlanIn"
-                            }
-                        }
-                    },
-                    "required": true
-                }
-            }
         }
     },
     "components": {
@@ -1380,6 +1380,17 @@
                         "title": "Temp",
                         "type": "number"
                     },
+                    "felt_temp": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Felt Temp"
+                    },
                     "wind_speed": {
                         "anyOf": [
                             {
@@ -1495,6 +1506,19 @@
                             }
                         ],
                         "title": "Station Count"
+                    },
+                    "ensemble_weight": {
+                        "anyOf": [
+                            {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ensemble Weight"
                     },
                     "ride_score": {
                         "anyOf": [
@@ -3069,6 +3093,158 @@
                 "title": "PropertiesSchema",
                 "type": "object"
             },
+            "GpxPathOut": {
+                "properties": {
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "coordinates": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Coordinates",
+                        "type": "array"
+                    },
+                    "distance_m": {
+                        "title": "Distance M",
+                        "type": "number"
+                    },
+                    "routing_points": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Routing Points",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "name",
+                    "coordinates",
+                    "distance_m",
+                    "routing_points"
+                ],
+                "title": "GpxPathOut",
+                "type": "object"
+            },
+            "GpxExportIn": {
+                "properties": {
+                    "name": {
+                        "default": "NoRain",
+                        "maxLength": 200,
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "coordinates": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "maxItems": 100000,
+                        "minItems": 2,
+                        "title": "Coordinates",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "coordinates"
+                ],
+                "title": "GpxExportIn",
+                "type": "object"
+            },
+            "RoutePlanOut": {
+                "properties": {
+                    "coordinates": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Coordinates",
+                        "type": "array"
+                    },
+                    "distance_m": {
+                        "title": "Distance M",
+                        "type": "number"
+                    },
+                    "time_s": {
+                        "title": "Time S",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "coordinates",
+                    "distance_m",
+                    "time_s"
+                ],
+                "title": "RoutePlanOut",
+                "type": "object"
+            },
+            "RoutePlanIn": {
+                "properties": {
+                    "name": {
+                        "default": "NoRain",
+                        "maxLength": 200,
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "geometrySource": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/GeometrySource"
+                            }
+                        ],
+                        "default": "graphhopper"
+                    },
+                    "coordinates": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "maxItems": 100000,
+                        "minItems": 2,
+                        "title": "Coordinates",
+                        "type": "array"
+                    },
+                    "durationSeconds": {
+                        "anyOf": [
+                            {
+                                "maximum": 1382400,
+                                "minimum": 1,
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Durationseconds"
+                    },
+                    "profile": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RoutingProfile"
+                            }
+                        ],
+                        "default": "bike"
+                    }
+                },
+                "required": [
+                    "coordinates"
+                ],
+                "title": "RoutePlanIn",
+                "type": "object"
+            },
             "BreakOut": {
                 "properties": {
                     "along_m": {
@@ -3757,158 +3933,6 @@
                     "startDate"
                 ],
                 "title": "JourneyIn",
-                "type": "object"
-            },
-            "GpxPathOut": {
-                "properties": {
-                    "name": {
-                        "title": "Name",
-                        "type": "string"
-                    },
-                    "coordinates": {
-                        "items": {
-                            "items": {
-                                "type": "number"
-                            },
-                            "type": "array"
-                        },
-                        "title": "Coordinates",
-                        "type": "array"
-                    },
-                    "distance_m": {
-                        "title": "Distance M",
-                        "type": "number"
-                    },
-                    "routing_points": {
-                        "items": {
-                            "items": {
-                                "type": "number"
-                            },
-                            "type": "array"
-                        },
-                        "title": "Routing Points",
-                        "type": "array"
-                    }
-                },
-                "required": [
-                    "name",
-                    "coordinates",
-                    "distance_m",
-                    "routing_points"
-                ],
-                "title": "GpxPathOut",
-                "type": "object"
-            },
-            "GpxExportIn": {
-                "properties": {
-                    "name": {
-                        "default": "NoRain",
-                        "maxLength": 200,
-                        "title": "Name",
-                        "type": "string"
-                    },
-                    "coordinates": {
-                        "items": {
-                            "items": {
-                                "type": "number"
-                            },
-                            "type": "array"
-                        },
-                        "maxItems": 100000,
-                        "minItems": 2,
-                        "title": "Coordinates",
-                        "type": "array"
-                    }
-                },
-                "required": [
-                    "coordinates"
-                ],
-                "title": "GpxExportIn",
-                "type": "object"
-            },
-            "RoutePlanOut": {
-                "properties": {
-                    "coordinates": {
-                        "items": {
-                            "items": {
-                                "type": "number"
-                            },
-                            "type": "array"
-                        },
-                        "title": "Coordinates",
-                        "type": "array"
-                    },
-                    "distance_m": {
-                        "title": "Distance M",
-                        "type": "number"
-                    },
-                    "time_s": {
-                        "title": "Time S",
-                        "type": "integer"
-                    }
-                },
-                "required": [
-                    "coordinates",
-                    "distance_m",
-                    "time_s"
-                ],
-                "title": "RoutePlanOut",
-                "type": "object"
-            },
-            "RoutePlanIn": {
-                "properties": {
-                    "name": {
-                        "default": "NoRain",
-                        "maxLength": 200,
-                        "title": "Name",
-                        "type": "string"
-                    },
-                    "geometrySource": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/GeometrySource"
-                            }
-                        ],
-                        "default": "graphhopper"
-                    },
-                    "coordinates": {
-                        "items": {
-                            "items": {
-                                "type": "number"
-                            },
-                            "type": "array"
-                        },
-                        "maxItems": 100000,
-                        "minItems": 2,
-                        "title": "Coordinates",
-                        "type": "array"
-                    },
-                    "durationSeconds": {
-                        "anyOf": [
-                            {
-                                "maximum": 1382400,
-                                "minimum": 1,
-                                "type": "integer"
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "title": "Durationseconds"
-                    },
-                    "profile": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/RoutingProfile"
-                            }
-                        ],
-                        "default": "bike"
-                    }
-                },
-                "required": [
-                    "coordinates"
-                ],
-                "title": "RoutePlanIn",
                 "type": "object"
             }
         }
