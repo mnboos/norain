@@ -57,6 +57,8 @@ services:
       - GRAPHHOPPER_HEAP=${GRAPHHOPPER_HEAP:-6g}
       # Heap for building the graph, when this container builds it; defaults to GRAPHHOPPER_HEAP.
       - GRAPHHOPPER_BUILD_HEAP=${GRAPHHOPPER_BUILD_HEAP:-}
+      # How the build holds the graph: RAM_STORE (in the heap) or MMAP (in files, far smaller heap, slower).
+      - GRAPHHOPPER_BUILD_DATAACCESS=${GRAPHHOPPER_BUILD_DATAACCESS:-RAM_STORE}
       # MMAP (graph paged in from disk by the OS, small heap) or RAM_STORE (whole graph in the heap).
       - GRAPHHOPPER_DATAACCESS=${GRAPHHOPPER_DATAACCESS:-MMAP}
       # true: build the graph from OSM_DATA_URL when /graph-cache is empty. false: fail instead,

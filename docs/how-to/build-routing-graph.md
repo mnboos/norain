@@ -18,8 +18,38 @@ docker compose --env-file .env -f docker-compose.prod.yml logs -f graphhopper
 
 The extract and elevation tiles in `graphhopper/osm` are reused. Delete the extract too if
 you want fresh OSM data. The build heap is `GRAPHHOPPER_BUILD_HEAP`, and
-`GRAPHHOPPER_MEM_LIMIT` must fit it. Routing fails until the build is done. Then do
+`GRAPHHOPPER_MEM_LIMIT` must fit it plus JVM overhead: a build that stops with `Killed` and
+exit code 137 hit that limit, not the heap. Routing fails until the build is done. Then do
 [step 4](#4-refresh-what-depended-on-the-old-graph).
+
+Don't use `just routing-build` on the VPS: it runs `docker-compose.dev.yml`, which builds into
+the repository's `data/graphhopper/cache`, not `APP_STORAGE_PATH`.
+
+### A large area on a small VPS
+
+By default the build holds the whole graph in the heap (`RAM_STORE`), which for all of Europe
+is far more than a 24 GB VPS has. `GRAPHHOPPER_BUILD_DATAACCESS=MMAP` builds it in files on
+`graph-cache` instead; the heap then only holds the OSM reader's node map and the CH/LM
+bookkeeping, and the page cache does the rest. It is slower, hours for Europe. In `.env`:
+
+```bash
+GRAPHHOPPER_BUILD_DATAACCESS=MMAP
+GRAPHHOPPER_BUILD_HEAP=12g
+GRAPHHOPPER_MEM_LIMIT=20g
+```
+
+Free the memory the other services hold while it runs, build once, then start everything:
+
+```bash
+docker compose --env-file .env -f docker-compose.prod.yml stop
+rm -rf /srv/norain-data/graphhopper/cache/*
+docker compose --env-file .env -f docker-compose.prod.yml run --rm -e GRAPHHOPPER_BUILD_ONLY=true graphhopper
+docker compose --env-file .env -f docker-compose.prod.yml up -d
+```
+
+These numbers are a starting point, not measured values. A Java `OutOfMemoryError` means the
+heap is too small; `Killed` means `GRAPHHOPPER_MEM_LIMIT` is. If the VPS cannot manage it,
+[build elsewhere](#build-elsewhere-and-ship-it).
 
 ## Build elsewhere and ship it
 
