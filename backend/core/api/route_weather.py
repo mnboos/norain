@@ -27,7 +27,8 @@ def check_routing_profile(profile: str) -> str:
 
 
 def job_out(job) -> ForecastJobOut:
-    return ForecastJobOut(**job_snapshot(job))
+    # The HTTP envelope is where a refreshing job's previous result reaches the page.
+    return ForecastJobOut(**job_snapshot(job, include_stale=True))
 
 
 def flexibility_params(departure: str, before: int, after: int) -> dict:
@@ -106,8 +107,8 @@ async def forecast_job_map_detail(request: HttpRequest, job_id: UUID, detail: Li
 
     The map asks for this only once it is zoomed in far enough to show the difference.
     """
-    job = await _readable_job(request, job_id, finished=True)
-    return {"line": line_at_detail(job.result, detail), "wind_arrows": wind_arrows_at_detail(job.result, detail)}
+    result = _shown_result(await _readable_job(request, job_id, finished=True))
+    return {"line": line_at_detail(result, detail), "wind_arrows": wind_arrows_at_detail(result, detail)}
 
 
 @router.get("/forecast_jobs/{job_id}/samples/{index}/uncertainty", response=ForecastUncertainty | None)
@@ -117,8 +118,7 @@ async def forecast_job_sample_uncertainty(request: HttpRequest, job_id: UUID, in
     ``null`` when the sample has none -- which includes every sample of a free account,
     since the stored result is stripped before storage.
     """
-    job = await _readable_job(request, job_id, finished=True)
-    samples = job.result.get("samples") or []
+    samples = _shown_result(await _readable_job(request, job_id, finished=True)).get("samples") or []
     if not 0 <= index < len(samples):
         raise HttpError(404, "Sample not found.")
     if not (await entitlements_for(getattr(request, "auth", None))).ensemble_uncertainty:
@@ -126,11 +126,17 @@ async def forecast_job_sample_uncertainty(request: HttpRequest, job_id: UUID, in
     return samples[index].get("uncertainty")
 
 
+def _shown_result(job) -> dict | None:
+    """The result the page shows for a job: the finished one, else the stale one it replaces."""
+    return job.result if job.status == ForecastJob.Status.DONE and job.result else job.stale_result
+
+
 async def _readable_job(request: HttpRequest, job_id: UUID, *, finished: bool = False):
     """Fetch a job the caller may read, or 404.
 
     With ``finished``, a job that has no result yet is a 404 as well: its parts do not
-    exist until assembly is done.
+    exist until assembly is done. A refreshing job's stale result counts, because the page
+    shows it and asks for its parts.
     """
     job = await ForecastJob.objects.filter(id=job_id).afirst()
     if job is None:
@@ -143,7 +149,7 @@ async def _readable_job(request: HttpRequest, job_id: UUID, *, finished: bool = 
         if not user or not user.is_authenticated or user.id != job.owner_id:
             raise HttpError(404, "Forecast job not found.")
 
-    if finished and (job.status != ForecastJob.Status.DONE or not job.result):
+    if finished and not _shown_result(job):
         raise HttpError(404, "Forecast job is not finished.")
     from ..jobs import restrict_job_result
 

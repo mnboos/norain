@@ -14,6 +14,7 @@ from django.conf import settings
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 
 from . import tests as fixtures
+from .entitlements import FREE
 from .geo import vertex_distances
 from .journeys import (
     NEAR_M,
@@ -619,6 +620,27 @@ class JourneyApiTests(TestCase):
         other = User.objects.create_user(username="other", email="o@example.com", password="pw")
         self.client.force_login(other)
         self.assertEqual(self.client.get(f"/api/journeys/{journey.id}").status_code, 404)
+
+    def test_a_refreshing_stage_is_ranked_by_its_stale_result(self):
+        """The recommendation must not blink out every time a stage forecast is renewed."""
+        self._post()
+        journey = Journey.objects.get()
+        self._stage_on_day(journey, 0)
+        stale = {
+            "samples": [],
+            "summary": {},
+            "computed_at": datetime.now(UTC).isoformat(),
+            "entitlements": FREE.result_marker(),  # built for this tier, or the read drops it
+        }
+        with patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
+            self.client.get(f"/api/journeys/{journey.id}")
+            ForecastJob.objects.update(status=ForecastJob.Status.FETCHING, stale_result=stale)
+            with patch("core.api.journey.rank_day", return_value=[]) as rank_day:
+                response = self.client.get(f"/api/journeys/{journey.id}")
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = rank_day.call_args.args[0]
+        self.assertEqual(rows[0]["result"], stale)
+        self.assertEqual(response.json()["days"][0]["stages"][0]["forecast_status"], "fetching")
 
     def _stage_on_day(self, journey, index: int, **day_fields) -> JourneyStage:
         day = JourneyDay.objects.create(

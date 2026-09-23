@@ -53,6 +53,10 @@ export interface ForecastJobOut {
      */
     result?: RouteForecastOut | null;
     /**
+     * 
+     */
+    stale?: boolean;
+    /**
      * WebSocket path that streams this job's progress
      */
     wsUrl?: string;
@@ -83,6 +87,7 @@ export function ForecastJobOutFromJSONTyped(json: any, ignoreDiscriminator: bool
         'cellsTotal': json['cells_total'] == null ? undefined : json['cells_total'],
         'error': json['error'] == null ? undefined : json['error'],
         'result': json['result'] === undefined ? undefined : json['result'] === null ? null : RouteForecastOutFromJSON(json['result']),
+        'stale': json['stale'] == null ? undefined : json['stale'],
         'wsUrl': json['ws_url'] == null ? undefined : json['ws_url'],
     };
 }
@@ -104,6 +109,7 @@ export function ForecastJobOutToJSONTyped(value?: ForecastJobOut | null, ignoreD
         'cells_total': value['cellsTotal'],
         'error': value['error'],
         'result': RouteForecastOutToJSON(value['result']),
+        'stale': value['stale'],
         'ws_url': value['wsUrl'],
     };
 }

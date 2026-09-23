@@ -1285,6 +1285,11 @@
                             }
                         ]
                     },
+                    "stale": {
+                        "default": false,
+                        "title": "Stale",
+                        "type": "boolean"
+                    },
                     "ws_url": {
                         "default": "",
                         "description": "WebSocket path that streams this job's progress",
@@ -1659,6 +1664,17 @@
                     "version": {
                         "title": "Version",
                         "type": "string"
+                    },
+                    "computed_at": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Computed At"
                     },
                     "route_id": {
                         "anyOf": [

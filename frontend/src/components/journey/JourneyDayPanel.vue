@@ -3,6 +3,7 @@ import { computed, ref, toRefs, watch } from "vue";
 import { useQuasar } from "quasar";
 import { symSharpBed, symSharpCloudOff, symSharpStar, symSharpWarning } from "@quasar/extras/material-symbols-sharp";
 import type { JourneyDayOut, JourneyOut, JourneyStageOut, PoiOut } from "@norain/api/models";
+import ForecastFreshness from "@/components/ForecastFreshness.vue";
 import ForecastSummaryCard from "@/components/ForecastSummaryCard.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import WeatherChart from "@/components/WeatherChart.vue";
@@ -68,8 +69,17 @@ const progressPercent = computed(() => {
     const progress = forecastQuery.progress.value;
     return progress?.cellsTotal ? Math.round((100 * progress.cellsSettled) / progress.cellsTotal) : undefined;
 });
+// Renewing on the server, not just any refetch: a routine one answered with a finished job
+// keeps the progress at "done" and must not flash the line in and out.
+const refreshing = computed(() => {
+    const status = forecastQuery.progress.value?.status;
+    return forecastQuery.isFetching.value && !!status && status !== "done" && status !== "failed";
+});
+const refreshFailed = computed(() => !!forecastQuery.error.value && !forecastQuery.isFetching.value);
 const selectedSample = ref(0);
-watch(forecast, () => {
+// Not on every new result: a stale forecast and the fresh one replacing it share the job and
+// the samples' places, so the user's pick stays where it was.
+watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () => {
     selectedSample.value = 0;
 });
 
@@ -259,6 +269,14 @@ function breakEta(elapsedS: number): string {
             <template v-if="forecast">
                 <div class="col-12 col-sm-6 col-md-4">
                     <q-card class="full-height">
+                        <q-card-section v-if="refreshing || refreshFailed" class="q-pb-none">
+                            <ForecastFreshness
+                                :computed-at="forecast.computedAt"
+                                :refreshing="refreshing"
+                                :failed="refreshFailed"
+                                :percent="progressPercent"
+                            />
+                        </q-card-section>
                         <ForecastSummaryCard flat :forecast="forecast" />
                     </q-card>
                 </div>

@@ -210,4 +210,30 @@ describe("awaitForecastJob", () => {
         await expect(awaitForecastJob(completed)).resolves.toBe(completed.result);
         expect(webSocket.options).toBeUndefined();
     });
+
+    it("hands over a refreshing job's stale result at once, then resolves with the fresh one", async () => {
+        const stale = { ...parsedResult, version: "old" };
+        const onStale = vi.fn();
+        const resultPromise = awaitForecastJob(
+            { ...pendingJob, stale: true, result: stale },
+            undefined,
+            undefined,
+            undefined,
+            onStale,
+        );
+        expect(onStale).toHaveBeenCalledExactlyOnceWith(stale);
+
+        const options = socketOptions();
+        connect(options);
+        receive(options, message({ job_id: "job-1", status: "done", result: rawResult }));
+        await expect(resultPromise).resolves.toMatchObject({ version: "v1" });
+        expect(onStale).toHaveBeenCalledOnce();
+    });
+
+    it("never calls onStale for a finished job", async () => {
+        const onStale = vi.fn();
+        const completed = { jobId: "job-1", status: "done", result: parsedResult } satisfies ForecastJobOut;
+        await awaitForecastJob(completed, undefined, undefined, undefined, onStale);
+        expect(onStale).not.toHaveBeenCalled();
+    });
 });

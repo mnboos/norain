@@ -5,7 +5,7 @@ import { gpxApi } from "@/services/gpx";
 import type { RoutePlanIn } from "@norain/api/models";
 import type { PlacesSearchResult } from "@norain/api/models";
 
-import { reportForecastProgress, useForecastProgress } from "@/queries/forecastProgress";
+import { reportForecastProgress, reportStaleForecast, useForecastProgress } from "@/queries/forecastProgress";
 import { measureForecastLoad } from "@/services/telemetry";
 import { awaitForecastJob } from "@/services/forecastJob";
 
@@ -81,7 +81,13 @@ export function useRouteWeather(
                         departureFlexBeforeMinutes: toValue(before),
                         departureFlexAfterMinutes: toValue(after),
                     });
-                    return await awaitForecastJob(job, reportForecastProgress(client, key), signal, onDelivery);
+                    return await awaitForecastJob(
+                        job,
+                        reportForecastProgress(client, key),
+                        signal,
+                        onDelivery,
+                        reportStaleForecast(client, key),
+                    );
                 },
                 {
                     feature: "adhoc",

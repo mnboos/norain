@@ -3,7 +3,7 @@ import { useMutation, useQueries, useQuery, useQueryClient, type QueryClient } f
 import { JourneysApi } from "@norain/api/apis";
 import type { JourneyIn } from "@norain/api/models";
 
-import { reportForecastProgress, useForecastProgress } from "@/queries/forecastProgress";
+import { reportForecastProgress, reportStaleForecast, useForecastProgress } from "@/queries/forecastProgress";
 import { awaitForecastJob } from "@/services/forecastJob";
 
 const api = new JourneysApi();
@@ -102,7 +102,13 @@ async function fetchStageForecast(
     signal: AbortSignal,
 ) {
     const job = await api.coreApiJourneyJourneyStageForecast({ journeyId, stageId });
-    return await awaitForecastJob(job, reportForecastProgress(client, key), signal);
+    return await awaitForecastJob(
+        job,
+        reportForecastProgress(client, key),
+        signal,
+        undefined,
+        reportStaleForecast(client, key),
+    );
 }
 
 /**

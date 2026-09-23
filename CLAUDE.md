@@ -203,6 +203,16 @@ segments, no per-model breakdown), and pages fetch those parts from
 shape into the job key, or two pages would compute two jobs for one forecast. Every line
 level must keep each sample's vertex exactly: the map finds samples on the line by equality.
 
+**Stale while it refreshes.** A restarted job (expired, failed or stalled) keeps its last
+result as `stale_result` (`jobs.carry_stale`): only one built for the owner's current tier and
+at most `STALE_RESULT_MAX_AGE` (24 h) old, measured from the payload's `computed_at`, which
+assembly stamps (not `updated_at`, which every restart bumps). A restart after a failed
+refresh carries the kept one forward, so a throttled provider never empties the page. Only the
+HTTP envelope (`job_out`) serves it, as `result` with `stale: true`, never the WebSocket
+frames. The page shows it with its "Stand" and swaps in the fresh result. It is cleared when
+assembly finishes, dropped on a tier change mid-refresh, and dropped by an entitlement failure
+in planning (`_fail_not_allowed`). `result` itself is still only ever written by assembly.
+
 Four rules hold this together:
 
 - **Assembly reads `cache_only=True`.** Every cell it needs was fetched by a `cells` task.
@@ -562,7 +572,8 @@ gets each day's GraphHopper alternatives, fills POI gaps and places breaks. Rows
 
 - **POIs are not in the graph.** The bike filter drops standalone amenity nodes, so
   `docker/osm-extract-pois.sh` (`just poi-extract`) extracts them from the *raw* extract and
-  `manage.py import_pois` (`just poi-import`) replaces the `Poi` table in one transaction.
+  `manage.py import_pois` (`just poi-import`; `poi-extract-prod` / `poi-import-prod` on the VPS,
+  whose host has no GDAL) replaces the `Poi` table in one transaction.
   `POI_RULES` in `core/pois.py` is the one tag map; a test checks the script filters every tag
   in it. Journeys store the POIs they use as JSON, never as FKs, so a re-import is free.
   An object gets one `Poi` row per matching category (unique on `osm_ref` + `category`): a

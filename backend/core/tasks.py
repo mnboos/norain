@@ -446,7 +446,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     if job.kind == ForecastJob.Kind.ROUTE and str(job.params.get("route_id")) not in {
         str(i) for i in await sync_to_async(allowed_route_ids)(job.owner)
     }:
-        await set_status(job, ForecastJob.Status.FAILED, error="Diese Route ist durch deinen Tarif pausiert.")
+        await _fail_not_allowed(job, "Diese Route ist durch deinen Tarif pausiert.")
         return
     if (
         job.kind == ForecastJob.Kind.JOURNEY_STAGE
@@ -454,7 +454,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
             id=job.params.get("journey_stage_id"), day__journey__owner_id=job.owner_id
         ).aexists()
     ):
-        await set_status(job, ForecastJob.Status.FAILED, error="Diese Etappe gibt es nicht mehr.")
+        await _fail_not_allowed(job, "Diese Etappe gibt es nicht mehr.")
         return
     await telemetry.bind_job(job)
     await set_status(job, ForecastJob.Status.PLANNING)
@@ -532,6 +532,13 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         await refresh_station_observations.aenqueue(str(job.id))
 
     logger.info(f"Forecast job {job.id}: {len(cells)} cells, {job.cells_total - job.cells_settled} fetches enqueued")
+
+
+async def _fail_not_allowed(job: ForecastJob, error: str) -> None:
+    """Fail a job its owner may no longer read, dropping the result kept to show meanwhile."""
+    job.stale_result = None
+    await ForecastJob.objects.filter(pk=job.pk).aupdate(stale_result=None)
+    await set_status(job, ForecastJob.Status.FAILED, error=error)
 
 
 async def _wants_stations(job: ForecastJob, total_seconds: float | None) -> bool:
@@ -719,13 +726,17 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
         payload["entitlements"] = computed["entitlements"]
         if computed.get("departure_inputs"):
             payload["departure_inputs"] = computed["departure_inputs"]
+        now = datetime.now(tz=UTC)
+        # What the stale-result age cap and the page's "Stand" read: updated_at moves on restart.
+        payload["computed_at"] = now.isoformat()
 
         won = await _active_stage(job).aupdate(
             result=payload,
+            stale_result=None,
             status=ForecastJob.Status.DONE,
             error="",
             computed_weather=None,
-            updated_at=datetime.now(tz=UTC),
+            updated_at=now,
         )
     except Exception:
         await _fail_forecast_stage(job, "Wetterdaten konnten nicht zusammengestellt werden.")

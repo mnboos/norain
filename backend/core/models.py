@@ -426,6 +426,10 @@ class ForecastJob(models.Model):
     # Internal handoff: JSON RouteWeatherOut plus the entitlements used to compute it.
     computed_weather = models.JSONField(null=True, blank=True)
     result = models.JSONField(null=True, blank=True)
+    # The previous result, kept while a restarted job refreshes so the page can show it at once
+    # (flagged stale) instead of a spinner. Only the HTTP envelope serves it; see
+    # ``jobs.carry_stale`` for what may be kept.
+    stale_result = models.JSONField(null=True, blank=True)
     error = models.TextField(blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)

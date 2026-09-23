@@ -12,6 +12,7 @@ import type { RecurringRouteOut } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import DepartureComparison from "@/components/DepartureComparison.vue";
+import ForecastFreshness from "@/components/ForecastFreshness.vue";
 import ForecastSummaryCard from "@/components/ForecastSummaryCard.vue";
 import KeyRideDataCard from "@/components/KeyRideDataCard.vue";
 import WindDistributionBar from "@/components/WindDistributionBar.vue";
@@ -160,8 +161,17 @@ const forecastProgressPercent = computed(() => {
     return Math.round((100 * progress.cellsSettled) / progress.cellsTotal);
 });
 
+// Renewing on the server, not just any refetch: the 60 s one answered with a finished job
+// keeps the progress at "done" and must not flash the line in and out.
+const refreshing = computed(() => {
+    const status = forecastProgress.value?.status;
+    return forecastLoading.value && !!status && status !== "done" && status !== "failed";
+});
+const refreshFailed = computed(() => !!forecastError.value && !forecastLoading.value);
 const selectedSample = ref(0);
-watch(forecast, () => {
+// Not on every new result: a stale forecast and the fresh one replacing it share the job and
+// the samples' places, so the user's pick stays where it was.
+watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () => {
     selectedSample.value = 0;
 });
 </script>
@@ -271,6 +281,14 @@ watch(forecast, () => {
                 <div class="col-12 col-sm-6 col-md-4">
                     <!-- The key figures sit under the forecast, in the same card. -->
                     <q-card class="full-height column">
+                        <q-card-section v-if="refreshing || refreshFailed" class="q-pb-none col-auto">
+                            <ForecastFreshness
+                                :computed-at="forecast.computedAt"
+                                :refreshing="refreshing"
+                                :failed="refreshFailed"
+                                :percent="forecastProgressPercent"
+                            />
+                        </q-card-section>
                         <ForecastSummaryCard flat :forecast="forecast" class="col" />
                         <q-separator />
                         <KeyRideDataCard flat :forecast="forecast" :columns="$q.screen.width >= 1280 ? 4 : 2" />
@@ -312,14 +330,17 @@ watch(forecast, () => {
                 </div>
             </template>
 
-            <div v-if="!hasGeometry || forecastError || (!route.forecastAvailable && !forecastLoading)" class="col-12">
+            <div
+                v-if="!hasGeometry || (forecastError && !forecast) || (!route.forecastAvailable && !forecastLoading)"
+                class="col-12"
+            >
                 <q-banner v-if="!hasGeometry" rounded class="bg-tint-warn">
                     <template #avatar>
                         <q-spinner-dots size="1.5rem" color="accent" />
                     </template>
                     Route wird berechnet...
                 </q-banner>
-                <q-banner v-else-if="forecastError" rounded class="bg-tint-error">
+                <q-banner v-else-if="forecastError && !forecast" rounded class="bg-tint-error">
                     Wetterdaten konnten nicht geladen werden. Ist diese Route nach Ablauf von Plus pausiert?
                     <q-btn flat to="/account" label="Aktive Routen und Tarif verwalten" no-caps />
                 </q-banner>
@@ -345,7 +366,8 @@ watch(forecast, () => {
             </q-card>
         </div>
 
-        <q-inner-loading :showing="forecastLoading && hasGeometry">
+        <!-- A forecast on screen (a stale one while it refreshes) stays usable: the line above says so. -->
+        <q-inner-loading :showing="forecastLoading && hasGeometry && !forecast">
             <q-circular-progress
                 v-if="forecastProgressPercent !== undefined"
                 show-value

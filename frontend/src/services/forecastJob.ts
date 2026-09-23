@@ -56,18 +56,24 @@ function reportProgress(job: ForecastJobOut, onProgress?: (progress: ForecastPro
  * envelope rather than weather. Progress arrives over a WebSocket; polling is the fallback
  * for connections that cannot upgrade (a proxy stripping the upgrade header, say). Both
  * channels carry the identical payload, so one parser handles them.
+ *
+ * A job that is refreshing an expired forecast may carry the previous result, flagged
+ * `stale`. `onStale` receives it at once, so the page can show it while the new one is
+ * computed; the promise still resolves with the fresh result.
  */
 export async function awaitForecastJob(
     job: ForecastJobOut,
     onProgress?: (progress: ForecastProgress) => void,
     signal?: AbortSignal,
     onDelivery?: (delivery: string) => void,
+    onStale?: (result: RouteForecastOut) => void,
 ): Promise<RouteForecastOut> {
     reportProgress(job, onProgress);
     if (isTerminal(job)) {
         onDelivery?.("immediate");
         return settle(job);
     }
+    if (job.stale && job.result) onStale?.(job.result);
 
     try {
         onDelivery?.("websocket");

@@ -1,6 +1,8 @@
 import { computed, toValue, type MaybeRefOrGetter } from "vue";
 import { skipToken, useQuery, type QueryClient, type QueryKey } from "@tanstack/vue-query";
 
+import type { RouteForecastOut } from "@norain/api/models";
+
 import type { ForecastProgress } from "@/services/forecastJob";
 
 /**
@@ -16,6 +18,19 @@ export const forecastProgressKey = (forecastKey: QueryKey) => ["forecastProgress
 export function reportForecastProgress(client: QueryClient, forecastKey: QueryKey) {
     return (progress: ForecastProgress) => {
         client.setQueryData(forecastProgressKey(forecastKey), progress);
+    };
+}
+
+/**
+ * The callback that shows a refreshing job's previous result under the forecast query's own
+ * key, while that query is still fetching. The query keeps `isFetching` until the fresh result
+ * replaces it, and keeps the stale data (with `error` set) if the refresh fails.
+ */
+export function reportStaleForecast(client: QueryClient, forecastKey: QueryKey) {
+    return (result: RouteForecastOut) => {
+        // Dated by when it was computed, not now: if the refresh is cancelled (the page left,
+        // another variant picked), the next mount must still see it as stale and refetch.
+        client.setQueryData(forecastKey, result, { updatedAt: Date.parse(result.computedAt ?? "") || 0 });
     };
 }
 

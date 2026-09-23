@@ -50,6 +50,10 @@ INCOMPLETE_JOB_LIFETIME = timedelta(minutes=5)
 # came into range.
 STATION_JOB_LIFETIME = timedelta(minutes=10)
 
+# How old a previous result may be and still be shown, flagged stale, while its job refreshes.
+# Measured from the result's own ``computed_at``: every restart bumps ``updated_at``.
+STALE_RESULT_MAX_AGE = timedelta(hours=24)
+
 
 def job_key(kind: str, owner_id: int | None, params: dict) -> str:
     """Stable identity for a forecast request.
@@ -82,12 +86,16 @@ def group_name(job_id) -> str:
     return f"forecast.{job_id}"
 
 
-def job_snapshot(job: ForecastJob, *, include_result: bool = True) -> dict:
+def job_snapshot(job: ForecastJob, *, include_result: bool = True, include_stale: bool = False) -> dict:
     """The job state as the browser sees it.
 
     Deliberately the same snake_case shape the job endpoint returns, so the frontend can
     parse a WebSocket frame and an HTTP response with one function -- the generated
     client's ``ForecastJobOutFromJSON`` -- instead of two.
+
+    ``include_stale`` adds the previous result, flagged ``stale``, while the job refreshes.
+    Only the HTTP envelope asks for it: the page needs it once, and the progress frames go
+    out on every settled cell.
     """
     snapshot: dict[str, Any] = {
         "job_id": str(job.id),
@@ -99,6 +107,9 @@ def job_snapshot(job: ForecastJob, *, include_result: bool = True) -> dict:
     }
     if include_result and job.status == ForecastJob.Status.DONE:
         snapshot["result"] = forecast_view(job)
+    elif include_stale and job.status != ForecastJob.Status.DONE and job.stale_result:
+        snapshot["result"] = forecast_view(job, job.stale_result)
+        snapshot["stale"] = True
     return snapshot
 
 
@@ -206,7 +217,7 @@ def sections_with_frost(sections: list[dict], samples: list[dict]) -> list[dict]
     return out
 
 
-def forecast_view(job: ForecastJob) -> dict:
+def forecast_view(job: ForecastJob, result: dict | None = None) -> dict:
     """The finished forecast as the job endpoint and the WebSocket serve it.
 
     The stored ``result`` stays complete; this only trims what goes over the wire. Parts
@@ -215,8 +226,10 @@ def forecast_view(job: ForecastJob) -> dict:
     charts need no part: the frontend draws them from the samples.
     Shaping happens here, on read, and never enters the job key -- otherwise the map and
     the route page would each compute their own job for the same forecast.
+
+    ``result`` is the payload to render, ``job.result`` unless given (the stale one).
     """
-    result = job.result or {}
+    result = (job.result if result is None else result) or {}
     # "figures": results stored before the frontend drew the charts itself still carry them.
     dropped = ("figures", "wind_segments", "entitlements", "departure_inputs")
     view = {key: value for key, value in result.items() if key not in dropped}
@@ -250,7 +263,8 @@ def forecast_view(job: ForecastJob) -> dict:
         view["sections"] = sections_with_frost(result["sections"], samples)
     view["uncertainty_partial"] = uncertainty_partial(samples)
     view["job_id"] = str(job.id)
-    view["version"] = job.updated_at.isoformat() if job.updated_at else ""
+    # The compute time, so the charts re-key when a fresh result replaces a stale one.
+    view["version"] = result.get("computed_at") or (job.updated_at.isoformat() if job.updated_at else "")
     return view
 
 
@@ -309,6 +323,27 @@ async def _built_for_current_tier(job: ForecastJob, owner) -> bool:
     return (job.result or {}).get("entitlements") == (await entitlements_for(owner)).result_marker()
 
 
+def carry_stale(job: ForecastJob, marker, now: datetime) -> dict | None:
+    """The result a restarting job may keep showing, flagged stale, while it refreshes.
+
+    The last finished result, or else the one an earlier restart already kept: a refresh
+    that fails or stalls (a throttled provider) restarts again, and must not lose it. Only a
+    result built for the owner's current tier (``marker``) and computed within
+    ``STALE_RESULT_MAX_AGE``. A finished result from before ``computed_at`` existed is dated by
+    ``updated_at``: nothing but assembly writes a finished row. Any other undated one is dropped.
+    """
+    candidate = job.result or job.stale_result
+    if not candidate or candidate.get("entitlements") != marker:
+        return None
+    if job.result and job.status == ForecastJob.Status.DONE and not candidate.get("computed_at"):
+        candidate = {**candidate, "computed_at": job.updated_at.isoformat()}
+    try:
+        computed_at = datetime.fromisoformat(candidate.get("computed_at") or "")
+    except ValueError:
+        return None
+    return candidate if now - computed_at <= STALE_RESULT_MAX_AGE else None
+
+
 async def get_or_start_job(
     kind: str, owner, params: dict, *, min_remaining: timedelta = timedelta(0)
 ) -> tuple[ForecastJob, bool]:
@@ -346,15 +381,23 @@ async def get_or_start_job(
         telemetry.event("forecast.request", outcome="cached" if done else "joined", **context)
         return job, False
 
+    marker = (await entitlements_for(owner)).result_marker()
+
     # Still working, and recently enough that its worker is plausibly alive.
     if not job.is_terminal and now - job.updated_at <= JOB_STALL_TIMEOUT:
+        if job.stale_result and job.stale_result.get("entitlements") != marker:
+            # The tier changed mid-refresh: the kept result would show what it no longer allows.
+            job.stale_result = None
+            await ForecastJob.objects.filter(pk=job.pk).aupdate(stale_result=None)
         telemetry.event("forecast.request", outcome="cached" if done else "joined", **context)
         return job, False
 
     outcome = "restart_expired" if done else "restart_failed" if job.is_terminal else "restart_stalled"
     telemetry.event("forecast.request", outcome=outcome, **context)
 
-    # Stale result, previous failure, or a job whose worker died: start over.
+    # Stale result, previous failure, or a job whose worker died: start over, keeping the
+    # last result to show while the new one is computed.
+    job.stale_result = carry_stale(job, marker, now)
     job.status = ForecastJob.Status.PENDING
     job.cells_total = 0
     job.cells_settled = 0
@@ -374,6 +417,7 @@ async def get_or_start_job(
             "attempts",
             "error",
             "result",
+            "stale_result",
             "computed_weather",
             "geometry",
             "params",
@@ -386,12 +430,15 @@ async def get_or_start_job(
 def restrict_job_result(job, limits):
     """Read-time expiry guard for polling and WebSocket delivery."""
     from copy import deepcopy
-    if not job.result:
-        return
-    job.result = deepcopy(job.result)
-    if not limits.departure_comparison:
-        job.result.pop("departure_inputs", None)
-        job.result.pop("departure_comparison", None)
-    if not limits.ensemble_uncertainty:
-        for sample in job.result.get("samples", []):
-            sample["uncertainty"] = None
+    for field in ("result", "stale_result"):
+        payload = getattr(job, field, None)
+        if not payload:
+            continue
+        payload = deepcopy(payload)
+        if not limits.departure_comparison:
+            payload.pop("departure_inputs", None)
+            payload.pop("departure_comparison", None)
+        if not limits.ensemble_uncertainty:
+            for sample in payload.get("samples", []):
+                sample["uncertainty"] = None
+        setattr(job, field, payload)

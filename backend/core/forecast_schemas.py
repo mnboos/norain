@@ -224,6 +224,9 @@ class RouteForecastOut(CamelSchema):
 
     job_id: UUID
     version: str
+    # When assembly finished this forecast (ISO 8601, UTC). None on results stored before it
+    # existed. The page shows it while a stale result stands in for a refreshing one.
+    computed_at: str | None = None
     route_id: UUID | None = None
     departure_time: str
     line: list[list[float]]  # coarse route line as [[lon, lat], ...]
@@ -253,5 +256,8 @@ class ForecastJobOut(CamelSchema):
     cells_total: int = 0
     error: str = ""
     # Present once `status` is "done". Stored already serialised and entitlement-stripped.
+    # While a restarted job refreshes, the HTTP envelope carries the previous result here
+    # instead, with `stale` set; the WebSocket frames never do.
     result: RouteForecastOut | None = None
+    stale: bool = False
     ws_url: str = Field(default="", description="WebSocket path that streams this job's progress")

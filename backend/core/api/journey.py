@@ -298,6 +298,12 @@ def _in_forecast_window(journey: Journey, day: JourneyDay, stage: JourneyStage) 
     return departure >= datetime.now(tz=UTC) - timedelta(hours=1) and forecast_available_at(arrival)
 
 
+def _ranked_result(job: ForecastJob | None) -> dict | None:
+    if job is None:
+        return None
+    return job.result if job.status == ForecastJob.Status.DONE else job.stale_result
+
+
 def _poi_out(value: dict | None) -> PoiOut | None:
     return PoiOut(**value) if value else None
 
@@ -327,9 +333,9 @@ async def get_journey(request: HttpRequest, journey_id: UUID):
                     "total_seconds": stage.total_seconds,
                     "gaps": stage.gaps,
                     "detours": stage.detours,
-                    "result": jobs[stage.id].result
-                    if stage.id in jobs and jobs[stage.id].status == ForecastJob.Status.DONE
-                    else None,
+                    # A refreshing job ranks by its stale result, so the recommendation does
+                    # not blink out every time the forecast is renewed.
+                    "result": _ranked_result(jobs.get(stage.id)),
                 }
             )
         # A leg limit in time becomes metres per stage when it is planned; the day's alternatives

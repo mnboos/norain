@@ -38,6 +38,7 @@ from core.grid import (
 from core.jobs import (
     INCOMPLETE_JOB_LIFETIME,
     MAX_PLAN_ATTEMPTS,
+    STALE_RESULT_MAX_AGE,
     forecast_view,
     get_or_start_job,
     job_key,
@@ -2163,6 +2164,159 @@ class ForecastJobTests(TestCase):
             ForecastJob.Kind.ROUTE, self.user, params, min_remaining=timedelta(minutes=100)
         )[1]
         self.assertTrue(needs_planning)
+
+    # -- the previous result while a job refreshes ------------------------------
+
+    def _stale_payload(self, age=timedelta(hours=3), **overrides) -> dict:
+        computed_at = datetime.now(tz=UTC) - age
+        return {**_finished_payload(), "computed_at": computed_at.isoformat(), **overrides}
+
+    def _restart(self):
+        return async_to_sync(get_or_start_job)(ForecastJob.Kind.ROUTE, self.user, self._job_params())
+
+    def _age(self, job, age=timedelta(hours=3)):
+        ForecastJob.objects.filter(id=job.id).update(updated_at=datetime.now(tz=UTC) - age)
+
+    def test_expired_job_keeps_its_result_to_show_while_it_refreshes(self):
+        payload = self._stale_payload()
+        job = self._make_job(status=ForecastJob.Status.DONE, result=payload)
+        self._age(job)
+
+        job, needs_planning = self._restart()
+        self.assertTrue(needs_planning)
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.PENDING)
+        self.assertIsNone(job.result)
+        self.assertEqual(job.stale_result, payload)
+
+    def test_a_failed_or_stalled_refresh_keeps_the_stale_result(self):
+        """A throttled refresh fails or stalls and restarts again; the kept result must survive."""
+        payload = self._stale_payload()
+        for status in (ForecastJob.Status.FAILED, ForecastJob.Status.FETCHING):
+            with self.subTest(status=status):
+                ForecastJob.objects.all().delete()
+                job = self._make_job(status=status, stale_result=payload)
+                self._age(job, timedelta(minutes=10))  # past JOB_STALL_TIMEOUT for the in-flight one
+
+                job, needs_planning = self._restart()
+                self.assertTrue(needs_planning)
+                job.refresh_from_db()
+                self.assertEqual(job.stale_result, payload)
+
+    def test_stale_result_is_dropped_when_too_old_or_for_another_tier(self):
+        cases = {
+            "too old": self._stale_payload(age=STALE_RESULT_MAX_AGE + timedelta(minutes=1)),
+            "other tier": self._stale_payload(entitlements=PRO.result_marker()),
+        }
+        for name, payload in cases.items():
+            with self.subTest(name):
+                ForecastJob.objects.all().delete()
+                job = self._make_job(status=ForecastJob.Status.DONE, result=payload)
+                self._age(job)
+                job, _ = self._restart()
+                job.refresh_from_db()
+                self.assertIsNone(job.stale_result)
+
+    def test_a_result_from_before_computed_at_is_dated_by_its_finish(self):
+        """Nothing but assembly writes a finished row, so its updated_at is when it was computed."""
+        undated = {key: value for key, value in self._stale_payload().items() if key != "computed_at"}
+        job = self._make_job(status=ForecastJob.Status.DONE, result=undated)
+        self._age(job)
+        finished = ForecastJob.objects.get(id=job.id).updated_at
+
+        job, _ = self._restart()
+        job.refresh_from_db()
+        self.assertEqual(job.stale_result["computed_at"], finished.isoformat())
+
+        # Too old by that date: dropped. An undated stale result on an unfinished job: dropped.
+        ForecastJob.objects.all().delete()
+        job = self._make_job(status=ForecastJob.Status.DONE, result=undated)
+        self._age(job, STALE_RESULT_MAX_AGE + timedelta(minutes=1))
+        job, _ = self._restart()
+        job.refresh_from_db()
+        self.assertIsNone(job.stale_result)
+        ForecastJob.objects.all().delete()
+        job = self._make_job(status=ForecastJob.Status.FAILED, stale_result=undated)
+        job, _ = self._restart()
+        job.refresh_from_db()
+        self.assertIsNone(job.stale_result)
+
+    def test_tier_change_mid_refresh_drops_the_stale_result(self):
+        job = self._make_job(status=ForecastJob.Status.FETCHING, stale_result=self._stale_payload())
+        Subscription.objects.create(user=self.user, plan=Plan.PRO)
+
+        job, needs_planning = self._restart()
+        self.assertFalse(needs_planning, "still in flight: joined")
+        job.refresh_from_db()
+        self.assertIsNone(job.stale_result)
+
+    def test_endpoint_serves_the_stale_result_but_progress_frames_do_not(self):
+        payload = self._stale_payload()
+        job = self._make_job(status=ForecastJob.Status.DONE, result=payload)
+        self._age(job)
+
+        with patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
+            response = self.client.get(
+                f"/api/routes/{self.route.id}/forecast",
+                {"date": self.departure.date().isoformat(), "time": "08:00"},
+            )
+        self.assertEqual(response.status_code, 202)
+        body = response.json()
+        self.assertTrue(body["stale"])
+        self.assertEqual(body["result"]["version"], payload["computed_at"])
+        self.assertEqual(body["result"]["computed_at"], payload["computed_at"])
+
+        job.refresh_from_db()
+        snapshot = job_snapshot(job)
+        self.assertNotIn("result", snapshot)
+        self.assertNotIn("stale", snapshot)
+
+    def test_detail_endpoints_answer_while_the_stale_result_is_shown(self):
+        job = self._make_job(status=ForecastJob.Status.FETCHING, stale_result=self._stale_payload())
+        response = self.client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "medium"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["line"], [[9.0, 47.0]])
+        # The stale payload has no samples: a 404 for the index, not for the job.
+        response = self.client.get(f"/api/forecast_jobs/{job.id}/samples/0/uncertainty")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["detail"], "Sample not found.")
+
+        ForecastJob.objects.filter(id=job.id).update(stale_result=None)
+        response = self.client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "medium"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_assembly_stamps_computed_at_and_clears_the_stale_result(self):
+        job = self._make_job(
+            status=ForecastJob.Status.ASSEMBLING,
+            stale_result=self._stale_payload(),
+            computed_weather={
+                "forecast": {
+                    k: v
+                    for k, v in _finished_payload().items()
+                    if k not in ("departure_time", "sections", "entitlements")
+                },
+                "entitlements": FREE.result_marker(),
+                "departure_inputs": None,
+            },
+        )
+        async_to_sync(_assemble_forecast_job_async)(str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.DONE)
+        self.assertIsNone(job.stale_result)
+        computed_at = datetime.fromisoformat(job.result["computed_at"])
+        self.assertLess(datetime.now(tz=UTC) - computed_at, timedelta(minutes=1))
+        self.assertEqual(forecast_view(job)["version"], job.result["computed_at"])
+
+    def test_paused_route_fails_without_its_stale_result(self):
+        RecurringRoute.objects.filter(id=self.route.id).update(active=False)
+        job = self._make_job(status=ForecastJob.Status.PENDING, stale_result=self._stale_payload())
+
+        async_to_sync(_plan_forecast_job_async)(str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, ForecastJob.Status.FAILED)
+        self.assertIsNone(job.stale_result)
 
     def test_prebuild_skips_departures_beyond_the_horizon(self):
         far = datetime.now(tz=UTC) + timedelta(hours=72)

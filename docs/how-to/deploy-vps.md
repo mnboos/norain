@@ -142,6 +142,20 @@ new one is ready. You can also
 copy a completed `photon_data` directory from another machine using the same Photon
 version; stop Photon on both machines during the copy.
 
+## Import the journey planner's POIs
+
+The POIs come from the raw OSM extract GraphHopper keeps in `${APP_STORAGE_PATH}/graphhopper/osm`.
+On the VPS, run both steps in containers (the host has no GDAL, which Django needs):
+
+```bash
+cd /srv/norain
+just poi-extract-prod   # writes pois-<extract>.geojsonseq next to the extract
+just poi-import-prod    # replaces the Poi table, in the backend image via worker-default
+```
+
+`just poi-extract` and `just poi-import` are the development versions; they use
+`docker-compose.dev.yml` and the host's virtualenv.
+
 ## First deployment and updates
 
 This release uses a fresh PostGIS schema and does not import SQLite data. Before its
