@@ -22,8 +22,8 @@ you want fresh OSM data. The build heap is `GRAPHHOPPER_BUILD_HEAP`, and
 exit code 137 hit that limit, not the heap. Routing fails until the build is done. Then do
 [step 4](#4-refresh-what-depended-on-the-old-graph).
 
-Don't use `just routing-build` on the VPS: it runs `docker-compose.dev.yml`, which builds into
-the repository's `data/graphhopper/cache`, not `APP_STORAGE_PATH`.
+`just routing-build` does the same with the stack `COMPOSE_FILE` in `.env` names, so on the VPS
+it empties and rebuilds `APP_STORAGE_PATH/graphhopper/cache`.
 
 ### A large area on a small VPS
 

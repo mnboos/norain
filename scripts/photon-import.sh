@@ -30,7 +30,8 @@ for file in "$@"; do
 done
 cd "$repo"
 
-compose=("$CONTAINER" compose -f docker-compose.dev.yml)
+# COMPOSE_FILE comes from .env through just.
+compose=("$CONTAINER" compose)
 "${compose[@]}" build photon
 "${compose[@]}" stop photon
 "${compose[@]}" run --rm --no-deps "${mounts[@]}" \

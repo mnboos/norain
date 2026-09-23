@@ -41,7 +41,8 @@ for file in "$@"; do
 done
 cd "$repo"
 
-compose=("$CONTAINER" compose -f docker-compose.dev.yml)
+# COMPOSE_FILE comes from .env through just.
+compose=("$CONTAINER" compose)
 "${compose[@]}" build graphhopper
 "${compose[@]}" stop graphhopper
 "${compose[@]}" run --rm --no-deps "${mounts[@]}" --entrypoint /graphhopper/filter-osm.sh graphhopper "/osm_data/bike-$name" "${inputs[@]}"

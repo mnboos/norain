@@ -48,7 +48,7 @@ setup:
 [doc("Start PostGIS, Redis, GraphHopper and Photon on the host ports set in .env.")]
 [group('dev')]
 services:
-    {{ container }} compose -f docker-compose.dev.yml up -d db redis graphhopper photon
+    {{ container }} compose up -d db redis graphhopper photon
 
 [doc("Run Django on BACKEND_PORT from .env (default 8000).")]
 [group('dev')]
@@ -104,14 +104,14 @@ thumbnail-refresh $route_id:
 routing-backfill *args:
     uv run python manage.py backfill_route_vertex_times {{ args }}
 
-[doc("Rebuild the local routing graph after editing graphhopper-config.yaml or data/graphhopper/models/ (ride speeds live there). Deletes data/graphhopper/cache and builds it again from the bike-filtered extract; the OSM extract and elevation tiles are kept. Takes minutes.")]
+[doc("Rebuild the routing graph of the COMPOSE_FILE stack after editing graphhopper-config.yaml or data/graphhopper/models/ (ride speeds live there). Empties its graph cache and builds it again from the bike-filtered extract; the OSM extract and elevation tiles are kept. Takes minutes.")]
 [group('geodata')]
-[confirm("This deletes the local routing graph and builds it again. Continue?")]
+[confirm("This deletes the routing graph of the COMPOSE_FILE stack and builds it again. Continue?")]
 routing-build:
-    {{ container }} compose -f docker-compose.dev.yml stop graphhopper
-    {{ container }} compose -f docker-compose.dev.yml run --rm --entrypoint bash graphhopper -c 'rm -rf /graph-cache/..?* /graph-cache/.[!.]* /graph-cache/*'
-    {{ container }} compose -f docker-compose.dev.yml run --rm -e GRAPHHOPPER_BUILD_ONLY=true graphhopper
-    {{ container }} compose -f docker-compose.dev.yml up -d graphhopper
+    {{ container }} compose stop graphhopper
+    {{ container }} compose run --rm --entrypoint bash graphhopper -c 'rm -rf /graph-cache/..?* /graph-cache/.[!.]* /graph-cache/*'
+    {{ container }} compose run --rm -e GRAPHHOPPER_BUILD_ONLY=true graphhopper
+    {{ container }} compose up -d graphhopper
 
 [doc("Print each bike profile's average speed on a few reference routes. Run it after routing-build to see what a speed change did.")]
 [group('geodata')]
@@ -146,8 +146,8 @@ osm-import +files:
 [doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) from the raw extract in data/graphhopper/osm, e.g. after a new download. Writes pois-<extract>.geojsonseq next to it; just poi-import loads it.")]
 [group('geodata')]
 poi-extract:
-    {{ container }} compose -f docker-compose.dev.yml build graphhopper
-    {{ container }} compose -f docker-compose.dev.yml run --rm --no-deps --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/{{ pois_file }}" "/osm_data/{{ file_name(osm_data_url) }}"
+    {{ container }} compose build graphhopper
+    {{ container }} compose run --rm --no-deps --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/{{ pois_file }}" "/osm_data/{{ file_name(osm_data_url) }}"
 
 [doc("Replace the POI table with the file from just poi-extract. Readers keep the old POIs until the new set is in.")]
 [group('geodata')]

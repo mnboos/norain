@@ -233,7 +233,7 @@
       <recent name="C:\src\norain\frontend\src\components\chart" />
     </key>
   </component>
-  <component name="RunManager" selected="Compound.dev">
+  <component name="RunManager" selected="Docker.docker services">
     <configuration name="dev" type="CompoundRunConfigurationType">
       <toRun name="norain" type="Python.DjangoServer" />
       <toRun name="dev" type="js.build_tools.npm" />
@@ -283,6 +283,8 @@
     </list>
     <recent_temporary>
       <list>
+        <item itemvalue="Docker.docker-compose.dev.yml.db: Compose Deployment" />
+        <item itemvalue="Docker.docker-compose.base.yml.db: Compose Deployment" />
         <item itemvalue="Docker.docker-compose.dev.yml.db: Compose Deployment" />
         <item itemvalue="Docker.docker-compose.base.yml.db: Compose Deployment" />
       </list>
