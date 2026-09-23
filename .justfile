@@ -155,6 +155,16 @@ poi-extract:
 poi-import:
     uv run python manage.py import_pois "../data/graphhopper/osm/{{ pois_file }}"
 
+[doc("On the VPS: extract the POIs from the raw extract in APP_STORAGE_PATH/graphhopper/osm. just poi-import-prod loads them.")]
+[group('geodata')]
+poi-extract-prod:
+    {{ container }} compose --env-file .env run --rm --pull never --no-deps --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/{{ pois_file }}" "/osm_data/{{ file_name(osm_data_url) }}"
+
+[doc("On the VPS: replace the POI table from just poi-extract-prod's file. Runs in the backend image, which has GDAL; the host needs none.")]
+[group('geodata')]
+poi-import-prod:
+    {{ container }} compose --env-file .env run --rm --pull never --no-deps worker-default python manage.py import_pois "/osm_data/{{ pois_file }}"
+
 [doc("Build the geocoder index from local Photon 1.0 dumps (.jsonl.zst or .jsonl; several become one index) or one prebuilt index (.tar.bz2), e.g. just photon-import photon_dumps/*.jsonl. The current index is replaced only once the new one is ready.")]
 [group('geodata')]
 [confirm("This replaces the local geocoder index with one built from the files. Continue?")]
