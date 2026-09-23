@@ -21,6 +21,7 @@ import { useEntitlements } from "@/composables/useEntitlements";
 import { usePlaceSearch } from "@/queries/places";
 import { placeLabel } from "@/utils/placeLabel";
 import { LODGING_KINDS, POI_CATEGORIES } from "@/utils/poiCategories";
+import ChipMultiSelect from "@/components/ChipMultiSelect.vue";
 
 const props = defineProps<{
     modelValue: boolean;
@@ -372,26 +373,14 @@ function onClose() {
                     </div>
                 </div>
 
-                <div>
-                    <div class="text-caption">Auf jeder Etappe am Stück brauche ich</div>
-                    <q-option-group
-                        v-model="poiCategories"
-                        type="checkbox"
-                        inline
-                        dense
-                        :options="
-                            POI_CATEGORIES.filter(c => c.value !== 'lodging').map(c => ({
-                                label: `${c.emoji} ${c.label}`,
-                                value: c.value,
-                            }))
-                        "
-                    />
-                </div>
+                <ChipMultiSelect
+                    v-model="poiCategories"
+                    label="Auf jeder Etappe am Stück brauche ich"
+                    hint="Jede Auswahl muss auf jeder Etappe vorkommen"
+                    :options="POI_CATEGORIES.filter(c => c.value !== 'lodging')"
+                />
 
-                <div>
-                    <div class="text-caption">Übernachten in</div>
-                    <q-option-group v-model="lodgingKinds" type="checkbox" inline dense :options="LODGING_KINDS" />
-                </div>
+                <ChipMultiSelect v-model="lodgingKinds" label="Übernachten in" hint="Leer: jede Art" :options="LODGING_KINDS" />
 
                 <q-expansion-item dense label="Strasse" header-class="text-caption q-px-none" default-opened>
                     <div class="row q-col-gutter-sm q-pt-sm">

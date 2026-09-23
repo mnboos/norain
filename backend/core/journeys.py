@@ -83,6 +83,11 @@ def elapsed_at(geometry: dict, along_m: float) -> float:
     return point_at(geometry, along_m)[1]
 
 
+def lodging_candidates(hits: list[PoiHit], kinds: list[str], from_along_m: float = 0.0) -> list[PoiHit]:
+    """Lodging of the wanted kinds (every kind when none are set), from ``from_along_m`` on."""
+    return [hit for hit in hits if hit.along_m >= from_along_m and (not kinds or hit.tags.get("tourism") in kinds)]
+
+
 @dataclass(frozen=True)
 class DayCut:
     end_along_m: float
@@ -218,7 +223,10 @@ CATEGORY_LABELS = {
     "toilets": "Toilette",
     "bbq": "Grillstelle",
     "drinking_water": "Trinkwasser",
-    "vending_machine": "Automat",
+    "vending_food": "Automat: Essen",
+    "vending_drinks": "Automat: Getränke",
+    "vending_sweets": "Automat: Süsses",
+    "vending_coffee": "Automat: Kaffee",
     "shelter": "Unterstand",
     "bike_repair": "Veloreparatur",
     "food": "Essen",

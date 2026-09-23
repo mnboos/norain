@@ -1,5 +1,5 @@
 import { computed, toValue, type MaybeRefOrGetter } from "vue";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
+import { useMutation, useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/vue-query";
 import { JourneysApi } from "@norain/api/apis";
 import type { JourneyIn } from "@norain/api/models";
 
@@ -14,8 +14,8 @@ export const journeyKeys = {
     detail: (id: string | null | undefined) => [...journeyKeys.all, "detail", id] as const,
     stageForecast: (id: string | null | undefined, stageId: string | null | undefined) =>
         [...journeyKeys.detail(id), "stage", stageId, "forecast"] as const,
-    stagePois: (id: string | null | undefined, stageId: string | null | undefined, categories: string) =>
-        [...journeyKeys.detail(id), "stage", stageId, "pois", categories] as const,
+    stagePois: (id: string | null | undefined, stageId: string | null | undefined, categories: string, lodging: boolean) =>
+        [...journeyKeys.detail(id), "stage", stageId, "pois", categories, lodging] as const,
 };
 
 /** Still working on the server: the plan itself, or a stage forecast it started on read. */
@@ -63,36 +63,74 @@ export function useJourneyStageForecast(
     const queryKey = computed(() => journeyKeys.stageForecast(toValue(id), toValue(stageId)));
     const query = useQuery({
         queryKey,
-        queryFn: async ({ client, queryKey: key, signal }) => {
-            const job = await api.coreApiJourneyJourneyStageForecast({
-                journeyId: toValue(id) ?? "",
-                stageId: toValue(stageId) ?? "",
-            });
-            return await awaitForecastJob(job, reportForecastProgress(client, key), signal);
-        },
+        queryFn: ({ client, queryKey: key, signal }) =>
+            fetchStageForecast(client, key, toValue(id) ?? "", toValue(stageId) ?? "", signal),
         enabled: () => !!toValue(id) && !!toValue(stageId) && toValue(enabled),
-        staleTime: 5 * 60 * 1000,
+        staleTime: STAGE_FORECAST_STALE_MS,
     });
     return Object.assign(query, { progress: useForecastProgress(queryKey) });
 }
 
-/** POIs on the way along a stage, for the map. */
-export function useJourneyStagePois(
+/**
+ * The forecasts of several stages, under the same keys as `useJourneyStageForecast`, so a
+ * variant fetched here opens at once when it is picked.
+ */
+export function useJourneyStageForecasts(
     id: MaybeRefOrGetter<string | null | undefined>,
-    stageId: MaybeRefOrGetter<string | null | undefined>,
+    stageIds: MaybeRefOrGetter<string[]>,
+) {
+    return useQueries({
+        queries: computed(() =>
+            toValue(stageIds).map(stageId => ({
+                queryKey: journeyKeys.stageForecast(toValue(id), stageId),
+                queryFn: ({ client, queryKey: key, signal }: { client: QueryClient; queryKey: readonly unknown[]; signal: AbortSignal }) =>
+                    fetchStageForecast(client, key, toValue(id) ?? "", stageId, signal),
+                enabled: !!toValue(id),
+                staleTime: STAGE_FORECAST_STALE_MS,
+            })),
+        ),
+    });
+}
+
+const STAGE_FORECAST_STALE_MS = 5 * 60 * 1000;
+
+async function fetchStageForecast(
+    client: QueryClient,
+    key: readonly unknown[],
+    journeyId: string,
+    stageId: string,
+    signal: AbortSignal,
+) {
+    const job = await api.coreApiJourneyJourneyStageForecast({ journeyId, stageId });
+    return await awaitForecastJob(job, reportForecastProgress(client, key), signal);
+}
+
+/**
+ * POIs in the area of several stages (a day's variants), for the map, one query per stage;
+ * with `lodging`, also where the day could end. The data is in the order of `stageIds`.
+ */
+export function useJourneyStagesPois(
+    id: MaybeRefOrGetter<string | null | undefined>,
+    stageIds: MaybeRefOrGetter<string[]>,
     categories: MaybeRefOrGetter<string[]>,
+    lodging: MaybeRefOrGetter<boolean> = false,
 ) {
     const joined = computed(() => [...toValue(categories)].sort().join(","));
-    return useQuery({
-        queryKey: computed(() => journeyKeys.stagePois(toValue(id), toValue(stageId), joined.value)),
-        queryFn: () =>
-            api.coreApiJourneyJourneyStagePois({
-                journeyId: toValue(id) ?? "",
-                stageId: toValue(stageId) ?? "",
-                categories: joined.value,
-            }),
-        enabled: () => !!toValue(id) && !!toValue(stageId) && joined.value.length > 0,
-        staleTime: 30 * 60 * 1000,
+    return useQueries({
+        queries: computed(() =>
+            toValue(stageIds).map(stageId => ({
+                queryKey: journeyKeys.stagePois(toValue(id), stageId, joined.value, toValue(lodging)),
+                queryFn: () =>
+                    api.coreApiJourneyJourneyStagePois({
+                        journeyId: toValue(id) ?? "",
+                        stageId,
+                        categories: joined.value,
+                        lodging: toValue(lodging),
+                    }),
+                enabled: !!toValue(id) && (joined.value.length > 0 || toValue(lodging)),
+                staleTime: 30 * 60 * 1000,
+            })),
+        ),
     });
 }
 

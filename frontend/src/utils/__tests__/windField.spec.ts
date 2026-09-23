@@ -27,7 +27,7 @@ describe("wind field", () => {
     });
 
     it("spreads a uniform wind evenly over the corridor", () => {
-        const field = buildWindField(arrowsFrom(270), line);
+        const field = buildWindField([{ arrows: arrowsFrom(270), line }]);
         expect(field).toBeDefined();
         if (!field) return;
         for (const index of field.inside) {
@@ -44,7 +44,7 @@ describe("wind field", () => {
             { lon: 9.0, lat: 47.0, bearing: 90, windDir: 270, windSpeed: 10 },
             { lon: 9.14, lat: 47.0, bearing: 90, windDir: 270, windSpeed: 30 },
         ];
-        const field = buildWindField(arrows, line);
+        const field = buildWindField([{ arrows, line }]);
         if (!field) throw new Error("no field");
         const middle = cellAt(field, 9.07, 47.0).u;
         expect(middle).toBeGreaterThan(15);
@@ -53,7 +53,7 @@ describe("wind field", () => {
     });
 
     it("stops at the widest corridor and only spawns inside it", () => {
-        const field = buildWindField(arrowsFrom(90), line, { halfWidthM: 2000 });
+        const field = buildWindField([{ arrows: arrowsFrom(90), line }], { halfWidthM: 2000 });
         if (!field) throw new Error("no field");
         expect(corridorMask(cellAt(field, 9.07, 47.0).distance, 2000)).toBeCloseTo(1);
         // ~3 km north of the line is beyond a 2 km half-width.
@@ -65,7 +65,7 @@ describe("wind field", () => {
     });
 
     it("keeps the corridor about as wide on screen at every zoom", () => {
-        const field = buildWindField(arrowsFrom(90), line);
+        const field = buildWindField([{ arrows: arrowsFrom(90), line }]);
         if (!field) throw new Error("no field");
         const wide = corridorHalfWidthM(field, 11);
         const narrow = corridorHalfWidthM(field, 13);
@@ -101,34 +101,64 @@ describe("wind field", () => {
             lon: lon ?? 0, lat: lat ?? 0, bearing: i < lons.length ? 90 : 270,
             ...(i < lons.length ? { windDir: 270, windSpeed: 10 } : { windDir: 90, windSpeed: 30 }),
         }));
-        const field = buildWindField(arrows, hairpin, { halfWidthM: 400 });
+        const field = buildWindField([{ arrows, line: hairpin }], { halfWidthM: 400 });
         if (!field) throw new Error("no field");
         expect(cellAt(field, 9.07, 47.0).u).toBeCloseTo(10, 3);
         expect(cellAt(field, 9.07, 47.01).u).toBeCloseTo(-30, 3);
     });
 
     it("stays finite with a single arrow or a single point", () => {
-        const one = buildWindField(arrowsFrom(180).slice(0, 1), line);
+        const one = buildWindField([{ arrows: arrowsFrom(180).slice(0, 1), line }]);
         if (!one) throw new Error("no field");
         for (const index of one.inside) {
             expect(Number.isFinite(one.u[index])).toBe(true);
             expect(Number.isFinite(one.v[index])).toBe(true);
         }
-        expect(buildWindField(arrowsFrom(180), [[9, 47]])).toBeDefined();
+        expect(buildWindField([{ arrows: arrowsFrom(180), line: [[9, 47]] }])).toBeDefined();
     });
 
     it("draws nothing without wind or without a line", () => {
-        expect(buildWindField([], line)).toBeUndefined();
-        expect(buildWindField(arrowsFrom(90), [])).toBeUndefined();
+        expect(buildWindField([{ arrows: [], line }])).toBeUndefined();
+        expect(buildWindField([{ arrows: arrowsFrom(90), line: [] }])).toBeUndefined();
+    });
+
+    it("gives each alternative its own wind and no corridor between them", () => {
+        // A second route ~5.5 km south, starting where the first one ends: the wind there blew
+        // the other way.
+        const south = [[9.14, 46.95], [9.07, 46.95], [9.0, 46.95]];
+        const southArrows: WindArrow[] = south.map(([lon, lat]) => ({
+            lon: lon ?? 0, lat: lat ?? 0, bearing: 270, windDir: 90, windSpeed: 30,
+        }));
+        const field = buildWindField(
+            [{ arrows: arrowsFrom(270), line }, { arrows: southArrows, line: south }],
+            { halfWidthM: 1000 },
+        );
+        if (!field) throw new Error("no field");
+        expect(cellAt(field, 9.07, 47.0).u).toBeCloseTo(20, 3);
+        expect(cellAt(field, 9.07, 46.95).u).toBeCloseTo(-30, 3);
+        // Nothing joins the first route's end to the second's start, nor lies between them.
+        expect(cellAt(field, 9.07, 46.975).distance).toBeGreaterThan(999);
+        expect(cellAt(field, 9.14, 46.975).distance).toBeGreaterThan(999);
+        expect(cellAt(field, 9.0, 46.975).distance).toBeGreaterThan(999);
+    });
+
+    it("keeps the first route's wind where routes share road, and skips a route without wind", () => {
+        const field = buildWindField([{ arrows: arrowsFrom(270), line }, { arrows: arrowsFrom(90, 40), line }]);
+        if (!field) throw new Error("no field");
+        expect(cellAt(field, 9.07, 47.0).u).toBeCloseTo(20, 3);
+
+        const alone = buildWindField([{ arrows: arrowsFrom(270), line }], { halfWidthM: 1000 });
+        const withEmpty = buildWindField(
+            [{ arrows: arrowsFrom(270), line }, { arrows: [], line: [[9.07, 46.9], [9.07, 46.8]] }],
+            { halfWidthM: 1000 },
+        );
+        expect(withEmpty?.inside.length).toBe(alone?.inside.length);
     });
 
     it("caps the grid on a long route", () => {
         const long = [[5.0, 46.0], [10.5, 47.8]];
-        const field = buildWindField(
-            long.map(([lon, lat]) => ({ lon: lon ?? 0, lat: lat ?? 0, bearing: 0, windDir: 0, windSpeed: 5 })),
-            long,
-            { maxSide: 256 },
-        );
+        const arrows = long.map(([lon, lat]) => ({ lon: lon ?? 0, lat: lat ?? 0, bearing: 0, windDir: 0, windSpeed: 5 }));
+        const field = buildWindField([{ arrows, line: long }], { maxSide: 256 });
         expect(field && Math.max(field.width, field.height)).toBeLessThanOrEqual(256);
     });
 });

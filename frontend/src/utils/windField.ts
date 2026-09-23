@@ -2,10 +2,11 @@ import type { WindArrow } from "@norain/api/models";
 import { groundArrowBearing, type GroundWind } from "@/utils/wind";
 
 /**
- * A wind field for the particle animation, built from the route's own wind arrows.
+ * A wind field for the particle animation, built from each route's own wind arrows (the
+ * route, plus a journey day's alternatives).
  *
- * The forecast only knows the wind along the route (each point at its ride-time ETA), so the
- * field covers a corridor around the line and nothing else: particles never claim a wind the
+ * The forecast only knows the wind along a route (each point at its ride-time ETA), so the
+ * field covers a corridor around each line and nothing else: particles never claim a wind the
  * forecast does not have. Cells are square in Web Mercator; row 0 is the northern edge, so
  * a cell's y grows southward like Mercator y.
  *
@@ -101,29 +102,47 @@ function segmentDistanceSq(px: number, py: number, ax: number, ay: number, bx: n
     return cx * cx + cy * cy;
 }
 
-export function buildWindField(
-    arrows: readonly WindArrow[],
-    line: readonly number[][],
-    options: WindFieldOptions = {},
-): WindField | undefined {
-    const { halfWidthM = MAX_CORRIDOR_M, cellM = 300, maxSide = 1024, neighbours = 4 } = options;
-    const winds = arrows.flatMap(arrow => {
-        const wind = windComponents(arrow);
-        return wind ? [{ x: mercatorX(arrow.lon), y: mercatorY(arrow.lat), ...wind }] : [];
-    });
-    const points = line.flatMap(([lon, lat]) =>
-        lon == null || lat == null ? [] : [{ x: mercatorX(lon), y: mercatorY(lat) }],
-    );
-    if (!winds.length || !points.length) return undefined;
+/** One route for the field: its wind arrows, in route order, and its line. */
+export interface WindTrack {
+    arrows: readonly WindArrow[];
+    line: readonly number[][];
+}
 
-    // Metres per Mercator unit at the route's middle latitude; a route spans too little
-    // latitude for the difference across it to matter at this resolution.
+interface Point {
+    x: number;
+    y: number;
+}
+
+/**
+ * The field around one or more routes (a journey day's selected variant and its alternatives),
+ * each cell taking its wind from the nearest route's own arrows. List the main route first:
+ * where routes share road, it keeps the cell.
+ */
+export function buildWindField(tracks: readonly WindTrack[], options: WindFieldOptions = {}): WindField | undefined {
+    const { halfWidthM = MAX_CORRIDOR_M, cellM = 300, maxSide = 1024, neighbours = 4 } = options;
+    // A route without wind gets no corridor: off the arrows, the forecast has none to show.
+    const usable = tracks.flatMap(track => {
+        const winds = track.arrows.flatMap(arrow => {
+            const wind = windComponents(arrow);
+            return wind ? [{ x: mercatorX(arrow.lon), y: mercatorY(arrow.lat), ...wind }] : [];
+        });
+        const points = track.line.flatMap(([lon, lat]) =>
+            lon == null || lat == null ? [] : [{ x: mercatorX(lon), y: mercatorY(lat) }],
+        );
+        return winds.length && points.length ? [{ winds, points }] : [];
+    });
+    if (!usable.length) return undefined;
+
+    // Metres per Mercator unit at the routes' middle latitude; they span too little latitude
+    // for the difference across them to matter at this resolution.
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const p of points) {
-        minX = Math.min(minX, p.x);
-        minY = Math.min(minY, p.y);
-        maxX = Math.max(maxX, p.x);
-        maxY = Math.max(maxY, p.y);
+    for (const { points } of usable) {
+        for (const p of points) {
+            minX = Math.min(minX, p.x);
+            minY = Math.min(minY, p.y);
+            maxX = Math.max(maxX, p.x);
+            maxY = Math.max(maxY, p.y);
+        }
     }
     const midLat = (Math.atan(Math.sinh(Math.PI * (1 - (minY + maxY)))) * 180) / Math.PI;
     const metresPerUnit = EARTH_CIRCUMFERENCE_M * Math.cos((midLat * Math.PI) / 180);
@@ -136,55 +155,66 @@ export function buildWindField(
     const width = Math.max(1, Math.ceil((maxX - minX) / cell));
     const height = Math.max(1, Math.ceil((maxY - minY) / cell));
 
-    // The line at the grid's resolution: vertices closer than a cell add nothing to the
+    // Each line at the grid's resolution: vertices closer than a cell add nothing to the
     // distance but cost a full neighbourhood of cells each.
-    const route = [points[0] ?? { x: 0, y: 0 }];
-    for (const p of points) {
-        const last = route[route.length - 1];
-        if (last && Math.hypot(p.x - last.x, p.y - last.y) >= cell) route.push(p);
-    }
-    const end = points[points.length - 1];
-    if (end && route[route.length - 1] !== end) route.push(end);
+    const routes = usable.map(({ points }) => {
+        const route: Point[] = [points[0] ?? { x: 0, y: 0 }];
+        for (const p of points) {
+            const last = route[route.length - 1];
+            if (last && Math.hypot(p.x - last.x, p.y - last.y) >= cell) route.push(p);
+        }
+        const end = points[points.length - 1];
+        if (end && route[route.length - 1] !== end) route.push(end);
+        return route;
+    });
 
-    // Distance to the line, and which segment is nearest: each segment only visits the cells
-    // within reach of it.
+    // Distance to the nearest line, and which route and segment that is: each segment only
+    // visits the cells within reach of it. No segment joins one route's end to the next
+    // route's start, and a tie keeps the earlier route.
     const distanceSq = new Float32Array(width * height).fill(Infinity);
+    const nearestTrack = new Int32Array(width * height).fill(-1);
     const nearestSegment = new Int32Array(width * height).fill(-1);
     const reach = Math.ceil(halfWidth / cell);
-    route.forEach((a, i) => {
-        const b = route[i + 1] ?? a;
-        const cx0 = Math.max(0, Math.floor((Math.min(a.x, b.x) - minX) / cell) - reach);
-        const cx1 = Math.min(width - 1, Math.floor((Math.max(a.x, b.x) - minX) / cell) + reach);
-        const cy0 = Math.max(0, Math.floor((Math.min(a.y, b.y) - minY) / cell) - reach);
-        const cy1 = Math.min(height - 1, Math.floor((Math.max(a.y, b.y) - minY) / cell) + reach);
-        for (let cy = cy0; cy <= cy1; cy++) {
-            const py = minY + (cy + 0.5) * cell;
-            for (let cx = cx0; cx <= cx1; cx++) {
-                const index = cy * width + cx;
-                const d = segmentDistanceSq(minX + (cx + 0.5) * cell, py, a.x, a.y, b.x, b.y);
-                if (d < (distanceSq[index] ?? Infinity)) {
-                    distanceSq[index] = d;
-                    nearestSegment[index] = i;
+    routes.forEach((route, t) => {
+        route.forEach((a, i) => {
+            const b = route[i + 1] ?? a;
+            const cx0 = Math.max(0, Math.floor((Math.min(a.x, b.x) - minX) / cell) - reach);
+            const cx1 = Math.min(width - 1, Math.floor((Math.max(a.x, b.x) - minX) / cell) + reach);
+            const cy0 = Math.max(0, Math.floor((Math.min(a.y, b.y) - minY) / cell) - reach);
+            const cy1 = Math.min(height - 1, Math.floor((Math.max(a.y, b.y) - minY) / cell) + reach);
+            for (let cy = cy0; cy <= cy1; cy++) {
+                const py = minY + (cy + 0.5) * cell;
+                for (let cx = cx0; cx <= cx1; cx++) {
+                    const index = cy * width + cx;
+                    const d = segmentDistanceSq(minX + (cx + 0.5) * cell, py, a.x, a.y, b.x, b.y);
+                    if (d < (distanceSq[index] ?? Infinity)) {
+                        distanceSq[index] = d;
+                        nearestTrack[index] = t;
+                        nearestSegment[index] = i;
+                    }
                 }
             }
-        }
+        });
     });
 
     // The arrows come in route order, so the arrows nearest a cell are the ones around the
-    // point of the route nearest to it: each vertex gets its nearest arrow once, and a cell
-    // then only weighs a short run of arrows around its segment's. That keeps the cost per
+    // point of its route nearest to it: each vertex gets its route's nearest arrow once, and a
+    // cell then only weighs a short run of arrows around its segment's. That keeps the cost per
     // cell constant however wide the corridor and however dense the arrows.
-    const vertexArrow = route.map(p => {
-        let best = 0;
-        let bestD = Infinity;
-        winds.forEach((w, j) => {
-            const d = (w.x - p.x) ** 2 + (w.y - p.y) ** 2;
-            if (d < bestD) {
-                bestD = d;
-                best = j;
-            }
+    const vertexArrows = routes.map((route, t) => {
+        const winds = usable[t]?.winds ?? [];
+        return route.map(p => {
+            let best = 0;
+            let bestD = Infinity;
+            winds.forEach((w, j) => {
+                const d = (w.x - p.x) ** 2 + (w.y - p.y) ** 2;
+                if (d < bestD) {
+                    bestD = d;
+                    best = j;
+                }
+            });
+            return best;
         });
-        return best;
     });
     const run = neighbours + 2;
     const candidates: { d: number; u: number; v: number }[] = [];
@@ -198,6 +228,9 @@ export function buildWindField(
         if (!(d < halfWidth)) continue;
         const x = minX + ((index % width) + 0.5) * cell;
         const y = minY + (Math.floor(index / width) + 0.5) * cell;
+        const track = nearestTrack[index] ?? 0;
+        const winds = usable[track]?.winds ?? [];
+        const vertexArrow = vertexArrows[track] ?? [];
         const segment = nearestSegment[index] ?? 0;
         const first = Math.min(vertexArrow[segment] ?? 0, vertexArrow[segment + 1] ?? winds.length);
         const last = Math.max(vertexArrow[segment] ?? 0, vertexArrow[segment + 1] ?? 0);

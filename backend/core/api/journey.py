@@ -19,8 +19,8 @@ from pydantic import Field, field_validator, model_validator
 from ..departures import local_iso
 from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut
-from ..geo import simplify_line
-from ..journeys import NEAR_M, rank_day
+from ..geo import simplify_line, vertex_distances
+from ..journeys import FILL_CORRIDOR_M, LODGING_CORRIDOR_M, LODGING_WINDOW, lodging_candidates, rank_day
 from ..models import ForecastJob, Journey, JourneyDay, JourneyStage, route_point
 from ..pois import LODGING_KINDS, POI_CATEGORIES, pois_along_sync
 from ..schedule import LOCAL_TZ, forecast_available_at
@@ -404,14 +404,32 @@ async def journey_stage_forecast(request: HttpRequest, journey_id: UUID, stage_i
 
 
 @router.get("/journeys/{journey_id}/stages/{stage_id}/pois", response=list[PoiOut])
-async def journey_stage_pois(request: HttpRequest, journey_id: UUID, stage_id: UUID, categories: str = ""):
-    """POIs on the way along one stage (within ``NEAR_M``), for the map. ``categories`` is a
-    comma-separated filter; empty means every category."""
-    _, stage = await _owned_stage(request, journey_id, stage_id)
-    wanted = [c for c in categories.split(",") if c] or list(POI_CATEGORIES)
+async def journey_stage_pois(
+    request: HttpRequest, journey_id: UUID, stage_id: UUID, categories: str = "", lodging: bool = False
+):
+    """POIs in the area of one stage, for the map: within ``FILL_CORRIDOR_M``, where the gap fill
+    looks for a detour, so a village a kilometre off the line shows too (``offset_m`` says how
+    far). ``categories`` is a comma-separated filter; empty means every category, unless only
+    ``lodging`` is asked for.
+
+    ``lodging`` adds the places the day could have ended at: lodging of the journey's kinds
+    within ``LODGING_CORRIDOR_M`` in the day's last ``LODGING_WINDOW``, where the planner looked.
+    None on the last day, which ends at the destination."""
+    journey, stage = await _owned_stage(request, journey_id, stage_id)
+    wanted = [c for c in categories.split(",") if c] or ([] if lodging else list(POI_CATEGORIES))
     try:
         check_categories(wanted)
     except ValueError as exc:
         raise HttpError(422, str(exc)) from None
-    hits = await sync_to_async(pois_along_sync)(stage.polyline_coordinates, wanted, NEAR_M)
+    line = stage.polyline_coordinates
+    hits = await sync_to_async(pois_along_sync)(line, wanted, FILL_CORRIDOR_M) if wanted else []
+    if lodging and (stage.day.lodging or stage.day.lodging_missing):
+        total = vertex_distances(line)[-1] if len(line) > 1 else 0.0
+        near_end = lodging_candidates(
+            await sync_to_async(pois_along_sync)(line, ["lodging"], LODGING_CORRIDOR_M),
+            journey.lodging_kinds or [],
+            total * (1 - LODGING_WINDOW),
+        )
+        known = {hit.osm_ref for hit in hits}
+        hits = sorted([*hits, *(hit for hit in near_end if hit.osm_ref not in known)], key=lambda hit: hit.along_m)
     return [PoiOut(**hit.as_json()) for hit in hits]

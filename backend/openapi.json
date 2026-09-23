@@ -1079,6 +1079,16 @@
                             "type": "string"
                         },
                         "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "lodging",
+                        "schema": {
+                            "default": false,
+                            "title": "Lodging",
+                            "type": "boolean"
+                        },
+                        "required": false
                     }
                 ],
                 "responses": {
@@ -1097,7 +1107,7 @@
                         }
                     }
                 },
-                "description": "POIs on the way along one stage (within ``NEAR_M``), for the map. ``categories`` is a\ncomma-separated filter; empty means every category.",
+                "description": "POIs in the area of one stage, for the map: within ``FILL_CORRIDOR_M``, where the gap fill\nlooks for a detour, so a village a kilometre off the line shows too (``offset_m`` says how\nfar). ``categories`` is a comma-separated filter; empty means every category, unless only\n``lodging`` is asked for.\n\n``lodging`` adds the places the day could have ended at: lodging of the journey's kinds\nwithin ``LODGING_CORRIDOR_M`` in the day's last ``LODGING_WINDOW``, where the planner looked.\nNone on the last day, which ends at the destination.",
                 "tags": [
                     "Journeys"
                 ]

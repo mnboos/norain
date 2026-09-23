@@ -170,6 +170,8 @@ export class WindParticleLayer implements CustomLayerInterface {
 
     /** Replace the wind; `undefined` draws nothing. */
     setField(field: WindField | undefined) {
+        // Every route render passes the field again; only a new one may wipe the trails.
+        if (field === this.field) return;
         this.field = field;
         this.clearTrails = true;
         this.updateView();

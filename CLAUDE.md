@@ -457,7 +457,12 @@ together:
 - **The field is the route's own arrows, nothing else.** `utils/windField.ts` interpolates the
   job's `windArrows` (IDW on u/v) over a corridor along the line. Each arrow carries the wind at
   its own ETA. There is no API change and no extra provider call. Do not fill the whole
-  viewport: off the route, the forecast has no wind to show.
+  viewport: off the route, the forecast has no wind to show. On a journey day the field also
+  covers the alternatives, each from its **own** stage forecast's arrows (`JourneyDayPanel`
+  fetches a variant's forecast only once its `forecastStatus` is `done`). `buildWindField`
+  takes the routes as tracks, the selected one first so it keeps the wind where variants share
+  road. A cell reads only its nearest track's arrows, no segment joins two tracks, and a track
+  without arrows gets no corridor.
 - **The corridor width follows the zoom, the field does not.** The field is built once out to
   `MAX_CORRIDOR_M` and stores each cell's distance to the route. `corridorHalfWidthM` picks the
   width for the current zoom (about `CORRIDOR_HALF_WIDTH_PX` on screen, at least `MIN_CORRIDOR_M`)
@@ -470,8 +475,10 @@ together:
   the trail texture) goes in `prerender`. `render` only composites, as MapLibre's custom-layer
   contract requires. The field-to-clip matrix is composed in float64, or particles jitter at
   street zoom.
-- **The layer keeps the map from going idle.** `renderRoute` stops the loop and restarts it from
-  its `once("idle")` handler, and chip thinning waits on that idle. Keep that order.
+- **The layer keeps the map from going idle.** Nothing may wait on `idle` while it runs: chip
+  thinning follows `moveend` (and `renderRoute` thins at once when `fitBounds` does not move).
+  The loop keeps running across a route or alternative switch; `setField` wipes the trails
+  only for a new field object.
 - `setStyle()` (theme switch) drops custom layers, so `renderWindParticles` runs again after
   `style.load`. The layer sits directly above `route-line`, below the basemap labels and
   the invisible `route-hit` layer.
@@ -558,6 +565,9 @@ gets each day's GraphHopper alternatives, fills POI gaps and places breaks. Rows
   `manage.py import_pois` (`just poi-import`) replaces the `Poi` table in one transaction.
   `POI_RULES` in `core/pois.py` is the one tag map; a test checks the script filters every tag
   in it. Journeys store the POIs they use as JSON, never as FKs, so a re-import is free.
+  An object gets one `Poi` row per matching category (unique on `osm_ref` + `category`): a
+  vending machine selling drinks and sweets is both, so wanted categories stay ANDed per leg
+  and one machine satisfies several. Extra-tag conditions match list items (`vending=a;b`).
   Postgres jsonb arrives as text on a raw cursor (Django's loader): parse it.
 - **Request custom models only penalise** (`multiply_by` ≤ 1). GraphHopper runs LM without CH,
   and LM is only correct for a model that makes edges more expensive. "Prefer the cycle

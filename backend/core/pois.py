@@ -12,13 +12,23 @@ come back empty.
 """
 
 import json
+import re
 from dataclasses import dataclass, field
 
 from django.db import connection
 
-# A rule is (key, values, extra conditions). An object belongs to the first category whose
-# rule matches: the key has one of the values, and every extra tag has one of its values.
+# A rule is (key, values, extra conditions). A rule matches when the key has one of the values
+# and every extra tag has one of its values. An extra tag is read as a list (`vending=drinks;sweets`,
+# mappers also write commas and capitals), so one matching item is enough. An object belongs to
+# every category with a matching rule: a machine selling drinks and sweets is both.
 Rule = tuple[str, tuple[str, ...], dict[str, tuple[str, ...]]]
+
+# vending=* items per vending category. Tickets, dog bags, newspapers and farm-shop goods are out:
+# nothing a rider stops for.
+VENDING_FOOD = ("food", "snacks", "snack", "pizza", "bread", "fruits", "fruit", "sausage", "sandwiches")
+VENDING_DRINKS = ("drinks", "drink", "water", "beverages", "apple_juice")
+VENDING_SWEETS = ("sweets", "chewing_gums", "bonbons", "ice_cream", "icecream", "chocolate")
+VENDING_COFFEE = ("coffee", "hot_drinks")
 
 POI_RULES: dict[str, tuple[Rule, ...]] = {
     "toilets": (("amenity", ("toilets",), {}),),
@@ -30,11 +40,15 @@ POI_RULES: dict[str, tuple[Rule, ...]] = {
         # A fountain is only a water source when it says so.
         ("amenity", ("fountain", "water_point"), {"drinking_water": ("yes",)}),
     ),
-    "vending_machine": (("amenity", ("vending_machine",), {}),),
+    "vending_food": (("amenity", ("vending_machine",), {"vending": VENDING_FOOD}),),
+    "vending_drinks": (("amenity", ("vending_machine",), {"vending": VENDING_DRINKS}),),
+    "vending_sweets": (("amenity", ("vending_machine",), {"vending": VENDING_SWEETS}),),
+    "vending_coffee": (("amenity", ("vending_machine",), {"vending": VENDING_COFFEE}),),
     "shelter": (("amenity", ("shelter",), {}),),
     "bike_repair": (
         ("amenity", ("bicycle_repair_station",), {}),
         ("shop", ("bicycle",), {}),
+        ("amenity", ("vending_machine",), {"vending": ("bicycle_tube",)}),
     ),
     "food": (("amenity", ("cafe", "restaurant", "fast_food", "biergarten"), {}),),
     "groceries": (("shop", ("supermarket", "convenience", "bakery"), {}),),
@@ -69,15 +83,21 @@ KEPT_TAGS = (
 CLOSED_ACCESS = frozenset({"private", "no"})
 
 
-def classify(tags: dict[str, str]) -> str | None:
-    """The category of an OSM object, or None when it is not a POI we keep."""
+def _items(value: str | None) -> set[str]:
+    """A list-valued tag as its items: `Drinks, Snacks` and `drinks;snacks` alike."""
+    return {item.strip().lower() for item in re.split(r"[;,]", value or "") if item.strip()}
+
+
+def _matches(tags: dict[str, str], rule: Rule) -> bool:
+    key, values, extra = rule
+    return tags.get(key) in values and all(_items(tags.get(k)) & set(v) for k, v in extra.items())
+
+
+def categories(tags: dict[str, str]) -> list[str]:
+    """Every category of an OSM object, empty when it is not a POI we keep."""
     if tags.get("access") in CLOSED_ACCESS:
-        return None
-    for category, rules in POI_RULES.items():
-        for key, values, extra in rules:
-            if tags.get(key) in values and all(tags.get(k) in v for k, v in extra.items()):
-                return category
-    return None
+        return []
+    return [category for category, rules in POI_RULES.items() if any(_matches(tags, rule) for rule in rules)]
 
 
 def filter_tags() -> set[tuple[str, str]]:

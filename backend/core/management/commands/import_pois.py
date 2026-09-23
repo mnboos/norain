@@ -17,13 +17,13 @@ from django.db import transaction
 from shapely.geometry import shape
 
 from core.models import Poi
-from core.pois import classify, kept_tags
+from core.pois import categories, kept_tags
 
 BATCH_SIZE = 5000
 
 
 def read_pois(path: Path) -> Iterator[Poi]:
-    """One Poi per feature that classifies, areas reduced to a point on their surface."""
+    """One Poi per feature and category, areas reduced to a point on their surface."""
     seen: set[str] = set()
     with path.open(encoding="utf-8") as handle:
         for raw in handle:
@@ -32,9 +32,9 @@ def read_pois(path: Path) -> Iterator[Poi]:
                 continue
             feature = json.loads(line)
             tags = {k: str(v) for k, v in (feature.get("properties") or {}).items()}
-            category = classify(tags)
+            wanted = categories(tags)
             ref = str(feature.get("id") or "")
-            if category is None or not ref or ref in seen or not feature.get("geometry"):
+            if not wanted or not ref or ref in seen or not feature.get("geometry"):
                 continue
             geometry = shape(feature["geometry"])
             if geometry.is_empty:
@@ -43,13 +43,14 @@ def read_pois(path: Path) -> Iterator[Poi]:
             # outside it, on the other side of a river.
             point = geometry if geometry.geom_type == "Point" else geometry.representative_point()
             seen.add(ref)
-            yield Poi(
-                osm_ref=ref,
-                category=category,
-                name=tags.get("name", "")[:300],
-                tags=kept_tags(tags),
-                location=Point(point.x, point.y, srid=4326),
-            )
+            for category in wanted:
+                yield Poi(
+                    osm_ref=ref,
+                    category=category,
+                    name=tags.get("name", "")[:300],
+                    tags=kept_tags(tags),
+                    location=Point(point.x, point.y, srid=4326),
+                )
 
 
 def import_pois(path: Path) -> int:

@@ -455,15 +455,13 @@ onBeforeUnmount(() => {
 <template>
     <q-card
         flat
-        class="fit"
+        class="chart-shell"
         :class="{ 'chart-shell--compact': compact }"
         @pointermove="moveTooltip"
         @pointerleave="hideTooltip"
         @keydown.esc="hideTooltip"
     >
-        <q-card-section class="no-padding fit">
-            <div ref="chartRef" class="fit" />
-        </q-card-section>
+        <div ref="chartRef" class="chart-plot" />
         <svg class="chart-selection" aria-hidden="true">
             <circle
                 v-for="(dot, i) in selectionDots"
@@ -487,8 +485,16 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .chart-shell {
+    position: relative;
     height: 100%;
     min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+/* Out of flow: Plotly sizes its SVG in pixels, which must never feed back into the card's height. */
+.chart-plot {
+    position: absolute;
+    inset: 0;
 }
 
 /* Plotly's SVG starts at the container's top-left, so plot pixels are overlay pixels. */

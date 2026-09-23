@@ -38,6 +38,7 @@ from core.journeys import (
     NEAR_M,
     along_limit,
     gap_fixes,
+    lodging_candidates,
     longest_gaps,
     place_breaks,
     split_days,
@@ -1076,11 +1077,9 @@ async def _plan_journey_async(journey_id: str, revision: int) -> None:
     # Along the line as vertex_distances measures it, like the day limit and the POI positions.
     total_m = along_limit(base, None, None)
     day_limit = along_limit(base, _day_seconds(journey), journey.max_day_distance_m)
-    lodgings = [
-        hit
-        for hit in await _pois_along(base["polyline"], ["lodging"], LODGING_CORRIDOR_M)
-        if not journey.lodging_kinds or hit.tags.get("tourism") in journey.lodging_kinds
-    ]
+    lodgings = lodging_candidates(
+        await _pois_along(base["polyline"], ["lodging"], LODGING_CORRIDOR_M), journey.lodging_kinds or []
+    )
     try:
         cuts = split_days(total_m, day_limit, lodgings, base)
     except ValueError:

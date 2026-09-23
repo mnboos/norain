@@ -44,6 +44,17 @@ export const CASING_LIGHT = "#1b2733";
 export const CASING_DARK = "#e8eef2";
 export const CASING_OPACITY = 0.55;
 
+// The journey alternatives the user has not picked, one colour per variant: all off the warm
+// ramp and the blue line drawn when there is no forecast. Lighter on the dark basemap.
+const ALTERNATIVE_LIGHT: readonly [string, ...string[]] = ["#0d9488", "#7c3aed", "#65a30d", "#64748b"];
+const ALTERNATIVE_DARK: readonly [string, ...string[]] = ["#2dd4bf", "#a78bfa", "#a3e635", "#94a3b8"];
+
+/** The colour of the variant at `index` in the day's list, stable whichever one is picked. */
+export function alternativeColor(index: number, dark: boolean): string {
+    const palette = dark ? ALTERNATIVE_DARK : ALTERNATIVE_LIGHT;
+    return palette[index % palette.length] ?? palette[0];
+}
+
 /** One ramp step. Gradient spans are subdivided so no two stops jump further than this. */
 const MAX_SCORE_STEP = 1 / (YLORRD_8.length - 1);
 

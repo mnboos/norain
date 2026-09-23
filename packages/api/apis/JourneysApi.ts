@@ -79,6 +79,10 @@ export interface JourneysApiCoreApiJourneyJourneyStagePoisRequest {
      * 
      */
     categories?: string;
+    /**
+     * 
+     */
+    lodging?: boolean;
 }
 
 export interface JourneysApiCoreApiJourneyReplanJourneyRequest {
@@ -323,6 +327,10 @@ export class JourneysApi extends runtime.BaseAPI {
             queryParameters['categories'] = requestParameters['categories'];
         }
 
+        if (requestParameters['lodging'] != null) {
+            queryParameters['lodging'] = requestParameters['lodging'];
+        }
+
         const headerParameters: runtime.HTTPHeaders = {};
 
 
@@ -339,7 +347,7 @@ export class JourneysApi extends runtime.BaseAPI {
     }
 
     /**
-     * POIs on the way along one stage (within ``NEAR_M``), for the map. ``categories`` is a comma-separated filter; empty means every category.
+     * POIs in the area of one stage, for the map: within ``FILL_CORRIDOR_M``, where the gap fill looks for a detour, so a village a kilometre off the line shows too (``offset_m`` says how far). ``categories`` is a comma-separated filter; empty means every category, unless only ``lodging`` is asked for.  ``lodging`` adds the places the day could have ended at: lodging of the journey\'s kinds within ``LODGING_CORRIDOR_M`` in the day\'s last ``LODGING_WINDOW``, where the planner looked. None on the last day, which ends at the destination.
      * Journey Stage Pois
      */
     async coreApiJourneyJourneyStagePoisRaw(requestParameters: JourneysApiCoreApiJourneyJourneyStagePoisRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<PoiOut>>> {
@@ -350,7 +358,7 @@ export class JourneysApi extends runtime.BaseAPI {
     }
 
     /**
-     * POIs on the way along one stage (within ``NEAR_M``), for the map. ``categories`` is a comma-separated filter; empty means every category.
+     * POIs in the area of one stage, for the map: within ``FILL_CORRIDOR_M``, where the gap fill looks for a detour, so a village a kilometre off the line shows too (``offset_m`` says how far). ``categories`` is a comma-separated filter; empty means every category, unless only ``lodging`` is asked for.  ``lodging`` adds the places the day could have ended at: lodging of the journey\'s kinds within ``LODGING_CORRIDOR_M`` in the day\'s last ``LODGING_WINDOW``, where the planner looked. None on the last day, which ends at the destination.
      * Journey Stage Pois
      */
     async coreApiJourneyJourneyStagePois(requestParameters: JourneysApiCoreApiJourneyJourneyStagePoisRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<PoiOut>> {

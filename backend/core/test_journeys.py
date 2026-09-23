@@ -19,6 +19,7 @@ from .journeys import (
     NEAR_M,
     along_limit,
     gap_fixes,
+    lodging_candidates,
     longest_gaps,
     place_breaks,
     rank_day,
@@ -37,7 +38,7 @@ from .models import (
     route_line,
     route_point,
 )
-from .pois import PoiHit, classify, filter_tags, pois_along_sync
+from .pois import PoiHit, categories, filter_tags, pois_along_sync
 from .road_prefs import RoadPrefs, is_penalty_only, merge_models, road_prefs_model
 from .schedule import local_today
 from .tasks import (
@@ -98,13 +99,26 @@ class PoiCategoryTests(SimpleTestCase):
         missing = {(k, v) for k, v in filter_tags() if v not in filters.get(k, set())}
         self.assertEqual(missing, set())
 
-    def test_classify(self):
-        self.assertEqual(classify({"amenity": "drinking_water"}), "drinking_water")
-        self.assertEqual(classify({"man_made": "water_tap", "drinking_water": "yes"}), "drinking_water")
-        self.assertIsNone(classify({"man_made": "water_tap"}), "a tap that does not say drinkable is not water")
-        self.assertIsNone(classify({"amenity": "toilets", "access": "private"}))
-        self.assertEqual(classify({"tourism": "camp_site"}), "lodging")
-        self.assertIsNone(classify({"amenity": "charging_station"}), "a car charger is not an e-bike charger")
+    def test_categories(self):
+        self.assertEqual(categories({"amenity": "drinking_water"}), ["drinking_water"])
+        self.assertEqual(categories({"man_made": "water_tap", "drinking_water": "yes"}), ["drinking_water"])
+        self.assertEqual(categories({"man_made": "water_tap"}), [], "a tap that does not say drinkable is not water")
+        self.assertEqual(categories({"amenity": "toilets", "access": "private"}), [])
+        self.assertEqual(categories({"tourism": "camp_site"}), ["lodging"])
+        self.assertEqual(categories({"amenity": "charging_station"}), [], "a car charger is not an e-bike charger")
+
+    def test_vending_machines_by_what_they_sell(self):
+        def vending(value: str | None) -> list[str]:
+            tags = {"amenity": "vending_machine"} | ({"vending": value} if value is not None else {})
+            return categories(tags)
+
+        self.assertEqual(vending("excrement_bags"), [], "a dog-bag dispenser is no stop")
+        self.assertEqual(vending("parking_tickets;public_transport_tickets"), [])
+        self.assertEqual(vending(None), [], "a machine that does not say what it sells")
+        self.assertEqual(vending("drinks;sweets"), ["vending_drinks", "vending_sweets"])
+        self.assertEqual(vending("Drinks, Snacks"), ["vending_food", "vending_drinks"], "commas and capitals")
+        self.assertEqual(vending("coffee"), ["vending_coffee"])
+        self.assertEqual(vending("bicycle_tube"), ["bike_repair"])
 
 
 class PoiImportTests(TestCase):
@@ -143,6 +157,22 @@ class PoiImportTests(TestCase):
         self.assertEqual(import_pois(path), 2)
         self.assertEqual(set(Poi.objects.values_list("osm_ref", flat=True)), {"n2", "w3"})
         self.assertEqual(Poi.objects.get(osm_ref="n2").tags, {"amenity": "toilets"}, "only whitelisted tags are kept")
+
+    def test_a_machine_selling_several_things_is_one_row_per_category(self):
+        path = self._write(
+            [
+                {
+                    "type": "Feature",
+                    "id": "n5",
+                    "properties": {"amenity": "vending_machine", "vending": "drinks;sweets;condoms"},
+                    "geometry": {"type": "Point", "coordinates": [8, 47]},
+                }
+            ]
+        )
+        self.assertEqual(import_pois(path), 2)
+        self.assertEqual(
+            sorted(Poi.objects.values_list("osm_ref", "category")), [("n5", "vending_drinks"), ("n5", "vending_sweets")]
+        )
 
     def test_a_failed_import_keeps_the_old_pois(self):
         Poi.objects.create(osm_ref="n1", category="toilets", location=route_point(47, 8))
@@ -253,6 +283,12 @@ class JourneyPlanningTests(SimpleTestCase):
         self.assertAlmostEqual(cuts[1].end_along_m, 156_000)
         self.assertEqual(len(cuts), 3)
 
+    def test_lodging_candidates_filter_kind_and_window(self):
+        hotel, camp = hit("lodging", 70_000, tourism="hotel"), hit("lodging", 76_000, tourism="camp_site")
+        early = hit("lodging", 10_000, tourism="hotel")
+        self.assertEqual(lodging_candidates([hotel, camp, early], ["hotel"]), [hotel, early])
+        self.assertEqual(lodging_candidates([hotel, camp, early], [], 60_000), [hotel, camp], "no kinds: every kind")
+
     def test_no_stub_day_when_the_ride_is_just_over_the_limit(self):
         geometry = straight_geometry(84)
         cuts = split_days(along_limit(geometry, None, None), 80_000, [], geometry)
@@ -283,6 +319,22 @@ class JourneyPlanningTests(SimpleTestCase):
         ]
         fixes = gap_fixes(near, wide, 40_000, ["drinking_water"], 20_000)
         self.assertEqual([f.osm_ref for f in fixes], ["n_split"])
+
+    def test_wanted_categories_are_each_required(self):
+        wanted = ["vending_drinks", "vending_sweets"]
+        drinks_only = [hit("vending_drinks", 20_000)]
+        self.assertEqual(longest_gaps(drinks_only, 40_000, wanted), {"vending_drinks": 20_000, "vending_sweets": 40_000})
+        both = [hit("vending_drinks", 20_000, ref="n_combo"), hit("vending_sweets", 20_000, ref="n_combo")]
+        self.assertEqual(longest_gaps(both, 40_000, wanted), {"vending_drinks": 20_000, "vending_sweets": 20_000})
+
+    def test_one_machine_fixes_several_gaps_with_one_detour(self):
+        wanted = ["vending_drinks", "vending_sweets"]
+        wide = [
+            hit("vending_drinks", 20_000, offset_m=800, ref="n_combo"),
+            hit("vending_sweets", 20_000, offset_m=800, ref="n_combo"),
+        ]
+        fixes = gap_fixes([], wide, 40_000, wanted, 20_000)
+        self.assertEqual([f.osm_ref for f in fixes], ["n_combo"])
 
     def test_gap_fix_never_detours_too_far(self):
         wide = [hit("toilets", 20_000, offset_m=4000)]
@@ -567,3 +619,66 @@ class JourneyApiTests(TestCase):
         other = User.objects.create_user(username="other", email="o@example.com", password="pw")
         self.client.force_login(other)
         self.assertEqual(self.client.get(f"/api/journeys/{journey.id}").status_code, 404)
+
+    def _stage_on_day(self, journey, index: int, **day_fields) -> JourneyStage:
+        day = JourneyDay.objects.create(
+            journey=journey, index=index, date=journey.start_date, start=[8, 47], end=[8.13, 47], **day_fields
+        )
+        geometry = straight_geometry(10)  # 8.0 .. ~8.13 °E
+        return JourneyStage.objects.create(
+            day=day,
+            rank=0,
+            polyline=route_line(geometry["polyline"]),
+            total_seconds=geometry["total_seconds"],
+            total_distance_m=geometry["total_distance_m"],
+            sample_points=geometry["sample_points"],
+            vertex_times=geometry["vertex_times"],
+            geometry_fetched_at=datetime.now(UTC),
+        )
+
+    def test_stage_pois_offer_lodging_where_the_day_could_end(self):
+        self._post()
+        journey = Journey.objects.get()
+        journey.lodging_kinds = ["hotel"]
+        journey.save()
+        lodging = {"osm_ref": "n_hotel", "category": "lodging", "name": "", "lon": 8.12, "lat": 47.005}
+        lodging |= {"along_m": 9000.0, "offset_m": 550.0}
+        stage = self._stage_on_day(journey, 0, lodging=lodging)
+        last = self._stage_on_day(journey, 1)
+        Poi.objects.create(osm_ref="n_wc", category="toilets", location=route_point(47.001, 8.05))
+        Poi.objects.create(
+            osm_ref="n_hotel", category="lodging", location=route_point(47.005, 8.12), tags={"tourism": "hotel"}
+        )
+        Poi.objects.create(
+            osm_ref="n_late", category="lodging", location=route_point(47.01, 8.11), tags={"tourism": "hotel"}
+        )
+        Poi.objects.create(
+            osm_ref="n_early", category="lodging", location=route_point(47.005, 8.02), tags={"tourism": "hotel"}
+        )
+        Poi.objects.create(
+            osm_ref="n_camp", category="lodging", location=route_point(47.005, 8.125), tags={"tourism": "camp_site"}
+        )
+
+        def refs(target, query):
+            response = self.client.get(f"/api/journeys/{journey.id}/stages/{target.id}/pois?{query}")
+            self.assertEqual(response.status_code, 200, response.content)
+            return [poi["osm_ref"] for poi in response.json()]
+
+        self.assertEqual(refs(stage, "categories=toilets"), ["n_wc"], "no lodging unless asked for")
+        self.assertEqual(refs(stage, "categories=toilets&lodging=true"), ["n_wc", "n_late", "n_hotel"])
+        self.assertEqual(refs(stage, "lodging=true"), ["n_late", "n_hotel"], "lodging alone is not every category")
+        self.assertEqual(
+            refs(last, "categories=toilets&lodging=true"), ["n_wc"], "the last day ends at the destination"
+        )
+
+    def test_stage_pois_show_the_area_not_only_the_line(self):
+        self._post()
+        journey = Journey.objects.get()
+        stage = self._stage_on_day(journey, 0)
+        Poi.objects.create(osm_ref="n_on", category="toilets", location=route_point(47.001, 8.02))
+        Poi.objects.create(osm_ref="n_village", category="toilets", location=route_point(47.009, 8.05))  # ~1 km
+        Poi.objects.create(osm_ref="n_far", category="toilets", location=route_point(47.027, 8.08))  # ~3 km
+
+        response = self.client.get(f"/api/journeys/{journey.id}/stages/{stage.id}/pois?categories=toilets")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual([poi["osm_ref"] for poi in response.json()], ["n_on", "n_village"])

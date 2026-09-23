@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, ref, toRefs, watch } from "vue";
+import { useQuasar } from "quasar";
 import { symSharpBed, symSharpCloudOff, symSharpStar, symSharpWarning } from "@quasar/extras/material-symbols-sharp";
 import type { JourneyDayOut, JourneyOut, JourneyStageOut, PoiOut } from "@norain/api/models";
 import ForecastSummaryCard from "@/components/ForecastSummaryCard.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import WeatherChart from "@/components/WeatherChart.vue";
-import { useJourneyStageForecast, useJourneyStagePois } from "@/queries/journeys";
+import { useJourneyStageForecast, useJourneyStageForecasts, useJourneyStagesPois } from "@/queries/journeys";
 import { clock, dayLabel, duration, km } from "@/utils/journeys";
-import { poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
-import { scoreColor } from "@/utils/rideQuality";
+import { CANDIDATE_COLOR, poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
+import { alternativeColor, scoreColor } from "@/utils/rideQuality";
 
+const $q = useQuasar();
 const props = defineProps<{
     journey: JourneyOut;
     day: JourneyDayOut;
@@ -34,6 +36,27 @@ function pick(id: string) {
     userPicked.value = true;
 }
 const stage = computed(() => stages.value.find(s => s.id === selectedId.value));
+// The variants not picked, each in its own colour on the map (by its place in the list, so a
+// variant keeps its colour whichever one is picked); a click on one picks it. Each brings its
+// own forecast's wind for the animation, once that forecast is done: waiting on the rest would
+// open a job socket per variant.
+const forecastedAlternatives = computed(() =>
+    day.value.forecastAvailable
+        ? stages.value.filter(s => s.id !== selectedId.value && s.forecastStatus === "done").map(s => s.id)
+        : [],
+);
+const alternativeForecasts = useJourneyStageForecasts(() => journey.value.id, forecastedAlternatives);
+const alternativeLines = computed(() => {
+    const windArrows = new Map(
+        forecastedAlternatives.value.map((id, n) => [id, alternativeForecasts.value[n]?.data?.windArrows] as const),
+    );
+    return stages.value
+        .map((s, index) => ({ id: s.id, line: s.path, index, windArrows: windArrows.get(s.id) }))
+        .filter(s => s.id !== selectedId.value);
+});
+function variantColor(index: number): string {
+    return alternativeColor(index, $q.dark.isActive);
+}
 
 const forecastQuery = useJourneyStageForecast(
     () => journey.value.id,
@@ -50,16 +73,19 @@ watch(forecast, () => {
     selectedSample.value = 0;
 });
 
-// Everything on the way, not just the planned stops, when the user asks for it.
+// The candidates the planner did not pick, grey, when the user asks for them: the wanted
+// categories in the area of every variant, and other lodging where the day could have ended.
 const showAllPois = ref(false);
-const { data: wayPois } = useJourneyStagePois(
+const stageIds = computed(() => (showAllPois.value ? stages.value.map(s => s.id) : []));
+const areaPois = useJourneyStagesPois(
     () => journey.value.id,
-    () => stage.value?.id,
-    () => (showAllPois.value ? journey.value.poiCategories : []),
+    stageIds,
+    () => journey.value.poiCategories,
+    true,
 );
 
-function mapPoi(poi: PoiOut, emphasis: boolean): MapPoi {
-    return { lon: poi.lon, lat: poi.lat, category: poi.category, name: poi.name, emphasis };
+function mapPoi(poi: PoiOut, planned: boolean, note?: string): MapPoi {
+    return { osmRef: poi.osmRef, lon: poi.lon, lat: poi.lat, category: poi.category, name: poi.name, planned, note };
 }
 const mapPois = computed<MapPoi[]>(() => {
     const planned = [
@@ -67,11 +93,22 @@ const mapPois = computed<MapPoi[]>(() => {
         ...(stage.value?.detours ?? []).map(p => mapPoi(p, true)),
         ...(day.value.lodging ? [mapPoi(day.value.lodging, true)] : []),
     ];
-    const seen = new Set(planned.map(p => `${p.lon},${p.lat}`));
-    const extra = showAllPois.value
-        ? (wayPois.value ?? []).filter(p => !seen.has(`${p.lon},${p.lat}`)).map(p => mapPoi(p, false))
-        : [];
-    return [...planned, ...extra];
+    // The other variants' stops, grey like the candidates: planned, but not on the picked line.
+    const otherPlanned = stages.value.flatMap((s, index) =>
+        s.id === selectedId.value
+            ? []
+            : [
+                  ...(s.breaks ?? []).flatMap(b =>
+                      (b.pois ?? []).map(p => mapPoi(p, false, `Pause in Variante ${index + 1}`)),
+                  ),
+                  ...(s.detours ?? []).map(p => mapPoi(p, false, `Umweg in Variante ${index + 1}`)),
+              ],
+    );
+    const candidates = areaPois.value.flatMap(query => (query.data ?? []).map(p => mapPoi(p, false)));
+    // One marker per OSM object, planned first: a machine selling drinks and sweets comes back
+    // once per category, and variants share most of their area.
+    const seen = new Set<string>();
+    return [...planned, ...otherPlanned, ...candidates].filter(p => !seen.has(p.osmRef) && seen.add(p.osmRef));
 });
 
 const missingGaps = computed(() =>
@@ -150,6 +187,12 @@ function breakEta(elapsedS: number): string {
                                     </q-item-section>
                                     <q-item-section>
                                         <q-item-label>
+                                            <span
+                                                v-if="alternative.id !== selectedId"
+                                                class="line-swatch q-mr-xs"
+                                                :style="{ background: variantColor(n) }"
+                                                aria-hidden="true"
+                                            />
                                             Variante {{ n + 1 }}
                                             <q-icon
                                                 v-if="alternative.recommended"
@@ -197,7 +240,7 @@ function breakEta(elapsedS: number): string {
                                     <div v-if="!stop.pois?.length" class="text-caption text-muted">
                                         Hier gibt es nichts Gewünschtes.
                                     </div>
-                                    <div v-for="poi in stop.pois" :key="poi.osmRef" class="text-caption">
+                                    <div v-for="poi in stop.pois" :key="`${poi.osmRef}:${poi.category}`" class="text-caption">
                                         {{ poiCategory(poi.category).emoji }} {{ poiName(poi) }}
                                     </div>
                                 </q-timeline-entry>
@@ -205,7 +248,7 @@ function breakEta(elapsedS: number): string {
                             <div v-for="gap in missingGaps" :key="gap" class="text-caption text-negative">
                                 {{ gap }}
                             </div>
-                            <div v-for="detour in stage.detours" :key="detour.osmRef" class="text-caption text-muted">
+                            <div v-for="detour in stage.detours" :key="`${detour.osmRef}:${detour.category}`" class="text-caption text-muted">
                                 Umweg zu {{ poiCategory(detour.category).emoji }} {{ poiName(detour) }}
                             </div>
                         </q-card-section>
@@ -245,20 +288,36 @@ function breakEta(elapsedS: number): string {
             </div>
         </div>
 
-        <q-card v-if="forecast" class="column overflow-hidden" style="height: 55vh; min-height: 320px">
+        <!-- Without a forecast (past the forecast window) the map still shows the line and the stops. -->
+        <q-card v-if="stage" class="column overflow-hidden" style="height: 55vh; min-height: 320px">
             <NiceMap
                 :route-weather="forecast"
+                :preview-line="forecast ? undefined : stage.path"
                 :selected-sample="selectedSample"
                 :pois="mapPois"
+                :alternative-lines="alternativeLines"
                 @select-sample="selectedSample = $event"
+                @select-alternative="pick"
             />
         </q-card>
-        <q-toggle
-            v-if="forecast"
-            v-model="showAllPois"
-            dense
-            label="Alle gewünschten Orte entlang der Strecke zeigen"
-        />
+        <div v-if="stage" class="row items-center q-gutter-x-md">
+            <q-toggle v-model="showAllPois" dense label="Weitere Orte in der Umgebung der Strecken zeigen (grau)" />
+            <span class="text-caption text-muted">
+                Farbig: eingeplant ·
+                <span class="poi-dot" :style="{ background: CANDIDATE_COLOR }" aria-hidden="true" />
+                nicht eingeplant
+            </span>
+            <span v-if="alternativeLines.length" class="text-caption text-muted">
+                <span
+                    v-for="alternative in alternativeLines"
+                    :key="alternative.id"
+                    class="line-swatch q-mr-xs"
+                    :style="{ background: variantColor(alternative.index) }"
+                    aria-hidden="true"
+                />
+                weitere Varianten, antippen zum Wählen
+            </span>
+        </div>
 
         <q-inner-loading :showing="forecastQuery.isFetching.value && !forecast">
             <q-circular-progress
@@ -282,5 +341,19 @@ function breakEta(elapsedS: number): string {
     width: 14px;
     height: 14px;
     border-radius: 3px;
+}
+.line-swatch {
+    display: inline-block;
+    width: 18px;
+    height: 4px;
+    border-radius: 2px;
+    vertical-align: middle;
+}
+.poi-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    vertical-align: middle;
 }
 </style>

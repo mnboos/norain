@@ -479,14 +479,18 @@ class Poi(models.Model):
     """A point of interest near bike routes, extracted from OSM (see core/pois.py).
 
     Replaced wholesale by ``manage.py import_pois``. Nothing references a row by key:
-    journeys store the POIs they use as JSON, so a re-import never touches them.
+    journeys store the POIs they use as JSON, so a re-import never touches them. An object has
+    one row per category it belongs to: a machine selling drinks and sweets is two rows.
     """
 
-    osm_ref = models.CharField(max_length=32, unique=True, help_text="n123 / w456 / r789")
+    osm_ref = models.CharField(max_length=32, db_index=True, help_text="n123 / w456 / r789")
     category = models.CharField(max_length=32, db_index=True)
     name = models.CharField(max_length=300, blank=True, default="")
     tags = models.JSONField(default=dict, blank=True, help_text="A whitelist of OSM tags, see core.pois.KEPT_TAGS")
     location = models.PointField(srid=4326, geography=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["osm_ref", "category"], name="unique_poi_category")]
 
     def __str__(self):
         return f"{self.category}: {self.name or self.osm_ref}"
