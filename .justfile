@@ -21,8 +21,13 @@ container := env("CONTAINER_ENGINE", if os_family() == "windows" { "podman" } el
 # The extract every graph build uses; same default as docker-compose.base.yml.
 osm_data_url := env("OSM_DATA_URL", "https://download.geofabrik.de/europe/switzerland-latest.osm.pbf")
 
-# The file just poi-extract writes and just poi-import reads, next to the extract in data/graphhopper/osm.
-pois_file := "pois-" + without_extension(without_extension(file_name(osm_data_url))) + ".geojsonseq"
+# The bike-filtered file every graph build reads; same default as the GraphHopper entrypoint.
+# just osm-filter-many-raw-pbf-into-one writes it, so for such files it must be set in .env.
+routing_osm_file_filtered := env("ROUTING_OSM_FILE_FILTERED", "bike-" + file_name(osm_data_url))
+
+# The POIs that belong to that file: pois-<its name without bike- and .osm.pbf>, next to it in
+# ROUTING_OSM_IMPORT_DIR. just poi-extract and just osm-filter-many-raw-pbf-into-one write it, just poi-import reads it.
+pois_file := "pois-" + trim_start_match(without_extension(without_extension(routing_osm_file_filtered)), "bike-") + ".geojsonseq"
 
 # List the recipes by group.
 default:
@@ -45,7 +50,7 @@ setup:
     uv venv --clear
     uv sync
 
-[doc("Start PostGIS, Redis, GraphHopper and Photon on the host ports set in .env.")]
+[doc("Start PostGIS, Redis, GraphHopper and Photon on the host ports set in .env. GraphHopper needs a graph first: just build-graphhopper-graph-from FILE.")]
 [group('dev')]
 services:
     {{ container }} compose up -d db redis graphhopper photon
@@ -104,16 +109,16 @@ thumbnail-refresh $route_id:
 routing-backfill *args:
     uv run python manage.py backfill_route_vertex_times {{ args }}
 
-[doc("Rebuild the routing graph of the COMPOSE_FILE stack after editing graphhopper-config.yaml or data/graphhopper/models/ (ride speeds live there). Empties its graph cache and builds it again from the bike-filtered extract; the OSM extract and elevation tiles are kept. Takes minutes.")]
+[doc("Build the routing graph of the COMPOSE_FILE stack from a bike-filtered .osm.pbf in ROUTING_OSM_IMPORT_DIR (a file name, or a path to it), e.g. just build-graphhopper-graph-from bike-europe-cycling.osm.pbf. Run it after just osm-filter-many-raw-pbf-into-one, or after editing graphhopper-config.yaml or data/graphhopper/models/ (ride speeds live there). Empties the graph cache first; the file and the elevation tiles are kept. Takes minutes, hours for a large area. The container never builds by itself; this is the only way. bike-<OSM_DATA_URL's file name> need not exist yet: the build downloads and filters it.")]
 [group('geodata')]
-[confirm("This deletes the routing graph of the COMPOSE_FILE stack and builds it again. Continue?")]
-routing-build:
-    {{ container }} compose stop graphhopper
+[confirm("This deletes the routing graph of the COMPOSE_FILE stack and builds a new one. Continue?")]
+build-graphhopper-graph-from filtered_pbf:
+    {{ if path_exists(join(justfile_directory(), env("ROUTING_OSM_IMPORT_DIR"), file_name(filtered_pbf))) == "true" { "" } else if file_name(filtered_pbf) == "bike-" + file_name(osm_data_url) { "" } else { error(file_name(filtered_pbf) + " is not in ROUTING_OSM_IMPORT_DIR (" + env("ROUTING_OSM_IMPORT_DIR") + ")") } }}{{ container }} compose stop graphhopper
     {{ container }} compose run --rm --entrypoint bash graphhopper -c 'rm -rf /graph-cache/..?* /graph-cache/.[!.]* /graph-cache/*'
-    {{ container }} compose run --rm -e GRAPHHOPPER_BUILD_ONLY=true graphhopper
+    {{ container }} compose run --rm -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper build
     {{ container }} compose up -d graphhopper
 
-[doc("Print each bike profile's average speed on a few reference routes. Run it after routing-build to see what a speed change did.")]
+[doc("Print each bike profile's average speed on a few reference routes. Run it after build-graphhopper-graph-from to see what a speed change did.")]
 [group('geodata')]
 routing-speeds *args:
     uv run --project backend python scripts/routing_speeds.py {{ args }}
@@ -124,26 +129,26 @@ routing-speeds *args:
 routing-refresh-routes:
     uv run python manage.py shell -c "from core.models import RecurringRoute; from core.tasks import refresh_route_geometry; print(sum(refresh_route_geometry.enqueue(str(i)) is not None for i in RecurringRoute.objects.values_list('id', flat=True)), 'routes queued')"
 
-[doc("Build the routing graph from local .osm.pbf files instead of downloading OSM_DATA_URL, e.g. just osm-import ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Filters them for bikes like every build and merges several into one. One file must have OSM_DATA_URL's file name; for several, set OSM_DATA_URL to a plain file name for the merged set, e.g. dach.osm.pbf. Deletes the current graph first; the elevation tiles are kept. Takes minutes.")]
+[doc("Filter raw .osm.pbf files for bikes and merge them into ROUTING_OSM_FILE_FILTERED (e.g. bike-europe-cycling.osm.pbf) in ROUTING_OSM_IMPORT_DIR, plus the matching POI file, e.g. just osm-filter-many-raw-pbf-into-one ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Builds no graph: run just build-graphhopper-graph-from <that file> next.")]
 [group('geodata')]
-[confirm("This deletes the local routing graph and builds a new one from the files. Continue?")]
+[confirm("This overwrites ROUTING_OSM_FILE_FILTERED and its POI file. Continue?")]
 [positional-arguments]
 [unix]
-osm-import +files:
-    CONTAINER={{ quote(container) }} OSM_DATA_URL={{ quote(osm_data_url) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} bash scripts/osm-import.sh "$@"
+osm-filter-many-raw-pbf-into-one +files:
+    CONTAINER={{ quote(container) }} ROUTING_OSM_FILE_FILTERED={{ quote(env("ROUTING_OSM_FILE_FILTERED", "")) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} bash scripts/osm-filter-many-raw-pbf-into-one.sh "$@"
 
 # Git Bash: just runs a shebang recipe through cygpath, which Git does not put on PATH, and
 # the bash on PATH is WSL's. [script] needs neither.
-[doc("Build the routing graph from local .osm.pbf files instead of downloading OSM_DATA_URL, e.g. just osm-import ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Filters them for bikes like every build and merges several into one. One file must have OSM_DATA_URL's file name; for several, set OSM_DATA_URL to a plain file name for the merged set, e.g. dach.osm.pbf. Deletes the current graph first; the elevation tiles are kept. Takes minutes.")]
+[doc("Filter raw .osm.pbf files for bikes and merge them into ROUTING_OSM_FILE_FILTERED (e.g. bike-europe-cycling.osm.pbf) in ROUTING_OSM_IMPORT_DIR, plus the matching POI file, e.g. just osm-filter-many-raw-pbf-into-one ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Builds no graph: run just build-graphhopper-graph-from <that file> next.")]
 [group('geodata')]
-[confirm("This deletes the local routing graph and builds a new one from the files. Continue?")]
+[confirm("This overwrites ROUTING_OSM_FILE_FILTERED and its POI file. Continue?")]
 [positional-arguments]
 [windows]
 [script("C:/Program Files/Git/bin/bash.exe", "-eu")]
-osm-import +files:
-    CONTAINER={{ quote(container) }} OSM_DATA_URL={{ quote(osm_data_url) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/osm-import.sh "$@"
+osm-filter-many-raw-pbf-into-one +files:
+    CONTAINER={{ quote(container) }} ROUTING_OSM_FILE_FILTERED={{ quote(env("ROUTING_OSM_FILE_FILTERED", "")) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/osm-filter-many-raw-pbf-into-one.sh "$@"
 
-[doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) from the raw extract in data/graphhopper/osm, e.g. after a new download. Writes pois-<extract>.geojsonseq next to it; just poi-import loads it.")]
+[doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) from OSM_DATA_URL's raw extract in ROUTING_OSM_IMPORT_DIR, e.g. after a new download (just osm-filter-many-raw-pbf-into-one writes them for its files). Writes pois-<extract>.geojsonseq next to it; just poi-import loads it.")]
 [group('geodata')]
 poi-extract:
     {{ container }} compose build graphhopper
@@ -153,9 +158,9 @@ poi-extract:
 [group('geodata')]
 [working-directory("backend")]
 poi-import:
-    uv run python manage.py import_pois "../data/graphhopper/osm/{{ pois_file }}"
+    uv run python manage.py import_pois {{ quote(join(justfile_directory(), env("ROUTING_OSM_IMPORT_DIR"), pois_file)) }}
 
-[doc("On the VPS: extract the POIs from the raw extract in APP_STORAGE_PATH/graphhopper/osm. just poi-import-prod loads them.")]
+[doc("On the VPS: extract the POIs from the raw extract in ROUTING_OSM_IMPORT_DIR. just poi-import-prod loads them.")]
 [group('geodata')]
 poi-extract-prod:
     {{ container }} compose --env-file .env run --rm --pull never --no-deps --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/{{ pois_file }}" "/osm_data/{{ file_name(osm_data_url) }}"
@@ -253,7 +258,7 @@ claude-deepseek:
 
 alias claude := claude-deepseek
 
-[doc("Download the OSM extracts into data/downloads/osm (only what changed since); build the graph from them with just osm-import.")]
+[doc("Download the OSM extracts into data/downloads/osm (only what changed since); filter them with just osm-filter-many-raw-pbf-into-one, then just build-graphhopper-graph-from <that file>.")]
 [windows]
 download-pbf:
     wsl bash -c "chmod +x scripts/download-pbf.sh && ./scripts/download-pbf.sh"
@@ -263,7 +268,7 @@ download-pbf:
 download-photon-dumps:
     wsl bash -c "chmod +x scripts/download-photon-dumps.sh && ./scripts/download-photon-dumps.sh"
 
-[doc("Download the OSM extracts into data/downloads/osm (only what changed since); build the graph from them with just osm-import.")]
+[doc("Download the OSM extracts into data/downloads/osm (only what changed since); filter them with just osm-filter-many-raw-pbf-into-one, then just build-graphhopper-graph-from <that file>.")]
 [linux]
 download-pbf:
     chmod +x scripts/download-pbf.sh

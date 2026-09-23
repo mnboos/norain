@@ -1,31 +1,32 @@
 # Rebuild the routing graph, or build it elsewhere
 
-GraphHopper builds its routing graph when `/graph-cache` is empty and then serves it. That
-is true in development and on the production VPS alike (`GRAPHHOPPER_BUILD_GRAPH`, default
-`true`). GraphHopper's own name for this step is "import".
+The GraphHopper container never builds a graph by itself. With an empty `/graph-cache` it
+stops with an error that names the command below. You build it by hand, in development and on
+the production VPS alike. GraphHopper's own name for this step is "import".
 
 ## Rebuild on the VPS
 
-On the VPS, from `/srv/norain`:
+On the VPS, from the checkout (`COMPOSE_FILE` in `.env` selects the production stack), with
+`FILE` a bike-filtered `.osm.pbf` in `ROUTING_OSM_IMPORT_DIR`:
 
 ```bash
-docker compose --env-file .env -f docker-compose.prod.yml stop graphhopper
-rm -rf /srv/norain-data/graphhopper/cache
-mkdir /srv/norain-data/graphhopper/cache
-docker compose --env-file .env -f docker-compose.prod.yml up -d graphhopper
-docker compose --env-file .env -f docker-compose.prod.yml logs -f graphhopper
+just build-graphhopper-graph-from FILE
 ```
 
-The extract and elevation tiles in `graphhopper/osm` are reused. Delete the extract too if
+It stops GraphHopper, empties the graph cache, builds the graph from `FILE`
+(`graphhopper build` in the container) and starts GraphHopper again. For
+`bike-<OSM_DATA_URL's file name>` it downloads and filters the extract first, if needed.
+
+The extract and elevation tiles in `ROUTING_OSM_IMPORT_DIR` are reused. Delete the extract too if
 you want fresh OSM data. The build heap is `GRAPHHOPPER_BUILD_HEAP`, and
 `GRAPHHOPPER_MEM_LIMIT` must fit it plus JVM overhead: a build that stops with `Killed` and
 exit code 137 hit that limit, not the heap. Routing fails until the build is done. Then do
 [step 4](#4-refresh-what-depended-on-the-old-graph).
 
-`just routing-build` does the same with the stack `COMPOSE_FILE` in `.env` names, so on the VPS
-it empties and rebuilds `APP_STORAGE_PATH/graphhopper/cache`.
-
 ### A large area on a small VPS
+
+For several countries merged by `just osm-filter-many-raw-pbf-into-one` on another machine, copy the filtered file
+(`bike-europe-cycling.osm.pbf`, say) into `ROUTING_OSM_IMPORT_DIR` and build from it.
 
 By default the build holds the whole graph in the heap (`RAM_STORE`), which for all of Europe
 is far more than a 24 GB VPS has. `GRAPHHOPPER_BUILD_DATAACCESS=MMAP` builds it in files on
@@ -41,10 +42,9 @@ GRAPHHOPPER_MEM_LIMIT=20g
 Free the memory the other services hold while it runs, build once, then start everything:
 
 ```bash
-docker compose --env-file .env -f docker-compose.prod.yml stop
-rm -rf /srv/norain-data/graphhopper/cache/*
-docker compose --env-file .env -f docker-compose.prod.yml run --rm -e GRAPHHOPPER_BUILD_ONLY=true graphhopper
-docker compose --env-file .env -f docker-compose.prod.yml up -d
+docker compose stop
+just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
+docker compose up -d
 ```
 
 These numbers are a starting point, not measured values. A Java `OutOfMemoryError` means the
@@ -75,7 +75,7 @@ VPS alone does nothing — the running server keeps the weights baked into its g
 after a restart it refuses to load it at all. The ride speeds themselves are described in
 [configuration](../reference/configuration.md#ride-speed).
 
-For a graph you only want locally — after a speed change, say — `just routing-build` does
+For a graph you only want locally — after a speed change, say — `just build-graphhopper-graph-from <filtered .osm.pbf>` does
 step 1 and starts the server again, with the heaps from `.env`.
 
 ### 1. Build on the build machine
@@ -84,18 +84,18 @@ From the repository root, with `OSM_DATA_URL` set to the extract you want (the d
 is Switzerland; Geofabrik's combined `europe/dach-latest.osm.pbf` covers DACH):
 
 ```bash
-docker compose -f docker-compose.dev.yml stop graphhopper
-mv data/graphhopper/cache data/graphhopper/cache.old && mkdir data/graphhopper/cache
-GRAPHHOPPER_BUILD_ONLY=true GRAPHHOPPER_BUILD_HEAP=16g GRAPHHOPPER_MEM_LIMIT=20g \
-  docker compose -f docker-compose.dev.yml run --rm graphhopper
+GRAPHHOPPER_BUILD_HEAP=16g GRAPHHOPPER_MEM_LIMIT=20g \
+  just build-graphhopper-graph-from bike-dach-latest.osm.pbf
 ```
 
 Switzerland builds in a few GB of heap; DACH with three CH profiles needs roughly
-16–24 GB. The container exits with `Build finished` when the graph is ready. It builds
+16–24 GB. The build prints `Build finished` when the graph is ready; the recipe then starts
+GraphHopper on it. It builds
 from a copy of the extract that osmium has cut down to what the bike profiles use
-(`bike-<extract>`). The extract, that copy and the elevation tiles stay in
-`data/graphhopper/osm/` and are not needed on the VPS. To build from files you already
-have, or from several countries merged into one, use `just osm-import FILE…` as described in
+(`bike-<extract>`, or `ROUTING_OSM_FILE_FILTERED`). The extract, that copy and the elevation tiles stay in
+`ROUTING_OSM_IMPORT_DIR` and are not needed on the VPS. To build from files you already
+have, or from several countries merged into one, use `just osm-filter-many-raw-pbf-into-one FILE…` and then
+`just build-graphhopper-graph-from` with the file it wrote, as described in
 [build routing and search from downloaded files](import-geodata.md).
 
 Check the size. With the default `GRAPHHOPPER_DATAACCESS=MMAP` the server pages it in from
@@ -132,9 +132,7 @@ start are slower. Memory above `GRAPHHOPPER_MEM_LIMIT`'s heap share goes to cach
 file, and more of it means fewer disk reads. With `RAM_STORE` instead, set `GRAPHHOPPER_HEAP`
 about 2 GB above the graph size and `GRAPHHOPPER_MEM_LIMIT` about 1–2 GB above the heap.
 
-Once `/info` answers, delete `cache.old`. To keep the VPS from ever building its own graph
-(for example after someone empties the cache), set `GRAPHHOPPER_BUILD_GRAPH=false` in its
-`.env`: an empty cache then stops the container with an error instead.
+Once `/info` answers, delete `cache.old`.
 
 ## 4. Refresh what depended on the old graph
 

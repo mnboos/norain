@@ -25,13 +25,13 @@ take precedence over values loaded by `python-dotenv`.
 | `OPENWEATHERMAP_API_KEY` | Optional | Enables OWM fallback when primary fetching fails |
 | `WEATHERUNDERGROUND_API_KEY` | Optional | Pro only: corrects temperature and rain risk near now with nearby personal weather stations. Budgeted for the free PWS owner key (1500 calls/day, 30/min) |
 | `REDIS_URL` | `redis://localhost:6379` | In-flight grid-cell claims (DB 1) and the forecast-progress channel layer (DB 2); needed by the web process and every worker |
-| `OSM_DATA_URL` | `https://download.geofabrik.de/europe/switzerland-latest.osm.pbf` | The OSM extract GraphHopper builds its graph from, when `/graph-cache` is empty. Every build reads `bike-<its file name>`, a copy filtered for bikes. A plain file name (no download) names a set merged by `just osm-import`, see [downloaded files](../how-to/import-geodata.md) |
+| `OSM_DATA_URL` | `https://download.geofabrik.de/europe/switzerland-latest.osm.pbf` | The unfiltered OSM extract `just build-graphhopper-graph-from bike-<its file name>` downloads and filters for bikes when that file is missing |
+| `ROUTING_OSM_FILE_FILTERED` | `bike-<file name of OSM_DATA_URL>` | The bike-filtered file in `ROUTING_OSM_IMPORT_DIR` that `just osm-filter-many-raw-pbf-into-one` writes, with its POIs, and `just poi-import` reads the POIs of. The graph itself is built from the file you pass to `just build-graphhopper-graph-from`; for `bike-<file name of OSM_DATA_URL>` that build downloads and filters the extract first. Set it for imported files, e.g. `bike-europe-cycling.osm.pbf` for several countries merged, see [downloaded files](../how-to/import-geodata.md) |
+| `ROUTING_OSM_IMPORT_DIR` | Required; `./data/graphhopper/osm` in `.env.template`, `/srv/norain-data/graphhopper/osm` in production | The host folder GraphHopper imports from, mounted at `/osm_data`: `ROUTING_OSM_FILE_FILTERED`, a downloaded extract and the elevation tiles. `just osm-filter-many-raw-pbf-into-one` and `just poi-extract` write their files here |
 | `GRAPHHOPPER_HEAP` | `6g` | GraphHopper serving JVM maximum heap. With `MMAP` a few GB are enough; with `RAM_STORE` it must hold the whole graph |
 | `GRAPHHOPPER_BUILD_HEAP` | `GRAPHHOPPER_HEAP` | JVM maximum heap while building the graph |
 | `GRAPHHOPPER_DATAACCESS` | `MMAP` | How the server holds the graph. `MMAP` lets the OS page it in from disk, so the heap stays small and the first queries after a start are slower; `RAM_STORE` keeps all of it in the heap. Serving only: the build uses `GRAPHHOPPER_BUILD_DATAACCESS`. Both write the same files, so switching needs no rebuild |
 | `GRAPHHOPPER_BUILD_DATAACCESS` | `RAM_STORE` | How the build holds the graph. `RAM_STORE` builds it in the heap; `MMAP` builds it in files on `/graph-cache`, so a large area (all of Europe, say) builds on a machine with far less memory, more slowly. The heap still holds the OSM reader's node map and the CH/LM bookkeeping |
-| `GRAPHHOPPER_BUILD_GRAPH` | `true` | `true` builds the graph from `OSM_DATA_URL` when `/graph-cache` is empty. `false` exits with an error instead, for a graph [built elsewhere](../how-to/build-routing-graph.md) and copied in |
-| `GRAPHHOPPER_BUILD_ONLY` | `false` | `true` exits once the graph is built instead of serving it |
 | `GRAPHHOPPER_MEM_LIMIT` | `8g` | GraphHopper container memory and swap limit, during the build too: it must fit `GRAPHHOPPER_BUILD_HEAP` plus JVM overhead, or the kernel kills the build (exit 137, `Killed`) |
 | `PHOTON_INDEX_URL` | `https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst` | Photon import |
 | `PHOTON_INDEX_FILE` | Empty | Local artifact path inside the container; takes precedence over the URL. Several `.jsonl.zst` / `.jsonl` dumps, separated by spaces, become one index |
@@ -80,9 +80,9 @@ CORS allows `http://localhost:$FRONTEND_PORT` and `http://127.0.0.1:$FRONTEND_PO
 | Path | Contents |
 | --- | --- |
 | `${APP_STORAGE_PATH}/db/app/data/` | Development PostgreSQL/PostGIS data |
-| `data/graphhopper/osm/` | Downloaded OSM extract, its bike-filtered copy (`bike-*.osm.pbf`, the file the graph is built from) and elevation tiles (only read while building the graph) |
+| `ROUTING_OSM_IMPORT_DIR` (`data/graphhopper/osm/`) | Downloaded OSM extract, its bike-filtered copy (`bike-*.osm.pbf`, the file the graph is built from) and elevation tiles (only read while building the graph) |
 | `data/graphhopper/cache/` | Built routing graph; empty it to build a new one |
-| `data/downloads/{osm,photon}/` | OSM extracts and Photon dumps from `just download-pbf` / `just download-photon-dumps`; not committed, only read by `osm-import` / `photon-import` |
+| `data/downloads/{osm,photon}/` | OSM extracts and Photon dumps from `just download-pbf` / `just download-photon-dumps`; not committed, only read by `osm-filter-many-raw-pbf-into-one` / `photon-import` |
 | `data/graphhopper/graphhopper-config.yaml` | Mounted routing configuration |
 | `data/graphhopper/models/` | Custom e-bike routing models |
 | `data/photon/` | Photon search data; inner `photon_data/` indicates an existing index |
@@ -152,8 +152,8 @@ only the factor is ours, in `bike_speed.json`, which must stay **last** in
 ### Changing a speed
 
 1. Edit the factor (or the cap, or a slope rule) in the profile's file.
-2. `just routing-build` — the speed is baked into the CH preparation, so it only takes
-   effect through a new graph. This deletes `data/graphhopper/cache` and builds it again;
+2. `just build-graphhopper-graph-from <filtered .osm.pbf>` — the speed is baked into the CH preparation, so it only takes
+   effect through a new graph. This empties the graph cache and builds it again;
    it takes minutes. Per-request speeds are not an option: they need `ch.disable=true`,
    which turns a few-millisecond query into roughly a second.
 3. `just routing-speeds` — prints what each profile now rides on four reference routes,
@@ -161,8 +161,8 @@ only the factor is ours, in `bike_speed.json`, which must stay **last** in
 4. `just routing-refresh-routes` — saved routes store their travel times, so they keep the
    old arrival times until they are routed again. Needs a worker on the `default` queue.
 
-On production, deploy the changed files, then stop `graphhopper`, empty
-`graphhopper/cache` and start it again: it builds the new graph. On a VPS without the
+On production, deploy the changed files, then run `just build-graphhopper-graph-from` there
+with the filtered file; the container never rebuilds by itself. On a VPS without the
 memory for that, [build the graph elsewhere](../how-to/build-routing-graph.md). Step 4
 applies there too.
 

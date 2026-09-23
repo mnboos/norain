@@ -30,8 +30,8 @@ since, so it is also how you get fresh data later. `data/downloads/` is not comm
 ## 2. Set `.env`
 
 ```bash
-# The graph is built from all extracts merged into one file; it gets this name.
-OSM_DATA_URL=europe-cycling.osm.pbf
+# The extracts are filtered for bikes and merged into this one file; every graph build reads it.
+ROUTING_OSM_FILE_FILTERED=bike-europe-cycling.osm.pbf
 
 # Building needs far more memory than serving. DACH alone needs a 16–24 GB heap;
 # more countries need more. Leave room for the JVM outside the heap.
@@ -48,25 +48,28 @@ PHOTON_IMPORT_HEAP=8g
 The numbers are a starting point, not measured values. Raise them if a step runs out of
 memory.
 
-Why a plain file name for `OSM_DATA_URL`: every graph build reads
-`data/graphhopper/osm/bike-<file name of OSM_DATA_URL>`. That includes `just routing-build`
-after a speed change and a fresh start with an empty graph cache. `osm-import` writes that
-file, so later rebuilds use the same data. No download matches a merged set of countries,
-so `osm-import` refuses to merge several files while `OSM_DATA_URL` is still a URL.
+Why `ROUTING_OSM_FILE_FILTERED`: every graph build reads
+`<ROUTING_OSM_IMPORT_DIR>/<ROUTING_OSM_FILE_FILTERED>`. That includes a rebuild
+after a speed change and a fresh start with an empty graph cache. `osm-filter-many-raw-pbf-into-one` writes that
+file, so later rebuilds use the same data. `OSM_DATA_URL` only names an extract to download,
+which no merged set of countries has; a filtered file with any other name than
+`bike-<its file name>` is never made from it. `osm-filter-many-raw-pbf-into-one` refuses to run without
+`ROUTING_OSM_FILE_FILTERED`. The journey planner's POIs go into the matching
+`pois-europe-cycling.geojsonseq`.
 
 ## 3. Build the routing graph
 
 ```bash
-just osm-import data/downloads/osm/*.osm.pbf
+just osm-filter-many-raw-pbf-into-one data/downloads/osm/*.osm.pbf
+just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
 ```
 
-This asks for confirmation, then:
-
-1. filters each extract down to what the bike profiles use (see
-   [what the filter keeps](#what-the-bike-filter-keeps)) and merges the results into
-   `data/graphhopper/osm/bike-europe-cycling.osm.pbf`;
-2. deletes the current graph (`data/graphhopper/cache`). The elevation tiles are kept;
-3. builds the new graph and starts GraphHopper again.
+The first filters each extract down to what the bike profiles use (see
+[what the filter keeps](#what-the-bike-filter-keeps)) and merges the results into
+`bike-europe-cycling.osm.pbf` in `ROUTING_OSM_IMPORT_DIR` (`data/graphhopper/osm`), plus the
+POIs into `pois-europe-cycling.geojsonseq`. It builds no graph. The second deletes the current
+graph (the elevation tiles are kept), builds the new one from that file and starts GraphHopper
+again.
 
 Routing is down until the build is done. That takes a long time for this many countries.
 Follow it with:
@@ -115,19 +118,20 @@ Then refresh what depended on the old graph:
 ```bash
 just download-pbf
 just download-photon-dumps
-just osm-import data/downloads/osm/*.osm.pbf
+just osm-filter-many-raw-pbf-into-one data/downloads/osm/*.osm.pbf
+just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
 just photon-import data/downloads/photon/*.jsonl.zst
 ```
 
 After a change to `data/graphhopper/graphhopper-config.yaml` or the models,
-`just routing-build` is enough. It rebuilds from the filtered file that is already there.
+`just build-graphhopper-graph-from bike-europe-cycling.osm.pbf` is enough. It rebuilds from the filtered file that
+is already there.
 
 ## Use a single file
 
-Both recipes also take a single file. For `osm-import`, its name must then match the
-file name at the end of `OSM_DATA_URL`, for example
-`just osm-import ~/Downloads/switzerland-latest.osm.pbf` with the default Switzerland
-URL. If the names differ, the recipe stops before changing anything and says what to set.
+Both recipes also take a single file. `osm-filter-many-raw-pbf-into-one` writes it, filtered, to
+`ROUTING_OSM_FILE_FILTERED` as well, for example `ROUTING_OSM_FILE_FILTERED=bike-switzerland.osm.pbf`
+for `just osm-filter-many-raw-pbf-into-one ~/Downloads/switzerland-latest.osm.pbf`.
 
 `photon-import` also takes a prebuilt `.tar.bz2` index, but only on its own: an index
 can't be combined with other files.
@@ -135,7 +139,7 @@ can't be combined with other files.
 ## What the bike filter keeps
 
 `docker/graphhopper-filter-osm.sh` is the only place the filter rules live. The graph
-build runs it every time, and so does `osm-import`. It keeps:
+build runs it every time, and so does `osm-filter-many-raw-pbf-into-one`. It keeps:
 
 - every highway except motorways and roads that are only planned or are gone;
 - ferries and piers;
@@ -154,8 +158,8 @@ These recipes work on the development services. For the VPS:
 
 - **Routing graph:** build it here as above, then copy `data/graphhopper/cache` over as in
   [build the routing graph elsewhere](build-routing-graph.md#2-copy-it-to-the-vps).
-  Keep `GRAPHHOPPER_BUILD_GRAPH=false` on the VPS: it can't rebuild a merged set of
-  countries itself, because it can't download one.
+  Or copy the filtered file into the VPS's `ROUTING_OSM_IMPORT_DIR` and run
+  `just build-graphhopper-graph-from` with it there.
 - **Search index:** copy the dumps into `${APP_STORAGE_PATH}/photon/` on the VPS and
   import them as in [deploy on a VPS](deploy-vps.md), listing all of them in
   `PHOTON_INDEX_FILE` separated by spaces and adding `-e PHOTON_REPLACE_INDEX=true`.

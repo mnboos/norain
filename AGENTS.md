@@ -33,7 +33,8 @@ backend/          Django 6 + django-ninja (async ASGI via daphne)
     schemas.py       shared Pydantic base (CamelSchema)
 frontend/         Vue 3 + Quasar + @tanstack/vue-query
   src/queries/    server-state keys, query hooks, mutations, cache invalidation
-.env             OSM_DATA_URL, PHOTON_INDEX_URL, GRAPHHOPPER_HEAP, OPENWEATHERMAP_API_KEY
+.env             OSM_DATA_URL, ROUTING_OSM_FILE_FILTERED, ROUTING_OSM_IMPORT_DIR,
+                 PHOTON_INDEX_URL, GRAPHHOPPER_HEAP, OPENWEATHERMAP_API_KEY
 ```
 
 ## Key architecture

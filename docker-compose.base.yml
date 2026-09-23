@@ -45,27 +45,27 @@ services:
     memswap_limit: ${GRAPHHOPPER_MEM_LIMIT:-8g}
 
     volumes:
-      - ./data/graphhopper/osm:/osm_data:z
+      # The folder GraphHopper imports from: the bike-filtered file (ROUTING_OSM_FILE_FILTERED), a
+      # downloaded extract and the elevation tiles. Set in .env.
+      - ${ROUTING_OSM_IMPORT_DIR:?ROUTING_OSM_IMPORT_DIR must be set}:/osm_data:z
       - ./data/graphhopper/cache:/graph-cache:z
       - ./data/graphhopper/graphhopper-config.yaml:/config.yaml:ro,z
       - ./data/graphhopper/models:/custom_models:z
     environment:
       - OSM_DATA_DIR=/osm_data
-      # Coverage area: any Geofabrik .osm.pbf (country/continent/planet). See .env.
+      # Only for the log: where /osm_data is on the host.
+      - ROUTING_OSM_IMPORT_DIR=${ROUTING_OSM_IMPORT_DIR:?ROUTING_OSM_IMPORT_DIR must be set}
+      # An unfiltered Geofabrik .osm.pbf (country/continent/planet). A build from
+      # bike-<its file name> downloads and filters it first. See .env.
       - OSM_DATA_URL=${OSM_DATA_URL:-https://download.geofabrik.de/europe/switzerland-latest.osm.pbf}
       # Serving JVM heap (maximum). With MMAP a few GB are enough; with RAM_STORE it must hold the whole graph.
       - GRAPHHOPPER_HEAP=${GRAPHHOPPER_HEAP:-6g}
-      # Heap for building the graph, when this container builds it; defaults to GRAPHHOPPER_HEAP.
+      # Heap for building the graph (just build-graphhopper-graph-from); defaults to GRAPHHOPPER_HEAP.
       - GRAPHHOPPER_BUILD_HEAP=${GRAPHHOPPER_BUILD_HEAP:-}
       # How the build holds the graph: RAM_STORE (in the heap) or MMAP (in files, far smaller heap, slower).
       - GRAPHHOPPER_BUILD_DATAACCESS=${GRAPHHOPPER_BUILD_DATAACCESS:-RAM_STORE}
       # MMAP (graph paged in from disk by the OS, small heap) or RAM_STORE (whole graph in the heap).
       - GRAPHHOPPER_DATAACCESS=${GRAPHHOPPER_DATAACCESS:-MMAP}
-      # true: build the graph from OSM_DATA_URL when /graph-cache is empty. false: fail instead,
-      # for a graph built elsewhere and copied in. See the entrypoint.
-      - GRAPHHOPPER_BUILD_GRAPH=${GRAPHHOPPER_BUILD_GRAPH:-true}
-      # true: build the graph and exit, e.g. to copy it to another machine.
-      - GRAPHHOPPER_BUILD_ONLY=${GRAPHHOPPER_BUILD_ONLY:-false}
     restart: unless-stopped
 
   photon:

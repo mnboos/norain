@@ -1,15 +1,9 @@
 #!/bin/bash
 #
-# Three paths, chosen by whether /graph-cache already holds a built graph:
-#   graph present                          -> serve it (no .pbf needed)
-#   graph missing, GRAPHHOPPER_BUILD_GRAPH=true (default)
-#                                          -> download OSM_DATA_URL, filter it for bikes
-#                                             (filter-osm.sh), build the graph, then serve it
-#                                             (or exit, with GRAPHHOPPER_BUILD_ONLY=true)
-#   graph missing, GRAPHHOPPER_BUILD_GRAPH=false
-#                                          -> fail; for a graph built on another machine and
-#                                             copied in (docs/how-to/build-routing-graph.md)
-# To rebuild: stop the service, empty /graph-cache, start it again.
+# The container never builds a graph by itself. Two modes:
+#   (no argument)  serve the graph in /graph-cache; without one, fail and say how to build it
+#   build          build the graph from ROUTING_OSM_FILE_FILTERED into /graph-cache, then exit.
+#                  just build-graphhopper-graph-from FILE runs this after emptying the cache.
 set -euo pipefail
 
 GRAPH_DIR=/graph-cache
@@ -20,38 +14,38 @@ GRAPHHOPPER_DATAACCESS="${GRAPHHOPPER_DATAACCESS:-MMAP}"
 # builds with a much smaller heap (and more slowly). Both write the same graph.
 GRAPHHOPPER_BUILD_DATAACCESS="${GRAPHHOPPER_BUILD_DATAACCESS:-RAM_STORE}"
 
-if [ ! -f "$GRAPH_DIR/properties" ]; then
-    if [ "${GRAPHHOPPER_BUILD_GRAPH:-true}" = "false" ]; then
-        echo "No graph in $GRAPH_DIR and GRAPHHOPPER_BUILD_GRAPH=false, so none is built here."
-        echo "Build the graph on another machine and copy it here: docs/how-to/build-routing-graph.md"
+build() {
+    : "${ROUTING_OSM_FILE_FILTERED:?Name the bike-filtered file to build from: just build-graphhopper-graph-from FILE}"
+    if [ -f "$GRAPH_DIR/properties" ]; then
+        echo "$GRAPH_DIR already holds a graph. Empty it first (just build-graphhopper-graph-from does)."
         exit 1
     fi
+    BIKE_DATA_FILE="${OSM_DATA_DIR}/${ROUTING_OSM_FILE_FILTERED}"
+    echo "Importing from ${OSM_DATA_DIR} (ROUTING_OSM_IMPORT_DIR on the host: ${ROUTING_OSM_IMPORT_DIR:-unknown})"
 
-    : "${OSM_DATA_URL:?OSM_DATA_URL must be set to build a graph}"
-    OSM_DATA_FILE="${OSM_DATA_DIR}/$(basename "$OSM_DATA_URL")"
-    BIKE_DATA_FILE="${OSM_DATA_DIR}/bike-$(basename "$OSM_DATA_URL")"
-    echo "Requested OSM data: ${OSM_DATA_FILE}"
-
-    # The filtered copy is reused until the extract is newer than it. With only the filtered
-    # copy present (just osm-import), nothing is downloaded.
-    if [ ! -s "$BIKE_DATA_FILE" ] || [ "$OSM_DATA_FILE" -nt "$BIKE_DATA_FILE" ]; then
-        if [ ! -s "$OSM_DATA_FILE" ]; then
-            if [[ "$OSM_DATA_URL" != *://* ]]; then
-                echo "OSM_DATA_URL is a file name, but neither ${OSM_DATA_FILE} nor ${BIKE_DATA_FILE} exists."
-                echo "Put the file there, or run just osm-import with the extracts it was made from."
-                exit 1
+    # bike-<OSM_DATA_URL's file name> is made from that download, and made again when the
+    # extract is newer. Any other name must already exist (just osm-filter-many-raw-pbf-into-one).
+    OSM_DATA_URL="${OSM_DATA_URL:-}"
+    if [[ "$OSM_DATA_URL" == *://* ]] && [ "$ROUTING_OSM_FILE_FILTERED" = "bike-$(basename "$OSM_DATA_URL")" ]; then
+        OSM_DATA_FILE="${OSM_DATA_DIR}/$(basename "$OSM_DATA_URL")"
+        if [ ! -s "$BIKE_DATA_FILE" ] || [ "$OSM_DATA_FILE" -nt "$BIKE_DATA_FILE" ]; then
+            if [ ! -s "$OSM_DATA_FILE" ]; then
+                echo "Downloading ${OSM_DATA_URL}"
+                wget \
+                    --no-check-certificate \
+                    --user-agent="norain" \
+                    --show-progress \
+                    --progress=bar:force:noscroll \
+                    -O "$OSM_DATA_FILE" \
+                    "$OSM_DATA_URL"
             fi
-            echo "Downloading OSM data"
-            wget \
-                --no-check-certificate \
-                --user-agent="norain" \
-                --show-progress \
-                --progress=bar:force:noscroll \
-                -O "$OSM_DATA_FILE" \
-                "$OSM_DATA_URL"
+            echo "Filtering ${OSM_DATA_FILE} for bikes into ${BIKE_DATA_FILE}"
+            /graphhopper/filter-osm.sh "$BIKE_DATA_FILE" "$OSM_DATA_FILE"
         fi
-        echo "Filtering ${OSM_DATA_FILE} for bikes into ${BIKE_DATA_FILE}"
-        /graphhopper/filter-osm.sh "$BIKE_DATA_FILE" "$OSM_DATA_FILE"
+    elif [ ! -s "$BIKE_DATA_FILE" ]; then
+        echo "${BIKE_DATA_FILE} does not exist."
+        echo "Put it in ROUTING_OSM_IMPORT_DIR on the host (${ROUTING_OSM_IMPORT_DIR:-unknown}), or make it with just osm-filter-many-raw-pbf-into-one."
+        exit 1
     fi
 
     # GraphHopper calls building the graph "import".
@@ -60,15 +54,28 @@ if [ ! -f "$GRAPH_DIR/properties" ]; then
         -Ddw.graphhopper.graph.dataaccess.default_type="${GRAPHHOPPER_BUILD_DATAACCESS}" \
         -Ddw.graphhopper.datareader.file="${BIKE_DATA_FILE}" \
         -jar graphhopper.jar import /config.yaml
+    echo "Build finished; $GRAPH_DIR is ready."
+}
 
-    if [ "${GRAPHHOPPER_BUILD_ONLY:-false}" = "true" ]; then
-        echo "Build finished; $GRAPH_DIR is ready."
-        exit 0
-    fi
-fi
-
-# No -Xms: the heap grows to what the graph needs instead of claiming the maximum up front.
-echo "Serving $GRAPH_DIR (${GRAPHHOPPER_DATAACCESS}, heap ${GRAPHHOPPER_HEAP})"
-exec java -Xmx"${GRAPHHOPPER_HEAP}" \
-    -Ddw.graphhopper.graph.dataaccess.default_type="${GRAPHHOPPER_DATAACCESS}" \
-    -jar graphhopper.jar server /config.yaml
+case "${1:-serve}" in
+    build)
+        build
+        ;;
+    serve)
+        if [ ! -f "$GRAPH_DIR/properties" ]; then
+            echo "No graph in $GRAPH_DIR. The container never builds one by itself. Build it with:"
+            echo "  just build-graphhopper-graph-from <bike-filtered .osm.pbf in ROUTING_OSM_IMPORT_DIR>"
+            echo "or copy one built elsewhere (docs/how-to/build-routing-graph.md)."
+            exit 1
+        fi
+        # No -Xms: the heap grows to what the graph needs instead of claiming the maximum up front.
+        echo "Serving $GRAPH_DIR (${GRAPHHOPPER_DATAACCESS}, heap ${GRAPHHOPPER_HEAP})"
+        exec java -Xmx"${GRAPHHOPPER_HEAP}" \
+            -Ddw.graphhopper.graph.dataaccess.default_type="${GRAPHHOPPER_DATAACCESS}" \
+            -jar graphhopper.jar server /config.yaml
+        ;;
+    *)
+        echo "Unknown command: $1 (expected build, or none to serve)" >&2
+        exit 2
+        ;;
+esac

@@ -50,7 +50,8 @@ frontend/         Vue 3 + Quasar + @tanstack/vue-query
     utils/routeThumbnail.ts  geographic path -> square viewBox projection
     components/RouteThumbnail.vue  the tiny route glyph in the list
 packages/api/     generated TypeScript client (see "Regenerating the client")
-.env             OSM_DATA_URL, PHOTON_INDEX_URL, GRAPHHOPPER_HEAP, OPENWEATHERMAP_API_KEY,
+.env             OSM_DATA_URL, ROUTING_OSM_FILE_FILTERED, ROUTING_OSM_IMPORT_DIR,
+                 PHOTON_INDEX_URL, GRAPHHOPPER_HEAP, OPENWEATHERMAP_API_KEY,
                  WEATHERUNDERGROUND_API_KEY, OPEN_METEO_API_KEY (commercial, optional),
                  OPEN_METEO_LIMIT_{MINUTE,HOUR,DAY,MONTH}, OPENWEATHERMAP_DAILY_CAP,
                  REDIS_URL (claim cache, provider budgets, channel layer)
@@ -509,19 +510,23 @@ stored before this still carry a `figures` key; `forecast_view` drops it.
 ### Routing graph
 
 GraphHopper is bike-only (`bike`, `ebike`, `fast_ebike`, each with CH); `ROUTING_PROFILES`
-in `api/route_weather.py` must list the same names. The container builds the graph from
-`OSM_DATA_URL` whenever `graph-cache` is empty, production included (`GRAPHHOPPER_BUILD_GRAPH`,
-default `true`); to rebuild, empty the cache and restart. It can also be built on another
-machine (`GRAPHHOPPER_BUILD_ONLY=true`) and copied over (`docs/how-to/build-routing-graph.md`).
+in `api/route_weather.py` must list the same names. The container **never builds a graph by itself**:
+with an empty `graph-cache` it exits with an error. `just build-graphhopper-graph-from FILE` (a bike-filtered file
+in `ROUTING_OSM_IMPORT_DIR`) empties the cache, runs the entrypoint's `build` command and starts it
+again; production too. A graph can also be built on another machine and copied over
+(`docs/how-to/build-routing-graph.md`).
 GraphHopper calls the build "import". It refuses a graph built with a different config or jar,
 so any change to `graphhopper-config.yaml` or `data/graphhopper/models/` means rebuilding.
 
-Every build reads `bike-<extract>`, not the extract itself: `docker/graphhopper-filter-osm.sh`
-(osmium) keeps only the ways, nodes and cycle-route relations the bike profiles use (a third of
-the Swiss file, same speeds), and the entrypoint redoes it when the extract is newer.
-`just osm-import FILE…` runs the same script on local files (several are filtered one by one,
-then merged) and writes `bike-<OSM_DATA_URL's file name>`, the file every rebuild reads: one file
-must have that name, several need `OSM_DATA_URL` set to a plain file name for the merged set.
+Every build reads the bike-filtered file it is given, in `ROUTING_OSM_IMPORT_DIR` (the host folder
+mounted at `/osm_data`, required in `.env`), never an extract itself:
+`docker/graphhopper-filter-osm.sh` (osmium) keeps only the ways, nodes and cycle-route relations
+the bike profiles use (a third of the Swiss file, same speeds). A build from
+`bike-<OSM_DATA_URL's file name>` downloads `OSM_DATA_URL` (only ever an unfiltered extract) and
+filters it, and redoes that when the extract is newer; any other file is used as it is. `just osm-filter-many-raw-pbf-into-one FILE…` runs the same script on
+local files (several are filtered one by one, then merged) and writes `ROUTING_OSM_FILE_FILTERED`,
+which it requires to be set, plus the matching `pois-<name without bike->.geojsonseq`; it builds
+no graph, `just build-graphhopper-graph-from FILE` does.
 If a profile ever needs a tag the filter drops, add it to that script and rebuild.
 
 The whole download-and-import workflow is in `docs/how-to/import-geodata.md`.

@@ -36,7 +36,16 @@ development PostGIS container. Open-Meteo needs no API key. If another program a
 one of the default ports (5432, 6379, 8989, 2322, 8000, 3000), set the matching `*_PORT`
 variable from `.env.template` in `.env`; the commands and URLs below then use that port instead.
 
-Start PostGIS and the two geographic services:
+Build the routing graph first. GraphHopper never builds one by itself; this downloads the
+Switzerland extract (`OSM_DATA_URL`), filters it for bikes and builds the graph, which takes a
+few minutes:
+
+```bash
+docker compose -f docker-compose.dev.yml build graphhopper
+just build-graphhopper-graph-from bike-switzerland-latest.osm.pbf
+```
+
+Then start PostGIS and the two geographic services:
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d --build db graphhopper photon

@@ -4,7 +4,7 @@ set -euo pipefail
 # ==============================================================================
 # Download the OSM extracts for the routing graph (DACH + NL + BE + DK)
 #
-# Only downloads: `just osm-import` filters them for bikes and merges them in the
+# Only downloads: `just osm-filter-many-raw-pbf-into-one` filters them for bikes and merges them in the
 # GraphHopper container, so nothing but wget is needed here. The files are kept,
 # and a run downloads again only what Geofabrik has updated since.
 # ==============================================================================
@@ -37,9 +37,9 @@ done
 echo "=============================================================================="
 echo "Done. Extracts in: $TARGET_DIR"
 echo "Build the routing graph from them (filtered for bikes and merged into one) with:"
-echo "  just osm-import $TARGET_DIR/*.osm.pbf"
-echo "Several files need a plain file name for the merged set in .env, for example:"
-echo "  OSM_DATA_URL=europe-cycling.osm.pbf"
+echo "  just osm-filter-many-raw-pbf-into-one $TARGET_DIR/*.osm.pbf"
+echo "It writes the file set in .env, for example:"
+echo "  ROUTING_OSM_FILE_FILTERED=bike-europe-cycling.osm.pbf"
 echo "This many countries need a large build heap: set GRAPHHOPPER_BUILD_HEAP and"
 echo "GRAPHHOPPER_MEM_LIMIT (see docs/how-to/build-routing-graph.md)."
 echo "=============================================================================="

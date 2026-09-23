@@ -11,8 +11,9 @@ HTTPS (443) in the VPS firewall. Install Docker Engine, the Docker Compose plugi
 Git, and Restic. Create a non-root `norain` deployment user in the `docker` group,
 then clone this repository at `/srv/norain`.
 
-GraphHopper builds its routing graph on the VPS the first time it starts with an empty
-`graphhopper/cache`, from `OSM_DATA_URL`. Building needs more memory than serving:
+GraphHopper never builds its routing graph by itself: before the first start, build it with
+`just build-graphhopper-graph-from FILE` ([rebuild on the VPS](build-routing-graph.md#rebuild-on-the-vps)), or
+copy one in. Until then the container stops with an error. Building needs more memory than serving:
 Switzerland needs a build heap (`GRAPHHOPPER_BUILD_HEAP`) of about 6 GB, DACH 16–24 GB.
 Serving uses `GRAPHHOPPER_DATAACCESS=MMAP`, so a 3 GB serving heap is enough for either
 (with `RAM_STORE`, DACH would need 10–14 GB). `GRAPHHOPPER_MEM_LIMIT` must fit the build heap.
@@ -67,7 +68,8 @@ sudo install -d -o norain -g norain -m 0750 \
   /srv/norain-data/photon
 ```
 
-`graphhopper/osm` keeps the downloaded OSM extract and elevation tiles, so a rebuild does
+`graphhopper/osm` is `ROUTING_OSM_IMPORT_DIR`, the folder GraphHopper imports from. It keeps the
+filtered OSM file, the downloaded extract and elevation tiles, so a rebuild does
 not download them again; allow disk space for them next to the graph in `graphhopper/cache`.
 
 The supplied Compose file expects these internal endpoints:
@@ -144,7 +146,7 @@ version; stop Photon on both machines during the copy.
 
 ## Import the journey planner's POIs
 
-The POIs come from the raw OSM extract GraphHopper keeps in `${APP_STORAGE_PATH}/graphhopper/osm`.
+The POIs come from the raw OSM extract GraphHopper keeps in `ROUTING_OSM_IMPORT_DIR`.
 On the VPS, run both steps in containers (the host has no GDAL, which Django needs):
 
 ```bash

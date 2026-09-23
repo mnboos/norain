@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Cut an OSM extract down to what the bike profiles use, so the graph builds faster and in
-# less memory. The entrypoint runs it before every build, and `just osm-import` runs it on
+# less memory. The entrypoint runs it before every build, and `just osm-filter-many-raw-pbf-into-one` runs it on
 # local files, so every graph is built from the same kind of data.
 #
 # osmium also keeps every node the kept ways use (with its tags, so barriers stay) and the

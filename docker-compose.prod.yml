@@ -116,7 +116,7 @@ services:
     depends_on: *routing-deps
     volumes:
       # The POI file from `osm-extract-pois.sh`, for `manage.py import_pois /osm_data/pois-<extract>.geojsonseq`.
-      - ${APP_STORAGE_PATH}/graphhopper/osm:/osm_data:ro
+      - ${ROUTING_OSM_IMPORT_DIR:?ROUTING_OSM_IMPORT_DIR must be set}:/osm_data:ro
 
   redis:
     container_name: redis
@@ -157,22 +157,23 @@ services:
       file: docker-compose.base.yml
     image: ${GRAPHHOPPER_IMAGE:?GRAPHHOPPER_IMAGE must be set}
     volumes:
-      # The OSM extract and elevation tiles, kept so a rebuild does not download them again.
-      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/graphhopper/osm:/osm_data
-      # The built graph. Empty it and restart the service to build a new one.
+      # The folder GraphHopper imports from (ROUTING_OSM_IMPORT_DIR): the filtered file, a downloaded
+      # extract and the elevation tiles, kept so a rebuild does not download them again.
+      - ${ROUTING_OSM_IMPORT_DIR:?ROUTING_OSM_IMPORT_DIR must be set}:/osm_data
+      # The built graph. Never built on start: just build-graphhopper-graph-from FILE builds it.
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/graphhopper/cache:/graph-cache
     healthcheck:
-      # A stored graph loads in minutes, but with an empty cache the service first builds the
-      # graph, which takes much longer. Checks that fail during start_period do not count, so
-      # the build has 3h; everything that waits on graphhopper (and release.sh) waits with it.
+      # A stored graph loads in minutes; the service never builds one on start. Checks that fail
+      # during start_period do not count; everything that waits on graphhopper (and release.sh)
+      # waits with it.
       interval: 15s
       timeout: 10s
       retries: 10
-      start_period: 3h
+      start_period: 15m
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8989/info" ]
     networks:
       - internal
-      # Building the graph downloads the OSM extract and the elevation tiles.
+      # Building the graph (just build-graphhopper-graph-from) downloads the OSM extract and the elevation tiles.
       - egress
 
   photon:

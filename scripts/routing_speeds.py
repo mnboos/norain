@@ -1,7 +1,7 @@
 """Print the average speed each bike profile rides on a few reference routes.
 
 Run it after changing a profile's `speed` block in data/graphhopper/models/ and
-rebuilding the graph (`just routing-build`), to see what the change did:
+rebuilding the graph (`just build-graphhopper-graph-from <filtered .osm.pbf>`), to see what the change did:
 
     just routing-speeds
 
