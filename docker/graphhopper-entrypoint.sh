@@ -16,6 +16,9 @@ GRAPH_DIR=/graph-cache
 GRAPHHOPPER_HEAP="${GRAPHHOPPER_HEAP:-6g}"
 GRAPHHOPPER_BUILD_HEAP="${GRAPHHOPPER_BUILD_HEAP:-$GRAPHHOPPER_HEAP}"
 GRAPHHOPPER_DATAACCESS="${GRAPHHOPPER_DATAACCESS:-MMAP}"
+# RAM_STORE builds in the heap. MMAP keeps the graph in files on /graph-cache, so a large area
+# builds with a much smaller heap (and more slowly). Both write the same graph.
+GRAPHHOPPER_BUILD_DATAACCESS="${GRAPHHOPPER_BUILD_DATAACCESS:-RAM_STORE}"
 
 if [ ! -f "$GRAPH_DIR/properties" ]; then
     if [ "${GRAPHHOPPER_BUILD_GRAPH:-true}" = "false" ]; then
@@ -52,8 +55,9 @@ if [ ! -f "$GRAPH_DIR/properties" ]; then
     fi
 
     # GraphHopper calls building the graph "import".
-    echo "Building the graph from ${BIKE_DATA_FILE} with a ${GRAPHHOPPER_BUILD_HEAP} heap"
+    echo "Building the graph from ${BIKE_DATA_FILE} with a ${GRAPHHOPPER_BUILD_HEAP} heap (${GRAPHHOPPER_BUILD_DATAACCESS})"
     java -Xmx"${GRAPHHOPPER_BUILD_HEAP}" \
+        -Ddw.graphhopper.graph.dataaccess.default_type="${GRAPHHOPPER_BUILD_DATAACCESS}" \
         -Ddw.graphhopper.datareader.file="${BIKE_DATA_FILE}" \
         -jar graphhopper.jar import /config.yaml
 

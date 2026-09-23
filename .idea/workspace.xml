@@ -4,28 +4,15 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="feat(journey): improve journey planning">
+    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="feat(web): keep stale forecasts for faster route-viewing">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/api/journey.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/journey.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/api/route_weather.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/route_weather.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/forecast_schemas.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/forecast_schemas.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/jobs.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/jobs.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/models.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/tasks.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/tasks.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/test_journeys.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/test_journeys.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/tests.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/tests.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/openapi.json" beforeDir="false" afterPath="$PROJECT_DIR$/backend/openapi.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/RouteDetailPanel.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/RouteDetailPanel.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/journey/JourneyDayPanel.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/journey/JourneyDayPanel.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/queries/forecastProgress.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/queries/forecastProgress.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/queries/journeys.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/queries/journeys.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/queries/recurringRoutes.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/queries/recurringRoutes.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/queries/routeWeather.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/queries/routeWeather.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/services/__tests__/forecastJob.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/services/__tests__/forecastJob.spec.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/services/forecastJob.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/services/forecastJob.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/ForecastJobOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ForecastJobOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RouteForecastOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RouteForecastOut.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/graphhopper/graphhopper-config.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/data/graphhopper/graphhopper-config.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/deploy/production.env.template" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/production.env.template" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker-compose.base.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.base.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker/graphhopper-entrypoint.sh" beforeDir="false" afterPath="$PROJECT_DIR$/docker/graphhopper-entrypoint.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/how-to/build-routing-graph.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/build-routing-graph.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/how-to/troubleshooting.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/troubleshooting.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/reference/configuration.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/reference/configuration.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -106,61 +93,61 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.715881005360655" />
-      <entry key="MS500" value="4.221583111862648" />
-      <entry key="S2" value="6.312669733585936" />
-      <entry key="S5" value="7.202752676889933" />
-      <entry key="S10" value="7.576583017549006" />
-      <entry key="S30" value="7.852861564602764" />
-      <entry key="S60" value="7.9256479003172675" />
-      <entry key="M2" value="7.962625664960157" />
-      <entry key="M5" value="7.985009655827139" />
-      <entry key="M10" value="8.006492205373169" />
-      <entry key="M15" value="8.201299039269347" />
-      <entry key="M30" value="12.137888310477042" />
-      <entry key="H1" value="32.983210204994734" />
-      <entry key="H2" value="79.93604107694513" />
-      <entry key="H4" value="150.86904423220523" />
-      <entry key="D1" value="647.4967236469623" />
-      <entry key="W1" value="2146.6410861272298" />
+      <entry key="MS100" value="1.0" />
+      <entry key="MS500" value="1.0" />
+      <entry key="S2" value="1.0" />
+      <entry key="S5" value="1.0" />
+      <entry key="S10" value="1.0000000000000036" />
+      <entry key="S30" value="1.0000503835222203" />
+      <entry key="S60" value="1.0173867619486077" />
+      <entry key="M2" value="1.3229867335257741" />
+      <entry key="M5" value="2.864509967051875" />
+      <entry key="M10" value="4.349762802563123" />
+      <entry key="M15" value="5.166843406621035" />
+      <entry key="M30" value="8.199700340389082" />
+      <entry key="H1" value="20.54725389757445" />
+      <entry key="H2" value="57.54695020041762" />
+      <entry key="H4" value="129.75564432218735" />
+      <entry key="D1" value="644.2440653114111" />
+      <entry key="W1" value="2169.376693369597" />
     </decayedCancelled>
     <decayedSelected>
       <entry key="MS100" value="0.0" />
       <entry key="MS500" value="0.0" />
       <entry key="S2" value="0.0" />
       <entry key="S5" value="0.0" />
-      <entry key="S10" value="3.644271370645699E-236" />
-      <entry key="S30" value="3.315407404548034E-79" />
-      <entry key="S60" value="5.757957454295784E-40" />
-      <entry key="M2" value="2.39957443191408E-20" />
-      <entry key="M5" value="1.4192340567888311E-8" />
-      <entry key="M10" value="1.1942287039594963E-4" />
-      <entry key="M15" value="0.002508723353010873" />
-      <entry key="M30" value="0.07576776767038505" />
-      <entry key="H1" value="0.697860508939689" />
-      <entry key="H2" value="2.591014337265396" />
-      <entry key="H4" value="6.034309024210779" />
-      <entry key="D1" value="40.848915174877014" />
-      <entry key="W1" value="192.33182384143535" />
+      <entry key="S10" value="6.126985934733785E-227" />
+      <entry key="S30" value="3.942293564999328E-76" />
+      <entry key="S60" value="1.9855209807502233E-38" />
+      <entry key="M2" value="1.4090851573805687E-19" />
+      <entry key="M5" value="2.8812098856056176E-8" />
+      <entry key="M10" value="1.6974366516759554E-4" />
+      <entry key="M15" value="0.003067518641766217" />
+      <entry key="M30" value="0.057426950618157356" />
+      <entry key="H1" value="0.3503321826509387" />
+      <entry key="H2" value="1.5370096508777" />
+      <entry key="H4" value="4.541382366291632" />
+      <entry key="D1" value="38.83430798118976" />
+      <entry key="W1" value="191.2703212054726" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="1.6239294145978054" />
-      <entry key="MS500" value="4.16766723583846" />
-      <entry key="S2" value="6.278495531582582" />
-      <entry key="S5" value="7.183892170009919" />
-      <entry key="S10" value="7.565974697276926" />
-      <entry key="S30" value="7.849026415421916" />
-      <entry key="S60" value="7.923690370179653" />
-      <entry key="M2" value="7.961636707827031" />
-      <entry key="M5" value="7.9846116130188625" />
-      <entry key="M10" value="8.006410797003596" />
-      <entry key="M15" value="8.20365918424821" />
-      <entry key="M30" value="12.213222537526375" />
-      <entry key="H1" value="33.67896494480029" />
-      <entry key="H2" value="82.5232617091184" />
-      <entry key="H4" value="156.8993755688803" />
-      <entry key="D1" value="688.3419734251561" />
-      <entry key="W1" value="2338.9702514170135" />
+      <entry key="MS100" value="0.7900413118633771" />
+      <entry key="MS500" value="0.9539595505475581" />
+      <entry key="S2" value="0.9882856515007326" />
+      <entry key="S5" value="0.9952976898141518" />
+      <entry key="S10" value="0.9976460744242714" />
+      <entry key="S30" value="0.9992651182091828" />
+      <entry key="S60" value="1.0169928504667476" />
+      <entry key="M2" value="1.3227791670073754" />
+      <entry key="M5" value="2.8644055943240927" />
+      <entry key="M10" value="4.349869639434835" />
+      <entry key="M15" value="5.169860426197468" />
+      <entry key="M30" value="8.257040943424949" />
+      <entry key="H1" value="20.89711853519467" />
+      <entry key="H2" value="59.08230148019606" />
+      <entry key="H4" value="134.29440853203553" />
+      <entry key="D1" value="683.0749544396303" />
+      <entry key="W1" value="2360.644381588939" />
     </decayedShown>
   </component>
   <component name="ProjectColorInfo">{
@@ -617,7 +604,23 @@
       <option name="project" value="LOCAL" />
       <updated>1790160713961</updated>
     </task>
-    <option name="localTasksCounter" value="35" />
+    <task id="LOCAL-00035" summary="build(just): run poi-import via docker">
+      <option name="closed" value="true" />
+      <created>1790168287986</created>
+      <option name="number" value="00035" />
+      <option name="presentableId" value="LOCAL-00035" />
+      <option name="project" value="LOCAL" />
+      <updated>1790168287986</updated>
+    </task>
+    <task id="LOCAL-00036" summary="feat(web): keep stale forecasts for faster route-viewing">
+      <option name="closed" value="true" />
+      <created>1790168759312</created>
+      <option name="number" value="00036" />
+      <option name="presentableId" value="LOCAL-00036" />
+      <option name="project" value="LOCAL" />
+      <updated>1790168759312</updated>
+    </task>
+    <option name="localTasksCounter" value="37" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -635,8 +638,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="chore(ide): update settings" />
-    <MESSAGE value="feat(plots): add map with route" />
     <MESSAGE value="docs: create docs according to diataxis" />
     <MESSAGE value="style(ui): improvate layout" />
     <MESSAGE value="refactor: refactor auth and subscription" />
@@ -660,7 +661,9 @@
     <MESSAGE value="chore(ide): update config" />
     <MESSAGE value="feat(web): many improvements&#10;&#10;* felt wind&#10;* wind animation&#10;* single-forecast with ensemble-band" />
     <MESSAGE value="feat(journey): improve journey planning" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(journey): improve journey planning" />
+    <MESSAGE value="build(just): run poi-import via docker" />
+    <MESSAGE value="feat(web): keep stale forecasts for faster route-viewing" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat(web): keep stale forecasts for faster route-viewing" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
@@ -674,6 +677,6 @@
     </breakpoint-manager>
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1790166907120" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
+    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1790168606541" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
   </component>
 </project>

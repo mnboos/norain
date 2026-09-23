@@ -253,9 +253,9 @@ graphhopper:
   import.osm.ignored_highways: motorway,construction
 
   # configure the memory access, use RAM_STORE for well equipped servers (default and recommended)
-  # This is what the build uses. The serving container overrides it with GRAPHHOPPER_DATAACCESS
+  # This is what the build uses unless GRAPHHOPPER_BUILD_DATAACCESS overrides it. The serving container overrides it with GRAPHHOPPER_DATAACCESS
   # (default MMAP). Both write the same files, so the choice never means rebuilding the graph.
-  graph.dataaccess.default_type: RAM_STORE
+  graph.dataaccess.default_type: MMAP
 
   # will write way names in the preferred language (language code as defined in ISO 639-1 or ISO 639-2):
   datareader.preferred_language: de
