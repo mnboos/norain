@@ -8,6 +8,7 @@
       <driver-ref>sqlite.xerial</driver-ref>
       <synchronize>true</synchronize>
       <imported>true</imported>
+      <remarks>/Users/mbo20/src/norain/backend/backend/settings.py</remarks>
       <remarks>C:/src/norain/backend/backend/settings.py</remarks>
       <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
       <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/backend/db.sqlite3</jdbc-url>

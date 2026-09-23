@@ -12,6 +12,8 @@ export interface ChartSample {
     elapsedS: number;
     eta: string;
     temp: number;
+    /** Wind chill at riding speed; missing without ride timing and on older forecasts. */
+    feltTemp?: number | null;
     rainRateMmH?: number | null;
     pop?: number | null;
     headwind?: number | null;
@@ -34,8 +36,6 @@ const BLUE = "#3a70b8";
 // slightly over/undershoot between two points at abrupt changes. Moderate smoothing keeps that small.
 const SMOOTH = { shape: "spline", smoothing: 0.7 } as const;
 
-type Bound = "p10" | "median" | "p90";
-
 interface Series {
     /** The key in `uncertainty.metrics`, also the legend group. */
     metric: string;
@@ -45,8 +45,7 @@ interface Series {
     label: string;
     color: string;
     unit: string;
-    /** How the single forecast is drawn. */
-    dash: "dash" | "dot";
+    dash: "solid" | "dot";
     value: (sample: ChartSample) => number | null | undefined;
 }
 
@@ -64,19 +63,27 @@ function minutes(samples: readonly ChartSample[]): number[] {
     return samples.map(sample => sample.elapsedS / 60);
 }
 
-/** Band + median for one metric; empty when there is no ensemble data to draw. */
-function ensembleTraces(samples: readonly ChartSample[], series: Series): Data[] {
-    const ranges = samples.map(sample => sample.uncertainty?.metrics[series.metric]);
-    const present = ranges.map(range => range?.median != null);
-    if (!present.some(Boolean)) return [];
+/**
+ * The ensemble's spread as a band around the line: `value + (p10 − median)` to
+ * `value + (p90 − median)`. It shows how uncertain the value is, recentred on the value the chart
+ * draws (the main run near now, the ensemble's centre from 72 h). So it is the ensemble's
+ * spread, not its absolute p10–p90 range, which the details panel shows. Empty without ensemble data.
+ */
+function spreadTraces(samples: readonly ChartSample[], series: Series): Data[] {
+    const bounds = samples.map(sample => {
+        const value = series.value(sample);
+        const range = sample.uncertainty?.metrics[series.metric];
+        if (value == null || range?.median == null || range.p10 == null || range.p90 == null) return null;
+        return { p10: value + range.p10 - range.median, p90: value + range.p90 - range.median };
+    });
+    if (!bounds.some(Boolean)) return [];
     const x = minutes(samples);
-    const at = (index: number, bound: Bound) => ranges[index]?.[bound] ?? null;
 
     // Separate each contiguous run: Plotly's filled polygons must not bridge missing data.
     const runs: number[][] = [];
     let run: number[] = [];
-    present.forEach((has, index) => {
-        if (has) {
+    bounds.forEach((bound, index) => {
+        if (bound) {
             run.push(index);
         } else if (run.length) {
             runs.push(run);
@@ -85,59 +92,44 @@ function ensembleTraces(samples: readonly ChartSample[], series: Series): Data[]
     });
     if (run.length) runs.push(run);
 
-    const traces: Data[] = runs.flatMap(indices =>
-        (["p10", "p90"] as const).map((bound): Data => ({
+    return runs.flatMap(indices =>
+        (["p10", "p90"] as const).map((key): Data => ({
             type: "scatter",
             x: indices.map(i => x[i] ?? null),
-            y: indices.map(i => at(i, bound)),
+            y: indices.map(i => bounds[i]?.[key] ?? null),
             mode: "lines",
             line: { width: 0, ...SMOOTH },
-            fill: bound === "p90" ? "tonexty" : "none",
+            fill: key === "p90" ? "tonexty" : "none",
             fillcolor: fill(series.color, 0.16),
+            // One legend entry per metric toggles the line and its band together.
             legendgroup: series.metric,
             showlegend: false,
             hoverinfo: "skip",
         })),
     );
-    // The legend names only the metric: the caption above the charts explains band/median/dotted,
-    // and one entry per metric toggles its whole group (band, median and single forecast).
-    traces.push({
-        type: "scatter",
-        x,
-        y: samples.map((_, index) => at(index, "median")),
-        customdata: customdata(samples),
-        mode: "lines+markers",
-        marker: { size: 4 },
-        line: { color: series.color, width: 2, ...SMOOTH },
-        connectgaps: false,
-        name: series.name,
-        legendgroup: series.metric,
-        hovertemplate: `%{customdata[1]} Uhr · %{y:.1f} ${series.unit}<extra>${series.label}: Median</extra>`,
-    });
-    return traces;
 }
 
-/** The main run's value as a dotted line. It only gets a legend entry when there is no median. */
-function singleForecastTrace(samples: readonly ChartSample[], series: Series, withEnsemble: boolean): Data {
+/** The sample's value as a line: the main run near now, moving onto the ensemble's centre by 72 h. */
+function forecastTrace(samples: readonly ChartSample[], series: Series): Data {
     return {
         type: "scatter",
         x: minutes(samples),
         y: samples.map(sample => series.value(sample) ?? null),
         customdata: customdata(samples),
         mode: "lines+markers",
-        marker: { size: 3 },
-        line: { dash: series.dash, width: 1.5, color: series.color, ...SMOOTH },
+        marker: { size: 4 },
+        line: { dash: series.dash, width: 2, color: series.color, ...SMOOTH },
         connectgaps: false,
         name: series.name,
         legendgroup: series.metric,
-        showlegend: !withEnsemble,
-        hovertemplate: `%{customdata[1]} Uhr · %{y:.1f} ${series.unit}<extra>${series.label}: Einzelprognose</extra>`,
+        showlegend: true,
+        hovertemplate: `%{customdata[1]} Uhr · %{y:.1f} ${series.unit}<extra>${series.label}</extra>`,
     };
 }
 
+/** The band first, so the line is drawn on top of it. */
 function seriesTraces(samples: readonly ChartSample[], series: Series): Data[] {
-    const ensemble = ensembleTraces(samples, series);
-    return [...ensemble, singleForecastTrace(samples, series, ensemble.length > 0)];
+    return [...spreadTraces(samples, series), forecastTrace(samples, series)];
 }
 
 /** The layout every chart shares: a title pinned top-left, the ride time along x. */
@@ -178,11 +170,23 @@ function temperatureChart(samples: readonly ChartSample[]): ChartFigure {
         label: "Temperatur",
         color: RED,
         unit: "°C",
-        dash: "dash",
+        dash: "solid",
         value: sample => sample.temp,
     };
     const layout = baseLayout("Temperatur", "°C");
     const data = seriesTraces(samples, series);
+    if (samples.some(sample => sample.feltTemp != null)) {
+        const felt: Series = {
+            metric: "felt",
+            name: "Gefühlt",
+            label: "Gefühlt (Fahrtwind)",
+            color: RED,
+            unit: "°C",
+            dash: "dot",
+            value: sample => sample.feltTemp,
+        };
+        data.push(forecastTrace(samples, felt));
+    }
     if (samples.some(sample => sample.rainRateMmH != null)) {
         data.unshift({
             type: "bar",
@@ -218,7 +222,7 @@ function headwindChart(samples: readonly ChartSample[]): ChartFigure {
         label: "Gegen-(+)/Rückenwind(−)",
         color: BLUE,
         unit: "km/h",
-        dash: "dot",
+        dash: "solid",
         value: sample => sample.headwind,
     };
     return { data: seriesTraces(samples, series), layout: baseLayout("Gegenwind", "km/h") };

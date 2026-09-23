@@ -10,6 +10,8 @@ Given a start, a destination, a routing profile and a departure time, this:
 The route sampling is decoupled from the forecast resolution: GraphHopper gives the true
 per-road travel time, so we know exactly when you reach each point of the polyline.
 """
+import json
+import math
 import os
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -29,6 +31,7 @@ from .grid import (
     get_or_fetch_forecast_cell,
 )
 from .models import EnsembleCell
+from .road_prefs import model_key
 from .schedule import local_today
 from .stations import (
     RAIN_HORIZON,
@@ -40,8 +43,8 @@ from .stations import (
     station_correction,
 )
 from .telemetry import provider
-from .uncertainty import extract_uncertainty
-from .wind import compute_wind_profile, normalize_wind, resolve_vertex_times
+from .uncertainty import EnsembleCentral, ensemble_central, ensemble_weight, extract_uncertainty
+from .wind import compute_wind_profile, felt_temperature, normalize_wind, resolve_vertex_times, sample_airspeed
 
 GRAPHHOPPER_URL = os.environ.get("GRAPHHOPPER_API_URL", "http://localhost:8989").rstrip("/")
 
@@ -154,9 +157,15 @@ def routing_points(start_lat: float, start_lon: float, dest_lat: float, dest_lon
     return ((start_lon, start_lat), *((float(lon), float(lat)) for lon, lat in via), (dest_lon, dest_lat))
 
 
-def _route_body(profile: str, points: RoutingPoints) -> dict:
-    """The one GraphHopper request, so the editor's preview and the saved geometry agree."""
-    return {
+def _route_body(profile: str, points: RoutingPoints, custom_model: dict | None = None, alternatives: int = 0) -> dict:
+    """The one GraphHopper request, so the editor's preview and the saved geometry agree.
+
+    ``custom_model`` is a request model on top of the profile's (journey road preferences and
+    weather zones, see ``core.road_prefs``); it must only add penalties, or LM gives wrong
+    routes. ``alternatives`` > 1 asks for that many paths, which GraphHopper only does between
+    two points and, on this graph, for up to about a day's ride (the node cap).
+    """
+    body = {
         "profile": profile,
         "points": [list(p) for p in points],
         "points_encoded": False,
@@ -164,20 +173,36 @@ def _route_body(profile: str, points: RoutingPoints) -> dict:
         "instructions": False,
         "details": ["time"],
     }
+    if custom_model:
+        body["custom_model"] = custom_model
+    if alternatives > 1:
+        body["algorithm"] = "alternative_route"
+        body["alternative_route.max_paths"] = alternatives
+    return body
 
 
 @alru_cache(maxsize=64)
 @provider("graphhopper")
-async def _fetch_route(profile: str, points: RoutingPoints) -> dict:
+async def _fetch_route(profile: str, points: RoutingPoints, custom_model: str = "", alternatives: int = 0) -> dict:
+    """``custom_model`` arrives as canonical JSON (``road_prefs.model_key``): the LRU keys on it."""
+    body = _route_body(profile, points, json.loads(custom_model) if custom_model else None, alternatives)
     async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{GRAPHHOPPER_URL}/route", json=_route_body(profile, points), timeout=30)
+        resp = await client.post(f"{GRAPHHOPPER_URL}/route", json=body, timeout=30)
         resp.raise_for_status()
         return resp.json()
 
 
-async def preview_route(profile: str, points: RoutingPoints) -> dict:
+async def _route(profile: str, points: RoutingPoints, custom_model: dict | None = None, alternatives: int = 0) -> dict:
+    """``_fetch_route`` with the request model in its hashable form; a plain request stays
+    ``(profile, points)``, so it shares LRU entries with every earlier caller."""
+    if not custom_model and alternatives < 2:
+        return await _fetch_route(profile, points)
+    return await _fetch_route(profile, points, model_key(custom_model), alternatives if alternatives > 1 else 0)
+
+
+async def preview_route(profile: str, points: RoutingPoints, custom_model: dict | None = None) -> dict:
     """The line alone, for the route editor: no sampling, no weather."""
-    path = (await _fetch_route(profile, points))["paths"][0]
+    path = (await _route(profile, points, custom_model))["paths"][0]
     return {
         "coordinates": path["points"]["coordinates"],
         "distance_m": round(path.get("distance", 0.0), 1),
@@ -186,19 +211,8 @@ async def preview_route(profile: str, points: RoutingPoints) -> dict:
 
 
 # --------------------------------------------------------------------------- geometry
-async def build_geometry(
-    profile: str,
-    points: RoutingPoints,
-    interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
-) -> dict:
-    """Route with GraphHopper and sample it at fixed *time* intervals.
-
-    Returns the polyline plus the sample points every later stage keys off, each carrying
-    its rounded grid coordinates. Shared by the ad-hoc forecast path, the saved-route
-    geometry task and forecast-job planning so all three sample a route identically.
-    """
-    route = await _fetch_route(profile, points)
-    path = route["paths"][0]
+def _path_geometry(path: dict, interval_seconds: int) -> dict:
+    """Sample one GraphHopper path at fixed *time* intervals."""
     coords: list[list[float]] = path["points"]["coordinates"]
     time_details = path.get("details", {}).get("time", [[0, len(coords) - 1, path.get("time", 0)]])
     cum_s = _cumulative_times_s(coords, time_details)
@@ -226,6 +240,38 @@ async def build_geometry(
     }
 
 
+async def build_geometry(
+    profile: str,
+    points: RoutingPoints,
+    interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
+    custom_model: dict | None = None,
+) -> dict:
+    """Route with GraphHopper and sample it at fixed *time* intervals.
+
+    Returns the polyline plus the sample points every later stage keys off, each carrying
+    its rounded grid coordinates. Shared by the ad-hoc forecast path, the saved-route
+    geometry task, forecast-job planning and journey planning so all sample a route identically.
+    """
+    route = await _route(profile, points, custom_model)
+    return _path_geometry(route["paths"][0], interval_seconds)
+
+
+async def build_geometries(
+    profile: str,
+    points: RoutingPoints,
+    alternatives: int,
+    interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
+    custom_model: dict | None = None,
+) -> list[dict]:
+    """Up to ``alternatives`` sampled paths between two points, best first.
+
+    Raises the routing errors like ``build_geometry``; a day too long for alternatives
+    (GraphHopper's node cap) is the caller's to retry with one path.
+    """
+    route = await _route(profile, points, custom_model, alternatives)
+    return [_path_geometry(path, interval_seconds) for path in route["paths"]]
+
+
 # --------------------------------------------------------------------------- forecast window
 def _forecast_days(eta: datetime, today: date) -> int:
     """Open-Meteo forecast_days needed to cover eta. `today` is the window origin (00:00 local)."""
@@ -245,6 +291,59 @@ def forecast_days_for(departure: datetime, sample_points: list[dict], today: dat
 
 
 # --------------------------------------------------------------------------- summarization
+def mean_felt_temp(samples: list[dict]) -> float | None:
+    """Time-weighted mean felt temperature of a ride, from stored sample dicts.
+
+    Each sample stands for half the riding time to each neighbour. Samples without
+    ``felt_temp`` (no timing, or stored before it existed) count with their air temperature.
+    """
+    points = [
+        (s["elapsed_s"], s["felt_temp"] if s.get("felt_temp") is not None else s["temp"])
+        for s in samples
+        if s.get("elapsed_s") is not None and s.get("temp") is not None
+    ]
+    if not points:
+        return None
+    if len(points) == 1:
+        return points[0][1]
+    weighted = total = 0.0
+    for (t0, v0), (t1, v1) in zip(points, points[1:]):
+        gap = max(0.0, t1 - t0)
+        weighted += gap * (v0 + v1) / 2
+        total += gap
+    return weighted / total if total > 0 else sum(v for _, v in points) / len(points)
+
+
+def _blend(value: float | None, central: float | None, weight: float) -> float | None:
+    """``value`` moved ``weight`` of the way to ``central``; the ensemble alone only at weight 1."""
+    if central is None:
+        return value
+    if value is None:
+        return central if weight >= 1 else None
+    return (1 - weight) * value + weight * central
+
+
+def _blend_with_ensemble(forecast: dict, central: EnsembleCentral, weight: float) -> None:
+    """Move the single run's temperature and wind toward the ensemble's central estimate.
+
+    Done in place, before the wind profile and the samples are built, so every later reader of
+    ``forecast`` (headwind, wind power, felt temperature, frost, arrows) sees the same number.
+    Rain and the weather code stay the single run's: the ride score already weighs the
+    ensemble's rain through ``pop`` and ``rain_if_wet``.
+    """
+    forecast["temp"] = _blend(forecast["temp"], central.temp, weight)
+    forecast["wind_gust"] = _blend(forecast.get("wind_gust"), central.wind_gust, weight)
+    if central.wind is None:
+        return
+    own = normalize_wind(forecast.get("wind_speed"), forecast.get("wind_dir"))
+    east = _blend(own.east if own else None, central.wind.east, weight)
+    north = _blend(own.north if own else None, central.wind.north, weight)
+    if east is None or north is None:
+        return
+    forecast["wind_speed"] = math.hypot(east, north)
+    forecast["wind_dir"] = math.degrees(math.atan2(east, north)) % 360
+
+
 def _summarize(samples: list[WeatherSample], source: str) -> RouteWeatherSummary:
     """Route-level verdict.
 
@@ -366,6 +465,7 @@ async def compute_route_weather(
     forecast_source = "open-meteo"
     forecasts: list[dict | None] = [None] * len(sample_points)
     ensemble_cells: list[EnsembleCell | None] = [None] * len(sample_points)
+    ensemble_weights: list[float | None] = [None] * len(sample_points)
     corrections: list[StationCorrection | None] = [None] * len(sample_points)
     readings: list[list[Reading]] = [[] for _ in sample_points]
     if station_correction_enabled:
@@ -426,6 +526,11 @@ async def compute_route_weather(
         else:
             ens_cell = await get_or_fetch_ensemble_cell(lat_r, lon_r, day_key_str, days)
         ensemble_cells[i] = ens_cell
+        if ens_cell is not None and (weight := ensemble_weight(eta, ens_cell.fetched_at)) > 0:
+            central = ensemble_central(ens_cell.data, eta, ENSEMBLE_MODELS.split(","))
+            if central is not None:
+                _blend_with_ensemble(forecast, central, weight)
+                ensemble_weights[i] = round(weight, 2)
 
     # Future anchors are now available. Integrate unrounded vectors over geometry once;
     # gaps retain their original indices rather than becoming adjacent valid samples.
@@ -473,6 +578,8 @@ async def compute_route_weather(
 
         headwind, crosswind = wind.samples[i].headwind, wind.samples[i].cross_abs_mean
         wind_power_w = wind.samples[i].wind_power_w
+        airspeed = sample_airspeed(wind.samples[i])
+        felt_temp = felt_temperature(forecast["temp"], airspeed) if airspeed is not None else None
 
         samples.append(
             WeatherSample(
@@ -490,6 +597,7 @@ async def compute_route_weather(
                 pop=round(pop, 2) if pop is not None else None,
                 rain_if_wet=round(rain_if_wet, 2) if rain_if_wet is not None else None,
                 temp=round(forecast["temp"], 1),
+                felt_temp=round(felt_temp, 1) if felt_temp is not None else None,
                 wind_speed=round(forecast["wind_speed"], 1) if forecast["wind_speed"] is not None else None,
                 wind_gust=round(forecast["wind_gust"], 1) if forecast["wind_gust"] is not None else None,
                 wind_dir=round(forecast["wind_dir"], 0) % 360 if forecast["wind_dir"] is not None else None,
@@ -499,6 +607,7 @@ async def compute_route_weather(
                 weather_code=forecast["weather_code"],
                 weather_desc=WMO_DE.get(forecast["weather_code"], "") if forecast["weather_code"] is not None else "",
                 station_count=station_count,
+                ensemble_weight=ensemble_weights[i],
             )
         )
 

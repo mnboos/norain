@@ -1,9 +1,11 @@
 apis/GPXApi.ts
+apis/JourneysApi.ts
 apis/PlacesApi.ts
 apis/RecurringRoutesApi.ts
 apis/RouteWeatherApi.ts
 apis/index.ts
 index.ts
+models/BreakOut.ts
 models/DepartureCandidate.ts
 models/DepartureComparison.ts
 models/EnsembleModelStatistics.ts
@@ -17,10 +19,16 @@ models/GeometrySchema.ts
 models/GeometrySource.ts
 models/GpxExportIn.ts
 models/GpxPathOut.ts
+models/JourneyDayOut.ts
+models/JourneyIn.ts
+models/JourneyOut.ts
+models/JourneyStageOut.ts
 models/PlacesSearchResult.ts
+models/PoiOut.ts
 models/PropertiesSchema.ts
 models/RecurringRouteIn.ts
 models/RecurringRouteOut.ts
+models/RoadPrefsIn.ts
 models/RouteForecastOut.ts
 models/RoutePlanForecastIn.ts
 models/RoutePlanIn.ts
@@ -31,6 +39,7 @@ models/RouteSection.ts
 models/RouteThumbnail.ts
 models/RouteWeatherSummary.ts
 models/RoutingProfile.ts
+models/WeatherPrefsIn.ts
 models/WindArrow.ts
 models/WindDistribution.ts
 models/index.ts

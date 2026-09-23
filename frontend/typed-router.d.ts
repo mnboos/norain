@@ -52,6 +52,20 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    'journeys': RouteRecordInfo<
+      'journeys',
+      '/journeys',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    'journey-detail': RouteRecordInfo<
+      'journey-detail',
+      '/journeys/:id',
+      { id: ParamValue<true> },
+      { id: ParamValue<false> },
+      | never
+    >,
     'map': RouteRecordInfo<
       'map',
       '/map',
@@ -102,6 +116,22 @@ declare module 'vue-router/auto-routes' {
         | never
       pathParamNames:
         | never
+    }
+    'src/pages/journeys/index.vue': {
+      routes:
+        | 'journeys'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/journeys/[id].vue': {
+      routes:
+        | 'journey-detail'
+      views:
+        | never
+      pathParamNames:
+        | 'id'
     }
     'src/pages/map.vue': {
       routes:

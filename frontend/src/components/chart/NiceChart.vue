@@ -21,7 +21,7 @@ function showPoint(event: PlotMouseEvent) {
     const template = typeof original === "string" ? original : "";
     const unit = /%\{y[^}]*\}\s*([^<]*)/.exec(template)?.[1]?.trim() ?? "";
     const label = (/<extra>(.*?)<\/extra>/.exec(template)?.[1] ?? trace.name ?? "Wetter")
-        .replace(/:\s*(Median|Einzelprognose)/g, "")
+        .replace(/:\s*(Median|Einzelprognose|Prognose)/g, "")
         .replace(/<[^>]*>/g, "");
     const custom = point.customdata;
     tooltip.value = {
@@ -86,7 +86,8 @@ function needsCompact(el: HTMLElement): boolean {
 
 // Background bands for the temperature chart, at fixed temperatures so a colour means the same
 // thing on every route. 14-22 °C is the flat zero-penalty stretch of TEMP_CURVE in the
-// backend's core/ride_quality.py - keep them in step. Series keep the backend's single colour: colouring
+// backend's core/ride_quality.py - keep them in step. That curve scores the *felt* line (wind
+// chill at riding speed); the frost limit is about the road and reads the air temperature. Series keep the backend's single colour: colouring
 // the line by temperature only repeated the y-axis, and a chart-relative ramp lied about it.
 const COMFORT_BAND: [number, number] = [14, 22];
 const FROST_LIMIT = 0;
@@ -264,7 +265,7 @@ function buildData(): Data[] {
             ...scatter,
             mode: isolated.some(Boolean) ? "lines+markers" : "lines",
             marker: { ...scatter.marker, size: isolated },
-            name: scatter.name?.replace(/:\s*(Ensemble-Median|Median|Einzelprognose)/g, ""),
+            name: scatter.name?.replace(/:\s*(Ensemble-Median|Median|Einzelprognose|Prognose)/g, ""),
             hoverinfo: scatter.hoverinfo === "skip" ? "skip" : "none",
             hovertemplate: undefined,
             meta: { tooltipTemplate: scatter.hovertemplate },
@@ -460,9 +461,7 @@ onBeforeUnmount(() => {
         @pointerleave="hideTooltip"
         @keydown.esc="hideTooltip"
     >
-        <q-card-section class="no-padding chart-body">
-            <div ref="chartRef" class="chart-plot" />
-        </q-card-section>
+        <div ref="chartRef" class="chart-plot" />
         <svg class="chart-selection" aria-hidden="true">
             <circle
                 v-for="(dot, i) in selectionDots"
@@ -486,14 +485,16 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .chart-shell {
+    position: relative;
     height: 100%;
     min-width: 0;
-}
-.chart-body,
-.chart-plot {
-    height: 100%;
-    min-width: 0;
+    min-height: 0;
     overflow: hidden;
+}
+/* Out of flow: Plotly sizes its SVG in pixels, which must never feed back into the card's height. */
+.chart-plot {
+    position: absolute;
+    inset: 0;
 }
 
 /* Plotly's SVG starts at the container's top-left, so plot pixels are overlay pixels. */

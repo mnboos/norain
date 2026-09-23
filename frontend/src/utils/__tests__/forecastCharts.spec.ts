@@ -40,13 +40,23 @@ function charts(samples: ChartSample[]): [ChartFigure, ChartFigure] {
     return [temperature, headwind];
 }
 
-const isBand = (trace: Partial<ScatterData>) => trace.fill === "tonexty";
-const isMedian = (trace: Partial<ScatterData>) => trace.line?.width === 2;
-const isSingle = (trace: Partial<ScatterData>) => trace.line?.dash != null;
+const isUpper = (trace: Partial<ScatterData>) => trace.fill === "tonexty";
+const isLower = (trace: Partial<ScatterData>) => trace.fill === "none";
+const isLine = (trace: Partial<ScatterData>) => trace.line?.width === 2;
 
 describe("forecastCharts", () => {
     it("draws nothing without samples", () => {
         expect(forecastCharts([])).toEqual([]);
+    });
+
+    it("adds the felt temperature as its own line only when the samples carry it", () => {
+        const [plain] = charts([sample(0), sample(300)]);
+        expect(scatters(plain).map(trace => trace.name)).not.toContain("Gefühlt");
+        const [temperature] = charts([sample(0, { feltTemp: 8 }), sample(300, { feltTemp: 9 })]);
+        const felt = scatters(temperature).find(trace => trace.name === "Gefühlt");
+        expect(felt?.y).toEqual([8, 9]);
+        expect(felt?.showlegend).toBe(true);
+        expect(felt?.line?.dash).toBe("dot");
     });
 
     it("draws temperature with the rain as bars, and headwind", () => {
@@ -58,18 +68,38 @@ describe("forecastCharts", () => {
         expect(scatters(headwind)).toHaveLength(headwind.data.length);
     });
 
+    it("draws one line per metric, with the ensemble spread recentred on it", () => {
+        // The ensemble median is 15 °C / 6 km/h, the line 12 °C / 4 km/h: the band keeps the
+        // spread (±2) but sits around the line, and no median line is drawn.
+        const [temperature, headwind] = charts([withSpread(0), withSpread(300)]);
+        for (const [chart, value] of [[temperature, 12], [headwind, 4]] as const) {
+            const traces = scatters(chart);
+            expect(traces.filter(isLine)).toHaveLength(1);
+            expect(traces.find(isLine)?.y).toEqual([value, value]);
+            expect(traces.find(isLine)?.line?.dash).toBe("solid");
+            expect(traces.find(isLower)?.y).toEqual([value - 2, value - 2]);
+            expect(traces.find(isUpper)?.y).toEqual([value + 2, value + 2]);
+        }
+    });
+
+    it("keeps an asymmetric spread asymmetric", () => {
+        const metrics = { temperature: { p10: 14, median: 15, p90: 19 } };
+        const [temperature] = charts([sample(0, { uncertainty: { metrics } })]);
+        expect(scatters(temperature).find(isLower)?.y).toEqual([11]);
+        expect(scatters(temperature).find(isUpper)?.y).toEqual([16]);
+    });
+
     it("keeps gaps, ride minutes and sample indices", () => {
         const [temperature] = charts([withSpread(0), sample(300, { rainRateMmH: null }), withSpread(600)]);
-        const median = scatters(temperature).find(isMedian);
-        expect(median?.x).toEqual([0, 5, 10]);
-        expect(median?.y).toEqual([15, null, 15]);
-        expect(median?.customdata).toEqual([
+        const line = scatters(temperature).find(isLine);
+        expect(line?.x).toEqual([0, 5, 10]);
+        expect(line?.customdata).toEqual([
             [0, "10:00"],
             [1, "10:05"],
             [2, "10:10"],
         ]);
-        // Two runs, so two bands: the fill must not bridge the missing sample.
-        expect(scatters(temperature).filter(isBand)).toHaveLength(2);
+        // Two runs, so two bands: the fill must not bridge the sample without a spread.
+        expect(scatters(temperature).filter(isUpper)).toHaveLength(2);
 
         expect(bars(temperature)[0]).toMatchObject({ x: [0, 5, 10], y: [0.5, null, 0.5], yaxis: "y2" });
         expect(temperature.layout.yaxis2).toMatchObject({ overlaying: "y", side: "right" });
@@ -84,16 +114,14 @@ describe("forecastCharts", () => {
         }
     });
 
-    it("draws only the single forecast, with its own legend entry, without an ensemble", () => {
+    it("draws only the line, with its own legend entry, without an ensemble", () => {
         // A free account's samples carry no uncertainty.
         const all = charts([sample(0), sample(300)]);
         for (const chart of all) {
             const traces = scatters(chart);
-            expect(traces.filter(isBand)).toHaveLength(0);
-            expect(traces.filter(isMedian)).toHaveLength(0);
-            const single = traces.filter(isSingle);
-            expect(single).toHaveLength(1);
-            expect(single[0]?.showlegend).toBe(true);
+            expect(traces.filter(isUpper)).toHaveLength(0);
+            expect(traces).toHaveLength(1);
+            expect(traces[0]?.showlegend).toBe(true);
         }
         expect(scatters(all[1])[0]?.y).toEqual([4, 4]);
     });

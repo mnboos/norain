@@ -2,20 +2,25 @@
 import { GeometrySource } from "@norain/api/models";
 import { computed, ref, toRefs, watch } from "vue";
 import { useQuasar } from "quasar";
-import { symSharpCloudOff, symSharpPedalBike } from "@quasar/extras/material-symbols-sharp";
+import {
+    symSharpCloudOff,
+    symSharpPedalBike,
+    symSharpEditRoad,
+    symSharpDownload,
+} from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import DepartureComparison from "@/components/DepartureComparison.vue";
+import ForecastFreshness from "@/components/ForecastFreshness.vue";
 import ForecastSummaryCard from "@/components/ForecastSummaryCard.vue";
 import KeyRideDataCard from "@/components/KeyRideDataCard.vue";
 import WindDistributionBar from "@/components/WindDistributionBar.vue";
 import WeatherChart from "@/components/WeatherChart.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import RouteEditorDialog from "@/components/RouteEditorDialog.vue";
-import GpxImportDialog from "@/components/GpxImportDialog.vue";
 import RouteTimingFields from "@/components/RouteTimingFields.vue";
-import { gpxApi, downloadGpx, gpxError, type RouteDraft } from "@/services/gpx";
+import { gpxApi, downloadGpx, gpxError } from "@/services/gpx";
 import { toLonLat, type LonLat } from "@/utils/routeEditing";
 import { useRecurringRoute, useRecurringRouteForecast, useUpdateRecurringRoute } from "@/queries/recurringRoutes";
 
@@ -105,34 +110,41 @@ function saveFlexibility() {
 
 // Reshaping is done on the outbound route; the server mirrors its via points onto the return.
 const editing = ref(false);
-const importing = ref(false);
 const exporting = ref(false);
 const duration = ref(route.value.durationSeconds ?? 0);
-watch(() => route.value.durationSeconds, value => { duration.value = value ?? 0; });
+watch(
+    () => route.value.durationSeconds,
+    value => {
+        duration.value = value ?? 0;
+    },
+);
 async function exportRoute() {
     exporting.value = true;
-    try { const response = await gpxApi.coreApiGpxExportSavedGpxRaw({ routeId: route.value.id }); await downloadGpx(response.raw, route.value.name); }
-    catch (e) { $q.notify({ type: "negative", message: await gpxError(e) }); }
-    finally { exporting.value = false; }
-}
-function saveImported(value: RouteDraft) {
-    const points = value.plan.coordinates;
-    const first = points[0], last = points.at(-1);
-    if (!first || !last) return;
-    saveShape.mutate({ id: route.value.id, data: { ...route.value, geometrySource: value.plan.geometrySource,
-        importedCoordinates: value.plan.geometrySource === GeometrySource.Imported ? points : [],
-        durationSeconds: value.plan.durationSeconds,
-        startLon: first[0] ?? 0, startLat: first[1] ?? 0, startName: "Start",
-        destLon: last[0] ?? 0, destLat: last[1] ?? 0, destName: "Ziel",
-        viaPoints: value.plan.geometrySource === GeometrySource.Graphhopper ? points.slice(1, -1) : [],
-    } }, { onError: e => { void gpxError(e).then(message => { $q.notify({ type: "negative", message }); }); } });
+    try {
+        const response = await gpxApi.coreApiGpxExportSavedGpxRaw({ routeId: route.value.id });
+        await downloadGpx(response.raw, route.value.name);
+    } catch (e) {
+        $q.notify({ type: "negative", message: await gpxError(e) });
+    } finally {
+        exporting.value = false;
+    }
 }
 function saveDuration() {
-    saveShape.mutate({ id: route.value.id, data: { ...route.value, durationSeconds: duration.value } },
-        { onError: e => { void gpxError(e).then(message => { $q.notify({ type: "negative", message }); }); } });
+    saveShape.mutate(
+        { id: route.value.id, data: { ...route.value, durationSeconds: duration.value } },
+        {
+            onError: e => {
+                void gpxError(e).then(message => {
+                    $q.notify({ type: "negative", message });
+                });
+            },
+        },
+    );
 }
 const saveShape = useUpdateRecurringRoute();
-const canEditShape = computed(() => !route.value.parentRouteId && route.value.geometrySource !== GeometrySource.Imported);
+const canEditShape = computed(
+    () => !route.value.parentRouteId && route.value.geometrySource !== GeometrySource.Imported,
+);
 const viaPoints = computed(() => (route.value.viaPoints ?? []).map(toLonLat));
 function saveViaPoints(points: LonLat[]) {
     saveShape.mutate(
@@ -149,8 +161,17 @@ const forecastProgressPercent = computed(() => {
     return Math.round((100 * progress.cellsSettled) / progress.cellsTotal);
 });
 
+// Renewing on the server, not just any refetch: the 60 s one answered with a finished job
+// keeps the progress at "done" and must not flash the line in and out.
+const refreshing = computed(() => {
+    const status = forecastProgress.value?.status;
+    return forecastLoading.value && !!status && status !== "done" && status !== "failed";
+});
+const refreshFailed = computed(() => !!forecastError.value && !forecastLoading.value);
 const selectedSample = ref(0);
-watch(forecast, () => {
+// Not on every new result: a stale forecast and the fresh one replacing it share the job and
+// the samples' places, so the user's pick stays where it was.
+watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () => {
     selectedSample.value = 0;
 });
 </script>
@@ -192,21 +213,34 @@ watch(forecast, () => {
                             flat
                             dense
                             no-caps
+                            :icon="symSharpEditRoad"
                             color="primary"
                             label="Strecke anpassen"
                             class="q-mt-sm"
                             :loading="saveShape.isPending.value"
                             @click="editing = true"
                         />
-                        <q-btn flat dense no-caps label="GPX exportieren" :disable="!hasGeometry && route.geometrySource !== 'imported'" :loading="exporting" @click="exportRoute" />
-                        <q-btn v-if="!route.parentRouteId" flat dense no-caps label="GPX importieren" @click="importing = true" />
-                        <GpxImportDialog v-model="importing" :profile="route.profile" @apply="saveImported" />
+                        <q-btn
+                            flat
+                            dense
+                            no-caps
+                            :icon="symSharpDownload"
+                            label="GPX exportieren"
+                            :disable="!hasGeometry && route.geometrySource !== 'imported'"
+                            :loading="exporting"
+                            @click="exportRoute"
+                        />
                         <template v-if="route.geometrySource === 'imported' && !route.parentRouteId">
                             <div class="q-my-sm">Originalstrecke aus GPX</div>
                             <RouteTimingFields v-model="duration" :distance-m="route.totalDistanceM ?? 0" />
                             <q-btn
-flat no-caps label="Fahrzeit speichern" :disable="duration <= 0 || duration > 1382400 || duration === route.durationSeconds"
-                                :loading="saveShape.isPending.value" @click="saveDuration" />
+                                flat
+                                no-caps
+                                label="Fahrzeit speichern"
+                                :disable="duration <= 0 || duration > 1382400 || duration === route.durationSeconds"
+                                :loading="saveShape.isPending.value"
+                                @click="saveDuration"
+                            />
                         </template>
                         <RouteEditorDialog
                             v-if="canEditShape"
@@ -247,6 +281,14 @@ flat no-caps label="Fahrzeit speichern" :disable="duration <= 0 || duration > 13
                 <div class="col-12 col-sm-6 col-md-4">
                     <!-- The key figures sit under the forecast, in the same card. -->
                     <q-card class="full-height column">
+                        <q-card-section v-if="refreshing || refreshFailed" class="q-pb-none col-auto">
+                            <ForecastFreshness
+                                :computed-at="forecast.computedAt"
+                                :refreshing="refreshing"
+                                :failed="refreshFailed"
+                                :percent="forecastProgressPercent"
+                            />
+                        </q-card-section>
                         <ForecastSummaryCard flat :forecast="forecast" class="col" />
                         <q-separator />
                         <KeyRideDataCard flat :forecast="forecast" :columns="$q.screen.width >= 1280 ? 4 : 2" />
@@ -261,7 +303,7 @@ flat no-caps label="Fahrzeit speichern" :disable="duration <= 0 || duration > 13
                                 :distribution="forecast.summary.windDistribution"
                             />
                         </q-card-section>
-                        <q-card-section style="height: 260px">
+                        <q-card-section style="height: 260px" class="q-pa-none">
                             <WeatherChart
                                 kind="headwind"
                                 :version="forecast.version"
@@ -275,7 +317,7 @@ flat no-caps label="Fahrzeit speichern" :disable="duration <= 0 || duration > 13
 
                 <div class="col-12 col-sm-6 col-md-3">
                     <q-card class="full-height column">
-                        <q-card-section class="col" style="min-height: 300px">
+                        <q-card-section class="col q-pa-none" style="min-height: 300px">
                             <WeatherChart
                                 kind="temperature"
                                 :version="forecast.version"
@@ -288,14 +330,17 @@ flat no-caps label="Fahrzeit speichern" :disable="duration <= 0 || duration > 13
                 </div>
             </template>
 
-            <div v-if="!hasGeometry || forecastError || (!route.forecastAvailable && !forecastLoading)" class="col-12">
+            <div
+                v-if="!hasGeometry || (forecastError && !forecast) || (!route.forecastAvailable && !forecastLoading)"
+                class="col-12"
+            >
                 <q-banner v-if="!hasGeometry" rounded class="bg-tint-warn">
                     <template #avatar>
                         <q-spinner-dots size="1.5rem" color="accent" />
                     </template>
                     Route wird berechnet...
                 </q-banner>
-                <q-banner v-else-if="forecastError" rounded class="bg-tint-error">
+                <q-banner v-else-if="forecastError && !forecast" rounded class="bg-tint-error">
                     Wetterdaten konnten nicht geladen werden. Ist diese Route nach Ablauf von Plus pausiert?
                     <q-btn flat to="/account" label="Aktive Routen und Tarif verwalten" no-caps />
                 </q-banner>
@@ -321,7 +366,8 @@ flat no-caps label="Fahrzeit speichern" :disable="duration <= 0 || duration > 13
             </q-card>
         </div>
 
-        <q-inner-loading :showing="forecastLoading && hasGeometry">
+        <!-- A forecast on screen (a stale one while it refreshes) stays usable: the line above says so. -->
+        <q-inner-loading :showing="forecastLoading && hasGeometry && !forecast">
             <q-circular-progress
                 v-if="forecastProgressPercent !== undefined"
                 show-value

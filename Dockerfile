@@ -68,7 +68,9 @@ RUN apt-get update -y && \
 
 COPY docker/graphhopper-entrypoint.sh entrypoint.sh
 COPY docker/graphhopper-filter-osm.sh filter-osm.sh
-RUN chmod +x /graphhopper/entrypoint.sh /graphhopper/filter-osm.sh
+# Also run on its own (`just poi-extract`): the journey planner's POIs, see core/pois.py.
+COPY docker/osm-extract-pois.sh extract-pois.sh
+RUN chmod +x /graphhopper/entrypoint.sh /graphhopper/filter-osm.sh /graphhopper/extract-pois.sh
 
 ENTRYPOINT ["/graphhopper/entrypoint.sh"]
 

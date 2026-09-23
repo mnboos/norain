@@ -179,7 +179,7 @@ class BudgetTests(SimpleTestCase):
             self.assertEqual([stations._spend_call() for _ in range(2)], [True, False])
 
     def test_fails_closed_without_the_cache(self):
-        with patch("core.stations.cache.incr", side_effect=ConnectionError("redis down")):
+        with patch("core.ratelimit.cache.incr", side_effect=ConnectionError("redis down")):
             self.assertFalse(stations._spend_call())
 
     def test_blocked_after_429(self):

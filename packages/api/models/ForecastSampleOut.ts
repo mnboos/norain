@@ -79,6 +79,10 @@ export interface ForecastSampleOut {
     /**
      * 
      */
+    feltTemp?: number | null;
+    /**
+     * 
+     */
     windSpeed?: number | null;
     /**
      * 
@@ -120,6 +124,10 @@ export interface ForecastSampleOut {
      * 
      */
     stationCount?: number | null;
+    /**
+     * 
+     */
+    ensembleWeight?: number | null;
     /**
      * 
      */
@@ -174,6 +182,7 @@ export function ForecastSampleOutFromJSONTyped(json: any, ignoreDiscriminator: b
         'pop': json['pop'] === undefined ? undefined : json['pop'] === null ? null : json['pop'],
         'rainIfWet': json['rain_if_wet'] === undefined ? undefined : json['rain_if_wet'] === null ? null : json['rain_if_wet'],
         'temp': json['temp'],
+        'feltTemp': json['felt_temp'] === undefined ? undefined : json['felt_temp'] === null ? null : json['felt_temp'],
         'windSpeed': json['wind_speed'] === undefined ? undefined : json['wind_speed'] === null ? null : json['wind_speed'],
         'windGust': json['wind_gust'] === undefined ? undefined : json['wind_gust'] === null ? null : json['wind_gust'],
         'windDir': json['wind_dir'] === undefined ? undefined : json['wind_dir'] === null ? null : json['wind_dir'],
@@ -185,6 +194,7 @@ export function ForecastSampleOutFromJSONTyped(json: any, ignoreDiscriminator: b
         'weatherCode': json['weather_code'] === undefined ? undefined : json['weather_code'] === null ? null : json['weather_code'],
         'weatherDesc': json['weather_desc'],
         'stationCount': json['station_count'] === undefined ? undefined : json['station_count'] === null ? null : json['station_count'],
+        'ensembleWeight': json['ensemble_weight'] === undefined ? undefined : json['ensemble_weight'] === null ? null : json['ensemble_weight'],
         'rideScore': json['ride_score'] === undefined ? undefined : json['ride_score'] === null ? null : json['ride_score'],
         'rideLabel': json['ride_label'] === undefined ? undefined : json['ride_label'] === null ? null : json['ride_label'],
         'windEffortLevel': json['wind_effort_level'] === undefined ? undefined : json['wind_effort_level'] === null ? null : json['wind_effort_level'],
@@ -215,6 +225,7 @@ export function ForecastSampleOutToJSONTyped(value?: ForecastSampleOut | null, i
         'pop': value['pop'],
         'rain_if_wet': value['rainIfWet'],
         'temp': value['temp'],
+        'felt_temp': value['feltTemp'],
         'wind_speed': value['windSpeed'],
         'wind_gust': value['windGust'],
         'wind_dir': value['windDir'],
@@ -226,6 +237,7 @@ export function ForecastSampleOutToJSONTyped(value?: ForecastSampleOut | null, i
         'weather_code': value['weatherCode'],
         'weather_desc': value['weatherDesc'],
         'station_count': value['stationCount'],
+        'ensemble_weight': value['ensembleWeight'],
         'ride_score': value['rideScore'],
         'ride_label': value['rideLabel'],
         'wind_effort_level': value['windEffortLevel'],

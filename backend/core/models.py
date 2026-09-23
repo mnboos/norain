@@ -293,6 +293,33 @@ class EnsembleCell(models.Model):
         return f"EnsembleCell({self.lat_r}, {self.lon_r}, {self.day_key})"
 
 
+class CellFetchLease(models.Model):
+    """Who is fetching a grid cell from the provider right now (see ``core.cell_lease``).
+
+    One row per cell while a fetch is in flight. ``forecast_days`` is deliberately not
+    in the key: a short and a long request for the same cell take turns rather than race.
+    """
+
+    class Kind(models.TextChoices):
+        FORECAST = "forecast"
+        ENSEMBLE = "ensemble"
+
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    lat_r = models.FloatField()
+    lon_r = models.FloatField()
+    day_key = models.DateField()
+    token = models.UUIDField(default=uuid.uuid4)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        constraints = (
+            models.UniqueConstraint(fields=["kind", "lat_r", "lon_r", "day_key"], name="unique_cell_fetch_lease"),
+        )
+
+    def __str__(self):
+        return f"CellFetchLease({self.kind}, {self.lat_r}, {self.lon_r}, {self.day_key})"
+
+
 class StationLookup(models.Model):
     """The Weather Underground stations nearest one lookup cell (~4-5 km).
 
@@ -347,6 +374,7 @@ class ForecastJob(models.Model):
     class Kind(models.TextChoices):
         ADHOC = "adhoc", "Ad-hoc route"
         ROUTE = "route", "Saved route"
+        JOURNEY_STAGE = "journey_stage", "Journey stage"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -398,6 +426,10 @@ class ForecastJob(models.Model):
     # Internal handoff: JSON RouteWeatherOut plus the entitlements used to compute it.
     computed_weather = models.JSONField(null=True, blank=True)
     result = models.JSONField(null=True, blank=True)
+    # The previous result, kept while a restarted job refreshes so the page can show it at once
+    # (flagged stale) instead of a spinner. Only the HTTP envelope serves it; see
+    # ``jobs.carry_stale`` for what may be kept.
+    stale_result = models.JSONField(null=True, blank=True)
     error = models.TextField(blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -445,3 +477,143 @@ class RideBriefing(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["route", "departure"], name="unique_ride_briefing")]
+
+
+class Poi(models.Model):
+    """A point of interest near bike routes, extracted from OSM (see core/pois.py).
+
+    Replaced wholesale by ``manage.py import_pois``. Nothing references a row by key:
+    journeys store the POIs they use as JSON, so a re-import never touches them. An object has
+    one row per category it belongs to: a machine selling drinks and sweets is two rows.
+    """
+
+    osm_ref = models.CharField(max_length=32, db_index=True, help_text="n123 / w456 / r789")
+    category = models.CharField(max_length=32, db_index=True)
+    name = models.CharField(max_length=300, blank=True, default="")
+    tags = models.JSONField(default=dict, blank=True, help_text="A whitelist of OSM tags, see core.pois.KEPT_TAGS")
+    location = models.PointField(srid=4326, geography=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["osm_ref", "category"], name="unique_poi_category")]
+
+    def __str__(self):
+        return f"{self.category}: {self.name or self.osm_ref}"
+
+
+class Journey(models.Model):
+    """A one-off ride over one or more days, planned by NoRain (core/journeys.py).
+
+    The user gives the ends, the date, how far a day and a leg may be, which POIs matter and
+    how the road should be. ``plan_journey`` turns that into days (ending at lodging) and, per
+    day, alternative stages. Their weather is ordinary forecast jobs (``JOURNEY_STAGE``), and
+    the ranking is computed when the journey is read, never stored.
+    """
+
+    class PlanStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ROUTING = "routing", "Routing"
+        WEATHER = "weather", "Fetching corridor weather"
+        DONE = "done", "Done"
+        FAILED = "failed", "Failed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="journeys")
+    name = models.CharField(max_length=200)
+
+    start_point = models.PointField(srid=4326, geography=True)
+    start_name = models.CharField(max_length=300)
+    destination_point = models.PointField(srid=4326, geography=True)
+    dest_name = models.CharField(max_length=300)
+    via_points = models.JSONField(default=list, blank=True, help_text="[[lon, lat], ...] in riding order")
+    profile = models.CharField(max_length=50, default="bike")
+
+    start_date = models.DateField()
+    earliest_start = models.TimeField(help_text="Local time a day's ride may start")
+    latest_arrival = models.TimeField(help_text="Local time a day's ride should end")
+    # A day and a leg are each limited by time, distance or both; the tighter one wins.
+    max_day_seconds = models.PositiveIntegerField(null=True, blank=True)
+    max_day_distance_m = models.PositiveIntegerField(null=True, blank=True)
+    max_leg_seconds = models.PositiveIntegerField(null=True, blank=True)
+    max_leg_distance_m = models.PositiveIntegerField(null=True, blank=True)
+
+    poi_categories = models.JSONField(default=list, blank=True, help_text="core.pois categories wanted on every leg")
+    lodging_kinds = models.JSONField(default=list, blank=True, help_text="tourism=* values a day may end at")
+    road_prefs = models.JSONField(default=dict, blank=True, help_text="core.road_prefs.RoadPrefs")
+    weather_prefs = models.JSONField(
+        default=dict, blank=True, help_text="avoid_rain, avoid_headwind, departure_window_minutes"
+    )
+
+    plan_status = models.CharField(max_length=16, choices=PlanStatus.choices, default=PlanStatus.PENDING)
+    # Bumped by every edit and re-plan. A planning task carries the revision it was started
+    # for and stops writing once it is no longer current.
+    plan_revision = models.PositiveIntegerField(default=0)
+    plan_attempts = models.PositiveSmallIntegerField(default=0)
+    plan_error = models.TextField(blank=True, default="")
+    planned_at = models.DateTimeField(null=True, blank=True)
+    # The day cuts between the two planning tasks: ends, lodging, which days are weather-routed.
+    plan_state = models.JSONField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering: ClassVar[list[str]] = ["start_date", "-created_at"]
+
+    @property
+    def routing_points(self) -> tuple[tuple[float, float], ...]:
+        via = tuple((float(lon), float(lat)) for lon, lat in self.via_points or ())
+        start = (self.start_point.x, self.start_point.y)
+        return (start, *via, (self.destination_point.x, self.destination_point.y))
+
+    def __str__(self):
+        return self.name
+
+
+class JourneyDay(models.Model):
+    """One day of a planned journey: where it starts and ends, and where the rider sleeps."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    journey = models.ForeignKey(Journey, on_delete=models.CASCADE, related_name="days")
+    index = models.PositiveSmallIntegerField()
+    date = models.DateField()
+    start = models.JSONField(help_text="[lon, lat]")
+    end = models.JSONField(help_text="[lon, lat]")
+    # Denormalised POI (core.pois.PoiHit.as_json), no FK: a POI re-import never touches it.
+    lodging = models.JSONField(null=True, blank=True)
+    # The day had to end where the limit ran out: no lodging of the wanted kinds nearby.
+    lodging_missing = models.BooleanField(default=False)
+    weather_routed = models.BooleanField(default=False)
+
+    class Meta:
+        ordering: ClassVar[list[str]] = ["index"]
+        constraints = (models.UniqueConstraint(fields=["journey", "index"], name="unique_journey_day"),)
+
+
+class JourneyStage(models.Model):
+    """One way to ride one day: a route alternative, gap-filled and with its breaks."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    day = models.ForeignKey(JourneyDay, on_delete=models.CASCADE, related_name="stages")
+    rank = models.PositiveSmallIntegerField(help_text="GraphHopper's order, 0 = its best path")
+    via_points = models.JSONField(default=list, blank=True, help_text="Gap-fill POIs routed through, [[lon, lat]]")
+
+    # The same geometry fields as RecurringRoute, so a forecast job reads either alike.
+    polyline = models.LineStringField(srid=4326, geography=True)
+    total_seconds = models.IntegerField()
+    total_distance_m = models.FloatField()
+    sample_points = models.JSONField()
+    vertex_times = models.JSONField()
+    geometry_fetched_at = models.DateTimeField()
+
+    breaks = models.JSONField(default=list, blank=True, help_text="[{along_m, elapsed_s, lon, lat, pois}]")
+    gaps = models.JSONField(default=dict, blank=True, help_text="{category: longest stretch without it, m}")
+    detours = models.JSONField(default=list, blank=True, help_text="Gap-fill POIs: [{poi..., category}]")
+    detour_m = models.FloatField(default=0, help_text="Extra distance the gap-fill vias cost")
+    leg_m = models.FloatField(default=0, help_text="The leg limit on this stage in metres; 0 = no breaks")
+
+    class Meta:
+        ordering: ClassVar[list[str]] = ["rank"]
+
+    @property
+    def polyline_coordinates(self) -> list[list[float]]:
+        return [[float(lon), float(lat)] for lon, lat in self.polyline.coords]

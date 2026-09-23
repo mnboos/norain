@@ -1,6 +1,6 @@
 {
     "extends": "./tsconfig.app.json",
-    "include": ["src/**/__tests__/*", "src/utils/**/*", "src/components/**/*", "src/composables/**/*", "src/services/**/*", "src/queries/**/*", "env.d.ts"],
+    "include": ["src/**/__tests__/*", "src/utils/**/*", "src/map/**/*", "src/components/**/*", "src/composables/**/*", "src/services/**/*", "src/queries/**/*", "env.d.ts"],
     "exclude": [],
     "compilerOptions": {
         "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vitest.tsbuildinfo",

@@ -73,7 +73,8 @@ WIND_POWER_CURVE = ((0, 0), (50, 0.3), (130, 0.65), (230, 1))
 # thumbnails from before the metric, or a route without timing.
 WIND_CURVE = ((0, 0), (10, 0.3), (20, 0.65), (30, 1))
 
-# Comfortable riding band is 14-22 °C; it gets worse in both directions.
+# Comfortable riding band is 14-22 °C *felt* - the wind chill at riding speed (`felt_temp`),
+# not the thermometer; it gets worse in both directions.
 TEMP_CURVE = ((-2, 1), (14, 0), (22, 0), (34, 1))
 
 # Frost is a safety factor, not a comfort one: what matters is ice on the road, so this curve
@@ -98,6 +99,13 @@ FROST_CODES = {
     71: 0.7, 73: 0.85, 75: 1.0, 77: 0.7,  # Schneefall, Schneegriesel
     85: 0.85, 86: 1.0,  # Schneeschauer
 }
+
+# Weather-aware journey routing (core/weather_routing.py): how much more a road costs inside
+# a weather zone, as GraphHopper priority multipliers (< 1 = a penalty, the only kind LM allows).
+# The same judgement as the curves above, so it lives here and never leaves the server: the
+# custom model goes to GraphHopper, not to the browser. Checked worst first.
+ROUTING_RAIN_ZONES = ((0.5, 0.25), (0.2, 0.6))  # (rain_impact at least, multiplier)
+ROUTING_WIND_ZONES = ((30.0, 0.6), (18.0, 0.85))  # (wind km/h at least, multiplier on headwind roads)
 
 BAND_LABELS = ("sehr gut", "gut", "mässig", "schlecht", "sehr schlecht")
 FACTOR_LABELS: dict[RideFactor, str] = {
@@ -216,6 +224,8 @@ def frost_impact(sample, rain: float | None = None, config: RideQualityConfig = 
     would make every job result and every thumbnail blob written before this field existed
     unscorable, and the whole list would go grey.
     """
+    # The air temperature, never `felt_temp`: ice is a property of the road, and wind chill
+    # does not cool a surface below the air.
     temp = _get(sample, "temp")
     if _finite(temp):
         wetness = rain if rain is not None else rain_impact(sample, config)
@@ -240,7 +250,9 @@ def ride_score(sample, config: RideQualityConfig = RIDE_QUALITY) -> RideScore | 
     ``None`` when rain or wind is unknown. Rain is ``rain_impact`` - chance and amount together.
     The wind factor reads the wind effort (``wind_power_w``) and falls back to the
     ground-relative headwind when there is none. Never feed apparent wind into either curve:
-    it is mostly the rider's own speed and would need a different calibration. Temperature and
+    it is mostly the rider's own speed and would need a different calibration. The temperature
+    factor reads the felt temperature (``felt_temp``, the wind chill at riding speed) and falls
+    back to ``temp`` for samples stored without it; frost reads the air temperature. Temperature and
     frost never make a sample unscorable: both fall back to no penalty (see ``frost_impact``).
     """
     rain = rain_impact(sample, config)
@@ -254,8 +266,10 @@ def ride_score(sample, config: RideQualityConfig = RIDE_QUALITY) -> RideScore | 
         wind = _clamp01(_piecewise(headwind, WIND_CURVE))
     else:
         return None
-    temp_value = _get(sample, "temp")
-    temp =_clamp01(_piecewise(temp_value, TEMP_CURVE)) if _finite(temp_value) else 0.0
+    temp_value = _get(sample, "felt_temp")
+    if not _finite(temp_value):
+        temp_value = _get(sample, "temp")
+    temp = _clamp01(_piecewise(temp_value, TEMP_CURVE)) if _finite(temp_value) else 0.0
     frost = frost_impact(sample, rain, config)
 
     penalties: dict[RideFactor, float] = {"rain": rain, "wind": wind, "temp": temp, "frost": frost}

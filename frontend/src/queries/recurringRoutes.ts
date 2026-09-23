@@ -10,7 +10,7 @@ import type {
 } from "@norain/api/models";
 
 import { entitlementKeys } from "@/queries/entitlements";
-import { reportForecastProgress, useForecastProgress } from "@/queries/forecastProgress";
+import { reportForecastProgress, reportStaleForecast, useForecastProgress } from "@/queries/forecastProgress";
 import { measureForecastLoad } from "@/services/telemetry";
 import { awaitForecastJob } from "@/services/forecastJob";
 
@@ -111,7 +111,15 @@ function recurringRouteForecastOptions(
                         source === "prefetch"
                             ? await api.coreApiRecurringRouteRouteForecast(request, { headers: PREFETCH_HEADERS })
                             : await api.coreApiRecurringRouteRouteForecast(request);
-                    return await awaitForecastJob(job, reportForecastProgress(client, key), signal, onDelivery);
+                    // Only the page shows a stale result: a prefetch that fails must leave nothing
+                    // behind, and stale data it cached would sit there unlabelled.
+                    return await awaitForecastJob(
+                        job,
+                        reportForecastProgress(client, key),
+                        signal,
+                        onDelivery,
+                        source === "page" ? reportStaleForecast(client, key) : undefined,
+                    );
                 },
                 { feature: "route", "route.id": toValue(id) ?? "", prefetch: source === "prefetch" },
                 signal,

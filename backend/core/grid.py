@@ -8,6 +8,7 @@ to avoid circular imports between weather.py <-> grid.py).
 """
 
 import os
+from collections.abc import Awaitable, Callable
 from datetime import UTC, date, datetime, timedelta
 from itertools import batched
 from typing import Any
@@ -18,7 +19,10 @@ from asgiref.sync import sync_to_async
 from django.db.models import Q
 from loguru import logger
 
+from .cell_lease import fetch_lease
 from .models import EnsembleCell, ForecastCell
+from .ratelimit import Limit, ProviderThrottled, acquire, cooldown_left, record_throttle
+from .ratelimit import describe_failure as _failure
 from .telemetry import emit, provider
 from .uncertainty import ENSEMBLE_VARIABLES
 from .wind import finite_number
@@ -51,7 +55,67 @@ POP_MEMBER_MM = 0.1
 ENSEMBLE_REQUEST_VERSION = 2
 CELL_LOOKUP_BATCH_SIZE = 500
 
+# Open-Meteo's free limits (open-meteo.com/en/pricing), in its own weighted calls. The free
+# API is for non-commercial use; with OPEN_METEO_API_KEY the requests go to the customer
+# hosts instead, and the OPEN_METEO_LIMIT_* variables should then carry the plan's limits.
+OPEN_METEO_LIMITS = {"MINUTE": (60, 600), "HOUR": (3600, 5000), "DAY": (86400, 10000), "MONTH": (30 * 86400, 300000)}
+# Headroom for requests we weigh too low and for the windows not lining up with Open-Meteo's.
+OPEN_METEO_MARGIN = 0.8
+# One Call 3.0 is free for 1000 calls a day and billed beyond that.
+OWM_DAILY_CAP = 900
+
 type CellKey = tuple[float, float, date]
+
+
+def _env_number(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name) or default)
+    except ValueError:
+        logger.warning(f"{name} is not a number, using {default}")
+        return default
+
+
+def open_meteo_limit() -> Limit:
+    """One budget for the forecast and the ensemble API: Open-Meteo counts per client."""
+    return Limit(
+        "open-meteo",
+        tuple(
+            (seconds, _env_number(f"OPEN_METEO_LIMIT_{name}", calls) * OPEN_METEO_MARGIN)
+            for name, (seconds, calls) in OPEN_METEO_LIMITS.items()
+        ),
+        fail_open=True,
+    )
+
+
+def owm_limit() -> Limit:
+    return Limit("openweathermap", ((86400, _env_number("OPENWEATHERMAP_DAILY_CAP", OWM_DAILY_CAP)),), fail_open=False)
+
+
+def open_meteo_weight(variables: int, forecast_days: int, models: int = 1) -> float:
+    """How many calls Open-Meteo counts one request as: more than 10 variables or 14 days is more than one.
+
+    The ensemble API may count its members too; that is not documented. A weight that is too
+    low shows up as 429s, and ``core.ratelimit`` then scales the budget down by itself.
+    """
+    return max(1.0, variables * models / 10) * max(1.0, forecast_days / 14)
+
+
+FORECAST_VARIABLES = len(_OM_VARS) * 2  # minutely_15 and hourly both count
+ENSEMBLE_MODEL_COUNT = len(ENSEMBLE_MODELS.split(","))
+
+
+def _open_meteo_request(url: str, params: dict) -> tuple[str, dict]:
+    """The customer host and key when a commercial key is configured, else the free host."""
+    if key := os.environ.get("OPEN_METEO_API_KEY"):
+        return url.replace("://", "://customer-", 1), {**params, "apikey": key}
+    return url, params
+
+
+def _throttle_wait(limit: Limit, exc: Exception) -> float:
+    """The cooldown a failed call starts: only a 429 starts one."""
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
+        return record_throttle(limit, exc.response)
+    return 0.0
 
 
 # =============================================================================
@@ -71,8 +135,9 @@ async def _fetch_ensemble(lat_r: float, lon_r: float, forecast_days: int, day_ke
         "timezone": "Europe/Zurich",
         "forecast_days": forecast_days,
     }
+    url, params = _open_meteo_request(ENSEMBLE_URL, params)
     async with httpx.AsyncClient() as client:
-        resp = await client.get(ENSEMBLE_URL, params=params, timeout=30)
+        resp = await client.get(url, params=params, timeout=30)
         resp.raise_for_status()
         data = resp.json()
         data["_norain_request_version"] = ENSEMBLE_REQUEST_VERSION
@@ -91,8 +156,9 @@ async def _fetch_open_meteo(lat_r: float, lon_r: float, forecast_days: int, day_
         "timezone": "Europe/Zurich",
         "forecast_days": forecast_days,
     }
+    url, params = _open_meteo_request(OPEN_METEO_URL, params)
     async with httpx.AsyncClient() as client:
-        resp = await client.get(OPEN_METEO_URL, params=params, timeout=30)
+        resp = await client.get(url, params=params, timeout=30)
         resp.raise_for_status()
         return resp.json()
 
@@ -313,6 +379,17 @@ def _get_ensemble_cell_sync(
     return cell
 
 
+def _find_forecast_cell_sync(
+    lat_r: float, lon_r: float, day_key: date, forecast_days: int | None = None
+) -> ForecastCell | None:
+    """A fresh cell from either source: an OWM fallback cell is as usable as an Open-Meteo one."""
+    for source in ("open-meteo", "openweathermap"):
+        cell = _get_forecast_cell_sync(lat_r, lon_r, day_key, source, forecast_days)
+        if cell is not None:
+            return cell
+    return None
+
+
 def _store_forecast_cell_sync(
     lat_r: float, lon_r: float, day_key: date, forecast_days: int, data: dict, source: str
 ) -> ForecastCell:
@@ -404,21 +481,61 @@ async def get_cached_forecast_cell(
     if isinstance(day_key, str):
         day_key = date.fromisoformat(day_key)
 
-    for source in ("open-meteo", "openweathermap"):
-        cell = await sync_to_async(_get_forecast_cell_sync)(lat_r, lon_r, day_key, source, forecast_days)
-        if cell is not None:
-            emit("count", "cache.lookup", kind="forecast", outcome="hit", source=source)
-            return cell
+    cell = await sync_to_async(_find_forecast_cell_sync)(lat_r, lon_r, day_key, forecast_days)
+    if cell is not None:
+        emit("count", "cache.lookup", kind="forecast", outcome="hit", source=cell.source)
+        return cell
     emit("count", "cache.lookup", kind="forecast", outcome="miss")
     return None
 
 
+async def _leased_fetch(
+    kind: str,
+    lat_r: float,
+    lon_r: float,
+    day_key: date,
+    forecast_days: int,
+    find_sync: Callable[[float, float, date, int | None], Any],
+    fetch_and_store: Callable[[], Awaitable[Any]],
+    raise_throttled: bool = False,
+) -> Any:
+    """Run *fetch_and_store* only as the holder of this cell's fetch lease.
+
+    However many callers miss the cache for one cell at once, one fetches; the rest wait
+    for it and return what it stored (see ``core.cell_lease``). A waiter whose holder was
+    throttled is throttled too, so its task defers alongside instead of failing the cell.
+    """
+    while True:
+        async with fetch_lease(kind, lat_r, lon_r, day_key) as holder:
+            # Looked up again under the lease: another holder may have stored the cell
+            # between this caller's cache miss and taking the lease.
+            cell = await sync_to_async(find_sync)(lat_r, lon_r, day_key, forecast_days)
+            if cell is not None:
+                return cell
+            if holder:
+                return await fetch_and_store()
+            if await sync_to_async(find_sync)(lat_r, lon_r, day_key, None) is None:
+                # The holder failed or died. Fetching here would be exactly the duplicate
+                # request the lease exists to prevent; the next scan or job retries.
+                logger.info(f"{kind} cell ({lat_r}, {lon_r}, {day_key}): concurrent fetch stored nothing")
+                if raise_throttled and (wait := cooldown_left(open_meteo_limit())):
+                    raise ProviderThrottled("open-meteo", wait)
+                return None
+        # A fresh cell exists but covers fewer days than this caller needs. That is a
+        # different request, so compete for the lease again and fetch the longer horizon.
+
+
 async def get_or_fetch_forecast_cell(
-    lat_r: float, lon_r: float, day_key: str | date, forecast_days: int
+    lat_r: float, lon_r: float, day_key: str | date, forecast_days: int, *, allow_fallback: bool = True
 ) -> ForecastCell | None:
     """Return a fresh ForecastCell from the DB, or fetch + store and return.
 
-    Tries Open-Meteo first, falls back to OWM. Returns None if both fail.
+    Tries Open-Meteo first, falls back to OWM. Returns None if both fail. At most one
+    caller per cell fetches at a time; concurrent callers get what it stored.
+
+    When Open-Meteo is rate-limited (our budget or its 429) and *allow_fallback* is False,
+    raises ``ProviderThrottled`` instead of spending an OWM call: the cell task would rather
+    wait. Other Open-Meteo failures fall back either way.
     """
     if isinstance(day_key, str):
         day_key = date.fromisoformat(day_key)
@@ -426,24 +543,52 @@ async def get_or_fetch_forecast_cell(
     cell = await get_cached_forecast_cell(lat_r, lon_r, day_key, forecast_days)
     if cell is not None:
         return cell
+    return await _leased_fetch(
+        "forecast",
+        lat_r,
+        lon_r,
+        day_key,
+        forecast_days,
+        _find_forecast_cell_sync,
+        lambda: _fetch_and_store_forecast(lat_r, lon_r, day_key, forecast_days, allow_fallback),
+        raise_throttled=not allow_fallback,
+    )
 
-    # Fetch fresh data
+
+async def _fetch_and_store_forecast(
+    lat_r: float, lon_r: float, day_key: date, forecast_days: int, allow_fallback: bool = True
+) -> ForecastCell | None:
     data = None
     source = "open-meteo"
-    try:
-        data = await _fetch_open_meteo(lat_r, lon_r, forecast_days, day_key.isoformat())
-    except (httpx.HTTPError, KeyError, ValueError) as exc:
-        # Logged: the calling task still reports success, so a TLS, DNS or rate-limit
-        # failure is otherwise visible only as a failed job.
-        logger.warning("get_or_fetch_forecast_cell: Open-Meteo fetch failed for ({}, {}): {}", lat_r, lon_r, exc)
+    limit = open_meteo_limit()
+    wait = acquire(limit, open_meteo_weight(FORECAST_VARIABLES, forecast_days))
+    if not wait:
+        try:
+            data = await _fetch_open_meteo(lat_r, lon_r, forecast_days, day_key.isoformat())
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            # Logged: the calling task still reports success, so a TLS, DNS or rate-limit
+            # failure is otherwise visible only as a failed job.
+            wait = _throttle_wait(limit, exc)
+            logger.warning(
+                "get_or_fetch_forecast_cell: Open-Meteo fetch failed for ({}, {}): {}", lat_r, lon_r, _failure(exc)
+            )
+    if data is None and wait and not allow_fallback:
+        raise ProviderThrottled(limit.provider, wait)
 
     if data is None:
         emit("count", "weather.fallback", outcome="needed")
         source = "openweathermap"
-        try:
-            data = await _fetch_owm(lat_r, lon_r)
-        except (httpx.HTTPError, KeyError, ValueError) as exc:
-            logger.warning("get_or_fetch_forecast_cell: OWM fetch failed for ({}, {}): {}", lat_r, lon_r, exc)
+        # Without a key _fetch_owm makes no call, so it spends no budget either.
+        if not os.environ.get("OPENWEATHERMAP_API_KEY") or not acquire(owm_limit()):
+            try:
+                data = await _fetch_owm(lat_r, lon_r)
+            except (httpx.HTTPError, KeyError, ValueError) as exc:
+                _throttle_wait(owm_limit(), exc)
+                logger.warning(
+                    "get_or_fetch_forecast_cell: OWM fetch failed for ({}, {}): {}", lat_r, lon_r, _failure(exc)
+                )
+        else:
+            logger.warning("get_or_fetch_forecast_cell: OpenWeatherMap budget reached, no fallback call")
 
     if data is None:
         logger.warning(
@@ -472,33 +617,56 @@ async def get_cached_ensemble_cell(
 
 
 async def get_or_fetch_ensemble_cell(
-    lat_r: float, lon_r: float, day_key: str | date, forecast_days: int
+    lat_r: float, lon_r: float, day_key: str | date, forecast_days: int, *, raise_throttled: bool = False
 ) -> EnsembleCell | None:
-    """Return a fresh EnsembleCell from the DB, or fetch + store and return."""
+    """Return a fresh EnsembleCell from the DB, or fetch + store and return.
+
+    At most one caller per cell fetches at a time; concurrent callers get what it stored.
+    A rate-limited Open-Meteo returns None, or raises ``ProviderThrottled`` if asked to.
+    """
     if isinstance(day_key, str):
         day_key = date.fromisoformat(day_key)
 
     cell = await get_cached_ensemble_cell(lat_r, lon_r, day_key, forecast_days)
     if cell is not None:
         return cell
+    return await _leased_fetch(
+        "ensemble",
+        lat_r,
+        lon_r,
+        day_key,
+        forecast_days,
+        _get_ensemble_cell_sync,
+        lambda: _fetch_and_store_ensemble(lat_r, lon_r, day_key, forecast_days, raise_throttled),
+        raise_throttled=raise_throttled,
+    )
 
+
+async def _fetch_and_store_ensemble(
+    lat_r: float, lon_r: float, day_key: date, forecast_days: int, raise_throttled: bool = False
+) -> EnsembleCell | None:
     data = None
-    try:
-        data = await _fetch_ensemble(lat_r, lon_r, forecast_days, day_key.isoformat())
-    except (httpx.HTTPError, KeyError, ValueError) as exc:
-        # Logged, unlike before: a swallowed failure here stores no cell, so the task that
-        # called it still reports success while having fetched nothing. Rate limiting is
-        # the usual cause and it is invisible without this.
-        logger.warning(
-            "get_or_fetch_ensemble_cell: ensemble fetch failed for ({}, {}), day_key={}, forecast_days={}: {}",
-            lat_r,
-            lon_r,
-            day_key,
-            forecast_days,
-            exc,
-        )
+    limit = open_meteo_limit()
+    wait = acquire(limit, open_meteo_weight(len(ENSEMBLE_VARIABLES), forecast_days, ENSEMBLE_MODEL_COUNT))
+    if not wait:
+        try:
+            data = await _fetch_ensemble(lat_r, lon_r, forecast_days, day_key.isoformat())
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            # Logged, unlike before: a swallowed failure here stores no cell, so the task that
+            # called it still reports success while having fetched nothing.
+            wait = _throttle_wait(limit, exc)
+            logger.warning(
+                "get_or_fetch_ensemble_cell: ensemble fetch failed for ({}, {}), day_key={}, forecast_days={}: {}",
+                lat_r,
+                lon_r,
+                day_key,
+                forecast_days,
+                _failure(exc),
+            )
 
     if data is None:
+        if wait and raise_throttled:
+            raise ProviderThrottled(limit.provider, wait)
         return None
 
     return await sync_to_async(_store_ensemble_cell_sync)(lat_r, lon_r, day_key, forecast_days, data)

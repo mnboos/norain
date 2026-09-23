@@ -3,12 +3,15 @@
 Background tasks for route geometry computation and forecast grid pre-warming.
 """
 
+import asyncio
+import random
 from datetime import UTC, date, datetime, timedelta
 
 from asgiref.sync import async_to_sync, sync_to_async
 from django.db import transaction
 from django.db.models import F
 from loguru import logger
+from shapely.geometry import LineString, Point
 
 from core import departures, telemetry
 from core.claims import claim_cell, release_cell
@@ -28,8 +31,31 @@ from core.grid import (
     get_or_fetch_forecast_cell,
 )
 from core.jobs import MAX_PLAN_ATTEMPTS, PLAN_RETRY_DELAY, get_or_start_job, publish, set_status
-from core.models import ForecastJob, ProcessedStripeEvent, RecurringRoute, route_line
-from core.schedule import forecast_available_at, local_today, next_departure, upcoming_departures
+from core.journeys import (
+    FILL_CORRIDOR_M,
+    LODGING_CORRIDOR_M,
+    MAX_FILL_ROUNDS,
+    NEAR_M,
+    along_limit,
+    gap_fixes,
+    lodging_candidates,
+    longest_gaps,
+    place_breaks,
+    split_days,
+)
+from core.models import (
+    ForecastJob,
+    Journey,
+    JourneyDay,
+    JourneyStage,
+    ProcessedStripeEvent,
+    RecurringRoute,
+    route_line,
+)
+from core.pois import pois_along_sync
+from core.ratelimit import ProviderThrottled
+from core.road_prefs import RoadPrefs, merge_models, road_prefs_model
+from core.schedule import LOCAL_TZ, forecast_available_at, local_today, next_departure, upcoming_departures
 from core.sections import compute_sections
 from core.stations import api_key, purge_station_data, refresh_stations_for_ride, ride_in_window
 from core.thumbnails import compute_route_thumbnail
@@ -38,10 +64,13 @@ from core.weather import (  # reuse existing functions
     ROUTING_ERRORS,
     SAMPLE_INTERVAL_DEFAULT_S,
     WeatherSnapshot,
+    build_geometries,
     build_geometry,
     compute_route_weather,
+    forecast_days_for,
     routing_points,
 )
+from core.weather_routing import cell_weather, corridor_cells, zone_model
 from core.wind import valid_vertex_times
 
 
@@ -138,56 +167,118 @@ async def _refresh_route_thumbnail_async(route_id: str) -> None:
 # --------------------------------------------------------------------------- grid cells
 # One task per ~1 km² cell: the unit the providers are actually billed in, and the unit
 # that is worth retrying on its own. These run on the `cells` queue, several workers wide.
+#
+# A rate-limited Open-Meteo (core.ratelimit) does not fail the cell: the task re-enqueues
+# itself a little later, without settling, so the job waits for the data instead of being
+# assembled without it. The deferrals are bounded well inside JOB_STALL_TIMEOUT, and each
+# one touches the job, or the stall check would restart it and fan every cell out again.
+# A longer wait (the hourly or daily limit) skips straight to the last attempt.
+
+MAX_CELL_DEFERS = 3
+MAX_DEFER_WAIT = 90  # seconds; beyond that the provider is out for the hour, not the minute
+SHORT_WAIT = 1.0  # waited out in the worker; anything longer would block the replica
+
+
+async def _cell_fetch(fetch, attempt: int):
+    """``fetch(last)``, once more after a wait of up to SHORT_WAIT. Raises ``ProviderThrottled`` to defer."""
+    last = attempt >= MAX_CELL_DEFERS
+    try:
+        return await fetch(last)
+    except ProviderThrottled as throttled:
+        if throttled.retry_after > MAX_DEFER_WAIT:
+            return await fetch(True)
+        if throttled.retry_after > SHORT_WAIT:
+            raise
+        await asyncio.sleep(throttled.retry_after)
+    return await fetch(last)
+
+
+async def _defer_cell(task, kind: str, args: tuple, job_id: str | None, attempt: int, wait: float) -> None:
+    delay = timedelta(seconds=wait + random.uniform(1, 10))  # noqa: S311 -- jitter, not a secret
+    logger.info(f"{kind} cell {args[:3]}: provider throttled, retrying in {delay.total_seconds():.0f} s")
+    await task.using(run_after=datetime.now(tz=UTC) + delay).aenqueue(*args, job_id, attempt=attempt + 1)
+    if job_id:
+        await ForecastJob.objects.filter(id=job_id, status=ForecastJob.Status.FETCHING).aupdate(
+            updated_at=datetime.now(tz=UTC)
+        )
 
 
 @task(queue_name="cells")
 def refresh_forecast_cell(
-    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None
+    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None, attempt: int = 0
 ) -> None:
     """Pre-fetch a single grid cell's deterministic weather and store it."""
-    async_to_sync(_refresh_forecast_cell_async)(lat_r, lon_r, day_key, forecast_days, job_id)
+    async_to_sync(_refresh_forecast_cell_async)(lat_r, lon_r, day_key, forecast_days, job_id, attempt)
 
 
 async def _refresh_forecast_cell_async(
-    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None
+    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None, attempt: int = 0
 ) -> None:
-    stored = False
+    stored = deferred = False
     try:
-        cell = await get_or_fetch_forecast_cell(lat_r, lon_r, day_key, forecast_days)
+        cell = await _cell_fetch(
+            lambda last: get_or_fetch_forecast_cell(lat_r, lon_r, day_key, forecast_days, allow_fallback=last),
+            attempt,
+        )
         stored = bool(cell)
         if stored:
             logger.debug(f"Forecast cell refreshed: ({lat_r}, {lon_r}, {day_key})")
         else:
             logger.warning(f"Forecast cell NOT stored: ({lat_r}, {lon_r}, {day_key}, days={forecast_days})")
+    except ProviderThrottled as throttled:
+        await _defer_cell(
+            refresh_forecast_cell,
+            "Forecast",
+            (lat_r, lon_r, day_key, forecast_days),
+            job_id,
+            attempt,
+            throttled.retry_after,
+        )
+        deferred = True
     finally:
         # Released on failure too: a cell both providers refused must stay claimable, or
         # one bad fetch would block every retry for the whole claim TTL.
         release_cell("forecast", lat_r, lon_r, day_key, forecast_days)
-        await _settle_cell(job_id, failed=not stored)
+        if not deferred:  # a deferred cell settles when its retry does
+            await _settle_cell(job_id, failed=not stored)
 
 
 @task(queue_name="cells")
 def refresh_ensemble_cell(
-    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None
+    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None, attempt: int = 0
 ) -> None:
     """Pre-fetch a single grid cell's ensemble data and store it."""
-    async_to_sync(_refresh_ensemble_cell_async)(lat_r, lon_r, day_key, forecast_days, job_id)
+    async_to_sync(_refresh_ensemble_cell_async)(lat_r, lon_r, day_key, forecast_days, job_id, attempt)
 
 
 async def _refresh_ensemble_cell_async(
-    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None
+    lat_r: float, lon_r: float, day_key: str, forecast_days: int, job_id: str | None = None, attempt: int = 0
 ) -> None:
-    stored = False
+    stored = deferred = False
     try:
-        cell = await get_or_fetch_ensemble_cell(lat_r, lon_r, day_key, forecast_days)
+        cell = await _cell_fetch(
+            lambda last: get_or_fetch_ensemble_cell(lat_r, lon_r, day_key, forecast_days, raise_throttled=not last),
+            attempt,
+        )
         stored = bool(cell)
         if stored:
             logger.debug(f"Ensemble cell refreshed: ({lat_r}, {lon_r}, {day_key})")
         else:
             logger.warning(f"Ensemble cell NOT stored: ({lat_r}, {lon_r}, {day_key}, days={forecast_days})")
+    except ProviderThrottled as throttled:
+        await _defer_cell(
+            refresh_ensemble_cell,
+            "Ensemble",
+            (lat_r, lon_r, day_key, forecast_days),
+            job_id,
+            attempt,
+            throttled.retry_after,
+        )
+        deferred = True
     finally:
         release_cell("ensemble", lat_r, lon_r, day_key, forecast_days)
-        await _settle_cell(job_id, failed=not stored)
+        if not deferred:
+            await _settle_cell(job_id, failed=not stored)
 
 
 @task(queue_name="cells")
@@ -306,6 +397,19 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
             "total_distance_m": route.total_distance_m,
         }
 
+    if job.kind == ForecastJob.Kind.JOURNEY_STAGE:
+        # Written whole by plan_journey, never without geometry: nothing to wait for.
+        stage = await JourneyStage.objects.filter(id=params["journey_stage_id"]).afirst()
+        if stage is None:
+            raise ValueError(f"Journey stage {params['journey_stage_id']} no longer exists")
+        return {
+            "polyline": stage.polyline_coordinates,
+            "sample_points": stage.sample_points,
+            "vertex_times": stage.vertex_times,
+            "total_seconds": stage.total_seconds,
+            "total_distance_m": stage.total_distance_m,
+        }
+
     if params.get("geometry_source") == "imported":
         return exact_geometry(
             params["coordinates"], params["duration_seconds"], params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S)
@@ -342,7 +446,15 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     if job.kind == ForecastJob.Kind.ROUTE and str(job.params.get("route_id")) not in {
         str(i) for i in await sync_to_async(allowed_route_ids)(job.owner)
     }:
-        await set_status(job, ForecastJob.Status.FAILED, error="Diese Route ist durch deinen Tarif pausiert.")
+        await _fail_not_allowed(job, "Diese Route ist durch deinen Tarif pausiert.")
+        return
+    if (
+        job.kind == ForecastJob.Kind.JOURNEY_STAGE
+        and not await JourneyStage.objects.filter(
+            id=job.params.get("journey_stage_id"), day__journey__owner_id=job.owner_id
+        ).aexists()
+    ):
+        await _fail_not_allowed(job, "Diese Etappe gibt es nicht mehr.")
         return
     await telemetry.bind_job(job)
     await set_status(job, ForecastJob.Status.PLANNING)
@@ -409,8 +521,9 @@ async def _plan_forecast_job_async(job_id: str) -> None:
                 # Enqueued even when the claim is held elsewhere. The holder is usually the
                 # pre-warm scan, whose task carries no job_id and so would never report back --
                 # counting the cell settled here would let assembly run before the data landed
-                # and store an empty forecast as a finished one. A duplicate task is cheap: by
-                # the time it runs the cell is normally warm and get_or_fetch_* just reads it.
+                # and store an empty forecast as a finished one. A duplicate task never fetches
+                # twice: get_or_fetch_* takes the cell's fetch lease (core.cell_lease), so it
+                # either reads the warm cell or waits for the holder and reads what it stored.
                 claim_cell(kind, lat_r, lon_r, day_key, days)
                 await cell_task.aenqueue(lat_r, lon_r, day_key, days, str(job.id))
 
@@ -421,8 +534,21 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     logger.info(f"Forecast job {job.id}: {len(cells)} cells, {job.cells_total - job.cells_settled} fetches enqueued")
 
 
+async def _fail_not_allowed(job: ForecastJob, error: str) -> None:
+    """Fail a job its owner may no longer read, dropping the result kept to show meanwhile."""
+    job.stale_result = None
+    await ForecastJob.objects.filter(pk=job.pk).aupdate(stale_result=None)
+    await set_status(job, ForecastJob.Status.FAILED, error=error)
+
+
 async def _wants_stations(job: ForecastJob, total_seconds: float | None) -> bool:
-    """Whether this job should spend Weather Underground calls: a key, a Pro owner, a ride near now."""
+    """Whether this job should spend Weather Underground calls: a key, a Pro owner, a ride near now.
+
+    Never for a journey stage: journeys are planned ahead, and one plan makes a job per day
+    and alternative, which would burn the fail-closed budget (30 calls a minute).
+    """
+    if job.kind == ForecastJob.Kind.JOURNEY_STAGE:
+        return False
     now = datetime.now(tz=UTC)
     if not api_key() or not any(ride_in_window(t, total_seconds, now) for t in departures.candidate_times(job.params)):
         return False
@@ -594,17 +720,23 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
         ]
         if job.kind == ForecastJob.Kind.ROUTE:
             payload["route_id"] = params["route_id"]
+        if job.kind == ForecastJob.Kind.JOURNEY_STAGE:
+            payload["journey_stage_id"] = params["journey_stage_id"]
         payload["departure_time"] = params["departure_time"]
         payload["entitlements"] = computed["entitlements"]
         if computed.get("departure_inputs"):
             payload["departure_inputs"] = computed["departure_inputs"]
+        now = datetime.now(tz=UTC)
+        # What the stale-result age cap and the page's "Stand" read: updated_at moves on restart.
+        payload["computed_at"] = now.isoformat()
 
         won = await _active_stage(job).aupdate(
             result=payload,
+            stale_result=None,
             status=ForecastJob.Status.DONE,
             error="",
             computed_weather=None,
-            updated_at=datetime.now(tz=UTC),
+            updated_at=now,
         )
     except Exception:
         await _fail_forecast_stage(job, "Wetterdaten konnten nicht zusammengestellt werden.")
@@ -623,6 +755,9 @@ async def start_forecast_job(kind: str, owner, params: dict, *, min_remaining: t
         route = await RecurringRoute.objects.only("geometry_fetched_at").filter(id=params["route_id"]).afirst()
         revision = route.geometry_fetched_at.isoformat() if route and route.geometry_fetched_at else None
         params = {**params, "geometry_revision": revision}
+    if kind == ForecastJob.Kind.JOURNEY_STAGE:
+        stage = await JourneyStage.objects.only("geometry_fetched_at").filter(id=params["journey_stage_id"]).afirst()
+        params = {**params, "geometry_revision": stage.geometry_fetched_at.isoformat() if stage else None}
     job, needs_planning = await get_or_start_job(kind, owner, params, min_remaining=min_remaining)
     if needs_planning:
         await plan_forecast_job.aenqueue(str(job.id))
@@ -874,3 +1009,340 @@ async def _scan_route_forecasts_async(route_id: str) -> dict:
 
     logger.debug(f"scan_route_forecasts({route.name}): {cell_count} cells, {ensemble_count} ensembles enqueued")
     return {"cells_enqueued": cell_count, "ensembles_enqueued": ensemble_count}
+
+
+# --------------------------------------------------------------------------- journeys
+# plan_journey cuts the journey into days; plan_journey_routes routes each day (around the
+# weather when it is close enough), fills POI gaps and places breaks. Between them the
+# corridor cells for weather-routed days are fetched by ordinary cell tasks; the second task
+# re-defers itself until they are warm or its attempts run out, the pattern plan_forecast_job
+# uses for missing geometry. On `default`: a plan makes tens of GraphHopper calls and must
+# not hold up the `forecasts` queue, where someone is waiting on a single forecast.
+
+# Days closer than this are routed around rain and headwind; further out, a shower's
+# position is not worth steering by.
+WEATHER_ROUTING_DAYS = 3
+CORRIDOR_RETRY_DELAY = timedelta(seconds=20)
+MAX_CORRIDOR_ATTEMPTS = 6
+# Rounds of "route, read the weather at the new etas, route again".
+WEATHER_ROUTING_ROUNDS = 2
+MAX_JOURNEY_DAYS = 14
+
+
+def _journey_is_current(journey_id, revision: int):
+    return Journey.objects.filter(id=journey_id, plan_revision=revision)
+
+
+async def _set_plan_status(journey_id, revision: int, status: str, error: str = "", **fields) -> bool:
+    return bool(await _journey_is_current(journey_id, revision).aupdate(plan_status=status, plan_error=error, **fields))
+
+
+def _day_seconds(journey: Journey) -> float:
+    """The riding a day allows: the time limit, but never past the day's window."""
+    window = (
+        datetime.combine(date.min, journey.latest_arrival) - datetime.combine(date.min, journey.earliest_start)
+    ).total_seconds()
+    limits = [s for s in (journey.max_day_seconds, window if window > 0 else None) if s]
+    return min(limits) if limits else 0
+
+
+def _day_departure(journey: Journey, day: date) -> datetime:
+    return datetime.combine(day, journey.earliest_start, tzinfo=LOCAL_TZ)
+
+
+def _wants_weather_routing(journey: Journey, limits, day: date) -> bool:
+    prefs = journey.weather_prefs or {}
+    if not limits.weather_routing or not (prefs.get("avoid_rain", True) or prefs.get("avoid_headwind", True)):
+        return False
+    return 0 <= (day - local_today()).days < WEATHER_ROUTING_DAYS
+
+
+async def _pois_along(coordinates, categories, corridor_m):
+    return await sync_to_async(pois_along_sync)(coordinates, list(categories), corridor_m)
+
+
+@task()
+def plan_journey(journey_id: str, revision: int) -> None:
+    """Cut a journey into days, then hand over to routing each day."""
+    async_to_sync(_plan_journey_async)(journey_id, revision)
+
+
+async def _plan_journey_async(journey_id: str, revision: int) -> None:
+
+    journey = await Journey.objects.select_related("owner").filter(id=journey_id, plan_revision=revision).afirst()
+    if journey is None:
+        return
+    if not await _set_plan_status(journey_id, revision, Journey.PlanStatus.ROUTING):
+        return
+    limits = await entitlements_for(journey.owner)
+    road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs)) or None
+    try:
+        base = await build_geometry(journey.profile, journey.routing_points, SAMPLE_INTERVAL_DEFAULT_S, road_model)
+    except ROUTING_ERRORS as exc:
+        logger.info(f"Journey {journey_id}: no route: {exc}")
+        await _set_plan_status(
+            journey_id, revision, Journey.PlanStatus.FAILED, "Für diese Reise wurde keine Route gefunden."
+        )
+        return
+
+    # Along the line as vertex_distances measures it, like the day limit and the POI positions.
+    total_m = along_limit(base, None, None)
+    day_limit = along_limit(base, _day_seconds(journey), journey.max_day_distance_m)
+    lodgings = lodging_candidates(
+        await _pois_along(base["polyline"], ["lodging"], LODGING_CORRIDOR_M), journey.lodging_kinds or []
+    )
+    try:
+        cuts = split_days(total_m, day_limit, lodgings, base)
+    except ValueError:
+        await _set_plan_status(journey_id, revision, Journey.PlanStatus.FAILED, "Das Tageslimit erlaubt keine Fahrt.")
+        return
+    if len(cuts) > MAX_JOURNEY_DAYS:
+        await _set_plan_status(
+            journey_id,
+            revision,
+            Journey.PlanStatus.FAILED,
+            f"Mehr als {MAX_JOURNEY_DAYS} Tage: bitte längere Tagesetappen wählen.",
+        )
+        return
+
+    start = [base["polyline"][0][0], base["polyline"][0][1]]
+    days = []
+    for index, cut in enumerate(cuts):
+        day = journey.start_date + timedelta(days=index)
+        days.append(
+            {
+                "index": index,
+                "date": day.isoformat(),
+                "start": start,
+                "end": cut.end,
+                "lodging": cut.lodging.as_json() if cut.lodging else None,
+                "lodging_missing": cut.lodging is None and index < len(cuts) - 1,
+                "weather": _wants_weather_routing(journey, limits, day),
+            }
+        )
+        start = cut.end
+    if not await _journey_is_current(journey_id, revision).aupdate(plan_state={"days": days}, plan_attempts=0):
+        return
+
+    enqueued = 0
+    for day in days:
+        if day["weather"]:
+            enqueued += await _enqueue_corridor_cells(journey, day, road_model)
+    if enqueued:
+        await _set_plan_status(journey_id, revision, Journey.PlanStatus.WEATHER)
+        await plan_journey_routes.using(run_after=datetime.now(tz=UTC) + CORRIDOR_RETRY_DELAY).aenqueue(
+            journey_id, revision
+        )
+    else:
+        await plan_journey_routes.aenqueue(journey_id, revision)
+
+
+async def _day_corridor(journey: Journey, day: dict, model: dict | None):
+    """The day routed as it stands, and the corridor cells around it with their window."""
+
+    points = (tuple(day["start"]), tuple(day["end"]))
+    geometry = await build_geometry(journey.profile, points, SAMPLE_INTERVAL_DEFAULT_S, model)
+    departure = _day_departure(journey, date.fromisoformat(day["date"]))
+    days = forecast_days_for(departure, geometry["sample_points"], local_today())
+    return geometry, corridor_cells(geometry["sample_points"]), departure, day["date"], days
+
+
+async def _enqueue_corridor_cells(journey: Journey, day: dict, model: dict | None) -> int:
+    """Fetch the day's corridor cells; returns how many are still cold."""
+    try:
+        _, cells, _, day_key, days = await _day_corridor(journey, day, model)
+    except ROUTING_ERRORS:
+        return 0
+    warm, _ = await get_cached_cell_keys(list(cells), [(day_key, days)])
+    cold = [key for key in cells if (key[0], key[1], date.fromisoformat(day_key)) not in warm]
+    for lat_r, lon_r in cold:
+        # No job id: nobody counts these. The routing task checks the cache instead.
+        if claim_cell("forecast", lat_r, lon_r, day_key, days):
+            await refresh_forecast_cell.aenqueue(lat_r, lon_r, day_key, days)
+    return len(cold)
+
+
+@task()
+def plan_journey_routes(journey_id: str, revision: int) -> None:
+    """Route each day of a cut journey into its stages."""
+    async_to_sync(_plan_journey_routes_async)(journey_id, revision)
+
+
+async def _plan_journey_routes_async(journey_id: str, revision: int) -> None:
+
+    journey = await Journey.objects.select_related("owner").filter(id=journey_id, plan_revision=revision).afirst()
+    if journey is None or not journey.plan_state:
+        return
+    limits = await entitlements_for(journey.owner)
+    road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs)) or None
+    days = journey.plan_state["days"]
+
+    # Wait for the corridor cells, within bounds: a cell that never arrives only costs its
+    # zone, never the plan.
+    if journey.plan_attempts < MAX_CORRIDOR_ATTEMPTS:
+        cold = 0
+        for day in days:
+            if day["weather"]:
+                try:
+                    _, cells, _, day_key, forecast_days = await _day_corridor(journey, day, road_model)
+                except ROUTING_ERRORS:
+                    continue
+                warm, _ = await get_cached_cell_keys(list(cells), [(day_key, forecast_days)])
+                cold += sum((k[0], k[1], date.fromisoformat(day_key)) not in warm for k in cells)
+        if cold:
+            if await _journey_is_current(journey_id, revision).aupdate(plan_attempts=F("plan_attempts") + 1):
+                await plan_journey_routes.using(run_after=datetime.now(tz=UTC) + CORRIDOR_RETRY_DELAY).aenqueue(
+                    journey_id, revision
+                )
+            return
+
+    if not await _set_plan_status(journey_id, revision, Journey.PlanStatus.ROUTING):
+        return
+    try:
+        planned = [await _plan_day(journey, day, limits, road_model) for day in days]
+    except ROUTING_ERRORS as exc:
+        logger.info(f"Journey {journey_id}: a day could not be routed: {exc}")
+        await _set_plan_status(
+            journey_id, revision, Journey.PlanStatus.FAILED, "Eine Tagesetappe konnte nicht berechnet werden."
+        )
+        return
+    except Exception:
+        await _set_plan_status(
+            journey_id, revision, Journey.PlanStatus.FAILED, "Die Reise konnte nicht geplant werden."
+        )
+        raise
+    await sync_to_async(_store_journey_plan)(journey_id, revision, planned)
+
+
+async def _weather_model(journey: Journey, day: dict, road_model: dict | None) -> dict | None:
+    """Route the day, read the weather at its etas, route around it; repeat once."""
+
+    prefs = journey.weather_prefs or {}
+    geometry, cells, departure, day_key, forecast_days = await _day_corridor(journey, day, road_model)
+    model = road_model
+    for _ in range(WEATHER_ROUTING_ROUNDS):
+        weather = await cell_weather(cells, departure, day_key, forecast_days)
+        zones = zone_model(
+            weather, avoid_rain=prefs.get("avoid_rain", True), avoid_headwind=prefs.get("avoid_headwind", True)
+        )
+        model = merge_models(road_model or {}, zones) or None
+        if not zones:
+            break
+        rerouted = await build_geometry(
+            journey.profile, (tuple(day["start"]), tuple(day["end"])), SAMPLE_INTERVAL_DEFAULT_S, model
+        )
+        if abs(rerouted["total_distance_m"] - geometry["total_distance_m"]) < 0.01 * geometry["total_distance_m"]:
+            break
+        geometry, cells = rerouted, corridor_cells(rerouted["sample_points"])
+    return model
+
+
+async def _plan_day(journey: Journey, day: dict, limits, road_model: dict | None) -> dict:
+    """The day's stages: alternatives, each gap-filled, with breaks."""
+
+    model = await _weather_model(journey, day, road_model) if day["weather"] else road_model
+    points = (tuple(day["start"]), tuple(day["end"]))
+    try:
+        paths = await build_geometries(
+            journey.profile, points, limits.max_journey_alternatives, SAMPLE_INTERVAL_DEFAULT_S, model
+        )
+    except ROUTING_ERRORS:
+        # Usually GraphHopper's node cap: alternatives on a long day. One path still works.
+        paths = [await build_geometry(journey.profile, points, SAMPLE_INTERVAL_DEFAULT_S, model)]
+
+    stages = []
+    seen: set[tuple[int, int]] = set()
+    for rank, path in enumerate(paths):
+        leg_m = along_limit(path, journey.max_leg_seconds, journey.max_leg_distance_m)
+        stage = await _plan_stage(journey, day, path, model, leg_m)
+        # Gap-filling can pull two alternatives onto the same road.
+        signature = (round(stage["geometry"]["total_distance_m"]), stage["geometry"]["total_seconds"])
+        if signature in seen:
+            continue
+        seen.add(signature)
+        stages.append({**stage, "rank": rank})
+    return {**day, "stages": stages}
+
+
+def _order_along(polyline: list[list[float]], points: list[list[float]]) -> list[list[float]]:
+    line = LineString([p[:2] for p in polyline])
+    return sorted(points, key=lambda p: line.project(Point(p[0], p[1])))
+
+
+async def _plan_stage(journey: Journey, day: dict, path: dict, model: dict | None, leg_m: float) -> dict:
+    wanted = list(journey.poi_categories or [])
+    geometry = path
+    vias: list[list[float]] = []
+    detours: list[dict] = []
+    for _ in range(MAX_FILL_ROUNDS if wanted and leg_m < path["total_distance_m"] else 0):
+        hits = await _pois_along(geometry["polyline"], wanted, FILL_CORRIDOR_M)
+        fixes = gap_fixes(hits, hits, geometry["total_distance_m"], wanted, leg_m)
+        if not fixes:
+            break
+        candidate_vias = _order_along(geometry["polyline"], [*vias, *([f.lon, f.lat] for f in fixes)])
+        try:
+            geometry = await build_geometry(
+                journey.profile,
+                (tuple(day["start"]), *(tuple(v) for v in candidate_vias), tuple(day["end"])),
+                SAMPLE_INTERVAL_DEFAULT_S,
+                model,
+            )
+        except ROUTING_ERRORS:
+            break
+        vias = candidate_vias
+        detours.extend({**fix.as_json()} for fix in fixes)
+
+    total = geometry["total_distance_m"]
+    hits = await _pois_along(geometry["polyline"], wanted, NEAR_M) if wanted else []
+    return {
+        "geometry": geometry,
+        "via_points": vias,
+        "gaps": longest_gaps(hits, total, wanted),
+        "breaks": place_breaks(geometry, total, leg_m, hits, wanted) if leg_m < total else [],
+        "detours": detours,
+        "detour_m": round(max(0.0, total - path["total_distance_m"]), 1),
+        "leg_m": round(leg_m, 1) if leg_m < total else 0.0,
+    }
+
+
+def _store_journey_plan(journey_id: str, revision: int, planned: list[dict]) -> None:
+    """Replace the journey's days in one transaction, unless the plan is no longer current."""
+    now = datetime.now(tz=UTC)
+    with transaction.atomic():
+        journey = Journey.objects.select_for_update().filter(id=journey_id, plan_revision=revision).first()
+        if journey is None:
+            return
+        journey.days.all().delete()
+        for day in planned:
+            row = JourneyDay.objects.create(
+                journey=journey,
+                index=day["index"],
+                date=date.fromisoformat(day["date"]),
+                start=day["start"],
+                end=day["end"],
+                lodging=day["lodging"],
+                lodging_missing=day["lodging_missing"],
+                weather_routed=day["weather"],
+            )
+            for stage in day["stages"]:
+                geometry = stage["geometry"]
+                JourneyStage.objects.create(
+                    day=row,
+                    rank=stage["rank"],
+                    via_points=stage["via_points"],
+                    polyline=route_line(geometry["polyline"]),
+                    total_seconds=geometry["total_seconds"],
+                    total_distance_m=geometry["total_distance_m"],
+                    sample_points=geometry["sample_points"],
+                    vertex_times=geometry["vertex_times"],
+                    geometry_fetched_at=now,
+                    breaks=stage["breaks"],
+                    gaps=stage["gaps"],
+                    detours=stage["detours"],
+                    detour_m=stage["detour_m"],
+                    leg_m=stage["leg_m"],
+                )
+        journey.plan_status = Journey.PlanStatus.DONE
+        journey.plan_error = ""
+        journey.planned_at = now
+        journey.save(update_fields=["plan_status", "plan_error", "planned_at", "updated_at"])

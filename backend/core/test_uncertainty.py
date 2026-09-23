@@ -1,8 +1,9 @@
+import math
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from .forecast_schemas import WeatherSample
 from .grid import (
@@ -15,7 +16,7 @@ from .grid import (
 )
 from .models import EnsembleCell
 from .schedule import LOCAL_TZ
-from .uncertainty import extract_uncertainty
+from .uncertainty import ensemble_central, ensemble_weight, extract_uncertainty
 from .weather import compute_route_weather
 
 # Provider timestamps are Swiss wall time with the zone left off.
@@ -66,6 +67,7 @@ def sample(elapsed=0, **kwargs):
     return WeatherSample(**(defaults | kwargs))
 
 
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
 class UncertaintyTests(SimpleTestCase):
     def test_ranges_weight_members_not_models_and_keep_dry_members(self):
         result = uncertainty()
@@ -188,6 +190,101 @@ class UncertaintyTests(SimpleTestCase):
             self.assertEqual(first["_norain_request_version"], ENSEMBLE_REQUEST_VERSION)
 
 
+class EnsembleCentralTests(SimpleTestCase):
+    def test_weight_ramps_from_48_to_72_hours(self):
+        for hours, weight in {0: 0.0, 47: 0.0, 48: 0.0, 60: 0.5, 72: 1.0, 100: 1.0}.items():
+            self.assertAlmostEqual(ensemble_weight(FETCHED + timedelta(hours=hours), FETCHED), weight, msg=hours)
+
+    def test_naive_eta_is_swiss_wall_time(self):
+        eta = datetime(2026, 9, 13, 12)
+        reference = datetime(2026, 9, 10, 12, tzinfo=LOCAL_TZ)
+        self.assertEqual(ensemble_weight(eta, reference), 1.0)
+        self.assertEqual(ensemble_weight(eta, reference + timedelta(hours=12)), 0.5)
+
+    def test_temperature_median_and_wind_speed_median_along_mean_direction(self):
+        central = ensemble_central(ensemble_data(), ETA, ["a", "b"])
+        self.assertEqual(central.temp, 15.0)
+        self.assertIsNone(central.wind_gust)  # no member has a gust
+        # 10 km/h from 359° and 20 km/h from 1°: median speed 15 km/h, mean direction ~0.33°.
+        self.assertAlmostEqual(math.hypot(central.wind.east, central.wind.north), 15.0, places=6)
+        self.assertAlmostEqual(math.degrees(math.atan2(central.wind.east, central.wind.north)), 1 / 3, places=2)
+
+    def test_disagreeing_directions_do_not_become_calm(self):
+        data = ensemble_data()
+        data["hourly"]["wind_speed_10m_a"] = [20.0, 0.0]
+        data["hourly"]["wind_speed_10m_member01_a"] = [20.0, 0.0]
+        data["hourly"]["wind_direction_10m_a"] = [80.0, 0.0]
+        data["hourly"]["wind_direction_10m_member01_a"] = [100.0, 0.0]
+        wind = ensemble_central(data, ETA, ["a", "b"]).wind
+        self.assertAlmostEqual(math.hypot(wind.east, wind.north), 20.0, places=6)  # not 20·cos 10°
+
+    def test_opposite_winds_have_no_central_wind(self):
+        data = ensemble_data()
+        data["hourly"]["wind_speed_10m_a"] = [20.0, 0.0]
+        data["hourly"]["wind_speed_10m_member01_a"] = [20.0, 0.0]
+        data["hourly"]["wind_direction_10m_a"] = [90.0, 0.0]
+        data["hourly"]["wind_direction_10m_member01_a"] = [270.0, 0.0]
+        central = ensemble_central(data, ETA, ["a", "b"])
+        self.assertIsNone(central.wind)
+        self.assertEqual(central.temp, 15.0)
+
+    def test_one_member_or_outside_hours_is_none(self):
+        one = {"hourly": {"time": ["2026-09-10T12:00"], "temperature_2m_a": [10.0], "wind_speed_10m_a": [5.0],
+                          "wind_direction_10m_a": [0.0]}}
+        self.assertIsNone(ensemble_central(one, ETA, ["a"]))
+        self.assertIsNone(ensemble_central(ensemble_data(), ETA - timedelta(hours=1), ["a", "b"]))
+
+
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
+class EnsembleBlendRouteTests(SimpleTestCase):
+    """compute_route_weather moves temp and wind toward the ensemble as the lead time grows."""
+
+    async def compute(self, lead_hours):
+        cell = SimpleNamespace(data={}, source="open-meteo")
+        ens = SimpleNamespace(data=ensemble_data(), fetched_at=ETA.replace(tzinfo=LOCAL_TZ) - timedelta(hours=lead_hours))
+        point = {"lat": 47.5, "lon": 9.5, "lat_r": 47.5, "lon_r": 9.5, "elapsed_s": 0, "idx": 0}
+        # Wind from the south: the ensemble's is from the north, so the headwind flips sign.
+        extracted = {
+            "rain_mm": 0.0, "precipitation_interval_s": 900, "temp": 5.0, "wind_speed": 10.0,
+            "wind_dir": 180.0, "wind_gust": 20.0, "weather_code": 3, "source": "open-meteo",
+        }
+        with (
+            patch("core.weather.get_or_fetch_forecast_cell", AsyncMock(return_value=cell)),
+            patch("core.weather.get_or_fetch_ensemble_cell", AsyncMock(return_value=ens)),
+            patch("core.weather.extract_sample", return_value=extracted),
+        ):
+            result = await compute_route_weather(
+                start_lat=47.5, start_lon=9.5, dest_lat=47.6, dest_lon=9.5, profile="bike",
+                departure_time=ETA.isoformat(), sample_points=[point], polyline=[[9.5, 47.5], [9.5, 47.6]],
+                total_seconds=600, total_distance_m=11_000.0,
+            )
+        return result.samples[0]
+
+    async def test_single_run_below_48_hours(self):
+        s = await self.compute(24)
+        self.assertEqual((s.temp, s.wind_speed, s.wind_dir, s.wind_gust), (5.0, 10.0, 180.0, 20.0))
+        self.assertIsNone(s.ensemble_weight)
+        self.assertLess(s.headwind, 0)
+
+    async def test_ensemble_from_72_hours(self):
+        s = await self.compute(96)
+        self.assertEqual(s.ensemble_weight, 1.0)
+        self.assertEqual(s.temp, 15.0)  # the ensemble median, the chart's median line
+        self.assertEqual(s.wind_gust, 20.0)  # no ensemble gust: the single run's stays
+        self.assertAlmostEqual(s.wind_speed, 15.0, delta=0.1)
+        self.assertLess(min(s.wind_dir, 360 - s.wind_dir), 1)
+        self.assertGreater(s.headwind, 0)
+        self.assertAlmostEqual(s.headwind, s.uncertainty.metrics["headwind"].median, delta=0.1)
+
+    async def test_halfway_at_60_hours(self):
+        s = await self.compute(60)
+        self.assertEqual(s.ensemble_weight, 0.5)
+        self.assertEqual(s.temp, 10.0)
+        # Half of 10 km/h from the south plus half of ~15 km/h from the north: ~2.5 km/h from the north.
+        self.assertAlmostEqual(s.wind_speed, 2.5, delta=0.1)
+
+
+@override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
 class UncertaintyCacheTests(TestCase):
     def setUp(self):
         self.cell = EnsembleCell.objects.create(

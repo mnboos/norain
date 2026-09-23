@@ -114,6 +114,9 @@ services:
     container_name: worker-default
     command: python manage.py db_worker --queue-name default
     depends_on: *routing-deps
+    volumes:
+      # The POI file from `osm-extract-pois.sh`, for `manage.py import_pois /osm_data/pois-<extract>.geojsonseq`.
+      - ${APP_STORAGE_PATH}/graphhopper/osm:/osm_data:ro
 
   redis:
     container_name: redis

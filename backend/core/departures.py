@@ -16,6 +16,7 @@ SAMPLE_FIELDS = (
     "pop",
     "rain_if_wet",
     "temp",
+    "felt_temp",
     "headwind",
     "wind_power_w",
     "weather_code",

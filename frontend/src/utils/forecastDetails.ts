@@ -48,6 +48,25 @@ export function forecastHeadline(summary: RouteWeatherSummary, samples: Forecast
  * rain, the amount its wet members predict (`rainAmount`, mm/h at the peak-risk point) —
  * the main run is a single scenario and is often dry exactly where the members are not.
  */
+/**
+ * The ride's felt temperature (wind chill at riding speed), averaged over riding time: each
+ * sample stands for half the time to each neighbour. A sample without `feltTemp` - no timing,
+ * or a forecast stored before it existed - counts with its air temperature.
+ */
+export function meanFeltTemp(samples: readonly Pick<ForecastSampleOut, "elapsedS" | "temp" | "feltTemp">[]): number | null {
+    const points = samples.map(s => [s.elapsedS, s.feltTemp ?? s.temp] as const);
+    if (!points.length) return null;
+    let weighted = 0;
+    let total = 0;
+    points.reduce((prev, point) => {
+        const gap = Math.max(0, point[0] - prev[0]);
+        weighted += (gap * (point[1] + prev[1])) / 2;
+        total += gap;
+        return point;
+    });
+    return total > 0 ? weighted / total : points.reduce((sum, [, value]) => sum + value, 0) / points.length;
+}
+
 export function peakRain(forecast: RouteForecastOut): string | null {
     const { summary, samples } = forecast;
     const mainRun = mainRunPeakRate(samples);

@@ -17,6 +17,7 @@ import type { PlacesSearchResult, RouteForecastOut, ForecastSampleOut, WindArrow
 import { FROST_MARK, isNightEta, pickVisibleSamples, weatherIconSvg } from "@/utils/weatherIcons";
 import { swissTime } from "@/utils/forecastDetails";
 import {
+    alternativeColor,
     CASING_DARK,
     CASING_LIGHT,
     CASING_OPACITY,
@@ -30,6 +31,9 @@ import { useForecastMapDetail, type LineDetail } from "@/queries/forecastParts";
 import { finerDetail, lineDetailForZoom } from "@/utils/mapDetail";
 import { groundArrowBearing, groundWindText, visibleWindArrows, windArrowSize, windPowerText } from "@/utils/wind";
 import { lineProgress, sampleAtRoutePoint, type ScreenPoint } from "@/utils/forecastSelection";
+import { buildWindField } from "@/utils/windField";
+import { WindParticleLayer } from "@/map/windParticles";
+import { CANDIDATE_COLOR, poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
 
 maplibreConfig.WORKER_URL = maplibreWorkerUrl;
 
@@ -52,6 +56,14 @@ const props = defineProps<{
     height?: string;
     selectedSample?: number;
     pickLocation?: boolean;
+    /** Journey POIs: breaks, lodging, what is on the way. None by default. */
+    pois?: MapPoi[];
+    /**
+     * Other routes the user can pick instead (journey alternatives), drawn thinner below the
+     * route, each in `alternativeColor(index)` so the map matches the list. Their own forecast's
+     * `windArrows` put them in the wind animation too.
+     */
+    alternativeLines?: { id: string; line: number[][]; index: number; windArrows?: WindArrow[] }[];
 }>();
 
 const { routeWeather, abfahrtsort, zielort } = toRefs(props);
@@ -60,6 +72,7 @@ const emit = defineEmits<{
     mapView: [view: { zoom: number; lat: number; lng: number }];
     selectSample: [index: number];
     selectLocation: [point: { lng: number; lat: number }];
+    selectAlternative: [id: string];
 }>();
 
 const mapContainer = useTemplateRef<HTMLDivElement>("map");
@@ -191,7 +204,7 @@ watch(fetchedDetail, fetched => {
         return;
     }
     loadedDetail.value = { detail, line: fetched.line, windArrows: fetched.windArrows };
-    void renderLine();
+    void renderLine().then(renderWindParticles);
     renderWindMarkers();
 });
 
@@ -200,6 +213,83 @@ const hasRoute = computed(() => (routeWeather.value?.samples.length ?? 0) > 0);
 /** Only claim a "Keine Daten" swatch when a stretch really is unknown. */
 const hasMissingScores = computed(() => scores.value.some(v => v === null));
 const hasWindProfile = computed(() => routeWeather.value?.summary.windDistribution != null);
+
+// --- wind display: animated particles (map/windParticles.ts) or the clickable arrows. The
+// arrows are the accessible mode and the default under reduced motion; the choice is kept
+// per browser. ---
+type WindMode = "animation" | "arrows";
+const WIND_MODE_KEY = "norain.windMode";
+function initialWindMode(): WindMode {
+    try {
+        const stored = localStorage.getItem(WIND_MODE_KEY);
+        if (stored === "animation" || stored === "arrows") return stored;
+    } catch {
+        // Storage blocked (private window, previews): fall through to the default.
+    }
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "arrows" : "animation";
+}
+const windMode = ref<WindMode>(initialWindMode());
+const windModeOptions = [
+    { label: "Animation", value: "animation" },
+    { label: "Pfeile", value: "arrows" },
+];
+/** Set when the particle layer could not start (no WebGL2 support for it): arrows then. */
+const particlesFailed = ref(false);
+const showParticles = computed(
+    () => windMode.value === "animation" && hasWindProfile.value && hasRoute.value && !particlesFailed.value,
+);
+// The route first, so it keeps the wind where an alternative shares its road.
+const windField = computed(() =>
+    buildWindField([
+        { arrows: drawnWindArrows.value, line: drawnLine.value },
+        ...(props.alternativeLines ?? []).map(a => ({ arrows: a.windArrows ?? [], line: a.line })),
+    ]),
+);
+const WIND_LAYER = "wind-particles";
+let windLayer: WindParticleLayer | undefined;
+
+/**
+ * Add, update or remove the particle layer. It sits directly above the route line, so the
+ * wind reads over the route, and below the basemap labels like the line itself. setStyle()
+ * drops custom layers, so this also runs after every theme switch.
+ */
+function renderWindParticles() {
+    const map = mymap.value;
+    if (!map) return;
+    const field = showParticles.value ? windField.value : undefined;
+    if (!field) {
+        if (map.getLayer(WIND_LAYER)) map.removeLayer(WIND_LAYER);
+        return;
+    }
+    windLayer ??= new WindParticleLayer(WIND_LAYER);
+    windLayer.setDark($q.dark.isActive);
+    windLayer.setField(field);
+    windLayer.setRunning(true);
+    if (map.getLayer(WIND_LAYER)) return;
+    try {
+        // Insert before whatever follows the route line: the first basemap label, or the
+        // invisible route-hit layer when the style has no labels.
+        const layers = map.getStyle().layers;
+        const routeLine = layers.findIndex(layer => layer.id === "route-line");
+        map.addLayer(windLayer, routeLine >= 0 ? layers[routeLine + 1]?.id : undefined);
+    } catch (e) {
+        console.error("Wind animation unavailable:", e);
+        particlesFailed.value = true;
+    }
+}
+
+watch(windMode, mode => {
+    try {
+        localStorage.setItem(WIND_MODE_KEY, mode);
+    } catch {
+        // Not remembered; the toggle still works for this page.
+    }
+    renderWindMarkers();
+    renderWindParticles();
+});
+watch(particlesFailed, failed => {
+    if (failed) renderWindMarkers();
+});
 
 // --- sample marker: weather chip (condition glyph + temperature) with the wind arrow
 // attached beside it. The arrow points in the direction the wind blows TOWARD. ---
@@ -310,6 +400,10 @@ function createWindMarker(map: MapLibreMap, arrow: WindArrow): WindMarker {
 function renderWindMarkers() {
     const map = mymap.value;
     if (!map) return;
+    if (showParticles.value) {
+        clearWindMarkers();
+        return;
+    }
     const { clientWidth: width, clientHeight: height } = map.getCanvas();
     const arrows = visibleWindArrows(drawnWindArrows.value, arrow => {
         const point = map.project([arrow.lon, arrow.lat]);
@@ -399,10 +493,16 @@ function windText(s: ForecastSampleOut): string {
         : `${Math.round(s.crosswind)} km/h Seitenwind (Abschnittsmittel)`;
 }
 
+/** " (gefühlt 8°C)" where the wind chill at riding speed differs from the thermometer. */
+function feltText(s: ForecastSampleOut): string {
+    if (s.feltTemp == null || Math.round(s.feltTemp) === Math.round(s.temp)) return "";
+    return ` (gefühlt ${s.feltTemp.toFixed(0)}°C)`;
+}
+
 function samplePopupHtml(s: ForecastSampleOut): string {
     return `<div style="font:13px/1.4 var(--app-font);min-width:160px">
         <b>${fmtTime(s.eta)} Uhr</b> · ${s.weatherDesc || ""}<br>
-        🌧️ ${s.rainRateMmH == null ? "—" : s.rainRateMmH.toFixed(1)} mm/h &nbsp; 🌡️ ${s.temp.toFixed(0)}°C<br>
+        🌧️ ${s.rainRateMmH == null ? "—" : s.rainRateMmH.toFixed(1)} mm/h &nbsp; 🌡️ ${s.temp.toFixed(0)}°C${feltText(s)}<br>
         Regenrisiko: ${s.pop == null ? "Nicht verfügbar" : `${Math.round(s.pop * 100)}%`}<br>
         💨 ${s.windSpeed == null ? "Nicht verfügbar" : `${s.windSpeed.toFixed(0)} km/h über Grund`}${s.windGust ? ` (Böen ${s.windGust.toFixed(0)})` : ""}<br>
         <span class="${s.headwind != null && s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span><br>
@@ -453,7 +553,7 @@ async function renderLine() {
     if (!map) return;
     const line = drawnLine.value;
 
-    const lineGeojson: import("geojson").Feature<import("geojson").LineString> = {
+    const lineGeojson: GeoJSON.Feature<GeoJSON.LineString> = {
         type: "Feature",
         geometry: { type: "LineString", coordinates: line },
         properties: {},
@@ -473,12 +573,7 @@ async function renderLine() {
         await existing.setData(lineGeojson);
     } else {
         map.addSource("route-source", { type: "geojson", data: lineGeojson, lineMetrics: true });
-        // Slip the route under the basemap's labels, but above every road, rail and boundary.
-        // Not simply the first symbol: Positron has waterway_label early, below all the roads.
-        const layers = map.getStyle().layers;
-        let labelsStart = layers.length;
-        while (labelsStart > 0 && layers[labelsStart - 1]?.type === "symbol") labelsStart--;
-        const labelsStartId = layers[labelsStart]?.id; // undefined -> top of the stack
+        const labelsStartId = firstLabelLayerId(map);
         map.addLayer(
             {
                 id: "route-line-casing",
@@ -511,6 +606,82 @@ async function renderLine() {
     // style swap, but the gradient and the casing change whenever the data or theme does.
     map.setPaintProperty("route-line", "line-gradient", gradient);
     map.setPaintProperty("route-line-casing", "line-color", casing);
+    await renderAlternatives();
+}
+
+/**
+ * Slip route lines under the basemap's labels, but above every road, rail and boundary.
+ * Not simply the first symbol: Positron has waterway_label early, below all the roads.
+ * Undefined means the top of the stack.
+ */
+function firstLabelLayerId(map: MapLibreMap): string | undefined {
+    const layers = map.getStyle().layers;
+    let labelsStart = layers.length;
+    while (labelsStart > 0 && layers[labelsStart - 1]?.type === "symbol") labelsStart--;
+    return layers[labelsStart]?.id;
+}
+
+// --- alternatives: the routes the user could pick instead, one muted colour, always below the
+// route itself, and a click on one selects it ---
+const ALTERNATIVE_SOURCE = "route-alternatives";
+const ALTERNATIVE_LAYER = "route-alternative";
+const ALTERNATIVE_HIT_LAYER = "route-alternative-hit";
+const ALTERNATIVE_WIDTH = 4;
+
+async function renderAlternatives() {
+    const map = mymap.value;
+    if (!map) return;
+    const data: GeoJSON.FeatureCollection<GeoJSON.LineString> = {
+        type: "FeatureCollection",
+        features: (props.alternativeLines ?? [])
+            .filter(alternative => alternative.line.length > 1)
+            .map(alternative => ({
+                type: "Feature",
+                geometry: { type: "LineString", coordinates: alternative.line },
+                properties: { id: alternative.id, color: alternativeColor(alternative.index, $q.dark.isActive) },
+            })),
+    };
+    const existing = map.getSource(ALTERNATIVE_SOURCE);
+    if (existing instanceof GeoJSONSource) {
+        await existing.setData(data);
+        return;
+    }
+    if (!data.features.length) return;
+    map.addSource(ALTERNATIVE_SOURCE, { type: "geojson", data });
+    // Below the route's casing when it is drawn; otherwise at the label boundary, where the
+    // route's layers will later be inserted above these.
+    const before = map.getLayer("route-line-casing") ? "route-line-casing" : firstLabelLayerId(map);
+    map.addLayer(
+        {
+            id: ALTERNATIVE_LAYER,
+            type: "line",
+            source: ALTERNATIVE_SOURCE,
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-width": ALTERNATIVE_WIDTH, "line-color": ["get", "color"], "line-opacity": 0.85 },
+        },
+        before,
+    );
+    map.addLayer(
+        {
+            id: ALTERNATIVE_HIT_LAYER,
+            type: "line",
+            source: ALTERNATIVE_SOURCE,
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-width": 16, "line-opacity": 0 },
+        },
+        before,
+    );
+}
+// An alternative's wind can arrive after the route: the particle field follows.
+watch([() => props.alternativeLines, hasMap], () => void renderAlternatives().then(renderWindParticles));
+
+function selectAlternative(event: MapMouseEvent & { features?: GeoJSON.Feature[] }) {
+    const map = mymap.value;
+    const id: unknown = event.features?.[0]?.properties?.id;
+    if (!map || typeof id !== "string") return;
+    // Where an alternative runs along the chosen route, the click belongs to the route.
+    if (map.getLayer("route-hit") && map.queryRenderedFeatures(event.point, { layers: ["route-hit"] }).length) return;
+    emit("selectAlternative", id);
 }
 
 async function renderRoute() {
@@ -524,9 +695,15 @@ async function renderRoute() {
     // full line's: simplification keeps both ends and every corner that matters at this scale.
     clearSampleMarkers();
     const bounds = new LngLatBounds();
-    drawnLine.value.forEach(c => bounds.extend([c[0] ?? 0, c[1] ?? 0]));
+    // The alternatives too, so a variant that swings further out is not cut off.
+    for (const line of [drawnLine.value, ...(props.alternativeLines ?? []).map(a => a.line)]) {
+        line.forEach(c => bounds.extend([c[0] ?? 0, c[1] ?? 0]));
+    }
+    renderWindParticles();
     if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 60 });
-    map.once("idle", applyMarkerThinning);
+    // The moveend listener thins the chips once the fit lands. Not "idle": the particle loop
+    // repaints every frame, so a map with the animation running never goes idle.
+    if (!map.isMoving()) applyMarkerThinning();
     // A new forecast can put a different wind at the same spot, so no arrow carries over.
     clearWindMarkers();
     renderWindMarkers();
@@ -542,10 +719,153 @@ watch(
             void mymap.value?.getSource<GeoJSONSource>("route-source")?.setData({ type: "FeatureCollection", features: [] });
             clearSampleMarkers();
             clearWindMarkers();
+            renderWindParticles();
         }
     },
     { immediate: true },
 );
+
+// --- journey POIs: the category's emoji on a disc, and a popup with the name (and, for a
+// candidate, that it is not planned) on click. Planned stops are DOM markers in the category
+// colour, stacked above the weather chips (a canvas layer always sits under every DOM marker);
+// the grey candidates, which can run to hundreds, stay one symbol layer and may sit under a chip ---
+const POI_SOURCE = "journey-pois";
+const POI_LAYER = "journey-poi";
+// Badges are drawn at this multiple of their CSS size, so they stay sharp on HiDPI screens.
+const POI_PIXEL_RATIO = 2;
+
+function poiLabel(poi: MapPoi): string {
+    return `${poiCategory(poi.category).emoji} ${poiName(poi)}${poi.planned ? "" : ` · ${poi.note ?? "nicht eingeplant"}`}`;
+}
+
+/** A shown planned stop. Its popup is built on first open. */
+interface PoiMarker {
+    marker: Marker;
+    popup?: Popup;
+}
+let poiMarkers: PoiMarker[] = [];
+
+function clearPoiMarkers() {
+    poiMarkers.forEach(({ marker, popup }) => {
+        popup?.remove();
+        marker.remove();
+    });
+    poiMarkers = [];
+}
+
+function createPoiMarker(map: MapLibreMap, poi: MapPoi): PoiMarker {
+    const element = document.createElement("div");
+    element.className = "wx-poi";
+    element.tabIndex = 0;
+    element.setAttribute("role", "button");
+    element.setAttribute("aria-label", poiLabel(poi));
+    element.style.background = poiCategory(poi.category).color;
+    element.textContent = poiCategory(poi.category).emoji;
+    const marker = new Marker({ element }).setLngLat([poi.lon, poi.lat]).addTo(map);
+    const entry: PoiMarker = { marker };
+    const toggle = () => {
+        if (entry.popup?.isOpen()) {
+            entry.popup.remove();
+            return;
+        }
+        entry.popup ??= new Popup({ offset: 16 }).setLngLat([poi.lon, poi.lat]).setText(poiLabel(poi));
+        entry.popup.addTo(map);
+    };
+    element.addEventListener("click", event => {
+        // Keep the map's own click handling from closing the popup straight away.
+        event.stopPropagation();
+        toggle();
+    });
+    element.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggle();
+        }
+    });
+    return entry;
+}
+
+/** A candidate's badge: its category's emoji on a grey disc with a white ring. The basemap's
+ * glyph server has no emoji, so the badge is a canvas image, not a text label. */
+function poiBadge(category: string): ImageData | undefined {
+    const size = 22 * POI_PIXEL_RATIO;
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) return undefined;
+    ctx.canvas.width = ctx.canvas.height = size;
+    const ring = 1.5 * POI_PIXEL_RATIO;
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2 - ring / 2, 0, 2 * Math.PI);
+    ctx.fillStyle = CANDIDATE_COLOR;
+    ctx.fill();
+    ctx.lineWidth = ring;
+    ctx.strokeStyle = "#ffffff";
+    ctx.stroke();
+    ctx.font = `${Math.round(size * 0.55)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(poiCategory(category).emoji, size / 2, size / 2 + size * 0.04);
+    return ctx.getImageData(0, 0, size, size);
+}
+
+function poiIcon(map: MapLibreMap, category: string): string {
+    const id = `poi-candidate-${category}`;
+    if (!map.hasImage(id)) {
+        const badge = poiBadge(category);
+        if (badge) map.addImage(id, badge, { pixelRatio: POI_PIXEL_RATIO });
+    }
+    return id;
+}
+
+async function renderPois() {
+    const map = mymap.value;
+    if (!map) return;
+    const pois = props.pois ?? [];
+    clearPoiMarkers();
+    poiMarkers = pois.filter(poi => poi.planned).map(poi => createPoiMarker(map, poi));
+    const data: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+        type: "FeatureCollection",
+        features: pois
+            .filter(poi => !poi.planned)
+            .map(poi => ({
+                type: "Feature",
+                geometry: { type: "Point", coordinates: [poi.lon, poi.lat] },
+                properties: { icon: poiIcon(map, poi.category), label: poiLabel(poi) },
+            })),
+    };
+    const existing = map.getSource(POI_SOURCE);
+    if (existing instanceof GeoJSONSource) {
+        await existing.setData(data);
+        return;
+    }
+    if (!data.features.length) return;
+    map.addSource(POI_SOURCE, { type: "geojson", data });
+    map.addLayer({
+        id: POI_LAYER,
+        type: "symbol",
+        source: POI_SOURCE,
+        layout: {
+            "icon-image": ["get", "icon"],
+            // Every stop stays visible: a hidden break would read as "nothing here".
+            "icon-allow-overlap": true,
+            "icon-ignore-placement": true,
+            // Smaller when zoomed out, so a day's worth of candidates does not bury the line.
+            "icon-size": ["interpolate", ["linear"], ["zoom"], 8, 0.6, 13, 1],
+        },
+        paint: { "icon-opacity": 0.85 },
+    });
+}
+watch([() => props.pois, hasMap], () => void renderPois());
+
+function showPoiPopup(event: MapMouseEvent & { features?: GeoJSON.Feature[] }) {
+    const map = mymap.value;
+    const feature = event.features?.[0];
+    if (!map || feature?.geometry.type !== "Point") return;
+    const [lng, lat] = feature.geometry.coordinates;
+    new Popup({ offset: 16 })
+        .setLngLat([lng ?? 0, lat ?? 0])
+        .setText(String(feature.properties?.label ?? ""))
+        .addTo(map);
+}
 
 // setStyle() replaces the whole style, which wipes our custom source/layers (but not the
 // DOM-based markers/popups, those survive) - re-add the line once the new style is ready.
@@ -556,7 +876,8 @@ watch(
         if (!map) return;
         map.setStyle(dark ? DARK_STYLE : LIGHT_STYLE);
         map.once("style.load", () => {
-            void renderLine();
+            void renderLine().then(renderWindParticles);
+            void renderPois();
         });
     },
 );
@@ -608,6 +929,20 @@ onMounted(() => {
                 map.getCanvas().style.cursor = "pointer";
             });
             map.on("mouseleave", "route-hit", leaveRoute);
+            map.on("click", ALTERNATIVE_HIT_LAYER, selectAlternative);
+            map.on("mouseenter", ALTERNATIVE_HIT_LAYER, () => {
+                map.getCanvas().style.cursor = "pointer";
+            });
+            map.on("mouseleave", ALTERNATIVE_HIT_LAYER, () => {
+                map.getCanvas().style.cursor = "";
+            });
+            map.on("click", POI_LAYER, showPoiPopup);
+            map.on("mouseenter", POI_LAYER, () => {
+                map.getCanvas().style.cursor = "pointer";
+            });
+            map.on("mouseleave", POI_LAYER, () => {
+                map.getCanvas().style.cursor = "";
+            });
             emitMapView(map);
             map.on("moveend", () => {
                 emitMapView(map);
@@ -636,6 +971,8 @@ onBeforeUnmount(() => {
     leaveRoute();
     clearSampleMarkers();
     clearWindMarkers();
+    clearPoiMarkers();
+    if (mymap.value?.getLayer(WIND_LAYER)) mymap.value.removeLayer(WIND_LAYER);
     mymap.value?.off("moveend", renderWindMarkers);
     mymap.value?.off("resize", renderWindMarkers);
     startMarker?.remove();
@@ -657,12 +994,31 @@ onBeforeUnmount(() => {
         <q-card-section v-else class="col column q-pa-none">
             <div ref="map" class="col map-canvas"></div>
             <MapLegend v-if="hasRoute" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
-            <div v-if="hasWindProfile" class="wx-wind-legend text-caption">
-                <q-item-label caption>
-                    <span aria-hidden="true">➤</span>
-                    Wind
-                </q-item-label>
-                <div>Pfeile zeigen Richtung und Stärke</div>
+            <div
+                v-if="hasWindProfile"
+                class="wx-wind-legend text-caption"
+                data-testid="wind-legend"
+                :data-wind-mode="showParticles ? 'animation' : 'arrows'"
+            >
+                <div class="row items-center no-wrap q-gutter-x-sm">
+                    <q-item-label caption>
+                        <span aria-hidden="true">➤</span>
+                        Wind
+                    </q-item-label>
+                    <q-btn-toggle
+                        v-model="windMode"
+                        :options="windModeOptions"
+                        dense
+                        no-caps
+                        unelevated
+                        size="sm"
+                        toggle-color="primary"
+                        text-color="white"
+                        aria-label="Winddarstellung"
+                    />
+                </div>
+                <div v-if="showParticles">Partikel zeigen Richtung und Stärke des Winds zur Fahrzeit</div>
+                <div v-else>Pfeile zeigen Richtung und Stärke</div>
             </div>
         </q-card-section>
     </q-card>
@@ -757,6 +1113,26 @@ body.body--dark .maplibregl-popup-anchor-right .maplibregl-popup-tip {
 }
 .wx-wind-arrow {
     cursor: pointer;
+}
+
+/* A planned stop. Every marker is a sibling in maplibre's canvas container, so the z-index
+   lifts it over the weather chips; popups go above both. */
+.wx-poi {
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    box-sizing: border-box;
+    border: 2.5px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+    font: 16px/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    cursor: pointer;
+}
+.maplibregl-popup {
+    z-index: 2;
 }
 
 .wx-selected {

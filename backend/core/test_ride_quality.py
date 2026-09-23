@@ -246,6 +246,20 @@ class FrostImpactTests(SimpleTestCase):
         self.assertIn(frost_level(sample(temp=1)), ("leicht", "mässig"))
 
 
+class FeltTemperatureTests(SimpleTestCase):
+    def test_the_temperature_factor_reads_the_felt_temperature(self):
+        felt = ride_score(sample(temp=16, felt_temp=8))
+        self.assertEqual(felt.temp, ride_score(sample(temp=8)).temp)
+        self.assertGreater(felt.temp, ride_score(sample(temp=16)).temp)
+
+    def test_a_sample_without_felt_temperature_scores_its_air_temperature(self):
+        # Job results and thumbnails stored before felt_temp existed.
+        self.assertEqual(ride_score(sample(temp=8)), ride_score(sample(temp=8, felt_temp=None)))
+
+    def test_frost_reads_the_air_not_the_wind_chill(self):
+        self.assertEqual(frost_impact(sample(temp=3, felt_temp=-3)), frost_impact(sample(temp=3)))
+
+
 class ServedRideQualityTests(SimpleTestCase):
     """The scores reach the client only through what the API serves, computed on read."""
 

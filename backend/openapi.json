@@ -799,6 +799,319 @@
                     "required": true
                 }
             }
+        },
+        "/api/journeys": {
+            "get": {
+                "operationId": "core_api_journey_list_journeys",
+                "summary": "List Journeys",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/JourneyOut"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Journeys"
+                ]
+            },
+            "post": {
+                "operationId": "core_api_journey_create_journey",
+                "summary": "Create Journey",
+                "parameters": [],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/JourneyOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Create a journey and start planning it. The plan arrives on ``GET /journeys/{id}``.",
+                "tags": [
+                    "Journeys"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/JourneyIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/journeys/{journey_id}": {
+            "put": {
+                "operationId": "core_api_journey_update_journey",
+                "summary": "Update Journey",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "journey_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Journey Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/JourneyOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Change a journey. Every change re-plans it: the days depend on all of the inputs.",
+                "tags": [
+                    "Journeys"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/JourneyIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "core_api_journey_delete_journey",
+                "summary": "Delete Journey",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "journey_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Journey Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                },
+                "tags": [
+                    "Journeys"
+                ]
+            },
+            "get": {
+                "operationId": "core_api_journey_get_journey",
+                "summary": "Get Journey",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "journey_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Journey Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/JourneyOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "The journey with its plan: days, alternatives and, where the forecast reaches, their\nweather and ranking. Opening it starts (or joins) each stage's forecast.",
+                "tags": [
+                    "Journeys"
+                ]
+            }
+        },
+        "/api/journeys/{journey_id}/plan": {
+            "post": {
+                "operationId": "core_api_journey_replan_journey",
+                "summary": "Replan Journey",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "journey_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Journey Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/JourneyOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Plan again with the same inputs: newer weather, POIs or graph.",
+                "tags": [
+                    "Journeys"
+                ]
+            }
+        },
+        "/api/journeys/{journey_id}/stages/{stage_id}/forecast": {
+            "get": {
+                "operationId": "core_api_journey_journey_stage_forecast",
+                "summary": "Journey Stage Forecast",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "journey_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Journey Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "stage_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Stage Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastJobOut"
+                                }
+                            }
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastJobOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "The full forecast of one stage, as a saved route's: 200 when fresh, else 202 and a job.",
+                "tags": [
+                    "Journeys"
+                ]
+            }
+        },
+        "/api/journeys/{journey_id}/stages/{stage_id}/pois": {
+            "get": {
+                "operationId": "core_api_journey_journey_stage_pois",
+                "summary": "Journey Stage Pois",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "journey_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Journey Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "stage_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Stage Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "categories",
+                        "schema": {
+                            "default": "",
+                            "title": "Categories",
+                            "type": "string"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "lodging",
+                        "schema": {
+                            "default": false,
+                            "title": "Lodging",
+                            "type": "boolean"
+                        },
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/PoiOut"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "POIs in the area of one stage, for the map: within ``FILL_CORRIDOR_M``, where the gap fill\nlooks for a detour, so a village a kilometre off the line shows too (``offset_m`` says how\nfar). ``categories`` is a comma-separated filter; empty means every category, unless only\n``lodging`` is asked for.\n\n``lodging`` adds the places the day could have ended at: lodging of the journey's kinds\nwithin ``LODGING_CORRIDOR_M`` in the day's last ``LODGING_WINDOW``, where the planner looked.\nNone on the last day, which ends at the destination.",
+                "tags": [
+                    "Journeys"
+                ]
+            }
         }
     },
     "components": {
@@ -972,6 +1285,11 @@
                             }
                         ]
                     },
+                    "stale": {
+                        "default": false,
+                        "title": "Stale",
+                        "type": "boolean"
+                    },
                     "ws_url": {
                         "default": "",
                         "description": "WebSocket path that streams this job's progress",
@@ -1076,6 +1394,17 @@
                     "temp": {
                         "title": "Temp",
                         "type": "number"
+                    },
+                    "felt_temp": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Felt Temp"
                     },
                     "wind_speed": {
                         "anyOf": [
@@ -1192,6 +1521,19 @@
                             }
                         ],
                         "title": "Station Count"
+                    },
+                    "ensemble_weight": {
+                        "anyOf": [
+                            {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ensemble Weight"
                     },
                     "ride_score": {
                         "anyOf": [
@@ -1322,6 +1664,17 @@
                     "version": {
                         "title": "Version",
                         "type": "string"
+                    },
+                    "computed_at": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Computed At"
                     },
                     "route_id": {
                         "anyOf": [
@@ -2592,6 +2945,51 @@
                 "title": "RoutePreviewOut",
                 "type": "object"
             },
+            "RoadPrefsIn": {
+                "description": "Journey road preferences (``core.road_prefs.RoadPrefs``); every one is a penalty.",
+                "properties": {
+                    "surface": {
+                        "default": "any",
+                        "enum": [
+                            "any",
+                            "avoid_unpaved",
+                            "paved_only"
+                        ],
+                        "title": "Surface",
+                        "type": "string"
+                    },
+                    "climbing": {
+                        "default": "neutral",
+                        "enum": [
+                            "neutral",
+                            "avoid"
+                        ],
+                        "title": "Climbing",
+                        "type": "string"
+                    },
+                    "traffic": {
+                        "default": "neutral",
+                        "enum": [
+                            "neutral",
+                            "avoid_main",
+                            "avoid_off_network"
+                        ],
+                        "title": "Traffic",
+                        "type": "string"
+                    },
+                    "towns": {
+                        "default": "neutral",
+                        "enum": [
+                            "neutral",
+                            "avoid"
+                        ],
+                        "title": "Towns",
+                        "type": "string"
+                    }
+                },
+                "title": "RoadPrefsIn",
+                "type": "object"
+            },
             "RoutePreviewIn": {
                 "properties": {
                     "profile": {
@@ -2610,6 +3008,16 @@
                         "minItems": 2,
                         "title": "Points",
                         "type": "array"
+                    },
+                    "roadPrefs": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/RoadPrefsIn"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
                     }
                 },
                 "required": [
@@ -2861,6 +3269,696 @@
                     "coordinates"
                 ],
                 "title": "RoutePlanIn",
+                "type": "object"
+            },
+            "BreakOut": {
+                "properties": {
+                    "along_m": {
+                        "title": "Along M",
+                        "type": "number"
+                    },
+                    "elapsed_s": {
+                        "title": "Elapsed S",
+                        "type": "integer"
+                    },
+                    "lon": {
+                        "title": "Lon",
+                        "type": "number"
+                    },
+                    "lat": {
+                        "title": "Lat",
+                        "type": "number"
+                    },
+                    "pois": {
+                        "items": {
+                            "$ref": "#/components/schemas/PoiOut"
+                        },
+                        "title": "Pois",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "along_m",
+                    "elapsed_s",
+                    "lon",
+                    "lat"
+                ],
+                "title": "BreakOut",
+                "type": "object"
+            },
+            "JourneyDayOut": {
+                "properties": {
+                    "id": {
+                        "format": "uuid",
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "index": {
+                        "title": "Index",
+                        "type": "integer"
+                    },
+                    "date": {
+                        "format": "date",
+                        "title": "Date",
+                        "type": "string"
+                    },
+                    "start": {
+                        "items": {
+                            "type": "number"
+                        },
+                        "title": "Start",
+                        "type": "array"
+                    },
+                    "end": {
+                        "items": {
+                            "type": "number"
+                        },
+                        "title": "End",
+                        "type": "array"
+                    },
+                    "lodging": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/PoiOut"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "lodging_missing": {
+                        "default": false,
+                        "title": "Lodging Missing",
+                        "type": "boolean"
+                    },
+                    "weather_routed": {
+                        "default": false,
+                        "title": "Weather Routed",
+                        "type": "boolean"
+                    },
+                    "forecast_available": {
+                        "default": false,
+                        "title": "Forecast Available",
+                        "type": "boolean"
+                    },
+                    "stages": {
+                        "items": {
+                            "$ref": "#/components/schemas/JourneyStageOut"
+                        },
+                        "title": "Stages",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "id",
+                    "index",
+                    "date",
+                    "start",
+                    "end"
+                ],
+                "title": "JourneyDayOut",
+                "type": "object"
+            },
+            "JourneyOut": {
+                "properties": {
+                    "id": {
+                        "format": "uuid",
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "start_lat": {
+                        "title": "Start Lat",
+                        "type": "number"
+                    },
+                    "start_lon": {
+                        "title": "Start Lon",
+                        "type": "number"
+                    },
+                    "start_name": {
+                        "title": "Start Name",
+                        "type": "string"
+                    },
+                    "dest_lat": {
+                        "title": "Dest Lat",
+                        "type": "number"
+                    },
+                    "dest_lon": {
+                        "title": "Dest Lon",
+                        "type": "number"
+                    },
+                    "dest_name": {
+                        "title": "Dest Name",
+                        "type": "string"
+                    },
+                    "via_points": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Via Points",
+                        "type": "array"
+                    },
+                    "profile": {
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "start_date": {
+                        "format": "date",
+                        "title": "Start Date",
+                        "type": "string"
+                    },
+                    "earliest_start": {
+                        "format": "time",
+                        "title": "Earliest Start",
+                        "type": "string"
+                    },
+                    "latest_arrival": {
+                        "format": "time",
+                        "title": "Latest Arrival",
+                        "type": "string"
+                    },
+                    "max_day_seconds": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Day Seconds"
+                    },
+                    "max_day_distance_m": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Day Distance M"
+                    },
+                    "max_leg_seconds": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Leg Seconds"
+                    },
+                    "max_leg_distance_m": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Max Leg Distance M"
+                    },
+                    "poi_categories": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Poi Categories",
+                        "type": "array"
+                    },
+                    "lodging_kinds": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Lodging Kinds",
+                        "type": "array"
+                    },
+                    "road_prefs": {
+                        "$ref": "#/components/schemas/RoadPrefsIn"
+                    },
+                    "weather_prefs": {
+                        "$ref": "#/components/schemas/WeatherPrefsIn"
+                    },
+                    "plan_status": {
+                        "title": "Plan Status",
+                        "type": "string"
+                    },
+                    "plan_error": {
+                        "default": "",
+                        "title": "Plan Error",
+                        "type": "string"
+                    },
+                    "planned_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Planned At"
+                    },
+                    "day_count": {
+                        "default": 0,
+                        "title": "Day Count",
+                        "type": "integer"
+                    },
+                    "days": {
+                        "items": {
+                            "$ref": "#/components/schemas/JourneyDayOut"
+                        },
+                        "title": "Days",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "start_lat",
+                    "start_lon",
+                    "start_name",
+                    "dest_lat",
+                    "dest_lon",
+                    "dest_name",
+                    "via_points",
+                    "profile",
+                    "start_date",
+                    "earliest_start",
+                    "latest_arrival",
+                    "max_day_seconds",
+                    "max_day_distance_m",
+                    "max_leg_seconds",
+                    "max_leg_distance_m",
+                    "poi_categories",
+                    "lodging_kinds",
+                    "road_prefs",
+                    "weather_prefs",
+                    "plan_status"
+                ],
+                "title": "JourneyOut",
+                "type": "object"
+            },
+            "JourneyStageOut": {
+                "properties": {
+                    "id": {
+                        "format": "uuid",
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "rank": {
+                        "title": "Rank",
+                        "type": "integer"
+                    },
+                    "distance_m": {
+                        "title": "Distance M",
+                        "type": "number"
+                    },
+                    "total_seconds": {
+                        "title": "Total Seconds",
+                        "type": "integer"
+                    },
+                    "path": {
+                        "description": "The line, simplified for an overview map",
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Path",
+                        "type": "array"
+                    },
+                    "via_points": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Via Points",
+                        "type": "array"
+                    },
+                    "breaks": {
+                        "items": {
+                            "$ref": "#/components/schemas/BreakOut"
+                        },
+                        "title": "Breaks",
+                        "type": "array"
+                    },
+                    "gaps": {
+                        "additionalProperties": {
+                            "type": "number"
+                        },
+                        "description": "Longest stretch without each wanted category, m",
+                        "title": "Gaps",
+                        "type": "object"
+                    },
+                    "detours": {
+                        "items": {
+                            "$ref": "#/components/schemas/PoiOut"
+                        },
+                        "title": "Detours",
+                        "type": "array"
+                    },
+                    "detour_m": {
+                        "default": 0,
+                        "title": "Detour M",
+                        "type": "number"
+                    },
+                    "forecast_job_id": {
+                        "anyOf": [
+                            {
+                                "format": "uuid",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Forecast Job Id"
+                    },
+                    "forecast_status": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Forecast Status"
+                    },
+                    "departure_time": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "Planned departure the forecast is for",
+                        "title": "Departure Time"
+                    },
+                    "ride_score": {
+                        "anyOf": [
+                            {
+                                "maximum": 1,
+                                "minimum": 0,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Score"
+                    },
+                    "ride_label": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Label"
+                    },
+                    "recommended_departure": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Recommended Departure"
+                    },
+                    "recommended": {
+                        "default": false,
+                        "title": "Recommended",
+                        "type": "boolean"
+                    },
+                    "reasons": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Reasons",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "id",
+                    "rank",
+                    "distance_m",
+                    "total_seconds",
+                    "path"
+                ],
+                "title": "JourneyStageOut",
+                "type": "object"
+            },
+            "PoiOut": {
+                "properties": {
+                    "osm_ref": {
+                        "title": "Osm Ref",
+                        "type": "string"
+                    },
+                    "category": {
+                        "title": "Category",
+                        "type": "string"
+                    },
+                    "name": {
+                        "default": "",
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "lon": {
+                        "title": "Lon",
+                        "type": "number"
+                    },
+                    "lat": {
+                        "title": "Lat",
+                        "type": "number"
+                    },
+                    "along_m": {
+                        "title": "Along M",
+                        "type": "number"
+                    },
+                    "offset_m": {
+                        "title": "Offset M",
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "osm_ref",
+                    "category",
+                    "lon",
+                    "lat",
+                    "along_m",
+                    "offset_m"
+                ],
+                "title": "PoiOut",
+                "type": "object"
+            },
+            "WeatherPrefsIn": {
+                "properties": {
+                    "avoid_rain": {
+                        "default": true,
+                        "title": "Avoid Rain",
+                        "type": "boolean"
+                    },
+                    "avoid_headwind": {
+                        "default": true,
+                        "title": "Avoid Headwind",
+                        "type": "boolean"
+                    },
+                    "departure_window_minutes": {
+                        "default": 60,
+                        "maximum": 120,
+                        "minimum": 0,
+                        "multipleOf": 15,
+                        "title": "Departure Window Minutes",
+                        "type": "integer"
+                    }
+                },
+                "title": "WeatherPrefsIn",
+                "type": "object"
+            },
+            "JourneyIn": {
+                "properties": {
+                    "name": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "startLat": {
+                        "maximum": 90,
+                        "minimum": -90,
+                        "title": "Startlat",
+                        "type": "number"
+                    },
+                    "startLon": {
+                        "maximum": 180,
+                        "minimum": -180,
+                        "title": "Startlon",
+                        "type": "number"
+                    },
+                    "startName": {
+                        "title": "Startname",
+                        "type": "string"
+                    },
+                    "destLat": {
+                        "maximum": 90,
+                        "minimum": -90,
+                        "title": "Destlat",
+                        "type": "number"
+                    },
+                    "destLon": {
+                        "maximum": 180,
+                        "minimum": -180,
+                        "title": "Destlon",
+                        "type": "number"
+                    },
+                    "destName": {
+                        "title": "Destname",
+                        "type": "string"
+                    },
+                    "viaPoints": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Viapoints",
+                        "type": "array"
+                    },
+                    "profile": {
+                        "default": "bike",
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "startDate": {
+                        "format": "date",
+                        "title": "Startdate",
+                        "type": "string"
+                    },
+                    "earliestStart": {
+                        "default": "08:00:00",
+                        "format": "time",
+                        "title": "Earlieststart",
+                        "type": "string"
+                    },
+                    "latestArrival": {
+                        "default": "18:00:00",
+                        "format": "time",
+                        "title": "Latestarrival",
+                        "type": "string"
+                    },
+                    "maxDaySeconds": {
+                        "anyOf": [
+                            {
+                                "maximum": 57600,
+                                "minimum": 1800,
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Maxdayseconds"
+                    },
+                    "maxDayDistanceM": {
+                        "anyOf": [
+                            {
+                                "maximum": 400000,
+                                "minimum": 5000,
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Maxdaydistancem"
+                    },
+                    "maxLegSeconds": {
+                        "anyOf": [
+                            {
+                                "maximum": 43200,
+                                "minimum": 600,
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Maxlegseconds"
+                    },
+                    "maxLegDistanceM": {
+                        "anyOf": [
+                            {
+                                "maximum": 200000,
+                                "minimum": 2000,
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Maxlegdistancem"
+                    },
+                    "poiCategories": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Poicategories",
+                        "type": "array"
+                    },
+                    "lodgingKinds": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Lodgingkinds",
+                        "type": "array"
+                    },
+                    "roadPrefs": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RoadPrefsIn"
+                            }
+                        ]
+                    },
+                    "weatherPrefs": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/WeatherPrefsIn"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "name",
+                    "startLat",
+                    "startLon",
+                    "startName",
+                    "destLat",
+                    "destLon",
+                    "destName",
+                    "startDate"
+                ],
+                "title": "JourneyIn",
                 "type": "object"
             }
         }

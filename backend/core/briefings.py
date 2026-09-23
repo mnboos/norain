@@ -16,6 +16,7 @@ from core.entitlements import briefing_route_ids
 from core.models import ForecastJob, PushSubscription, RecurringRoute, RideBriefing, User
 from core.schedule import LOCAL_TZ, next_departure
 from core.tasks import start_forecast_job
+from core.weather import mean_felt_temp
 
 LEAD = timedelta(minutes=60)
 PREPARE = timedelta(minutes=10)
@@ -52,6 +53,9 @@ def briefing_body(job, route):
     temps = [s.get("temp") for s in samples if isinstance(s.get("temp"), (int, float))]
     if temps:
         lines.append(f"Temperatur entlang der Route: {min(temps):.0f}–{max(temps):.0f} °C.")
+    felt = mean_felt_temp(samples)
+    if felt is not None:
+        lines.append(f"Gefühlt im Schnitt: {felt:.0f} °C.")
     lines.append("Die Vorhersage kann sich ändern; dies ist keine laufende Wetterwarnung.")
     return "\n".join(lines)
 
