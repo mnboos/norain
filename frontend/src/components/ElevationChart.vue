@@ -17,6 +17,8 @@ const props = defineProps<{
     label?: string;
     /** Other routes drawn beside this one, each in its own colour (a journey day's variants). */
     alternatives?: { stageId: string; color: string; label: string }[];
+    /** Compact card sizing for side-by-side journey charts. */
+    compact?: boolean;
 }>();
 const api = new ElevationApi();
 const axis = ref<"distance" | "time">("distance");
@@ -107,7 +109,7 @@ const figure = computed(() => {
 </script>
 
 <template>
-    <q-card flat bordered class="q-pa-sm">
+    <q-card flat bordered class="q-pa-sm" :class="{ 'compact-elevation': compact }">
         <div class="row items-center justify-between q-gutter-sm">
             <div class="text-subtitle2">Höhenprofil</div>
             <q-btn-toggle
@@ -127,9 +129,14 @@ const figure = computed(() => {
             :figure="figure"
             keep-line-widths
             :x-unit="axis === 'distance' ? 'km' : 'min'"
-            style="height: 260px"
+            :class="{ 'compact-elevation-plot': compact }"
+            :style="compact ? undefined : { height: '260px' }"
         />
-        <q-skeleton v-else-if="pending" height="220px" aria-label="Höhenprofil wird geladen" />
+        <q-skeleton
+            v-else-if="pending"
+            :height="props.compact ? '180px' : '220px'"
+            aria-label="Höhenprofil wird geladen"
+        />
         <div v-else-if="failed.length" role="alert" class="q-pa-md">
             Höhendaten konnten nicht geladen werden.
             <q-btn flat no-caps label="Erneut versuchen" @click="retryFailed" />
@@ -152,5 +159,19 @@ const figure = computed(() => {
             <span v-if="axis === 'time' && approximateTiming">· Fahrzeit nach Streckenlänge geschätzt</span>
             <span v-if="partialHeights">· Höhendaten teilweise nicht verfügbar</span>
         </div>
+        <div v-if="$slots.footer" class="text-caption text-muted"><slot name="footer" /></div>
     </q-card>
 </template>
+
+<style scoped>
+.compact-elevation {
+    display: flex;
+    flex-direction: column;
+    min-height: 280px;
+    min-width: 0;
+}
+.compact-elevation-plot {
+    flex: 1 1 180px;
+    min-height: 180px;
+}
+</style>

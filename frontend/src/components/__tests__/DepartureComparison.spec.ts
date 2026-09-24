@@ -27,6 +27,37 @@ describe("DepartureComparison", () => {
     });
     afterEach(() => vi.useRealTimers());
 
+    it("shows only strictly better commuter alternatives, including within the same quality band", () => {
+        const data = comparison();
+        Object.assign(data.candidates[0] ?? {}, { available: true, rideScore: 0.5 });
+        const wrapper = mount(DepartureComparison, { props: { comparison: data, betterOnly: true } });
+        const options = wrapper.findAll(".departure-option");
+        expect(options).toHaveLength(1);
+        expect(options[0]?.text()).toContain("08:15");
+        wrapper.unmount();
+    });
+
+    it.each([0.2, 0.4, null])("hides commuter comparisons without a better score (%s)", score => {
+        const data = comparison();
+        Object.assign(data.candidates[1] ?? {}, { rideScore: 0.2 });
+        Object.assign(data.candidates[2] ?? {}, { rideScore: score });
+        const wrapper = mount(DepartureComparison, { props: { comparison: data, betterOnly: true } });
+        expect(wrapper.find("section").exists()).toBe(false);
+        wrapper.unmount();
+    });
+
+    it("requires a known baseline and preserves reset for a previously selected alternative", async () => {
+        const data = comparison();
+        Object.assign(data.candidates[1] ?? {}, { rideScore: null });
+        const wrapper = mount(DepartureComparison, {
+            props: { comparison: data, betterOnly: true, selectedTime: data.recommendedTime },
+        });
+        expect(wrapper.findAll(".departure-option")).toHaveLength(0);
+        await wrapper.get(".reset-time").trigger("click");
+        expect(wrapper.emitted("reset")).toHaveLength(1);
+        wrapper.unmount();
+    });
+
     it("shows requested, recommended, and selected states with text and accessible buttons", async () => {
         const wrapper = mount(DepartureComparison, { props: { comparison: comparison() } });
         const buttons = wrapper.findAll(".departure-option");

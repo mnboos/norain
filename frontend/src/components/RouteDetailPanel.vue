@@ -269,6 +269,7 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
                     </DepartureFlexibility>
                     <q-card-section v-if="departureComparison">
                         <DepartureComparison
+                            better-only
                             :comparison="departureComparison"
                             :selected-time="selectedDeparture"
                             @select="selectedDeparture = $event"

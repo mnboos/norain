@@ -7,18 +7,33 @@
 
 <script setup lang="ts">
 import { computed, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { symSharpArrowBack } from "@quasar/extras/material-symbols-sharp";
 import RouteDetailPanel from "@/components/RouteDetailPanel.vue";
 import { useSession } from "@/composables/useSession";
 import { nextDepartureParts, useRecurringRoute } from "@/queries/recurringRoutes";
 import { recordRouteOpened } from "@/utils/recentRoutes";
+import { nextRideId } from "@/utils/nextRide";
 
 const currentRoute = useRoute();
+const router = useRouter();
 const routeId = computed(() => String(currentRoute.params.id));
 const { session } = useSession();
 
 const { data: route, isLoading, error } = useRecurringRoute(routeId);
+
+// A route opened from the dashboard or a bookmark means the next ride in either
+// direction. An explicit tab selection must remain selectable even when it is later.
+const nextDirectionId = computed(() =>
+    route.value && currentRoute.query.direction !== "outbound" ? nextRideId(route.value) : routeId.value,
+);
+watch(
+    nextDirectionId,
+    id => {
+        if (id !== routeId.value) void router.replace({ path: `/routes/${id}`, query: currentRoute.query });
+    },
+    { immediate: true },
+);
 
 // Remembered so the dashboard can load this route's forecast ahead next time.
 watch(
@@ -48,11 +63,15 @@ const departureTime = computed(() => departure.value.time);
         <q-banner v-else-if="error || !route" class="bg-tint-error q-mt-md" rounded>Route nicht gefunden.</q-banner>
 
         <q-tabs v-if="route?.returnRouteId || route?.parentRouteId" dense align="left" class="q-mb-md">
-            <q-route-tab :to="`/routes/${route.parentRouteId ?? route.id}`" label="Hinfahrt" exact />
+            <q-route-tab
+                :to="{ path: `/routes/${route.parentRouteId ?? route.id}`, query: { direction: 'outbound' } }"
+                label="Hinfahrt"
+                exact
+            />
             <q-route-tab :to="`/routes/${route.returnRouteId ?? route.id}`" label="Rückfahrt" exact />
         </q-tabs>
         <RouteDetailPanel
-            v-if="route"
+            v-if="route && nextDirectionId === routeId"
             :key="routeId"
             :route="route"
             :departure-date="departureDate"

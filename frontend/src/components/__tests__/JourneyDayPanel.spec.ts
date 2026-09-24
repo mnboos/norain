@@ -24,7 +24,7 @@ vi.mock("@/components/ElevationChart.vue", () => ({ default: { template: "<div /
 vi.mock("@/components/WeatherChart.vue", () => ({ default: { template: "<div />" } }));
 
 describe("journey warnings", () => {
-    it("shows limits and unfulfilled POI wishes with only one alternative", () => {
+    it("keeps warnings visible and details follow variant selection, resetting on a new day", async () => {
         const reasons = [
             "Tageslimit: ~5 min zu lang",
             "Tageslimit: ~2.0 km zu weit",
@@ -72,22 +72,49 @@ describe("journey warnings", () => {
                 day,
             },
             global: {
-                stubs: Object.fromEntries(
-                    [
-                        "QCard",
-                        "QCardSection",
-                        "QBanner",
-                        "QSeparator",
-                        "QIcon",
-                        "QToggle",
-                        "QBtn",
-                        "QExpansionItem",
-                    ].map(name => [name, { template: "<div><slot /></div>" }]),
-                ),
+                stubs: {
+                    ...Object.fromEntries(
+                        [
+                            "QCard",
+                            "QCardSection",
+                            "QBanner",
+                            "QSeparator",
+                            "QIcon",
+                            "QToggle",
+                            "QBtn",
+                            "QExpansionItem",
+                        ].map(name => [name, { template: "<div><slot /></div>" }]),
+                    ),
+                    QExpansionItem: {
+                        props: ["modelValue"],
+                        emits: ["update:modelValue"],
+                        template:
+                            '<div><button data-testid="toggle-details" @click="$emit(\'update:modelValue\', !modelValue)">Details</button><div v-if="modelValue"><slot /></div></div>',
+                    },
+                },
             },
         });
         const warnings = wrapper.get('[data-testid="journey-limit-warnings"]');
         for (const reason of reasons) expect(warnings.text()).toContain(reason);
+        expect(wrapper.find(".variant-button").exists()).toBe(false);
+        expect(wrapper.text()).not.toContain("Keine Pause nötig.");
+        const first = { ...day.stages![0]!, reasons: [...reasons, "Erste Route"], recommended: true };
+        const second = { ...first, id: "s2", recommended: false, reasons: ["Zweite Route"], forecastStatus: "failed" };
+        await wrapper.setProps({ day: { ...day, stages: [first, second] } });
+        expect(wrapper.get(".variant-button").attributes("aria-pressed")).toBe("true");
+        expect(wrapper.text()).toContain("Wetter fehlgeschlagen");
+        await wrapper.get('[data-testid="toggle-details"]').trigger("click");
+        expect(wrapper.text()).toContain("Erste Route");
+        await wrapper.findAll(".variant-button")[1]!.trigger("click");
+        expect(wrapper.text()).toContain("Zweite Route");
+        expect(wrapper.text()).not.toContain("Erste Route");
+        expect(wrapper.findAll(".variant-button")[1]!.attributes("aria-pressed")).toBe("true");
+        await wrapper.setProps({ day: { ...day, id: "next-day", stages: [first, second] } });
+        expect(wrapper.text()).not.toContain("Erste Route");
+        expect(wrapper.get(".variant-button").attributes("aria-pressed")).toBe("true");
+        expect(wrapper.find('[data-testid="journey-charts"]').exists()).toBe(true);
+        for (const reason of reasons)
+            expect(wrapper.get('[data-testid="journey-limit-warnings"]').text()).toContain(reason);
         wrapper.unmount();
     });
 });

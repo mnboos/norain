@@ -47,7 +47,7 @@ function onSave(data: JourneyIn) {
 </script>
 
 <template>
-    <q-page class="q-pa-md column">
+    <q-page class="q-pa-md column no-wrap">
         <div class="row items-center q-mb-md no-wrap">
             <q-btn flat round dense :icon="symSharpArrowBack" to="/journeys" aria-label="Zurück" />
             <div v-if="journey" class="col q-ml-sm ellipsis">

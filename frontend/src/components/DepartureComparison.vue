@@ -4,13 +4,26 @@ import { useNow } from "@vueuse/core";
 import type { DepartureCandidate, DepartureComparison } from "@norain/api/models";
 import { scoreColor } from "@/utils/rideQuality";
 
-const props = defineProps<{ comparison: DepartureComparison; selectedTime?: string | null }>();
+const props = defineProps<{
+    comparison: DepartureComparison;
+    selectedTime?: string | null;
+    betterOnly?: boolean;
+}>();
 const emit = defineEmits<{ select: [time: string]; reset: [] }>();
 const now = useNow({ interval: 15_000 });
 const selected = computed(() => props.selectedTime ?? props.comparison.requestedTime);
 const recommended = computed(() =>
-    props.comparison.candidates.find(c => c.departureTime === props.comparison.recommendedTime && available(c)),
+    candidates.value.find(c => c.departureTime === props.comparison.recommendedTime && available(c)),
 );
+const candidates = computed(() => {
+    if (!props.betterOnly) return props.comparison.candidates;
+    const baseline = props.comparison.candidates.find(c => sameTime(c.departureTime, props.comparison.requestedTime));
+    if (!baseline?.available || baseline.rideScore == null) return [];
+    const baselineScore = baseline.rideScore;
+    return props.comparison.candidates.filter(
+        c => available(c) && c.rideScore != null && c.rideScore < baselineScore,
+    );
+});
 const formatter = new Intl.DateTimeFormat("de-CH", {
     timeZone: "Europe/Zurich",
     day: "2-digit",
@@ -38,7 +51,11 @@ function select(candidate: DepartureCandidate) {
 </script>
 
 <template>
-    <section aria-label="Abfahrtszeiten vergleichen" class="q-pa-sm departure-comparison">
+    <section
+        v-if="!betterOnly || candidates.length || selectedTime"
+        aria-label="Abfahrtszeiten vergleichen"
+        class="q-pa-sm departure-comparison"
+    >
         <div class="text-subtitle2">Beste Abfahrtszeit</div>
         <div class="text-caption">
             Zeitfenster: {{ format(comparison.windowStart) }} – {{ format(comparison.windowEnd) }}
@@ -48,10 +65,10 @@ function select(candidate: DepartureCandidate) {
             <br />
             {{ comparison.explanation }}
         </p>
-        <p v-else class="q-my-sm">Nicht genügend Wetterdaten oder keine zukünftige Abfahrt im Zeitfenster.</p>
+        <p v-else-if="!betterOnly" class="q-my-sm">Nicht genügend Wetterdaten oder keine zukünftige Abfahrt im Zeitfenster.</p>
         <div class="departure-timeline" aria-label="Verglichene Abfahrtszeiten">
             <button
-                v-for="candidate in comparison.candidates"
+                v-for="candidate in candidates"
                 :key="candidate.departureTime"
                 type="button"
                 class="departure-option"
