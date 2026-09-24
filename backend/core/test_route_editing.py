@@ -105,14 +105,19 @@ class RouteEditingTests(TestCase):
         body = {"profile": "bike", "points": points or [[9, 47], *VIA, [9.01, 47.01]]}
         return self.client.post("/api/routes/preview", body, content_type="application/json")
 
-    def test_preview_returns_the_line_only(self):
+    def test_preview_returns_line_and_vertex_times(self):
         with patch("core.weather._fetch_route", AsyncMock(return_value=GH_ROUTE)) as fetch:
             response = self._preview()
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(
-            response.json(),
+            {key: value for key, value in response.json().items() if key != "vertex_times"},
             {"coordinates": GH_ROUTE["paths"][0]["points"]["coordinates"], "distance_m": 2500, "time_s": 900},
         )
+        times = response.json()["vertex_times"]
+        self.assertEqual(len(times), 3)
+        self.assertEqual(times[0], 0)
+        self.assertEqual(times[-1], 900)
+        self.assertTrue(0 < times[1] < 900)
         self.assertEqual(len(fetch.await_args.args[1]), 3)
 
     def test_preview_without_a_route_is_a_422(self):

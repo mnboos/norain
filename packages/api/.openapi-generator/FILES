@@ -1,3 +1,4 @@
+apis/ElevationApi.ts
 apis/GPXApi.ts
 apis/JourneysApi.ts
 apis/PlacesApi.ts
@@ -8,6 +9,9 @@ index.ts
 models/BreakOut.ts
 models/DepartureCandidate.ts
 models/DepartureComparison.ts
+models/ElevationIn.ts
+models/ElevationOut.ts
+models/ElevationPoint.ts
 models/EnsembleModelStatistics.ts
 models/EnsembleRange.ts
 models/ForecastJobOut.ts

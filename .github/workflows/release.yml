@@ -45,6 +45,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: sudo apt-get update && sudo apt-get install -y binutils libproj-dev gdal-bin
       - run: cd backend && uv sync --frozen && uv run python manage.py test core
+      - run: uv run --no-project --with pmtiles==3.8.1 --with pillow==12.3.0 python -m unittest discover -s docker/tests -v
       - run: cd frontend && npm ci && npm run build
 
   publish:

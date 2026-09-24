@@ -6,6 +6,7 @@
 </route>
 
 <script setup lang="ts">
+import ElevationChart from "@/components/ElevationChart.vue";
 import { GeometrySource } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
 import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
@@ -346,6 +347,11 @@ v-if="!exact"
                             outlined
                             stack-label
                         />
+                        <ElevationChart
+v-if="previewQuery.data.value"
+                            :coordinates="previewQuery.data.value.coordinates"
+                            :total-seconds="previewQuery.data.value.timeS"
+                            :vertex-times="previewQuery.data.value.vertexTimes" />
                         <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
 
                         <q-btn-toggle

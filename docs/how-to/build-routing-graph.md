@@ -1,399 +1,183 @@
-# Build the routing graph
+# Build and deploy the routing graph
 
-NoRain plans bike routes with GraphHopper. GraphHopper needs a **routing graph**: a
-prepared copy of the map that it can search quickly. This guide explains how to make one,
-step by step.
+NoRain builds **GraphHopper 12.0-SNAPSHOT** from commit
+`d9506cd7d36d5d068d9118b19b86cf0609dbe773` with Java 25. Its native PMTiles
+provider reads **Mapterhorn zoom 15**, using bilinear interpolation. Photon keeps
+its own Java runtime. Both amd64 and arm64 images are built from the same Java source.
 
-**The graph is never built automatically.** When GraphHopper starts without a graph, it
-stops at once with this message:
+There are three separate artifacts:
 
-```
-No graph in /graph-cache. The container never builds one by itself. Build it with:
-  just build-graphhopper-graph-from <bike-filtered .osm.pbf in ROUTING_OSM_IMPORT_DIR>
-```
-
-You always build it yourself, with one command. That is true on your own computer and on
-the server (the VPS).
-
-## Contents
-
-- [The words used in this guide](#the-words-used-in-this-guide)
-- [Before you start: `.env`](#before-you-start-env)
-- [Path A: one country, downloaded for you](#path-a-one-country-downloaded-for-you)
-- [Path B: several countries merged into one](#path-b-several-countries-merged-into-one)
-- [Path C: build on the VPS](#path-c-build-on-the-vps)
-- [Path D: build on another computer and copy it to the VPS](#path-d-build-on-another-computer-and-copy-it-to-the-vps)
-- [After every build](#after-every-build)
-- [Build again after changing the config or a speed](#build-again-after-changing-the-config-or-a-speed)
-- [When something goes wrong](#when-something-goes-wrong)
-- [What happens inside the build command](#what-happens-inside-the-build-command)
-
-## The words used in this guide
-
-| Word | What it is | Example |
+| Artifact | Container location | Purpose |
 | --- | --- | --- |
-| **Raw OSM file** | A map file as it comes from [Geofabrik](https://download.geofabrik.de/), with everything in it: roads, buildings, shops, rivers. | `switzerland-latest.osm.pbf` |
-| **Filtered OSM file** | The same map with only what bikes need (roads, paths, ferries, cycle routes). About a third of the size. Its name starts with `bike-`. **The graph is always built from a filtered file.** | `bike-europe-cycling.osm.pbf` |
-| **Import folder** | The folder on your computer (or the VPS) where the OSM files live. Set by `ROUTING_OSM_IMPORT_DIR` in `.env`. Inside the container it is called `/osm_data`. | `./data/graphhopper/osm` |
-| **Graph folder** | Where the finished graph is stored. GraphHopper serves from here. | `data/graphhopper/cache` (dev), `/srv/norain-data/graphhopper/cache` (VPS) |
+| Filtered OSM | `/osm_data/bike-*.osm.pbf` | Roads and bike-route relations |
+| Terrain | `/osm_data/elevation/<manifest-hash>/` | Verified PMTiles, attribution, and reusable decoded cache |
+| Routing graph | `/graph-cache/releases/<id>/` | Graph, configuration snapshot, models, and build identity |
 
-There are only two commands:
+`/graph-cache/current` selects the active graph. `candidate` selects the newest
+successful import; `previous` retains the last activated managed graph. Graph
+builds never stop the running service or delete its graph. Startup only loads an
+existing graph; it never downloads OSM/terrain or starts an import.
 
-| Command | What it does | Makes a graph? |
-| --- | --- | --- |
-| `just osm-filter-many-raw-pbf-into-one FILE…` | Takes one or more **raw** files, filters them and merges them into **one filtered file** in the import folder. It also writes the POI file for the journey planner. | No |
-| `just build-graphhopper-graph-from FILE` | Takes **one filtered file** from the import folder and builds the graph from it. Deletes the old graph first. | Yes |
+The elevation chart and height enrichment of previously saved routes are separate
+application work. This upgrade does not rewrite saved routes. New routing results
+may differ because the engine and terrain have changed.
 
-## Before you start: `.env`
+## 1. Build or select the image
 
-All commands read `.env` in the repository folder. Check these lines:
+Locally:
 
-```bash
-# Which docker-compose file to use: docker-compose.dev.yml on your computer,
-# docker-compose.prod.yml on the VPS.
-COMPOSE_FILE=docker-compose.dev.yml
-
-# The import folder: where the OSM files are. Required.
-ROUTING_OSM_IMPORT_DIR=./data/graphhopper/osm
-
-# A raw file to download (only used by path A).
-OSM_DATA_URL=https://download.geofabrik.de/europe/switzerland-latest.osm.pbf
-
-# The name of the filtered file that osm-filter-many-raw-pbf-into-one writes (only path B).
-ROUTING_OSM_FILE_FILTERED=bike-europe-cycling.osm.pbf
-
-# Memory for the build. See "How much memory" below.
-GRAPHHOPPER_BUILD_HEAP=6g
-GRAPHHOPPER_MEM_LIMIT=8g
-GRAPHHOPPER_BUILD_DATAACCESS=RAM_STORE
+```sh
+docker compose build graphhopper
 ```
 
-### How much memory
+In production, set `GRAPHHOPPER_IMAGE` to the immutable image tag published by CI
+and pull it. Use **that same image** for the import, validation and serving. Each
+graph records the Java revision and jar checksum; a different source revision is rejected
+before GraphHopper opens it. Config/model snapshots prevent a later checkout from
+silently changing the configuration of a prepared graph.
 
-The build needs much more memory than running the server. Two settings matter:
+A generic application release checks the active graph against the selected image
+before replacing services. An engine upgrade therefore needs the graph workflow
+below before the application release.
 
-- `GRAPHHOPPER_BUILD_HEAP` is the memory Java may use for the build.
-- `GRAPHHOPPER_MEM_LIMIT` is the most the whole container may use. It must be **bigger**
-  than the heap: Java needs some memory outside the heap too. If the container reaches this
-  limit, the system kills the build (you see `Killed` and `exit code 137`).
+## 2. Prepare OSM
 
-`GRAPHHOPPER_BUILD_DATAACCESS` says where the graph is kept while it is built:
+`ROUTING_OSM_IMPORT_DIR` is the host folder mounted at `/osm_data`; default:
+`./data/graphhopper/osm`. Production normally uses a persistent folder such as
+`/srv/norain-data/graphhopper/osm`.
 
-- `RAM_STORE` (the default): all in memory. Fast, but needs a lot of memory.
-- `MMAP`: in files on disk. Slower (hours for a big area), but needs far less memory.
-  Use it when the computer does not have enough memory for `RAM_STORE`.
+For custom country combinations, download the raw extracts and run:
 
-Starting points (not measured exactly; raise them if the build runs out of memory):
-
-| Area | `DATAACCESS` | `BUILD_HEAP` | `MEM_LIMIT` |
-| --- | --- | --- | --- |
-| Switzerland | `RAM_STORE` | `6g` | `8g` |
-| Germany + Austria + Switzerland | `RAM_STORE` | `16g`–`24g` | `20g`–`28g` |
-| Many European countries, on a 64 GB computer | `RAM_STORE` | `40g` | `48g` |
-| Many European countries, on a 24 GB VPS | `MMAP` | `12g` | `20g` |
-
-## Path A: one country, downloaded for you
-
-Use this for a quick start on your own computer. The build downloads the raw file from
-`OSM_DATA_URL` and filters it for you.
-
-1. Set `OSM_DATA_URL` in `.env` to the Geofabrik file you want. The default is Switzerland.
-2. Build the GraphHopper image, so it has the newest scripts:
-
-   ```bash
-   docker compose build graphhopper
-   ```
-
-3. Build the graph. The file name is `bike-` plus the file name at the end of
-   `OSM_DATA_URL`:
-
-   ```bash
-   just build-graphhopper-graph-from bike-switzerland-latest.osm.pbf
-   ```
-
-   Type `y` when it asks. You see the download, then the filter, then the build. For
-   Switzerland this takes a few minutes. It ends with `Build finished`, and GraphHopper
-   starts again.
-4. Do the checks in [after every build](#after-every-build).
-
-The raw and the filtered file stay in the import folder. The next build uses the filtered
-file again and downloads nothing. To get fresh map data, delete both files from the
-import folder and build again.
-
-## Path B: several countries merged into one
-
-Use this to cover more than one country (for example Germany, Austria, Switzerland, the
-Netherlands, Belgium and Denmark).
-
-1. Download the raw files:
-
-   ```bash
-   just download-pbf
-   ```
-
-   They go into `data/downloads/osm/`. The list of countries is at the top of
-   `scripts/download-pbf.sh`. Running it again later only downloads what has changed.
-2. In `.env`, choose the name of the merged filtered file, and set the memory for your
-   computer (see [how much memory](#how-much-memory)):
-
-   ```bash
-   ROUTING_OSM_FILE_FILTERED=bike-europe-cycling.osm.pbf
-   ```
-
-3. Build the GraphHopper image:
-
-   ```bash
-   docker compose build graphhopper
-   ```
-
-4. Filter and merge the raw files into one filtered file:
-
-   ```bash
-   just osm-filter-many-raw-pbf-into-one data/downloads/osm/*.osm.pbf
-   ```
-
-   Type `y` when it asks. When it is done, the import folder has
-   `bike-europe-cycling.osm.pbf` and `pois-europe-cycling.geojsonseq`. **No graph is built
-   yet**, and GraphHopper keeps running with the old graph.
-5. Build the graph from that file:
-
-   ```bash
-   just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
-   ```
-
-   Type `y` when it asks. Routing does not work until the build is done. It ends with
-   `Build finished`, and GraphHopper starts again.
-6. Load the journey planner's POIs, which step 4 extracted from the same files:
-
-   ```bash
-   just poi-import-into-db
-   ```
-
-   On another machine, such as the VPS, copy `pois-europe-cycling.geojsonseq` into its import
-   folder too, or remake it there from the raw files:
-   `just poi-extract-from-unfiltered-osm-pbf data/downloads/osm/*.osm.pbf`.
-
-7. Do the checks in [after every build](#after-every-build).
-
-Search (Photon) is separate. See [build routing and search from downloaded
-files](import-geodata.md) for the search index.
-
-## Path C: build on the VPS
-
-Use this when the filtered file is already on the VPS, or when the VPS should download it
-(path A's file name). Run everything on the VPS, in the repository folder.
-
-1. **Get the newest code.**
-
-   ```bash
-   cd ~/src/norain        # or /srv/norain: wherever the repository is
-   git pull
-   ```
-
-2. **Check `.env`.** It must say:
-
-   ```bash
-   COMPOSE_FILE=docker-compose.prod.yml
-   ROUTING_OSM_IMPORT_DIR=/srv/norain-data/graphhopper/osm   # the folder with your .osm.pbf files
-   ```
-
-   For a big area on a VPS with 24 GB, also set:
-
-   ```bash
-   GRAPHHOPPER_BUILD_DATAACCESS=MMAP
-   GRAPHHOPPER_BUILD_HEAP=12g
-   GRAPHHOPPER_MEM_LIMIT=20g
-   ```
-
-3. **Check that the filtered file is in the import folder.** Use the folder from
-   `ROUTING_OSM_IMPORT_DIR`:
-
-   ```bash
-   ls -lh /srv/norain-data/graphhopper/osm/
-   ```
-
-   You should see your `bike-….osm.pbf`. If it is not there, copy it from the computer that
-   made it (path B, step 4):
-
-   ```bash
-   # run this on the computer that has the file
-   rsync -a --partial --progress data/graphhopper/osm/bike-europe-cycling.osm.pbf \
-     USER@VPS:/srv/norain-data/graphhopper/osm/
-   ```
-
-   If you see a file that starts with `bike-bike-`, delete it: it was filtered twice by
-   mistake.
-4. **Build the GraphHopper image**, so it has the newest scripts:
-
-   ```bash
-   docker compose build graphhopper
-   ```
-
-5. **Stop everything**, so the build gets all the memory. The site is offline from here
-   until step 8.
-
-   ```bash
-   docker compose stop
-   ```
-
-6. **Start a `tmux` session.** A big build takes hours. Inside `tmux` it keeps running if
-   your SSH connection drops.
-
-   ```bash
-   tmux new -s graph
-   ```
-
-   To leave it running and log out: press `Ctrl-b`, then `d`. To come back later:
-   `tmux attach -t graph`.
-7. **Build the graph:**
-
-   ```bash
-   just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
-   ```
-
-   Type `y` when it asks. The log shows:
-
-   ```
-   Importing from /osm_data (ROUTING_OSM_IMPORT_DIR on the host: /srv/norain-data/graphhopper/osm)
-   Building the graph from /osm_data/bike-europe-cycling.osm.pbf with a 12g heap (MMAP)
-   ```
-
-   Check that the file name and `MMAP` are what you expect. Then wait until you see
-   `Build finished`. If it stops with an error, see [when something goes
-   wrong](#when-something-goes-wrong).
-8. **Start everything again:**
-
-   ```bash
-   docker compose up -d
-   ```
-
-9. Do the checks in [after every build](#after-every-build).
-
-## Path D: build on another computer and copy it to the VPS
-
-Use this when the VPS does not have enough memory, or to keep the site online during a
-long build. A computer with 64 GB builds much faster than a VPS with `MMAP`.
-
-**The graph must be built with the same setup as the VPS**, or GraphHopper refuses to load
-it. Use the same commit (the same `data/graphhopper/graphhopper-config.yaml`, the same files
-in `data/graphhopper/models/` and the same GraphHopper version in `Dockerfile`). The type of
-processor does not matter: a graph built on a normal PC works on the ARM VPS.
-
-1. **On your computer**, check out the commit that runs on the VPS, then build the graph
-   with path A or path B. With a lot of memory, set it in `.env` first, for example:
-
-   ```bash
-   GRAPHHOPPER_BUILD_DATAACCESS=RAM_STORE
-   GRAPHHOPPER_BUILD_HEAP=40g
-   GRAPHHOPPER_MEM_LIMIT=48g
-   ```
-
-2. **Check the size** of the graph:
-
-   ```bash
-   du -sh data/graphhopper/cache
-   ```
-
-3. **Copy it to the VPS**, into a new folder next to the old one:
-
-   ```bash
-   rsync -a --partial --delete --progress data/graphhopper/cache/ \
-     USER@VPS:/srv/norain-data/graphhopper/cache.new/
-   ```
-
-4. **On the VPS**, swap the new graph in:
-
-   ```bash
-   cd ~/src/norain
-   docker compose stop graphhopper
-   cd /srv/norain-data/graphhopper
-   [ -d cache ] && mv cache cache.old
-   mv cache.new cache
-   cd ~/src/norain
-   docker compose up -d graphhopper
-   docker compose logs -f graphhopper      # wait for "Serving /graph-cache", then Ctrl-C
-   ```
-
-5. Do the checks in [after every build](#after-every-build). When everything works, delete
-   the old graph: `rm -rf /srv/norain-data/graphhopper/cache.old`.
-
-## After every build
-
-1. **Check that GraphHopper runs.**
-
-   ```bash
-   docker compose ps graphhopper
-   ```
-
-   After a few minutes the status should say `healthy` (on the VPS) or `running`. On your
-   own computer you can also open <http://localhost:8989/info>.
-2. **Restart the backend and the workers**, so they forget old routes they kept in memory:
-
-   ```bash
-   docker compose restart
-   ```
-
-   (On your own computer, restart `just server` and your workers instead.)
-3. **Recalculate all saved routes.** Saved routes keep their old line and times until this
-   runs. It needs a worker on the `default` queue.
-
-   ```bash
-   just routing-refresh-routes
-   ```
-
-   On the VPS, if `uv` is not installed there, run it in a container instead:
-
-   ```bash
-   docker compose run --rm --no-deps worker-default python manage.py shell -c "from core.models import RecurringRoute; from core.tasks import refresh_route_geometry; print(sum(refresh_route_geometry.enqueue(str(i)) is not None for i in RecurringRoute.objects.values_list('id', flat=True)), 'routes queued')"
-   ```
-
-4. **Try it.** Plan a short route in each country you built, and one that crosses a border.
-   Routes outside the new area no longer work.
-
-## Build again after changing the config or a speed
-
-The graph contains the rules from `data/graphhopper/graphhopper-config.yaml` and
-`data/graphhopper/models/` (the ride speeds live there, see
-[configuration](../reference/configuration.md#ride-speed)). A change to them only works
-after a new build. Changing the files alone does nothing, and after a restart GraphHopper
-refuses the old graph.
-
-Build again from the filtered file that is already there:
-
-```bash
-just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
-just routing-speeds          # shows the new speeds of each profile
+```sh
+just osm-filter-many-raw-pbf-into-one /path/to/germany-latest.osm.pbf /path/to/austria-latest.osm.pbf
 ```
 
-Then do [after every build](#after-every-build).
+Set `ROUTING_OSM_FILE_FILTERED` before that command. It also produces the matching
+POI file. Use the exact same filtered file for terrain preparation and graph import.
+For the default `bike-switzerland-latest.osm.pbf`, the terrain command can download
+and filter `OSM_DATA_URL` when the file is missing. The dry run does not download
+terrain, but can still perform this OSM preparation.
 
-## When something goes wrong
+## 3. Estimate and prepare terrain
 
-| What you see | What it means | What to do |
-| --- | --- | --- |
-| `No graph in /graph-cache. The container never builds one by itself.` | GraphHopper has no graph yet, or the graph folder was emptied. It restarts again and again with this message. | Build one ([path A](#path-a-one-country-downloaded-for-you), [B](#path-b-several-countries-merged-into-one), [C](#path-c-build-on-the-vps)) or copy one ([path D](#path-d-build-on-another-computer-and-copy-it-to-the-vps)). |
-| `error: … is not in ROUTING_OSM_IMPORT_DIR (…)` | The file you named is not in the import folder. Nothing was changed. | Check the name with `ls`, and check `ROUTING_OSM_IMPORT_DIR` in `.env`. |
-| `Killed`, and `exit code 137` | The container used more memory than `GRAPHHOPPER_MEM_LIMIT`, and the system stopped it. | Raise `GRAPHHOPPER_MEM_LIMIT`. If the computer has no more memory, use `GRAPHHOPPER_BUILD_DATAACCESS=MMAP`, or build on a bigger computer (path D). |
-| `java.lang.OutOfMemoryError` | Java used all of `GRAPHHOPPER_BUILD_HEAP`. | Raise `GRAPHHOPPER_BUILD_HEAP`. Keep `GRAPHHOPPER_MEM_LIMIT` a few GB above it. |
-| `ROUTING_OSM_IMPORT_DIR must be set` | `.env` has no import folder. | Add `ROUTING_OSM_IMPORT_DIR=…` to `.env`. |
-| `no configuration file provided` | `.env` has no `COMPOSE_FILE`. | Add `COMPOSE_FILE=docker-compose.dev.yml` (or `docker-compose.prod.yml` on the VPS). |
-| A file called `bike-bike-….osm.pbf` appears | A file that was already filtered was filtered again. | Delete the `bike-bike-…` file. Build from the `bike-…` file, and don't put a filtered file name into `OSM_DATA_URL`. |
-| GraphHopper refuses to load a copied graph | It was built with a different config or GraphHopper version. | Build again with the same commit as the VPS (path D). |
+```sh
+just routing-terrain-estimate bike-switzerland-latest.osm.pbf
+just routing-terrain-from bike-switzerland-latest.osm.pbf
+```
 
-## What happens inside the build command
+Bounds come from the actual OSM nodes, expanded by one complete zoom-15 tile on
+all sides. The helper reads Mapterhorn's archive catalog, extracts only zoom 15
+from intersecting regional archives, then merges them. The planet archive alone
+only contains zooms 0–12 and cannot provide this resolution.
 
-`just build-graphhopper-graph-from FILE` does four things, in this order:
+The estimate prints transfer/archive sizes before downloading terrain. Allow
+additional space for temporary extracts, the merged archive, decoded terrain
+cache, the new graph and the retained previous graph. Zoom 15 over a large region
+can require substantial disk space and import time; start with a small extract.
 
-1. It checks that `FILE` is in the import folder, and stops if not. (One exception: for
-   `bike-<file name of OSM_DATA_URL>` the file may be missing, because it will be
-   downloaded.)
-2. It stops GraphHopper and empties the graph folder.
-3. It runs the GraphHopper container once with the command `build`. The container
-   downloads and filters the raw file if needed (path A only), then builds the graph from
-   `/osm_data/FILE` and exits.
-4. It starts GraphHopper again, which now serves the new graph.
+Preparation verifies PMTiles structure, WebP decoding and absence of terrain voids.
+If Mapterhorn has no tile for part of the requested area, preparation continues and
+prints a warning; GraphHopper returns a height gap for routes crossing that tile and
+the charts leave that segment blank. There is no silent low-resolution fallback. A
+higher zoom cannot improve the accuracy of the original survey. At Swiss latitudes
+zoom 15 corresponds to roughly 1.6 m pixels.
 
-The filter rules are in `docker/graphhopper-filter-osm.sh`. See [what the bike filter
-keeps](import-geodata.md#what-the-bike-filter-keeps).
+Downloads are staged and only published when complete. The manifest records source
+URLs and source checksums, bounds, zoom, and the completed extract's SHA-256. A
+matching completed extract is reused after checksum verification. Interrupted
+preparation leaves the prior `elevation/current` untouched and preserves completed
+source extracts in `.prepare-<hash>/` for the next attempt, so they are not
+downloaded again.
 
-[Documentation index](../README.md)
+Mapterhorn attribution is retained as `attribution.json` alongside the archive;
+see [Mapterhorn attribution](https://mapterhorn.com/attribution/) and
+[data access](https://mapterhorn.com/data-access/).
+
+## 4. Import without interrupting routing
+
+```sh
+just build-graphhopper-graph-from bike-switzerland-latest.osm.pbf
+```
+
+This checks terrain integrity and matching OSM bounds first, then imports into a
+new release directory. A failed import never changes `current` or `candidate`.
+Only one import runs at a time. Failed release directories are retained for
+inspection and can be removed once no import uses them.
+
+`GRAPHHOPPER_BUILD_HEAP` defaults to `GRAPHHOPPER_HEAP` (6g).
+`GRAPHHOPPER_BUILD_DATAACCESS=RAM_STORE` uses heap; `MMAP` trades speed for a
+smaller heap. Serving defaults to `GRAPHHOPPER_DATAACCESS=MMAP`. Leave enough RAM
+for the running graph plus the import, or build on another machine.
+
+To build elsewhere, use the same image and copy the **entire release directory**
+to the serving machine under `graphhopper/cache/releases/`, then set `candidate`
+to that relative release path. Keep the matching terrain release at the same path on the serving machine: the internal `/elevation` endpoint uses GraphHopper’s native provider to enrich existing saved paths without rerouting them. Ordinary routing loads elevations from the graph. Neither endpoint downloads terrain at request time.
+
+## 5. Validate, activate, and check
+
+Choose two non-sea-level points inside the imported graph, in `[longitude, latitude]`
+order. For a Switzerland graph:
+
+```sh
+just routing-validate-candidate '[[9.5329,46.8499],[9.6800,46.7833]]'
+just routing-activate
+just routing-speeds
+```
+
+Validation starts an isolated container with no published ports. It checks bike,
+ebike and fast_ebike, finite 3D elevation, 2D compatibility, time details, via
+points, alternative routing and the custom-model expressions used for road and
+wind preferences. Only a passing artifact can be activated. The container is
+removed after testing.
+
+Activation briefly stops GraphHopper, switches the current symlink, then recreates
+its service. Check `docker compose logs graphhopper` and `/info` after activation.
+Review representative flat, mountainous, bridge and tunnel routes as well as the
+reference speed output; a successful HTTP response alone does not establish survey
+accuracy. Startup should load the graph without terrain downloads or reimporting.
+
+The commands never enqueue `routing-refresh-routes`: that command recalculates
+saved geometry and is not part of this migration.
+
+## Rollback
+
+Before activating, record the old immutable image ID:
+
+```sh
+docker inspect --format '{{.Image}}' "$(docker compose ps -q graphhopper)"
+```
+
+For managed graphs created by this workflow:
+
+```sh
+just routing-rollback sha256:THE_PREVIOUS_IMAGE_ID
+```
+
+This verifies the previous artifact against that image before stopping the service,
+then restores its graph/configuration and recreates the service. Persist the image
+selection in the deployment environment so the next release uses the intended
+engine. Keep both images and release directories until the new deployment is verified.
+
+### First migration from the legacy 10.2 graph
+
+Before updating the checkout, retain a copy of its configuration and models, record
+the old image ID and keep the old checkout/release. The new workflow leaves the
+legacy graph files directly under `/graph-cache` untouched. Rollback to 10.2 uses
+the **old checkout/configuration and old image**, which still read those root files;
+it does not use the new `routing-rollback` command. Do not prune the old graph or
+image until validation is complete. Never load a 10.2 graph with the 12 image.
+
+## Tests
+
+The terrain tests require `pmtiles==3.8.1` and Pillow:
+
+```sh
+python -m unittest discover -s docker/tests -v
+cd backend && python manage.py test core
+```
+
+The container already includes both terrain dependencies. To run the unit tests
+there, mount `docker/` at a separate test path and run unittest discovery there.
+A real small-area import and `routing-validate-candidate` additionally exercise the
+native WebP decoder and the Java routing engine; run these for both supported
+architectures when changing the source pin or runtime.

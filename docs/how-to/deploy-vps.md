@@ -12,13 +12,13 @@ Git, and Restic. Create a non-root `norain` deployment user in the `docker` grou
 then clone this repository at `/srv/norain`.
 
 GraphHopper never builds its routing graph by itself: before the first start, build it with
-`just build-graphhopper-graph-from FILE` ([path C: build on the VPS](build-routing-graph.md#path-c-build-on-the-vps)), or
+`just build-graphhopper-graph-from FILE` ([path C: build on the VPS](build-routing-graph.md#4-import-without-interrupting-routing)), or
 copy one in. Until then the container stops with an error. Building needs more memory than serving:
 Switzerland needs a build heap (`GRAPHHOPPER_BUILD_HEAP`) of about 6 GB, DACH 16–24 GB.
 Serving uses `GRAPHHOPPER_DATAACCESS=MMAP`, so a 3 GB serving heap is enough for either
 (with `RAM_STORE`, DACH would need 10–14 GB). `GRAPHHOPPER_MEM_LIMIT` must fit the build heap.
 If the VPS cannot hold the build, [build the graph on another
-machine](build-routing-graph.md#path-d-build-on-another-computer-and-copy-it-to-the-vps) and copy it in. Prepare Photon with a manual import before first startup (see below), using
+machine](build-routing-graph.md#4-import-without-interrupting-routing) and copy it in. Prepare Photon with a manual import before first startup (see below), using
 `PHOTON_IMPORT_HEAP` (4 GB by default). The published images are built for
 both amd64 and arm64, so ARM hosts such as Oracle's Ampere A1 work. Do not expose
 GraphHopper, Photon, PostgreSQL, or Django directly.
@@ -193,12 +193,12 @@ to local `HEAD`, which CI must already have published) and then checks the healt
 endpoint. It reads `VPS_USER`, `VPS_HOST`, and `VPS_PUBLIC_HEALTH_URL` from the local
 `.env`, and your SSH key must be accepted by the deployment user.
 
-Photon loads the index prepared above. GraphHopper loads its graph, or builds it first
-when `graphhopper/cache` is empty. The backend, `worker-forecasts` and `worker-default` wait
-until GraphHopper is healthy (and Caddy waits for the backend), so the first release waits
-for the whole build and the site stays down until it is done. Restarting only
-`graphhopper` to rebuild leaves the running backend up, but routing fails until the build
-ends. Follow both with
+Photon loads the index prepared above. GraphHopper loads an explicitly prepared,
+validated and activated graph. Before the first release or an engine upgrade, follow
+[the routing graph guide](build-routing-graph.md) to prepare Mapterhorn terrain,
+import a candidate, validate it and activate it with the matching image. The release
+script checks graph/image compatibility before replacing services. It never builds
+a graph during startup. Check both services with
 `docker compose --env-file .env -f docker-compose.prod.yml logs -f graphhopper photon`.
 After they are ready, verify `https://YOUR_DOMAIN/healthz`, sign up, verify the
 email, create a route, and confirm the worker computes its geometry.

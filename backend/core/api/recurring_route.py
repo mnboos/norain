@@ -354,6 +354,7 @@ class RoutePreviewOut(CamelSchema):
     coordinates: list[list[float]]
     distance_m: float
     time_s: int
+    vertex_times: list[float] | None = None
 
 
 # The editor asks once per drag, so a minute's worth of real editing stays far below this.
@@ -462,6 +463,7 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
         route.sample_points = None
         route.polyline = None
         route.vertex_times = None
+        route.vertex_elevations = None
         route.geometry_fetched_at = None
         route.total_seconds = None
         route.total_distance_m = None
@@ -646,6 +648,7 @@ def _save_return(route, cron, description):
             sample_points=None,
             polyline=None,
             vertex_times=None,
+            vertex_elevations=None,
             geometry_fetched_at=None,
             thumbnail=None,
             thumbnail_computed_at=None,

@@ -1,6 +1,7 @@
 data/photon
 data/graphhopper/cache
 data/graphhopper/osm
+data/osm
 .venv
 node_modules
 .env
@@ -17,3 +18,6 @@ data/otp/*.obj
 
 # downloads from scripts/download-*.sh
 data/downloads/
+
+# Python helpers and tests
+__pycache__/

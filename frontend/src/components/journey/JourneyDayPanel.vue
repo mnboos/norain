@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ElevationChart from "@/components/ElevationChart.vue";
 import { computed, ref, toRefs, watch } from "vue";
 import { useQuasar } from "quasar";
 import { symSharpBed, symSharpCloudOff, symSharpStar, symSharpWarning } from "@quasar/extras/material-symbols-sharp";
@@ -58,6 +59,23 @@ const alternativeLines = computed(() => {
 function variantColor(index: number): string {
     return alternativeColor(index, $q.dark.isActive);
 }
+// The elevation profiles in each variant's own colour, the picked one too (its line on the map
+// is coloured by ride quality instead, but the profile needs a colour of its own).
+const selectedIndex = computed(() =>
+    Math.max(
+        0,
+        stages.value.findIndex(s => s.id === selectedId.value),
+    ),
+);
+const selectedProfileColor = computed(() => variantColor(selectedIndex.value));
+const selectedLabel = computed(() => `Variante ${selectedIndex.value + 1}`);
+const alternativeProfiles = computed(() =>
+    alternativeLines.value.map(a => ({
+        stageId: a.id,
+        color: variantColor(a.index),
+        label: `Variante ${a.index + 1}`,
+    })),
+);
 
 const forecastQuery = useJourneyStageForecast(
     () => journey.value.id,
@@ -198,7 +216,6 @@ function breakEta(elapsedS: number): string {
                                     <q-item-section>
                                         <q-item-label>
                                             <span
-                                                v-if="alternative.id !== selectedId"
                                                 class="line-swatch q-mr-xs"
                                                 :style="{ background: variantColor(n) }"
                                                 aria-hidden="true"
@@ -250,7 +267,11 @@ function breakEta(elapsedS: number): string {
                                     <div v-if="!stop.pois?.length" class="text-caption text-muted">
                                         Hier gibt es nichts Gewünschtes.
                                     </div>
-                                    <div v-for="poi in stop.pois" :key="`${poi.osmRef}:${poi.category}`" class="text-caption">
+                                    <div
+                                        v-for="poi in stop.pois"
+                                        :key="`${poi.osmRef}:${poi.category}`"
+                                        class="text-caption"
+                                    >
                                         {{ poiCategory(poi.category).emoji }} {{ poiName(poi) }}
                                     </div>
                                 </q-timeline-entry>
@@ -258,7 +279,11 @@ function breakEta(elapsedS: number): string {
                             <div v-for="gap in missingGaps" :key="gap" class="text-caption text-negative">
                                 {{ gap }}
                             </div>
-                            <div v-for="detour in stage.detours" :key="`${detour.osmRef}:${detour.category}`" class="text-caption text-muted">
+                            <div
+                                v-for="detour in stage.detours"
+                                :key="`${detour.osmRef}:${detour.category}`"
+                                class="text-caption text-muted"
+                            >
                                 Umweg zu {{ poiCategory(detour.category).emoji }} {{ poiName(detour) }}
                             </div>
                         </q-card-section>
@@ -266,6 +291,30 @@ function breakEta(elapsedS: number): string {
                 </q-card>
             </div>
 
+            <div v-if="stage" class="col-12">
+                <ElevationChart
+                    :stage-id="stage.id"
+                    :color="selectedProfileColor"
+                    :label="selectedLabel"
+                    :alternatives="alternativeProfiles"
+                />
+                <div v-if="alternativeProfiles.length" class="text-caption text-muted q-mt-xs">
+                    <span
+                        class="line-swatch q-mr-xs"
+                        :style="{ background: selectedProfileColor }"
+                        aria-hidden="true"
+                    />
+                    {{ selectedLabel }} (gewählt) ·
+                    <span
+                        v-for="alternative in alternativeProfiles"
+                        :key="alternative.stageId"
+                        class="line-swatch q-mr-xs"
+                        :style="{ background: alternative.color }"
+                        aria-hidden="true"
+                    />
+                    weitere Varianten
+                </div>
+            </div>
             <template v-if="forecast">
                 <div class="col-12 col-sm-6 col-md-4">
                     <q-card class="full-height">

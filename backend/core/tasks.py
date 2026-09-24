@@ -108,6 +108,7 @@ async def _refresh_route_geometry_async(route_id: str, *, backfill_only: bool = 
         total_distance_m=geometry["total_distance_m"],
         sample_points=sample_points,
         vertex_times=geometry["vertex_times"],
+        vertex_elevations=geometry.get("vertex_elevations"),
         geometry_fetched_at=now,
         updated_at=now,
     )
@@ -393,6 +394,7 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
             "polyline": route.polyline_coordinates,
             "sample_points": route.sample_points,
             "vertex_times": route.vertex_times,
+            "vertex_elevations": route.vertex_elevations,
             "total_seconds": route.total_seconds,
             "total_distance_m": route.total_distance_m,
         }
@@ -406,6 +408,7 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
             "polyline": stage.polyline_coordinates,
             "sample_points": stage.sample_points,
             "vertex_times": stage.vertex_times,
+            "vertex_elevations": stage.vertex_elevations,
             "total_seconds": stage.total_seconds,
             "total_distance_m": stage.total_distance_m,
         }
@@ -722,6 +725,9 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
             payload["route_id"] = params["route_id"]
         if job.kind == ForecastJob.Kind.JOURNEY_STAGE:
             payload["journey_stage_id"] = params["journey_stage_id"]
+        payload["elevation_geometry"] = {
+            key: (job.geometry or {}).get(key) for key in ("vertex_times", "vertex_elevations")
+        }
         payload["departure_time"] = params["departure_time"]
         payload["entitlements"] = computed["entitlements"]
         if computed.get("departure_inputs"):
@@ -1335,6 +1341,7 @@ def _store_journey_plan(journey_id: str, revision: int, planned: list[dict]) -> 
                     total_distance_m=geometry["total_distance_m"],
                     sample_points=geometry["sample_points"],
                     vertex_times=geometry["vertex_times"],
+                    vertex_elevations=geometry.get("vertex_elevations"),
                     geometry_fetched_at=now,
                     breaks=stage["breaks"],
                     gaps=stage["gaps"],

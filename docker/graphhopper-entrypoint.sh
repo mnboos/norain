@@ -1,9 +1,7 @@
 #!/bin/bash
 #
-# The container never builds a graph by itself. Two modes:
-#   (no argument)  serve the graph in /graph-cache; without one, fail and say how to build it
-#   build          build the graph from ROUTING_OSM_FILE_FILTERED into /graph-cache, then exit.
-#                  just build-graphhopper-graph-from FILE runs this after emptying the cache.
+# The container serves /graph-cache/current. Terrain preparation, candidate builds and
+# activation are explicit; a failed import never replaces the active graph.
 set -euo pipefail
 
 GRAPH_DIR=/graph-cache
@@ -14,12 +12,8 @@ GRAPHHOPPER_DATAACCESS="${GRAPHHOPPER_DATAACCESS:-MMAP}"
 # builds with a much smaller heap (and more slowly). Both write the same graph.
 GRAPHHOPPER_BUILD_DATAACCESS="${GRAPHHOPPER_BUILD_DATAACCESS:-RAM_STORE}"
 
-build() {
+prepare_osm() {
     : "${ROUTING_OSM_FILE_FILTERED:?Name the bike-filtered file to build from: just build-graphhopper-graph-from FILE}"
-    if [ -f "$GRAPH_DIR/properties" ]; then
-        echo "$GRAPH_DIR already holds a graph. Empty it first (just build-graphhopper-graph-from does)."
-        exit 1
-    fi
     BIKE_DATA_FILE="${OSM_DATA_DIR}/${ROUTING_OSM_FILE_FILTERED}"
     echo "Importing from ${OSM_DATA_DIR} (ROUTING_OSM_IMPORT_DIR on the host: ${ROUTING_OSM_IMPORT_DIR:-unknown})"
 
@@ -48,34 +42,60 @@ build() {
         exit 1
     fi
 
-    # GraphHopper calls building the graph "import".
-    echo "Building the graph from ${BIKE_DATA_FILE} with a ${GRAPHHOPPER_BUILD_HEAP} heap (${GRAPHHOPPER_BUILD_DATAACCESS})"
+}
+
+# Preparation and imports are explicit. Startup does not download terrain.
+terrain() {
+    prepare_osm
+    python /graphhopper/terrain.py prepare "$BIKE_DATA_FILE" "$@"
+}
+
+build() {
+    exec 9>/graph-cache/.build.lock
+    flock -n 9 || { echo "Another graph build is running." >&2; exit 1; }
+    prepare_osm
+    if [ ! -d /osm_data/elevation/current ]; then
+        echo "Elevation data has not been prepared in ROUTING_OSM_IMPORT_DIR (${ROUTING_OSM_IMPORT_DIR:-unknown})." >&2
+        echo "Run: just routing-terrain-from $ROUTING_OSM_FILE_FILTERED" >&2
+        echo "Then retry: just build-graphhopper-graph-from $ROUTING_OSM_FILE_FILTERED" >&2
+        exit 1
+    fi
+    # Hold the terrain selection stable until the import has captured its immutable path.
+    exec 8>/osm_data/elevation/.prepare.lock
+    flock -s 8
+    python /graphhopper/terrain.py check "$BIKE_DATA_FILE"
+    terrain_dir=$(readlink -f /osm_data/elevation/current)
+    artifact=$(python /graphhopper/artifact.py begin --terrain "$terrain_dir")
+    flock -u 8
+    echo "Building candidate $artifact; the active graph remains available."
     java -Xmx"${GRAPHHOPPER_BUILD_HEAP}" \
+        -Ddw.graphhopper.graph.location="$artifact/graph" \
+        -Ddw.graphhopper.custom_models.directory="$artifact/models" \
+        -Ddw.graphhopper.graph.elevation.pmtiles.location="$terrain_dir/terrain.pmtiles" \
+        -Ddw.graphhopper.graph.elevation.cache_dir="$terrain_dir/cache" \
         -Ddw.graphhopper.graph.dataaccess.default_type="${GRAPHHOPPER_BUILD_DATAACCESS}" \
         -Ddw.graphhopper.datareader.file="${BIKE_DATA_FILE}" \
-        -jar graphhopper.jar import /config.yaml
-    echo "Build finished; $GRAPH_DIR is ready."
+        -jar graphhopper.jar import "$artifact/config.yaml"
+    python /graphhopper/artifact.py finish "${artifact#/graph-cache/}"
+    echo "Candidate ready. Validate it before activation (see docs/how-to/build-routing-graph.md)."
+}
+
+serve() {
+    artifact=$(python /graphhopper/artifact.py check "${1:-current}")
+    terrain_dir=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["terrain"])' "$artifact/artifact.json")
+    exec java -Xmx"${GRAPHHOPPER_HEAP}" \
+        -Ddw.graphhopper.graph.location="$artifact/graph" \
+        -Ddw.graphhopper.custom_models.directory="$artifact/models" \
+        -Ddw.graphhopper.graph.elevation.pmtiles.location="$terrain_dir/terrain.pmtiles" \
+        -Ddw.graphhopper.graph.dataaccess.default_type="${GRAPHHOPPER_DATAACCESS}" \
+        -jar graphhopper.jar server "$artifact/config.yaml"
 }
 
 case "${1:-serve}" in
-    build)
-        build
-        ;;
-    serve)
-        if [ ! -f "$GRAPH_DIR/properties" ]; then
-            echo "No graph in $GRAPH_DIR. The container never builds one by itself. Build it with:"
-            echo "  just build-graphhopper-graph-from <bike-filtered .osm.pbf in ROUTING_OSM_IMPORT_DIR>"
-            echo "or copy one built elsewhere (docs/how-to/build-routing-graph.md)."
-            exit 1
-        fi
-        # No -Xms: the heap grows to what the graph needs instead of claiming the maximum up front.
-        echo "Serving $GRAPH_DIR (${GRAPHHOPPER_DATAACCESS}, heap ${GRAPHHOPPER_HEAP})"
-        exec java -Xmx"${GRAPHHOPPER_HEAP}" \
-            -Ddw.graphhopper.graph.dataaccess.default_type="${GRAPHHOPPER_DATAACCESS}" \
-            -jar graphhopper.jar server /config.yaml
-        ;;
-    *)
-        echo "Unknown command: $1 (expected build, or none to serve)" >&2
-        exit 2
-        ;;
+    terrain) shift; terrain "$@" ;;
+    build) build ;;
+    serve) serve "${2:-current}" ;;
+    activate) python /graphhopper/artifact.py activate "${2:-candidate}" ;;
+    rollback) python /graphhopper/artifact.py rollback previous ;;
+    *) echo "Unknown command: $1 (expected terrain, build, serve, activate or rollback)" >&2; exit 2 ;;
 esac

@@ -231,7 +231,7 @@ def forecast_view(job: ForecastJob, result: dict | None = None) -> dict:
     """
     result = (job.result if result is None else result) or {}
     # "figures": results stored before the frontend drew the charts itself still carry them.
-    dropped = ("figures", "wind_segments", "entitlements", "departure_inputs")
+    dropped = ("elevation_geometry", "figures", "wind_segments", "entitlements", "departure_inputs")
     view = {key: value for key, value in result.items() if key not in dropped}
     if result.get("departure_inputs"):
         view["departure_comparison"] = comparison_view(result["departure_inputs"])

@@ -6,6 +6,137 @@
         "description": ""
     },
     "paths": {
+        "/api/elevation": {
+            "post": {
+                "operationId": "core_api_elevation_preview_elevation",
+                "summary": "Preview Elevation",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ElevationOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Elevation"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ElevationIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/routes/{route_id}/elevation": {
+            "get": {
+                "operationId": "core_api_elevation_route_elevation",
+                "summary": "Route Elevation",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ElevationOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Elevation"
+                ]
+            }
+        },
+        "/api/journey_stages/{stage_id}/elevation": {
+            "get": {
+                "operationId": "core_api_elevation_stage_elevation",
+                "summary": "Stage Elevation",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "stage_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Stage Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ElevationOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Elevation"
+                ]
+            }
+        },
+        "/api/forecast_jobs/{job_id}/elevation": {
+            "get": {
+                "operationId": "core_api_elevation_forecast_elevation",
+                "summary": "Forecast Elevation",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "job_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Job Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ElevationOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Elevation"
+                ]
+            }
+        },
         "/api/route_weather": {
             "get": {
                 "operationId": "core_api_route_weather_route_weather",
@@ -1116,6 +1247,105 @@
     },
     "components": {
         "schemas": {
+            "ElevationOut": {
+                "properties": {
+                    "points": {
+                        "items": {
+                            "$ref": "#/components/schemas/ElevationPoint"
+                        },
+                        "title": "Points",
+                        "type": "array"
+                    },
+                    "source": {
+                        "title": "Source",
+                        "type": "string"
+                    },
+                    "approximate_timing": {
+                        "default": false,
+                        "title": "Approximate Timing",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "points",
+                    "source"
+                ],
+                "title": "ElevationOut",
+                "type": "object"
+            },
+            "ElevationPoint": {
+                "properties": {
+                    "distance_m": {
+                        "title": "Distance M",
+                        "type": "number"
+                    },
+                    "elapsed_s": {
+                        "title": "Elapsed S",
+                        "type": "number"
+                    },
+                    "elevation_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Elevation M"
+                    }
+                },
+                "required": [
+                    "distance_m",
+                    "elapsed_s",
+                    "elevation_m"
+                ],
+                "title": "ElevationPoint",
+                "type": "object"
+            },
+            "ElevationIn": {
+                "properties": {
+                    "coordinates": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "maxItems": 100000,
+                        "minItems": 2,
+                        "title": "Coordinates",
+                        "type": "array"
+                    },
+                    "totalSeconds": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 1382400,
+                        "title": "Totalseconds",
+                        "type": "number"
+                    },
+                    "vertexTimes": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "type": "number"
+                                },
+                                "maxItems": 100000,
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Vertextimes"
+                    }
+                },
+                "required": [
+                    "coordinates",
+                    "totalSeconds"
+                ],
+                "title": "ElevationIn",
+                "type": "object"
+            },
             "DepartureCandidate": {
                 "properties": {
                     "departure_time": {
@@ -2935,6 +3165,20 @@
                     "time_s": {
                         "title": "Time S",
                         "type": "integer"
+                    },
+                    "vertex_times": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "type": "number"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Vertex Times"
                     }
                 },
                 "required": [
@@ -3205,6 +3449,20 @@
                     "time_s": {
                         "title": "Time S",
                         "type": "integer"
+                    },
+                    "vertex_times": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "type": "number"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Vertex Times"
                     }
                 },
                 "required": [

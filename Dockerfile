@@ -48,30 +48,56 @@ RUN apt-get update -y && \
     rm -rf /var/lib/apt/lists/*
 
 
-FROM java-base AS graphhopper
-
-WORKDIR /graphhopper
-
-# A graph only loads with the jar that built it: bumping this means rebuilding the graph
-# (empty the graph cache and restart the service).
-ADD https://github.com/graphhopper/graphhopper/releases/download/10.2/graphhopper-web-10.2.jar graphhopper.jar
-
+# Build Java once on the build host; the shaded jar includes the platform-specific WebP libraries.
+FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk AS graphhopper-build
+ARG GRAPHHOPPER_COMMIT=d9506cd7d36d5d068d9118b19b86cf0609dbe773
+RUN apt-get update && apt-get install -y --no-install-recommends git maven ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 COPY docker/certs/* /usr/local/share/ca-certificates/
-RUN update-ca-certificates
+RUN update-ca-certificates && keytool -import -noprompt -alias zscaler-corp-cert -trustcacerts \
+    -keystore ${JAVA_HOME}/lib/security/cacerts -storepass changeit \
+    -file /usr/local/share/ca-certificates/zscaler-root.pem.crt
+WORKDIR /source
+RUN git init && git remote add origin https://github.com/graphhopper/graphhopper.git \
+    && git fetch --depth 1 origin "$GRAPHHOPPER_COMMIT" && git checkout --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "$GRAPHHOPPER_COMMIT" \
+    && printf '%s\n' "$GRAPHHOPPER_COMMIT" > /graphhopper-revision
+# Expose coordinate heights for saved paths using GraphHopper's native provider.
+COPY docker/graphhopper/ElevationResource.java /source/web/src/main/java/com/graphhopper/application/resources/ElevationResource.java
+RUN sed -i '/environment.jersey().register(new RootResource());/a\        environment.jersey().register(com.graphhopper.application.resources.ElevationResource.class);' \
+    web/src/main/java/com/graphhopper/application/GraphHopperApplication.java
+RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -pl web -am package -DskipTests
 
-RUN keytool -import -noprompt -alias zscaler-corp-cert -trustcacerts -keystore ${JAVA_HOME}/lib/security/cacerts -storepass changeit -file /usr/local/share/ca-certificates/zscaler-root.pem.crt
-
-# osmium cuts an OSM extract down to what the bike profiles use before every build.
-RUN apt-get update -y && \
-    apt-get install -y --no-install-recommends osmium-tool && \
-    rm -rf /var/lib/apt/lists/*
-
+FROM eclipse-temurin:25-jre AS graphhopper
+ARG TARGETARCH
+WORKDIR /graphhopper
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates wget osmium-tool python3 python3-venv python3-pil \
+    && rm -rf /var/lib/apt/lists/*
+COPY docker/certs/* /usr/local/share/ca-certificates/
+RUN update-ca-certificates && keytool -import -noprompt -alias zscaler-corp-cert -trustcacerts \
+    -keystore ${JAVA_HOME}/lib/security/cacerts -storepass changeit \
+    -file /usr/local/share/ca-certificates/zscaler-root.pem.crt
+COPY --from=graphhopper-build /source/web/target/graphhopper-web-12.0-SNAPSHOT.jar graphhopper.jar
+COPY --from=graphhopper-build /graphhopper-revision /graphhopper/revision
+# Pin both native CLI builds and verify downloads before extracting them.
+RUN case "$TARGETARCH" in \
+      arm64) arch=arm64; checksum=f8bd47e7ea866863489cad588fbaf2f31f42e5821f7a03f009b3769f05801cb1 ;; \
+      amd64) arch=x86_64; checksum=3ed7dbf4ec2e6dfe5e25b6f70d1ffc932729f93c86db353bf514dd71010a312f ;; \
+      *) exit 1 ;; esac \
+    && wget -q "https://github.com/protomaps/go-pmtiles/releases/download/v1.31.2/go-pmtiles_1.31.2_Linux_${arch}.tar.gz" -O /tmp/pmtiles.tar.gz \
+    && echo "$checksum  /tmp/pmtiles.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/pmtiles.tar.gz -C /usr/local/bin pmtiles && rm /tmp/pmtiles.tar.gz
+RUN python3 -m venv --system-site-packages /opt/terrain \
+    && /opt/terrain/bin/pip install --no-cache-dir pmtiles==3.8.1
+ENV PATH="/opt/terrain/bin:$PATH"
 COPY docker/graphhopper-entrypoint.sh entrypoint.sh
+COPY docker/graphhopper-terrain.py terrain.py
+COPY docker/graphhopper-artifact.py artifact.py
+COPY docker/graphhopper-smoke.py smoke.py
 COPY docker/graphhopper-filter-osm.sh filter-osm.sh
-# Also run on its own (`just poi-extract`): the journey planner's POIs, see core/pois.py.
 COPY docker/osm-extract-pois.sh extract-pois.sh
 RUN chmod +x /graphhopper/entrypoint.sh /graphhopper/filter-osm.sh /graphhopper/extract-pois.sh
-
 ENTRYPOINT ["/graphhopper/entrypoint.sh"]
 
 

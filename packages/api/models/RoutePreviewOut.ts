@@ -32,6 +32,10 @@ export interface RoutePreviewOut {
      * 
      */
     timeS: number;
+    /**
+     * 
+     */
+    vertexTimes?: Array<number> | null;
 }
 
 /**
@@ -57,6 +61,7 @@ export function RoutePreviewOutFromJSONTyped(json: any, ignoreDiscriminator: boo
         'coordinates': json['coordinates'],
         'distanceM': json['distance_m'],
         'timeS': json['time_s'],
+        'vertexTimes': json['vertex_times'] === undefined ? undefined : json['vertex_times'] === null ? null : json['vertex_times'],
     };
 }
 
@@ -74,6 +79,7 @@ export function RoutePreviewOutToJSONTyped(value?: RoutePreviewOut | null, ignor
         'coordinates': value['coordinates'],
         'distance_m': value['distanceM'],
         'time_s': value['timeS'],
+        'vertex_times': value['vertexTimes'],
     };
 }
 

@@ -177,6 +177,7 @@ class RecurringRoute(models.Model):
         help_text="[{lat, lon, lat_r, lon_r, elapsed_s, idx}, ...] pre-computed sample points with rounded coords",
     )
     geometry_fetched_at = models.DateTimeField(null=True, blank=True)
+    vertex_elevations = models.JSONField(null=True, blank=True, help_text="Elevation in metres at each polyline vertex")
     vertex_times = models.JSONField(
         null=True, blank=True, help_text="Floating-point elapsed seconds at every polyline vertex"
     )
@@ -602,6 +603,7 @@ class JourneyStage(models.Model):
     total_seconds = models.IntegerField()
     total_distance_m = models.FloatField()
     sample_points = models.JSONField()
+    vertex_elevations = models.JSONField(null=True, blank=True, help_text="Elevation in metres at each polyline vertex")
     vertex_times = models.JSONField()
     geometry_fetched_at = models.DateTimeField()
 
@@ -617,3 +619,9 @@ class JourneyStage(models.Model):
     @property
     def polyline_coordinates(self) -> list[list[float]]:
         return [[float(lon), float(lat)] for lon, lat in self.polyline.coords]
+
+
+class ElevationProfile(models.Model):
+    key = models.CharField(max_length=64, primary_key=True)
+    data = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)

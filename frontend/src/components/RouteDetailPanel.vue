@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ElevationChart from "@/components/ElevationChart.vue";
 import { GeometrySource } from "@norain/api/models";
 import { computed, ref, toRefs, watch } from "vue";
 import { useQuasar } from "quasar";
@@ -330,6 +331,9 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
                 </div>
             </template>
 
+            <div v-if="hasGeometry" class="col-12">
+                <ElevationChart :route-id="route.id" :version="String(route.updatedAt)" />
+            </div>
             <div
                 v-if="!hasGeometry || (forecastError && !forecast) || (!route.forecastAvailable && !forecastLoading)"
                 class="col-12"

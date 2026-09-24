@@ -25,7 +25,9 @@ function showPoint(event: PlotMouseEvent) {
         .replace(/<[^>]*>/g, "");
     const custom = point.customdata;
     tooltip.value = {
-        time: Array.isArray(custom) ? `${custom[1]} Uhr` : `${String(point.x)} min`,
+        time: Array.isArray(custom)
+            ? `${custom[1]} Uhr`
+            : `${Number(point.x).toLocaleString("de-CH", { maximumFractionDigits: 2 })} ${props.xUnit ?? "min"}`,
         label,
         value: `${point.y.toLocaleString("de-CH", { maximumFractionDigits: unit === "%" ? 0 : 1 })} ${unit}`,
     };
@@ -59,8 +61,12 @@ function selectPoint(event: PlotMouseEvent) {
 const props = defineProps<{
     figure: { data?: Data[]; layout?: Partial<Layout> };
     temperature?: boolean;
+    xUnit?: string;
     selectedSample?: number;
     samples?: TimedSample[];
+    /** Keep each trace's own line width instead of the uniform 1.5 (the elevation profile's
+     * picked variant is drawn thicker than the others). */
+    keepLineWidths?: boolean;
 }>();
 
 const { figure } = toRefs(props);
@@ -189,7 +195,8 @@ function buildLayout(): Partial<Layout> {
             yanchor: "bottom",
             font: { ...incoming.legend?.font, family: FONT_FAMILY, color: ink, size: 10 },
         },
-        xaxis: { ...incoming.xaxis, ...axisTheme },
+        // A figure may turn the vertical gridlines off (the elevation profile does).
+        xaxis: { ...incoming.xaxis, ...axisTheme, showgrid: incoming.xaxis?.showgrid ?? true },
         yaxis: {
             ...incoming.yaxis,
             ...axisTheme,
@@ -271,7 +278,7 @@ function buildData(): Data[] {
             meta: { tooltipTemplate: scatter.hovertemplate },
             line: {
                 ...scatter.line,
-                width: scatter.line?.width === 0 ? 0 : 1.5,
+                width: scatter.line?.width === 0 ? 0 : props.keepLineWidths ? (scatter.line?.width ?? 1.5) : 1.5,
             },
         };
     });

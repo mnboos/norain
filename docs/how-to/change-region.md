@@ -7,11 +7,8 @@ This covers one region that GraphHopper and Photon download themselves. To cover
 several countries at once, or to build from files you already have, follow
 [build routing and search from downloaded files](import-geodata.md) instead.
 
-1. Stop the geographic services from the repository root:
-
-   ```bash
-   docker compose -f docker-compose.dev.yml stop graphhopper photon
-   ```
+1. Keep the current routing service running while preparing its replacement. Ensure
+   there is disk and memory for both graphs and the zoom-15 terrain data.
 
 2. Set `OSM_DATA_URL` in `.env` to the new region's Geofabrik `.osm.pbf` URL.
    Set `PHOTON_INDEX_URL` to a matching Photon regional dump or prebuilt index.
@@ -19,11 +16,11 @@ several countries at once, or to build from files you already have, follow
    startup script supports `.jsonl.zst` dumps and `.tar.bz2` indexes. Select URLs
    for the desired coverage from the providers; changing one service does not
    change the other.
-3. Build the new routing graph. GraphHopper never does this by itself. Follow
-   [path A of the routing-graph guide](build-routing-graph.md#path-a-one-country-downloaded-for-you):
-   `just build-graphhopper-graph-from bike-<file name at the end of OSM_DATA_URL>`.
-   It downloads the new file, filters it and builds the graph. Set the memory first
-   ([how much memory](build-routing-graph.md#how-much-memory)).
+3. Prepare Mapterhorn terrain and import a candidate graph following the
+   [routing-graph guide](build-routing-graph.md). Run `routing-terrain-estimate`,
+   `routing-terrain-from` and `build-graphhopper-graph-from` with the same filtered
+   OSM filename. Validate endpoints inside the new region, then run
+   `routing-activate`. Zoom-15 terrain must cover the entire OSM extent.
 4. For search, move `data/photon` to a backup location and recreate the empty directory:
    Photon only imports when its index directory is absent. Adjust `PHOTON_IMPORT_HEAP`
    as needed. Then recreate Photon and follow its import:
@@ -34,8 +31,8 @@ several countries at once, or to build from files you already have, follow
    ```
 
 5. On production, do the same on the VPS
-   ([path C](build-routing-graph.md#path-c-build-on-the-vps)), or build the graph on another computer and copy
-   it over ([path D](build-routing-graph.md#path-d-build-on-another-computer-and-copy-it-to-the-vps)).
+   ([path C](build-routing-graph.md#4-import-without-interrupting-routing)), or build the graph on another computer and copy
+   it over ([path D](build-routing-graph.md#4-import-without-interrupting-routing)).
 
 6. Search for a town within the new area and create a short route between covered
    locations. Confirm geometry is computed and a weather forecast loads.

@@ -155,6 +155,7 @@ def exact_geometry(points, duration_seconds, interval_seconds=300):
     return {
         "polyline": line,
         "vertex_times": vertex_times,
+        "vertex_elevations": None,
         "sample_points": samples,
         "total_seconds": round(duration_seconds),
         "total_distance_m": total,

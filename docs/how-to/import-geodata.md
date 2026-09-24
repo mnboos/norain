@@ -29,18 +29,21 @@ since, so it is also how you get fresh data later. `data/downloads/` is not comm
 
 ## 2. Build the routing graph
 
-Follow [path B of the routing-graph guide](build-routing-graph.md#path-b-several-countries-merged-into-one).
+Follow [path B of the routing-graph guide](build-routing-graph.md#2-prepare-osm).
 In short:
 
 ```bash
 # in .env: ROUTING_OSM_FILE_FILTERED=bike-europe-cycling.osm.pbf, and enough memory
 just osm-filter-many-raw-pbf-into-one data/downloads/osm/*.osm.pbf
+just routing-terrain-estimate bike-europe-cycling.osm.pbf
+just routing-terrain-from bike-europe-cycling.osm.pbf
 just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
 just poi-import-into-db
 ```
 
-The first command filters the files and merges them into one. The second builds the graph
-from it. The third loads the journey planner's POIs.
+The commands filter and merge the OSM files, prepare matching terrain, import a candidate
+graph and load POIs. Validate and activate the candidate using the routing-graph guide
+before serving it.
 
 ## 3. Build the search index
 
@@ -75,7 +78,7 @@ Steps 2 and 3 don't depend on each other. Run them in either order.
   give the container more memory (`GRAPHHOPPER_MEM_LIMIT`): what the heap doesn't use
   caches the graph file.
 
-Then do [after every build](build-routing-graph.md#after-every-build).
+Then do [after every build](build-routing-graph.md#5-validate-activate-and-check).
 
 ## Update the data later
 
@@ -83,12 +86,14 @@ Then do [after every build](build-routing-graph.md#after-every-build).
 just download-pbf
 just download-photon-dumps
 just osm-filter-many-raw-pbf-into-one data/downloads/osm/*.osm.pbf
+just routing-terrain-estimate bike-europe-cycling.osm.pbf
+just routing-terrain-from bike-europe-cycling.osm.pbf
 just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
 just photon-import data/downloads/photon/*.jsonl.zst
 ```
 
 After a change to `data/graphhopper/graphhopper-config.yaml` or the models, only the build
-is needed: see [build again after changing the config](build-routing-graph.md#build-again-after-changing-the-config-or-a-speed).
+is needed: see [build again after changing the config](build-routing-graph.md#4-import-without-interrupting-routing).
 
 ## Use a single file
 
@@ -120,8 +125,8 @@ profile ever needs a tag the filter drops, add it to that script and rebuild.
 These recipes work on the development services. For the VPS:
 
 - **Routing graph:** build it here and copy the graph over
-  ([path D](build-routing-graph.md#path-d-build-on-another-computer-and-copy-it-to-the-vps)), or copy the
-  filtered file to the VPS and build it there ([path C](build-routing-graph.md#path-c-build-on-the-vps)).
+  ([path D](build-routing-graph.md#4-import-without-interrupting-routing)), or copy the
+  filtered file to the VPS and build it there ([path C](build-routing-graph.md#4-import-without-interrupting-routing)).
 - **Search index:** copy the dumps into `${APP_STORAGE_PATH}/photon/` on the VPS and
   import them as in [deploy on a VPS](deploy-vps.md), listing all of them in
   `PHOTON_INDEX_FILE` separated by spaces and adding `-e PHOTON_REPLACE_INDEX=true`.

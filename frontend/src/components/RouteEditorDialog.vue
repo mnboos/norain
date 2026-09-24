@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ElevationChart from "@/components/ElevationChart.vue";
 import { computed, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { useQuasar } from "quasar";
 import { GeoJSONSource, LngLatBounds, Map as MapLibreMap, Marker, config as maplibreConfig } from "maplibre-gl";
@@ -53,6 +54,8 @@ const vias = ref<LonLat[]>([]);
 let routedVias: LonLat[] = [];
 const line = shallowRef<number[][]>([]);
 const caption = ref("");
+const previewSeconds = ref<number>();
+const previewTimes = ref<number[] | null>();
 const loading = ref(false);
 
 let markers: Marker[] = [];
@@ -82,6 +85,8 @@ async function refreshPreview() {
             controller.signal,
         );
         line.value = result.coordinates;
+        previewSeconds.value = result.timeS;
+        previewTimes.value = result.vertexTimes;
         caption.value = routeCaption(result.distanceM, result.timeS);
         routedVias = asked;
     } catch (error) {
@@ -254,6 +259,7 @@ function beginLineDrag(m: MapLibreMap, event: MapLayerMouseEvent | MapLayerTouch
 function onShow() {
     vias.value = props.viaPoints.map(toLonLat);
     routedVias = vias.value;
+    previewSeconds.value = undefined;
     line.value = [props.start, ...vias.value, props.dest];
     caption.value = "";
     if (!mapContainer.value) return;
@@ -327,6 +333,9 @@ function apply() {
                 </div>
             </q-card-section>
             <div ref="map" class="col" :style="{ minHeight: $q.screen.xs ? '0' : 'min(60dvh, 560px)' }" />
+            <q-expansion-item v-if="previewSeconds && !loading" label="Höhenprofil">
+                <ElevationChart :coordinates="line" :total-seconds="previewSeconds" :vertex-times="previewTimes" />
+            </q-expansion-item>
             <q-card-actions>
                 <div class="text-caption q-ml-sm" aria-live="polite">
                     <q-spinner v-if="loading" size="1em" class="q-mr-xs" />

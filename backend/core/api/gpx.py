@@ -10,6 +10,7 @@ from ninja.errors import HttpError
 from pydantic import Field
 
 from ..auth.backend import optional_session_auth
+from ..elevation import with_heights
 from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut
 from ..gpx import MAX_GPX_BYTES, exact_geometry, parse_gpx, serialize_gpx
@@ -103,6 +104,7 @@ class RoutePlanOut(CamelSchema):
     coordinates: list[list[float]]
     distance_m: float
     time_s: int
+    vertex_times: list[float] | None = None
 
 
 @router.post("/gpx/preview", response=RoutePlanOut)
@@ -117,7 +119,10 @@ async def preview_gpx(request, data: RoutePlanIn):
     except (ValueError, *ROUTING_ERRORS) as exc:
         raise HttpError(422, "Für diese Punkte wurde keine Route gefunden.") from exc
     return {
-        "coordinates": data.coordinates if data.geometry_source == "imported" else geometry["polyline"],
+        "coordinates": data.coordinates
+        if data.geometry_source == "imported"
+        else with_heights(geometry["polyline"], geometry.get("vertex_elevations")),
+        "vertex_times": None if data.geometry_source == "imported" else geometry["vertex_times"],
         "distance_m": geometry["total_distance_m"],
         "time_s": geometry["total_seconds"],
     }

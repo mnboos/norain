@@ -50,7 +50,7 @@ setup:
     uv venv --clear
     uv sync
 
-[doc("Start PostGIS, Redis, GraphHopper and Photon on the host ports set in .env. GraphHopper needs a graph first: just build-graphhopper-graph-from FILE.")]
+[doc("Start PostGIS, Redis, GraphHopper and Photon on the host ports set in .env. GraphHopper needs an activated graph first; see docs/how-to/build-routing-graph.md.")]
 [group('dev')]
 services:
     {{ container }} compose up -d db redis graphhopper photon
@@ -109,16 +109,41 @@ thumbnail-refresh $route_id:
 routing-backfill *args:
     uv run python manage.py backfill_route_vertex_times {{ args }}
 
-[doc("Build the routing graph of the COMPOSE_FILE stack from a bike-filtered .osm.pbf in ROUTING_OSM_IMPORT_DIR (a file name, or a path to it), e.g. just build-graphhopper-graph-from bike-europe-cycling.osm.pbf. Run it after just osm-filter-many-raw-pbf-into-one, or after editing graphhopper-config.yaml or data/graphhopper/models/ (ride speeds live there). Empties the graph cache first; the file and the elevation tiles are kept. Takes minutes, hours for a large area. The container never builds by itself; this is the only way. bike-<OSM_DATA_URL's file name> need not exist yet: the build downloads and filters it.")]
-[group('geodata')]
-[confirm("This deletes the routing graph of the COMPOSE_FILE stack and builds a new one. Continue?")]
-build-graphhopper-graph-from filtered_pbf:
-    {{ if path_exists(join(justfile_directory(), env("ROUTING_OSM_IMPORT_DIR"), file_name(filtered_pbf))) == "true" { "" } else if file_name(filtered_pbf) == "bike-" + file_name(osm_data_url) { "" } else { error(file_name(filtered_pbf) + " is not in ROUTING_OSM_IMPORT_DIR (" + env("ROUTING_OSM_IMPORT_DIR") + ")") } }}{{ container }} compose stop graphhopper
-    {{ container }} compose run --rm --entrypoint bash graphhopper -c 'rm -rf /graph-cache/..?* /graph-cache/.[!.]* /graph-cache/*'
-    {{ container }} compose run --rm -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper build
-    {{ container }} compose up -d graphhopper
+[group("geodata")]
+download-elevation-for:
+    echo NotImplemented
 
-[doc("Print each bike profile's average speed on a few reference routes. Run it after build-graphhopper-graph-from to see what a speed change did.")]
+[doc("Estimate the zoom-15 Mapterhorn download for a filtered OSM file. The file must already exist in ROUTING_OSM_IMPORT_DIR.")]
+[group('geodata')]
+routing-terrain-estimate filtered_pbf:
+    {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper terrain --dry-run
+
+[doc("Prepare and verify zoom-15 Mapterhorn terrain for a filtered OSM file; keeps the active graph running.")]
+[group('geodata')]
+routing-terrain-from filtered_pbf:
+    {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper terrain
+
+[doc("Import a candidate graph using prepared Mapterhorn terrain. Does not stop, delete or activate the current graph.")]
+[group('geodata')]
+build-graphhopper-graph-from filtered_pbf:
+    {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper build
+
+[doc('Start an isolated candidate and test all profiles. Points: JSON [[lon,lat],[lon,lat]] within the graph. Marks a passing candidate ready for activation.')]
+[group('geodata')]
+routing-validate-candidate points:
+    CONTAINER={{ quote(container) }} uv run --no-project python scripts/routing-candidate.py {{ quote(points) }}
+
+[doc("Activate the validated candidate with the currently configured GraphHopper image. Preserve the old image/config for rollback before the first 10.2 migration.")]
+[group('geodata')]
+routing-activate:
+    CONTAINER={{ quote(container) }} uv run --no-project python scripts/routing-switch.py activate
+
+[doc("Restore the previous managed graph with its matching image (pass the saved immutable image ID/tag). For a legacy 10.2 graph see the migration guide.")]
+[group('geodata')]
+routing-rollback image:
+    CONTAINER={{ quote(container) }} uv run --no-project python scripts/routing-switch.py rollback {{ quote(image) }}
+
+[doc("Print each bike profile's average speed on a few reference routes. Run it after routing-activate to see what a speed change did.")]
 [group('geodata')]
 routing-speeds *args:
     uv run --project backend python scripts/routing_speeds.py {{ args }}
@@ -129,9 +154,9 @@ routing-speeds *args:
 routing-refresh-routes:
     uv run python manage.py shell -c "from core.models import RecurringRoute; from core.tasks import refresh_route_geometry; print(sum(refresh_route_geometry.enqueue(str(i)) is not None for i in RecurringRoute.objects.values_list('id', flat=True)), 'routes queued')"
 
-[doc("Filter raw .osm.pbf files for bikes and merge them into ROUTING_OSM_FILE_FILTERED (e.g. bike-europe-cycling.osm.pbf) in ROUTING_OSM_IMPORT_DIR, plus the matching POI file, e.g. just osm-filter-many-raw-pbf-into-one ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Builds no graph: run just build-graphhopper-graph-from <that file> next.")]
+[doc("Filter raw .osm.pbf files for bikes and merge them into ROUTING_OSM_FILE_FILTERED (e.g. bike-europe-cycling.osm.pbf) in ROUTING_OSM_IMPORT_DIR, plus the matching POI file, e.g. just osm-filter-many-raw-pbf-into-one ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Builds no graph: prepare terrain with routing-terrain-from, then import, validate and activate the candidate.")]
 [group('geodata')]
-[confirm("This overwrites ROUTING_OSM_FILE_FILTERED and its POI file. Continue?")]
+[confirm("This overwrites ROUTING_OSM_FILE_FILTERED (" + env("ROUTING_OSM_IMPORT_DIR") +"/"+ env("ROUTING_OSM_FILE_FILTERED") + ") and its POI file. Continue?")]
 [positional-arguments]
 [unix]
 osm-filter-many-raw-pbf-into-one +files:
@@ -139,7 +164,7 @@ osm-filter-many-raw-pbf-into-one +files:
 
 # Git Bash: just runs a shebang recipe through cygpath, which Git does not put on PATH, and
 # the bash on PATH is WSL's. [script] needs neither.
-[doc("Filter raw .osm.pbf files for bikes and merge them into ROUTING_OSM_FILE_FILTERED (e.g. bike-europe-cycling.osm.pbf) in ROUTING_OSM_IMPORT_DIR, plus the matching POI file, e.g. just osm-filter-many-raw-pbf-into-one ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Builds no graph: run just build-graphhopper-graph-from <that file> next.")]
+[doc("Filter raw .osm.pbf files for bikes and merge them into ROUTING_OSM_FILE_FILTERED (e.g. bike-europe-cycling.osm.pbf) in ROUTING_OSM_IMPORT_DIR, plus the matching POI file, e.g. just osm-filter-many-raw-pbf-into-one ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Builds no graph: prepare terrain with routing-terrain-from, then import, validate and activate the candidate.")]
 [group('geodata')]
 [confirm("This overwrites ROUTING_OSM_FILE_FILTERED and its POI file. Continue?")]
 [positional-arguments]

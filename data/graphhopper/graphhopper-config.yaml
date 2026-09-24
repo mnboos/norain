@@ -119,6 +119,10 @@ graphhopper:
     road_access,
     road_environment,
     bike_temporal_access,
+    bike_road_access,
+    bike_network,
+    ferry_speed,
+    country,
     average_slope,
     max_slope,
     road_class,
@@ -152,13 +156,19 @@ graphhopper:
 
   #### Elevation ####
 
-  # To populate your graph with elevation data use SRTM, default is noop (no elevation). Read more about it in docs/core/elevation.md
-  graph.elevation.provider: cgiar
+  # Native Mapterhorn: prepare an immutable zoom-15 extract before import.
+  # The build overrides location/cache_dir with the verified artifact paths.
+  graph.elevation.provider: pmtiles
+  graph.elevation.pmtiles.location: /osm_data/elevation/current/terrain.pmtiles
+  graph.elevation.pmtiles.zoom: 15
+  graph.elevation.pmtiles.terrain_encoding: terrarium
+  graph.elevation.interpolate: bilinear
+  graph.elevation.clear: false
 
-  # default location for cache is /tmp/srtm
+  # Each terrain artifact gets its own decoded cache; never mix dataset revisions.
   # Raw tiles are only read at import (elevation is baked into the graph), so keep them out of
   # /graph-cache: that directory is the artifact copied to the serving machine.
-  graph.elevation.cache_dir: /osm_data/elevation
+  graph.elevation.cache_dir: /osm_data/elevation/current/cache
 
   # If you have a slow disk or plenty of RAM change the default MMAP to:
 #  graph.elevation.dataaccess: RAM_STORE

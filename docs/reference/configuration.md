@@ -28,6 +28,7 @@ take precedence over values loaded by `python-dotenv`.
 | `OSM_DATA_URL` | `https://download.geofabrik.de/europe/switzerland-latest.osm.pbf` | The unfiltered OSM extract `just build-graphhopper-graph-from bike-<its file name>` downloads and filters for bikes when that file is missing |
 | `ROUTING_OSM_FILE_FILTERED` | `bike-<file name of OSM_DATA_URL>` | The bike-filtered file in `ROUTING_OSM_IMPORT_DIR` that `just osm-filter-many-raw-pbf-into-one` writes, with its POIs, and `just poi-import-into-db` reads the POIs of. The graph itself is built from the file you pass to `just build-graphhopper-graph-from`; for `bike-<file name of OSM_DATA_URL>` that build downloads and filters the extract first. Set it for imported files, e.g. `bike-europe-cycling.osm.pbf` for several countries merged, see [downloaded files](../how-to/import-geodata.md) |
 | `ROUTING_OSM_IMPORT_DIR` | Required; `./data/graphhopper/osm` in `.env.template`, `/srv/norain-data/graphhopper/osm` in production | The host folder GraphHopper imports from, mounted at `/osm_data`: `ROUTING_OSM_FILE_FILTERED`, a downloaded extract and the elevation tiles. `just osm-filter-many-raw-pbf-into-one` and `just poi-extract-from-unfiltered-osm-pbf` write their files here |
+| `GRAPHHOPPER_IMAGE` | `norain-graphhopper:local` locally; required in production | Same immutable image for import, validation and serving; contains GraphHopper 12.0-SNAPSHOT built from the source commit in `Dockerfile` |
 | `GRAPHHOPPER_HEAP` | `6g` | GraphHopper serving JVM maximum heap. With `MMAP` a few GB are enough; with `RAM_STORE` it must hold the whole graph |
 | `GRAPHHOPPER_BUILD_HEAP` | `GRAPHHOPPER_HEAP` | JVM maximum heap while building the graph |
 | `GRAPHHOPPER_DATAACCESS` | `MMAP` | How the server holds the graph. `MMAP` lets the OS page it in from disk, so the heap stays small and the first queries after a start are slower; `RAM_STORE` keeps all of it in the heap. Serving only: the build uses `GRAPHHOPPER_BUILD_DATAACCESS`. Both write the same files, so switching needs no rebuild |
@@ -80,8 +81,8 @@ CORS allows `http://localhost:$FRONTEND_PORT` and `http://127.0.0.1:$FRONTEND_PO
 | Path | Contents |
 | --- | --- |
 | `${APP_STORAGE_PATH}/db/app/data/` | Development PostgreSQL/PostGIS data |
-| `ROUTING_OSM_IMPORT_DIR` (`data/graphhopper/osm/`) | Downloaded OSM extract, its bike-filtered copy (`bike-*.osm.pbf`, the file the graph is built from) and elevation tiles (only read while building the graph) |
-| `data/graphhopper/cache/` | Built routing graph; empty it to build a new one |
+| `ROUTING_OSM_IMPORT_DIR` (`data/graphhopper/osm/`) | Downloaded OSM extract, its bike-filtered copy (`bike-*.osm.pbf`, the file the graph is built from) and elevation archive (read during graph builds and saved-coordinate elevation lookups) |
+| `data/graphhopper/cache/` | Immutable graph releases with current/candidate/previous symlinks; retain previous releases for rollback |
 | `data/downloads/{osm,photon}/` | OSM extracts and Photon dumps from `just download-pbf` / `just download-photon-dumps`; not committed, only read by `osm-filter-many-raw-pbf-into-one` / `photon-import` |
 | `data/graphhopper/graphhopper-config.yaml` | Mounted routing configuration |
 | `data/graphhopper/models/` | Custom e-bike routing models |
@@ -152,10 +153,10 @@ only the factor is ours, in `bike_speed.json`, which must stay **last** in
 ### Changing a speed
 
 1. Edit the factor (or the cap, or a slope rule) in the profile's file.
-2. `just build-graphhopper-graph-from <filtered .osm.pbf>` — the speed is baked into the CH preparation, so it only takes
-   effect through a new graph. This empties the graph cache and builds it again;
-   it takes minutes. Per-request speeds are not an option: they need `ch.disable=true`,
-   which turns a few-millisecond query into roughly a second.
+2. Prepare terrain if the OSM extent changed, then run
+   `just build-graphhopper-graph-from <filtered .osm.pbf>`. This builds a separate
+   candidate and retains the active graph. Run `just routing-validate-candidate`
+   with endpoints inside it, then `just routing-activate` to use the new speeds.
 3. `just routing-speeds` — prints what each profile now rides on four reference routes,
    next to the targets above. Repeat from 1 if a number is off.
 4. `just routing-refresh-routes` — saved routes store their travel times, so they keep the
@@ -163,7 +164,7 @@ only the factor is ours, in `bike_speed.json`, which must stay **last** in
 
 On production, deploy the changed files, then run `just build-graphhopper-graph-from` there
 with the filtered file; the container never rebuilds by itself. On a VPS without the
-memory for that, [build the graph elsewhere](../how-to/build-routing-graph.md#path-d-build-on-another-computer-and-copy-it-to-the-vps). Step 4
+memory for that, [build the graph elsewhere](../how-to/build-routing-graph.md#4-import-without-interrupting-routing). Step 4
 applies there too.
 
 ## Deployment boundary

@@ -37,6 +37,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: graphhopper
+    image: ${GRAPHHOPPER_IMAGE:-norain-graphhopper:local}
     container_name: graphhopper
     deploy:
       resources:

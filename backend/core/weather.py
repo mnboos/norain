@@ -10,6 +10,7 @@ Given a start, a destination, a routing profile and a departure time, this:
 The route sampling is decoupled from the forecast resolution: GraphHopper gives the true
 per-road travel time, so we know exactly when you reach each point of the polyline.
 """
+
 import json
 import math
 import os
@@ -169,6 +170,7 @@ def _route_body(profile: str, points: RoutingPoints, custom_model: dict | None =
         "profile": profile,
         "points": [list(p) for p in points],
         "points_encoded": False,
+        "elevation": True,
         "calc_points": True,
         "instructions": False,
         "details": ["time"],
@@ -207,13 +209,18 @@ async def preview_route(profile: str, points: RoutingPoints, custom_model: dict 
         "coordinates": path["points"]["coordinates"],
         "distance_m": round(path.get("distance", 0.0), 1),
         "time_s": int(path.get("time", 0) / 1000),
+        "vertex_times": _cumulative_times_s(
+            path["points"]["coordinates"],
+            path.get("details", {}).get("time", [[0, len(path["points"]["coordinates"]) - 1, path.get("time", 0)]]),
+        ),
     }
 
 
 # --------------------------------------------------------------------------- geometry
 def _path_geometry(path: dict, interval_seconds: int) -> dict:
     """Sample one GraphHopper path at fixed *time* intervals."""
-    coords: list[list[float]] = path["points"]["coordinates"]
+    raw_coords = path["points"]["coordinates"]
+    coords = [point[:2] for point in raw_coords]
     time_details = path.get("details", {}).get("time", [[0, len(coords) - 1, path.get("time", 0)]])
     cum_s = _cumulative_times_s(coords, time_details)
 
@@ -233,6 +240,7 @@ def _path_geometry(path: dict, interval_seconds: int) -> dict:
 
     return {
         "polyline": coords,
+        "vertex_elevations": [p[2] if len(p) > 2 else None for p in raw_coords],
         "vertex_times": cum_s,
         "sample_points": sample_points,
         "total_seconds": int(cum_s[-1]) if cum_s else 0,

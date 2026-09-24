@@ -160,7 +160,7 @@ services:
       # The folder GraphHopper imports from (ROUTING_OSM_IMPORT_DIR): the filtered file, a downloaded
       # extract and the elevation tiles, kept so a rebuild does not download them again.
       - ${ROUTING_OSM_IMPORT_DIR:?ROUTING_OSM_IMPORT_DIR must be set}:/osm_data
-      # The built graph. Never built on start: just build-graphhopper-graph-from FILE builds it.
+      # Graph releases and current/candidate symlinks. Imports and activation are explicit.
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/graphhopper/cache:/graph-cache
     healthcheck:
       # A stored graph loads in minutes; the service never builds one on start. Checks that fail
