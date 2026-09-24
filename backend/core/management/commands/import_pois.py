@@ -2,7 +2,7 @@
 
 Usage: python manage.py import_pois /osm_data/pois-switzerland-latest.geojsonseq
 
-The file comes from docker/osm-extract-pois.sh (`just poi-extract`). The whole replacement
+The file comes from docker/osm-extract-pois.sh (`just poi-extract-from-unfiltered-osm-pbf`). The whole replacement
 runs in one transaction, so a failed import leaves the old POIs in place, and readers keep
 seeing them until the new set commits.
 """

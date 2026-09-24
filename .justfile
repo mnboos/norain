@@ -26,7 +26,7 @@ osm_data_url := env("OSM_DATA_URL", "https://download.geofabrik.de/europe/switze
 routing_osm_file_filtered := env("ROUTING_OSM_FILE_FILTERED", "bike-" + file_name(osm_data_url))
 
 # The POIs that belong to that file: pois-<its name without bike- and .osm.pbf>, next to it in
-# ROUTING_OSM_IMPORT_DIR. just poi-extract and just osm-filter-many-raw-pbf-into-one write it, just poi-import reads it.
+# ROUTING_OSM_IMPORT_DIR. just poi-extract-from-unfiltered-osm-pbf and just osm-filter-many-raw-pbf-into-one write it, just poi-import reads it.
 pois_file := "pois-" + trim_start_match(without_extension(without_extension(routing_osm_file_filtered)), "bike-") + ".geojsonseq"
 
 # List the recipes by group.
@@ -148,29 +148,29 @@ osm-filter-many-raw-pbf-into-one +files:
 osm-filter-many-raw-pbf-into-one +files:
     CONTAINER={{ quote(container) }} ROUTING_OSM_FILE_FILTERED={{ quote(env("ROUTING_OSM_FILE_FILTERED", "")) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/osm-filter-many-raw-pbf-into-one.sh "$@"
 
-[doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) from raw .osm.pbf files, anywhere (several are merged), into the POI file named after ROUTING_OSM_FILE_FILTERED in ROUTING_OSM_IMPORT_DIR, e.g. just poi-extract data/downloads/osm/*.osm.pbf. Use the same files the graph was filtered from. just poi-import (poi-import-prod on the VPS) loads it.")]
+[doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) from raw .osm.pbf files, anywhere (several are merged), into the POI file named after ROUTING_OSM_FILE_FILTERED in ROUTING_OSM_IMPORT_DIR, e.g. just poi-extract-from-unfiltered-osm-pbf data/downloads/osm/*.osm.pbf. Use the same raw files the graph was filtered from, never a bike-*.osm.pbf: the bike filter dropped almost every POI. just poi-import (poi-import-prod on the VPS) loads it.")]
 [group('geodata')]
 [positional-arguments]
 [unix]
-poi-extract +files:
-    CONTAINER={{ quote(container) }} POIS_FILE={{ quote(pois_file) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} bash scripts/poi-extract.sh "$@"
+poi-extract-from-unfiltered-osm-pbf +files:
+    CONTAINER={{ quote(container) }} POIS_FILE={{ quote(pois_file) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} bash scripts/poi-extract-from-unfiltered-osm-pbf.sh "$@"
 
 # Git Bash: see osm-filter-many-raw-pbf-into-one.
-[doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) from raw .osm.pbf files, anywhere (several are merged), into the POI file named after ROUTING_OSM_FILE_FILTERED in ROUTING_OSM_IMPORT_DIR, e.g. just poi-extract data/downloads/osm/*.osm.pbf. Use the same files the graph was filtered from. just poi-import (poi-import-prod on the VPS) loads it.")]
+[doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) from raw .osm.pbf files, anywhere (several are merged), into the POI file named after ROUTING_OSM_FILE_FILTERED in ROUTING_OSM_IMPORT_DIR, e.g. just poi-extract-from-unfiltered-osm-pbf data/downloads/osm/*.osm.pbf. Use the same raw files the graph was filtered from, never a bike-*.osm.pbf: the bike filter dropped almost every POI. just poi-import (poi-import-prod on the VPS) loads it.")]
 [group('geodata')]
 [positional-arguments]
 [windows]
 [script("C:/Program Files/Git/bin/bash.exe", "-eu")]
-poi-extract +files:
-    CONTAINER={{ quote(container) }} POIS_FILE={{ quote(pois_file) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/poi-extract.sh "$@"
+poi-extract-from-unfiltered-osm-pbf +files:
+    CONTAINER={{ quote(container) }} POIS_FILE={{ quote(pois_file) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/poi-extract-from-unfiltered-osm-pbf.sh "$@"
 
-[doc("Replace the POI table with the file from just poi-extract. Readers keep the old POIs until the new set is in.")]
+[doc("Replace the POI table with the file from just poi-extract-from-unfiltered-osm-pbf. Readers keep the old POIs until the new set is in.")]
 [group('geodata')]
 [working-directory("backend")]
 poi-import:
     uv run python manage.py import_pois {{ quote(join(justfile_directory(), env("ROUTING_OSM_IMPORT_DIR"), pois_file)) }}
 
-[doc("On the VPS: replace the POI table from just poi-extract's file. Runs in the backend image, which has GDAL; the host needs none.")]
+[doc("On the VPS: replace the POI table from just poi-extract-from-unfiltered-osm-pbf's file. Runs in the backend image, which has GDAL; the host needs none.")]
 [group('geodata')]
 poi-import-prod:
     {{ container }} compose --env-file .env run --rm --pull never --no-deps worker-default python manage.py import_pois "/osm_data/{{ pois_file }}"

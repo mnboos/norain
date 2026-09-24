@@ -153,7 +153,7 @@ was filtered from, wherever they are; several are merged into one POI file, name
 
 ```bash
 cd /srv/norain
-just poi-extract ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf
+just poi-extract-from-unfiltered-osm-pbf ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf
 just poi-import-prod    # replaces the Poi table, in the backend image via worker-default
 ```
 

@@ -139,16 +139,15 @@ graphhopper:
 
   #### Speed, hybrid and flexible mode ####
 
-  # To make CH preparation faster for multiple profiles you can increase the default threads if you have enough RAM.
-  # Change this setting only if you know what you are doing and if the default worked for you.
-  prepare.ch.threads: 1
+  # Build threads: 3, one per profile, here and below. Parallel preparation needs more heap; raise
+  # GRAPHHOPPER_BUILD_HEAP if the build runs out of memory.
+  prepare.ch.threads: 3
 
   # To tune the performance vs. memory usage for the hybrid mode use
   # prepare.lm.landmarks: 16
 
-  # Make landmark preparation parallel if you have enough RAM. Change this only if you know what you are doing and if
-  # the default worked for you.
-  # prepare.lm.threads: 1
+  # Landmark preparation, one thread per profile in profiles_lm.
+  prepare.lm.threads: 3
 
 
   #### Elevation ####
@@ -202,7 +201,7 @@ graphhopper:
 
   # This feature allows classifying roads into 'rural', 'residential' and 'city' areas (encoded value 'urban_density')
   # Use 1 or more threads to enable the feature
-  graph.urban_density.threads: 2
+  graph.urban_density.threads: 3
   # Use higher/lower sensitivities if too little/many roads fall into the according categories.
   # Using smaller radii will speed up the classification, but only change these values if you know what you are doing.
   # If you do not need the (rather slow) city classification set city_radius to zero.
@@ -219,7 +218,7 @@ graphhopper:
   # allows setting a minimum size (number of edges) for such detached components. This can be used to reduce the number
   # of cases where a connection between locations might not be found.
   prepare.min_network_size: 200
-  prepare.subnetworks.threads: 1
+  prepare.subnetworks.threads: 3
 
   #### Routing ####
 

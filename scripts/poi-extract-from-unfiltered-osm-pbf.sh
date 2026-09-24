@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Extract the journey planner's POIs from raw .osm.pbf files into POIS_FILE in
-# ROUTING_OSM_IMPORT_DIR, which just poi-import reads: `just poi-extract FILE…` runs this.
+# ROUTING_OSM_IMPORT_DIR, which just poi-import reads: `just poi-extract-from-unfiltered-osm-pbf FILE…` runs this.
 # The files can be anywhere; several are merged into one POI file.
 #
 # Takes from just: CONTAINER (podman or docker), POIS_FILE (named after
