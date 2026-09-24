@@ -48,6 +48,14 @@ export interface PoiOut {
      * 
      */
     offsetM: number;
+    /**
+     * 
+     */
+    detourS?: number | null;
+    /**
+     * 
+     */
+    detourM?: number | null;
 }
 
 /**
@@ -80,6 +88,8 @@ export function PoiOutFromJSONTyped(json: any, ignoreDiscriminator: boolean): Po
         'lat': json['lat'],
         'alongM': json['along_m'],
         'offsetM': json['offset_m'],
+        'detourS': json['detour_s'] === undefined ? undefined : json['detour_s'] === null ? null : json['detour_s'],
+        'detourM': json['detour_m'] === undefined ? undefined : json['detour_m'] === null ? null : json['detour_m'],
     };
 }
 
@@ -101,6 +111,8 @@ export function PoiOutToJSONTyped(value?: PoiOut | null, ignoreDiscriminator: bo
         'lat': value['lat'],
         'along_m': value['alongM'],
         'offset_m': value['offsetM'],
+        'detour_s': value['detourS'],
+        'detour_m': value['detourM'],
     };
 }
 

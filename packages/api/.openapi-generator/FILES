@@ -19,6 +19,7 @@ models/ForecastMapDetailOut.ts
 models/ForecastSampleOut.ts
 models/ForecastUncertainty.ts
 models/ForecastUncertaintySummary.ts
+models/GapOut.ts
 models/GeometrySchema.ts
 models/GeometrySource.ts
 models/GpxExportIn.ts
@@ -27,6 +28,9 @@ models/JourneyDayOut.ts
 models/JourneyIn.ts
 models/JourneyOut.ts
 models/JourneyStageOut.ts
+models/LegOverrunOut.ts
+models/LimitOverrunsOut.ts
+models/OverrunOut.ts
 models/PlacesSearchResult.ts
 models/PoiOut.ts
 models/PropertiesSchema.ts

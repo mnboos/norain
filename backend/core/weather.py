@@ -11,6 +11,7 @@ The route sampling is decoupled from the forecast resolution: GraphHopper gives 
 per-road travel time, so we know exactly when you reach each point of the polyline.
 """
 
+import asyncio
 import json
 import math
 import os
@@ -158,7 +159,14 @@ def routing_points(start_lat: float, start_lon: float, dest_lat: float, dest_lon
     return ((start_lon, start_lat), *((float(lon), float(lat)) for lon, lat in via), (dest_lon, dest_lat))
 
 
-def _route_body(profile: str, points: RoutingPoints, custom_model: dict | None = None, alternatives: int = 0) -> dict:
+def _route_body(
+    profile: str,
+    points: RoutingPoints,
+    custom_model: dict | None = None,
+    alternatives: int = 0,
+    *,
+    include_geometry: bool = True,
+) -> dict:
     """The one GraphHopper request, so the editor's preview and the saved geometry agree.
 
     ``custom_model`` is a request model on top of the profile's (journey road preferences and
@@ -173,8 +181,11 @@ def _route_body(profile: str, points: RoutingPoints, custom_model: dict | None =
         "elevation": True,
         "calc_points": True,
         "instructions": False,
-        "details": ["time"],
+        "details": ["time", "leg_time", "leg_distance"],
     }
+    if not include_geometry:
+        body.update(calc_points=False, elevation=False)
+        body.pop("details")
     if custom_model:
         body["custom_model"] = custom_model
     if alternatives > 1:
@@ -184,14 +195,38 @@ def _route_body(profile: str, points: RoutingPoints, custom_model: dict | None =
 
 
 @alru_cache(maxsize=64)
-@provider("graphhopper")
 async def _fetch_route(profile: str, points: RoutingPoints, custom_model: str = "", alternatives: int = 0) -> dict:
     """``custom_model`` arrives as canonical JSON (``road_prefs.model_key``): the LRU keys on it."""
     body = _route_body(profile, points, json.loads(custom_model) if custom_model else None, alternatives)
+    return await _post_route(body)
+
+
+@provider("graphhopper")
+async def _post_route(body: dict) -> dict:
     async with httpx.AsyncClient() as client:
         resp = await client.post(f"{GRAPHHOPPER_URL}/route", json=body, timeout=30)
         resp.raise_for_status()
         return resp.json()
+
+
+async def route_legs(profile, legs, custom_model=None, *, limiter, memo):
+    """Uncached explicit routing pairs; the caller owns the loop-local limiter and memo."""
+
+    async def one(points):
+        points = tuple(tuple(p) for p in points)
+        key = (profile, points, model_key(custom_model))
+        async with limiter:
+            if key not in memo:
+                try:
+                    path = (await _post_route(_route_body(profile, points, custom_model, include_geometry=False)))[
+                        "paths"
+                    ][0]
+                    memo[key] = (float(path["time"]) / 1000, float(path["distance"]))
+                except ROUTING_ERRORS:
+                    memo[key] = None
+            return memo[key]
+
+    return await asyncio.gather(*(one(points) for points in legs))
 
 
 async def _route(profile: str, points: RoutingPoints, custom_model: dict | None = None, alternatives: int = 0) -> dict:
@@ -240,6 +275,7 @@ def _path_geometry(path: dict, interval_seconds: int) -> dict:
 
     return {
         "polyline": coords,
+        "waypoint_indices": [0, *(detail[1] for detail in path.get("details", {}).get("leg_time", []))],
         "vertex_elevations": [p[2] if len(p) > 2 else None for p in raw_coords],
         "vertex_times": cum_s,
         "sample_points": sample_points,
@@ -362,7 +398,7 @@ def _summarize(samples: list[WeatherSample], source: str) -> RouteWeatherSummary
     """
     if any(s.pop is not None for s in samples):
         wet = [s for s in samples if (s.pop or 0.0) >= POP_VERDICT]
-        peak = max(samples, key=lambda s: (s.pop or 0.0))
+        peak = max(samples, key=lambda s: s.pop or 0.0)
         amount = peak.rain_if_wet if peak.rain_if_wet is not None else peak.rain_mm
         rain_probability = round(max(s.pop or 0.0 for s in samples), 2)
         rain_amount = round(amount, 1)
@@ -445,6 +481,7 @@ async def compute_route_weather(
     local_departure = departure
     if departure.tzinfo is not None:
         from .schedule import LOCAL_TZ
+
         local_departure = departure.astimezone(LOCAL_TZ)
         departure = departure.astimezone(UTC)
     today = local_today()
@@ -480,7 +517,9 @@ async def compute_route_weather(
         if snapshot is not None:
             if snapshot.readings is None:
                 snapshot.readings = await get_cached_readings(
-                    [{**sp, "elapsed_s": 0} for sp in sample_points], snapshot.now, snapshot.now,
+                    [{**sp, "elapsed_s": 0} for sp in sample_points],
+                    snapshot.now,
+                    snapshot.now,
                 )
             readings = snapshot.readings or []
         else:
@@ -507,6 +546,7 @@ async def compute_route_weather(
             continue
         if strict_coverage:
             from .departures import cell_covers
+
             if not cell_covers(cell.data, eta, cell.source):
                 continue
         logger.debug("compute_route_weather: got forecast cell for {}: {}", eta, cell)
@@ -544,9 +584,12 @@ async def compute_route_weather(
     # gaps retain their original indices rather than becoming adjacent valid samples.
     times = resolve_vertex_times(coords, sample_points, vertex_times)
     wind = compute_wind_profile(
-        coords, sample_points,
+        coords,
+        sample_points,
         [normalize_wind(f.get("wind_speed"), f.get("wind_dir")) if f is not None else None for f in forecasts],
-        times, total_dist, include_segments=include_segments,
+        times,
+        total_dist,
+        include_segments=include_segments,
     )
     for i, sp in enumerate(sample_points):
         forecast = forecasts[i]
@@ -559,7 +602,11 @@ async def compute_route_weather(
         uncertainty = None
         if ens_cell is not None:
             uncertainty = extract_uncertainty(
-                ens_cell.data, eta, None, ens_cell.fetched_at, ENSEMBLE_MODELS.split(","),
+                ens_cell.data,
+                eta,
+                None,
+                ens_cell.fetched_at,
+                ENSEMBLE_MODELS.split(","),
                 wind_support=wind.samples[i].support,
             )
         pop = uncertainty.pop if uncertainty is not None else None

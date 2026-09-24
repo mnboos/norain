@@ -28,6 +28,13 @@ import {
     PoiOutToJSON,
     PoiOutToJSONTyped,
 } from './PoiOut';
+import type { GapOut } from './GapOut';
+import {
+    GapOutFromJSON,
+    GapOutFromJSONTyped,
+    GapOutToJSON,
+    GapOutToJSONTyped,
+} from './GapOut';
 
 /**
  * 
@@ -59,6 +66,10 @@ export interface JourneyDayOut {
      * 
      */
     lodging?: PoiOut | null;
+    /**
+     * 
+     */
+    lodgingDetour?: GapOut | null;
     /**
      * 
      */
@@ -105,6 +116,7 @@ export function JourneyDayOutFromJSONTyped(json: any, ignoreDiscriminator: boole
         'start': json['start'],
         'end': json['end'],
         'lodging': json['lodging'] === undefined ? undefined : json['lodging'] === null ? null : PoiOutFromJSON(json['lodging']),
+        'lodgingDetour': json['lodging_detour'] === undefined ? undefined : json['lodging_detour'] === null ? null : GapOutFromJSON(json['lodging_detour']),
         'lodgingMissing': json['lodging_missing'] == null ? undefined : json['lodging_missing'],
         'weatherRouted': json['weather_routed'] == null ? undefined : json['weather_routed'],
         'forecastAvailable': json['forecast_available'] == null ? undefined : json['forecast_available'],
@@ -129,6 +141,7 @@ export function JourneyDayOutToJSONTyped(value?: JourneyDayOut | null, ignoreDis
         'start': value['start'],
         'end': value['end'],
         'lodging': PoiOutToJSON(value['lodging']),
+        'lodging_detour': GapOutToJSON(value['lodgingDetour']),
         'lodging_missing': value['lodgingMissing'],
         'weather_routed': value['weatherRouted'],
         'forecast_available': value['forecastAvailable'],

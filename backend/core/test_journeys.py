@@ -4,7 +4,6 @@ import json
 import re
 import tempfile
 from datetime import UTC, datetime, time, timedelta
-from itertools import pairwise
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -16,16 +15,7 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 from . import tests as fixtures
 from .entitlements import FREE
 from .geo import vertex_distances
-from .journeys import (
-    NEAR_M,
-    along_limit,
-    gap_fixes,
-    lodging_candidates,
-    longest_gaps,
-    place_breaks,
-    rank_day,
-    split_days,
-)
+from .journeys import lodging_candidates, rank_day
 from .management.commands.import_pois import import_pois
 from .models import (
     ForecastJob,
@@ -203,6 +193,28 @@ class PoiImportTests(TestCase):
         self.assertAlmostEqual(hits[1].along_m, 1520, delta=30)
         self.assertEqual(hits[1].tags, {"a": "b"})
 
+    def test_planner_queries_return_leg_poi_occurrence_in_postgis(self):
+        from .journey_geometry import Limits, LineMeasure
+        from .journey_planner import JourneyPlanner, RoutingBudget
+        from .tasks import _pois_along
+        from .test_journey_routing import fake_geometry, fake_legs
+
+        Poi.objects.create(osm_ref="return_water", category="drinking_water", location=route_point(47, 8.05))
+
+        async def run():
+            path = await fake_geometry("bike", [(8, 47), (8.1, 47), (8, 47)])
+            planner = JourneyPlanner("bike", None, RoutingBudget(), fake_geometry, fake_legs, _pois_along)
+            hits = await planner.window_hits(path, 20, 40, ["drinking_water"], 2500)
+            self.assertEqual(len(hits), 1)
+            self.assertEqual(LineMeasure(path).index(hits[0].along_m), 30)
+            choices = await planner.candidates(path, [], hits, 20, 40, Limits())
+            self.assertEqual(len(choices), 1)
+            result = await planner.insert(path, [], choices[0], 20, Limits(), is_break=True)
+            self.assertIsNotNone(result)
+            self.assertGreater(result[2]["index"], 20)
+
+        async_to_sync(run)()
+
 
 # --------------------------------------------------------------------------- GraphHopper requests
 class RoadPrefsTests(SimpleTestCase):
@@ -268,79 +280,11 @@ class WeatherZoneTests(SimpleTestCase):
 
 # --------------------------------------------------------------------------- planning
 class JourneyPlanningTests(SimpleTestCase):
-    def test_along_limit_takes_the_tighter_of_time_and_distance(self):
-        geometry = straight_geometry(50)  # 5 m/s: 10 km per 2000 s
-        self.assertAlmostEqual(along_limit(geometry, None, 20_000), 20_000)
-        self.assertAlmostEqual(along_limit(geometry, 2000, 20_000), 10_000, delta=100)
-
-    def test_days_end_at_the_lodging_nearest_the_route(self):
-        geometry = straight_geometry(200)
-        total = along_limit(geometry, None, None)
-        lodgings = [hit("lodging", 70_000, 100), hit("lodging", 78_000, 900), hit("lodging", 76_000, 40)]
-        cuts = split_days(total, 80_000, lodgings, geometry)
-        self.assertEqual(cuts[0].end_along_m, 76_000)
-        self.assertEqual(cuts[0].lodging.offset_m, 40)
-        self.assertIsNone(cuts[1].lodging, "no lodging in the second day's window: it ends at the limit")
-        self.assertAlmostEqual(cuts[1].end_along_m, 156_000)
-        self.assertEqual(len(cuts), 3)
-
     def test_lodging_candidates_filter_kind_and_window(self):
         hotel, camp = hit("lodging", 70_000, tourism="hotel"), hit("lodging", 76_000, tourism="camp_site")
         early = hit("lodging", 10_000, tourism="hotel")
         self.assertEqual(lodging_candidates([hotel, camp, early], ["hotel"]), [hotel, early])
         self.assertEqual(lodging_candidates([hotel, camp, early], [], 60_000), [hotel, camp], "no kinds: every kind")
-
-    def test_no_stub_day_when_the_ride_is_just_over_the_limit(self):
-        geometry = straight_geometry(84)
-        cuts = split_days(along_limit(geometry, None, None), 80_000, [], geometry)
-        self.assertEqual(len(cuts), 1)
-
-    def test_breaks_go_where_most_wanted_categories_are(self):
-        geometry = straight_geometry(60)
-        total = along_limit(geometry, None, None)
-        hits = [
-            hit("drinking_water", 16_000),
-            hit("toilets", 17_000),
-            hit("drinking_water", 17_200),
-            hit("toilets", 19_000, offset_m=NEAR_M + 100),  # too far off to count
-        ]
-        breaks = place_breaks(geometry, total, 20_000, hits, ["drinking_water", "toilets"])
-        self.assertEqual(breaks[0]["along_m"], 17_000)
-        self.assertEqual(sorted(p["category"] for p in breaks[0]["pois"]), ["drinking_water", "toilets"])
-        self.assertTrue(all(b2["along_m"] - b1["along_m"] <= 20_000 for b1, b2 in pairwise(breaks)))
-        self.assertLessEqual(total - breaks[-1]["along_m"], 20_000)
-
-    def test_gap_fix_prefers_a_poi_that_splits_the_gap(self):
-        near = [hit("drinking_water", 5_000)]
-        wide = [
-            *near,
-            hit("drinking_water", 12_000, offset_m=300, ref="n_early"),  # too early: 5..12 fine, 12..40 not
-            hit("drinking_water", 22_000, offset_m=900, ref="n_split"),  # 5..22 and 22..40 both fit
-            hit("drinking_water", 30_000, offset_m=5000, ref="n_far"),
-        ]
-        fixes = gap_fixes(near, wide, 40_000, ["drinking_water"], 20_000)
-        self.assertEqual([f.osm_ref for f in fixes], ["n_split"])
-
-    def test_wanted_categories_are_each_required(self):
-        wanted = ["vending_drinks", "vending_sweets"]
-        drinks_only = [hit("vending_drinks", 20_000)]
-        self.assertEqual(longest_gaps(drinks_only, 40_000, wanted), {"vending_drinks": 20_000, "vending_sweets": 40_000})
-        both = [hit("vending_drinks", 20_000, ref="n_combo"), hit("vending_sweets", 20_000, ref="n_combo")]
-        self.assertEqual(longest_gaps(both, 40_000, wanted), {"vending_drinks": 20_000, "vending_sweets": 20_000})
-
-    def test_one_machine_fixes_several_gaps_with_one_detour(self):
-        wanted = ["vending_drinks", "vending_sweets"]
-        wide = [
-            hit("vending_drinks", 20_000, offset_m=800, ref="n_combo"),
-            hit("vending_sweets", 20_000, offset_m=800, ref="n_combo"),
-        ]
-        fixes = gap_fixes([], wide, 40_000, wanted, 20_000)
-        self.assertEqual([f.osm_ref for f in fixes], ["n_combo"])
-
-    def test_gap_fix_never_detours_too_far(self):
-        wide = [hit("toilets", 20_000, offset_m=4000)]
-        self.assertEqual(gap_fixes([], wide, 40_000, ["toilets"], 20_000), [])
-        self.assertEqual(longest_gaps([], 40_000, ["toilets"]), {"toilets": 40_000})
 
 
 class RankingTests(SimpleTestCase):
@@ -404,17 +348,13 @@ class JourneyTaskTests(TestCase):
         )
 
     def _plan(self, *, paths=None):
+        from .test_journey_routing import fake_geometry, fake_legs
+
         geometries = AsyncMock(side_effect=lambda profile, points, n, *a, **k: paths or [_gh_path(70, points[0][0])])
         routes = SimpleNamespace(aenqueue=AsyncMock(), using=lambda **_: SimpleNamespace(aenqueue=AsyncMock()))
         with (
-            patch(
-                "core.tasks.build_geometry",
-                AsyncMock(
-                    side_effect=lambda profile, points, *a, **k: _gh_path(
-                        (points[-1][0] - points[0][0]) * 76, points[0][0]
-                    )
-                ),
-            ) as geometry,
+            patch("core.tasks.build_geometry", AsyncMock(side_effect=fake_geometry)) as geometry,
+            patch("core.tasks.route_legs", AsyncMock(side_effect=fake_legs)),
             patch("core.tasks.build_geometries", geometries),
             patch("core.tasks.plan_journey_routes", routes),
         ):
@@ -448,22 +388,100 @@ class JourneyTaskTests(TestCase):
             async_to_sync(_plan_journey_async)(str(self.journey.id), revision)
         self.assertEqual(JourneyDay.objects.count(), 0)
 
+    def test_remainder_failure_marks_plan_failed_and_does_not_enqueue(self):
+        from .test_journey_routing import fake_geometry
+
+        calls = 0
+
+        async def route(profile, points, *args):
+            nonlocal calls
+            calls += 1
+            if calls > 1:
+                raise ValueError("no remainder")
+            return await fake_geometry(profile, points)
+
+        enqueue = AsyncMock()
+        with (
+            patch("core.tasks.build_geometry", side_effect=route),
+            patch("core.tasks._pois_along", AsyncMock(return_value=[])),
+            patch("core.tasks.plan_journey_routes", SimpleNamespace(aenqueue=enqueue)),
+        ):
+            async_to_sync(_plan_journey_async)(str(self.journey.id), self.journey.plan_revision)
+        self.journey.refresh_from_db()
+        self.assertEqual(self.journey.plan_status, Journey.PlanStatus.FAILED)
+        enqueue.assert_not_awaited()
+
+    def test_loop_waypoints_are_assigned_once_in_visit_order(self):
+        from .journey_planner import RoutingBudget
+        from .tasks import _plan_day_ends
+        from .test_journey_routing import fake_geometry
+
+        self.journey.via_points = [[8.7, 47], [8.0, 47], [9.2, 47]]
+        self.journey.save()
+        with (
+            patch("core.tasks.build_geometry", side_effect=fake_geometry),
+            patch("core.tasks._pois_along", AsyncMock(return_value=[])),
+        ):
+            days = async_to_sync(_plan_day_ends)(self.journey, FREE, None, RoutingBudget())
+        self.assertEqual([p for day in days for p in day["vias"]], self.journey.via_points)
+        self.assertGreater(len(days), 2)
+
+    def test_stored_plan_round_trips_limits_gaps_and_lodging(self):
+        from .tasks import _store_journey_plan
+        from .test_journey_routing import geometry
+
+        path = geometry([[8, 47], [8.01, 47]], [0, 900])
+        stage = {
+            "geometry": path,
+            "rank": 0,
+            "via_points": [],
+            "breaks": [],
+            "gaps": {"drinking_water": {"s": 900, "m": 1500}, "toilets": 1700},
+            "detours": [],
+            "detour_m": 0,
+            "leg_m": 1000,
+            "leg_seconds": 600,
+            "limit_overruns": {
+                "day": {"over_s": 60, "over_m": 200},
+                "legs": [{"leg": 1, "over_s": 300, "over_m": 500}],
+            },
+        }
+        day = {
+            "index": 0,
+            "date": (local_today() + timedelta(days=30)).isoformat(),
+            "start": [8, 47],
+            "end": [8.01, 47],
+            "lodging": None,
+            "lodging_detour": {"s": 20, "m": 100},
+            "lodging_missing": False,
+            "weather": False,
+            "stages": [stage],
+        }
+        _store_journey_plan(self.journey.id, self.journey.plan_revision, [day])
+        self.client.force_login(self.user)
+        response = self.client.get(f"/api/journeys/{self.journey.id}")
+        self.assertEqual(response.status_code, 200, response.content)
+        result = response.json()["days"][0]
+        self.assertEqual(result["lodging_detour"], {"s": 20, "m": 100})
+        stored = result["stages"][0]
+        self.assertEqual(stored["leg_seconds"], 600)
+        self.assertEqual(stored["limit_overruns"]["legs"][0]["leg"], 1)
+        self.assertEqual(stored["gaps"]["toilets"], {"s": None, "m": 1700})
+        self.assertIn("Tageslimit: ~1 min zu lang", stored["reasons"])
+        self.assertIn("Etappe 1: ~5 min zu lang", stored["reasons"])
+
     def test_weather_routing_only_for_pro_days_near_now(self):
         Subscription.objects.create(
             user=self.user, plan=Plan.PRO, complimentary_until=datetime.now(UTC) + timedelta(days=1)
         )
         self.journey.start_date = local_today() + timedelta(days=2)
         self.journey.save()
+        from .test_journey_routing import fake_geometry, fake_legs
+
         cells = SimpleNamespace(aenqueue=AsyncMock())
         with (
-            patch(
-                "core.tasks.build_geometry",
-                AsyncMock(
-                    side_effect=lambda profile, points, *a, **k: _gh_path(
-                        (points[-1][0] - points[0][0]) * 76, points[0][0]
-                    )
-                ),
-            ),
+            patch("core.tasks.build_geometry", AsyncMock(side_effect=fake_geometry)),
+            patch("core.tasks.route_legs", AsyncMock(side_effect=fake_legs)),
             patch("core.tasks.refresh_forecast_cell", cells),
             patch(
                 "core.tasks.plan_journey_routes",
@@ -641,6 +659,38 @@ class JourneyApiTests(TestCase):
         rows = rank_day.call_args.args[0]
         self.assertEqual(rows[0]["result"], stale)
         self.assertEqual(response.json()["days"][0]["stages"][0]["forecast_status"], "fetching")
+
+    def test_limits_detours_and_both_gap_shapes_round_trip(self):
+        self._post()
+        journey = Journey.objects.get()
+        stage = self._stage_on_day(journey, 0, lodging_detour={"s": 240, "m": 900.0})
+        JourneyStage.objects.filter(id=stage.id).update(
+            leg_seconds=3600,
+            leg_m=25_000,
+            # A legacy metres-only gap next to a new one that breaks the time limit only.
+            gaps={"drinking_water": 30_000.0, "toilets": {"s": 4200, "m": 20_000.0}},
+            detours=[{**hit("toilets", 3000).as_json(), "detour_s": 180, "detour_m": 1200.0}],
+            limit_overruns={"day": {"over_s": 0, "over_m": 2500.0}, "legs": [{"leg": 2, "over_s": 300, "over_m": 0}]},
+        )
+        with patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
+            response = self.client.get(f"/api/journeys/{journey.id}")
+        self.assertEqual(response.status_code, 200, response.content)
+        day = response.json()["days"][0]
+        stage_out = day["stages"][0]
+        self.assertEqual(day["lodging_detour"], {"s": 240, "m": 900.0})
+        self.assertEqual(stage_out["leg_seconds"], 3600)
+        self.assertEqual(stage_out["gaps"]["drinking_water"], {"s": None, "m": 30_000.0})
+        self.assertEqual(stage_out["gaps"]["toilets"], {"s": 4200, "m": 20_000.0})
+        self.assertEqual(stage_out["limit_overruns"]["day"]["over_m"], 2500.0)
+        self.assertEqual(stage_out["limit_overruns"]["legs"][0]["leg"], 2)
+        self.assertEqual(stage_out["detours"][0]["detour_m"], 1200.0)
+        reasons = stage_out["reasons"]
+        self.assertIn("Trinkwasser: 30 km ohne", reasons)
+        self.assertIn("Toilette: 70 min ohne", reasons)
+        self.assertIn("Umweg ~1.2 km zu Toilette", reasons)
+        self.assertIn("Tageslimit: ~2.5 km zu weit", reasons)
+        self.assertIn("Etappe 2: ~5 min zu lang", reasons)
+        self.assertFalse(any(r.startswith("Tageslimit:") and "min" in r for r in reasons), "distance-only overrun")
 
     def _stage_on_day(self, journey, index: int, **day_fields) -> JourneyStage:
         day = JourneyDay.objects.create(

@@ -39,3 +39,12 @@ export function duration(seconds: number): string {
 export function clock(iso: string | null | undefined): string {
     return iso ? iso.slice(11, 16) : "";
 }
+
+/** Legacy gaps contain metres only; never infer historical travel times. */
+export function gapExcessLabel(gap: number | { s?: number | null; m: number }, seconds?: number | null, meters?: number | null): string {
+    const parts: string[] = [];
+    if (typeof gap !== "number" && gap.s != null && seconds && gap.s > seconds) parts.push(duration(gap.s));
+    const distance = typeof gap === "number" ? gap : gap.m;
+    if (meters && distance > meters) parts.push(km(distance));
+    return parts.length ? `${parts.join(" / ")} ohne` : "";
+}

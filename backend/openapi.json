@@ -3564,6 +3564,30 @@
                 "title": "BreakOut",
                 "type": "object"
             },
+            "GapOut": {
+                "properties": {
+                    "s": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "S"
+                    },
+                    "m": {
+                        "title": "M",
+                        "type": "number"
+                    }
+                },
+                "required": [
+                    "m"
+                ],
+                "title": "GapOut",
+                "type": "object"
+            },
             "JourneyDayOut": {
                 "properties": {
                     "id": {
@@ -3598,6 +3622,16 @@
                         "anyOf": [
                             {
                                 "$ref": "#/components/schemas/PoiOut"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "lodging_detour": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/GapOut"
                             },
                             {
                                 "type": "null"
@@ -3875,11 +3909,27 @@
                     },
                     "gaps": {
                         "additionalProperties": {
-                            "type": "number"
+                            "$ref": "#/components/schemas/GapOut"
                         },
-                        "description": "Longest stretch without each wanted category, m",
                         "title": "Gaps",
                         "type": "object"
+                    },
+                    "leg_seconds": {
+                        "default": 0,
+                        "title": "Leg Seconds",
+                        "type": "integer"
+                    },
+                    "leg_m": {
+                        "default": 0,
+                        "title": "Leg M",
+                        "type": "number"
+                    },
+                    "limit_overruns": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/LimitOverrunsOut"
+                            }
+                        ]
                     },
                     "detours": {
                         "items": {
@@ -3986,6 +4036,68 @@
                 "title": "JourneyStageOut",
                 "type": "object"
             },
+            "LegOverrunOut": {
+                "properties": {
+                    "over_s": {
+                        "default": 0,
+                        "title": "Over S",
+                        "type": "number"
+                    },
+                    "over_m": {
+                        "default": 0,
+                        "title": "Over M",
+                        "type": "number"
+                    },
+                    "leg": {
+                        "title": "Leg",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "leg"
+                ],
+                "title": "LegOverrunOut",
+                "type": "object"
+            },
+            "LimitOverrunsOut": {
+                "properties": {
+                    "day": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/OverrunOut"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "legs": {
+                        "items": {
+                            "$ref": "#/components/schemas/LegOverrunOut"
+                        },
+                        "title": "Legs",
+                        "type": "array"
+                    }
+                },
+                "title": "LimitOverrunsOut",
+                "type": "object"
+            },
+            "OverrunOut": {
+                "properties": {
+                    "over_s": {
+                        "default": 0,
+                        "title": "Over S",
+                        "type": "number"
+                    },
+                    "over_m": {
+                        "default": 0,
+                        "title": "Over M",
+                        "type": "number"
+                    }
+                },
+                "title": "OverrunOut",
+                "type": "object"
+            },
             "PoiOut": {
                 "properties": {
                     "osm_ref": {
@@ -4016,6 +4128,28 @@
                     "offset_m": {
                         "title": "Offset M",
                         "type": "number"
+                    },
+                    "detour_s": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Detour S"
+                    },
+                    "detour_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Detour M"
                     }
                 },
                 "required": [

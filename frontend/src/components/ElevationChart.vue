@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, ref } from "vue";
 import { useQueries, useQuery } from "@tanstack/vue-query";
 import { ElevationApi } from "@norain/api/apis";
+import type { ElevationOut } from "@norain/api/models";
 import { elevationFigure, type ElevationSeries } from "@/utils/elevation";
 
 const NiceChart = defineAsyncComponent(() => import("./chart/NiceChart.vue"));
@@ -64,18 +65,43 @@ const alternativeQueries = useQueries({
         })),
     ),
 });
-const hasData = computed(() => query.data.value?.points.some(p => p.elevationM !== null));
+const usable = (data?: ElevationOut) => !!data?.points.some(p => p.elevationM != null);
+const profiles = computed(() =>
+    [
+        ...(props.alternatives ?? []).map((a, n) => ({
+            data: alternativeQueries.value[n]?.data,
+            color: a.color,
+            label: a.label,
+            primary: false,
+        })),
+        {
+            data: query.data.value,
+            color: props.color ?? "#32966b",
+            label: props.label ?? "Höhe",
+            primary: true,
+        },
+    ].filter((p): p is typeof p & { data: ElevationOut } => usable(p.data)),
+);
+const hasData = computed(() => profiles.value.length > 0);
+const results = computed(() => [
+    {
+        isPending: query.isPending.value,
+        fetchStatus: query.fetchStatus.value,
+        isError: query.isError.value,
+        refetch: query.refetch,
+    },
+    ...alternativeQueries.value,
+]);
+const pending = computed(() => results.value.some(q => q.isPending && q.fetchStatus !== "idle"));
+const failed = computed(() => results.value.filter(q => q.isError));
+function retryFailed() {
+    for (const result of failed.value) void result.refetch();
+}
+const sources = computed(() => [...new Set(profiles.value.map(p => p.data.source))].join(" · "));
+const approximateTiming = computed(() => profiles.value.some(p => p.data.approximateTiming));
+const partialHeights = computed(() => profiles.value.some(p => p.data.points.some(point => point.elevationM == null)));
 const figure = computed(() => {
-    const series: ElevationSeries[] = (props.alternatives ?? []).flatMap((a, n) => {
-        const points = alternativeQueries.value[n]?.data?.points;
-        return points ? [{ points, color: a.color, label: a.label }] : [];
-    });
-    series.push({
-        points: query.data.value?.points ?? [],
-        color: props.color ?? "#32966b",
-        label: props.label ?? "Höhe",
-        primary: true,
-    });
+    const series: ElevationSeries[] = profiles.value.map(p => ({ ...p, points: p.data.points }));
     return elevationFigure(series, axis.value);
 });
 </script>
@@ -96,27 +122,35 @@ const figure = computed(() => {
                 ]"
             />
         </div>
-        <q-skeleton v-if="query.isPending.value" height="220px" aria-label="Höhenprofil wird geladen" />
-        <div v-else-if="query.isError.value" role="alert" class="q-pa-md">
-            Höhendaten konnten nicht geladen werden.
-            <q-btn flat no-caps label="Erneut versuchen" @click="query.refetch()" />
-        </div>
-        <div v-else-if="!hasData" class="q-pa-md">Keine Höhendaten für diese Strecke verfügbar.</div>
         <NiceChart
-            v-else
+            v-if="hasData"
             :figure="figure"
             keep-line-widths
             :x-unit="axis === 'distance' ? 'km' : 'min'"
             style="height: 260px"
         />
+        <q-skeleton v-else-if="pending" height="220px" aria-label="Höhenprofil wird geladen" />
+        <div v-else-if="failed.length" role="alert" class="q-pa-md">
+            Höhendaten konnten nicht geladen werden.
+            <q-btn flat no-caps label="Erneut versuchen" @click="retryFailed" />
+        </div>
+        <div v-else class="q-pa-md">Keine Höhendaten für diese Strecke verfügbar.</div>
+        <template v-if="hasData">
+            <div v-if="query.isError.value" role="alert" class="q-pa-md">
+                Höhendaten für die gewählte Strecke konnten nicht geladen werden.
+                <q-btn flat no-caps label="Erneut versuchen" @click="query.refetch()" />
+            </div>
+            <div v-else-if="query.isPending.value" role="status" class="q-pa-md">
+                Höhenprofil für die gewählte Strecke wird geladen…
+            </div>
+            <div v-else-if="!usable(query.data.value)" class="q-pa-md">
+                Keine Höhendaten für die gewählte Strecke verfügbar.
+            </div>
+        </template>
         <div v-if="hasData" class="text-caption text-muted">
-            {{ query.data.value?.source }}
-            <span v-if="axis === 'time' && query.data.value?.approximateTiming">
-                · Fahrzeit nach Streckenlänge geschätzt
-            </span>
-            <span v-if="query.data.value?.points.some(p => p.elevationM === null)">
-                · Höhendaten teilweise nicht verfügbar
-            </span>
+            {{ sources }}
+            <span v-if="axis === 'time' && approximateTiming">· Fahrzeit nach Streckenlänge geschätzt</span>
+            <span v-if="partialHeights">· Höhendaten teilweise nicht verfügbar</span>
         </div>
     </q-card>
 </template>

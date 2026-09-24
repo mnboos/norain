@@ -28,7 +28,9 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     entitlements.py  every tier limit, in one place
     thumbnails.py    route-list glyph: path simplification + cache-only weather
     ride_quality.py  ride-quality curves + RIDE_QUALITY config (secret; scored on read)
-    journeys.py      journey planning: day cuts, breaks, POI gaps, ranking on read
+    journeys.py      journey constants, lodging filter, ranking on read
+    journey_planner.py  routed insertions: gap fixes, breaks, lodging (RoutingBudget)
+    journey_geometry.py measured lines: Limits, LineMeasure, check_limits, gaps
     pois.py          POI categories (POI_RULES) + corridor query pois_along_sync
     road_prefs.py    road preferences -> penalty-only GraphHopper custom model
     weather_routing.py  rain/headwind zones -> custom-model areas
@@ -569,9 +571,10 @@ request body elsewhere.
 
 A journey is a one-off ride over one or more days: start, end, date, a limit per day and per
 leg (time or distance), the POIs wanted on every leg, lodging kinds, road and weather
-preferences. `plan_journey` (queue `default`) routes the whole journey once with LM, cuts it
-into days at lodging (`journeys.split_days`), and hands over to `plan_journey_routes`, which
-gets each day's GraphHopper alternatives, fills POI gaps and places breaks. Rows:
+preferences. `plan_journey` (queue `default`) picks the day ends one day at a time
+(`tasks._plan_day_ends`: route the remainder, choose lodging, start the next day there) and
+hands over to `plan_journey_routes`, which gets each day's GraphHopper alternatives and, per
+alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.stage`). Rows:
 `Journey` → `JourneyDay` → `JourneyStage` (one per alternative, geometry like a
 `RecurringRoute`). Rules that hold this together:
 
@@ -590,8 +593,39 @@ gets each day's GraphHopper alternatives, fills POI gaps and places breaks. Rows
   network" is therefore `avoid_off_network`. Every GraphHopper request still goes through
   `weather._route_body`; `_route` keeps a request without a model at `(profile, points)`.
 - **POIs steer the route by via points, not by the custom model.** "Water once per leg" is a
-  rule about the whole path and GraphHopper weighs edges; `journeys.gap_fixes` picks the POI
-  with the smallest detour and the planner routes through it.
+  rule about the whole path and GraphHopper weighs edges. Every chosen POI (lodging, gap fix,
+  break) is a via on the final line, so the way there and back is ridden, timed and checked.
+  Each wanted category gets a visit attempt even on a day shorter than the leg limit (or
+  without a leg limit). Successful visits appear as stops, not just detour markers.
+  Search 60–85% into the available leg first, then 40–95%, then the whole leg if no evaluated
+  candidate works. Apply the six-candidate cap separately within each band; cheap early POIs
+  must not crowd out useful later stops. Within a band, prefer facilities within 400 m along
+  the line of another committed stop, routing through each. Missing categories get a visible reason.
+  A POI near the line is not a visit until the line is routed through it. The actual routed
+  waypoint must be within `MAX_POI_SNAP_M` (25 m) of the POI; a successful GraphHopper reply
+  that snaps it to a distant road is rejected, including previously committed POIs in an insertion.
+  POI searches and projections use the current search window, so the same place can be visited
+  again on the return leg. Segment projections are converted to cumulative geodesic metres.
+- **Detours are routed, never guessed.** Self-hosted GraphHopper has **no `/matrix`** (only the
+  hosted commercial API does). A candidate's cost is a local insertion: route ~2 km before it →
+  POI → ~2 km after it (`journey_planner.INSERT_SPAN_M`) against the path's own time between
+  those points, so an alternative keeps its road. `offset_m` only orders the prefilter (top
+  `MAX_ROUTED_CANDIDATES`); only candidates that routed are eligible — a failed or unchecked
+  one never wins, whatever its offset. Pair requests go through `weather.route_legs`: uncached
+  (they would evict the planning pass's geometries from the LRU), through `_route_body` with no
+  points, with the same model as the path, and with a limiter and memo created **per planning
+  invocation** (`RoutingBudget`): `async_to_sync` may give each task a new event loop, and a
+  module-level semaphore would stay bound to a dead one. `MAX_PLAN_ROUTE_REQUESTS` caps a plan.
+- **Limits are time and distance, on the final line.** `journey_geometry.LineMeasure.boundary`
+  takes the tighter of both from each break, never one converted distance for the day.
+  `check_limits` measures the final geometry; `LAST_DAY_SLACK` applies to the last day's day
+  limit only. An alternative over the day limit is dropped while another keeps it; a sole one is
+  kept with `limit_overruns`, and `rank_day` says which limit, in minutes or km. Gaps are
+  stored as `{category: {s, m}}`; old rows hold metres only and must still rank.
+- **Via points are tracked by visit, not by position.** Waypoint indices come from GraphHopper's
+  `leg_time` details of the route in hand (`waypoint_indices`); a loop that passes a via twice
+  must not consume it early. Every remainder, day corridor and final line routes through the
+  vias still ahead. A day with a via gets one path: alternatives take two points only.
 - **Alternatives are per day.** `alternative_route` takes two points only and exceeds the
   2 M node cap beyond ~130 km, so a failure falls back to one path.
 - **Weather-aware routing** (Pro, days within `WEATHER_ROUTING_DAYS`): rain zones as request

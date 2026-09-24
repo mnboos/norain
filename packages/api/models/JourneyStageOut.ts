@@ -28,6 +28,20 @@ import {
     BreakOutToJSON,
     BreakOutToJSONTyped,
 } from './BreakOut';
+import type { GapOut } from './GapOut';
+import {
+    GapOutFromJSON,
+    GapOutFromJSONTyped,
+    GapOutToJSON,
+    GapOutToJSONTyped,
+} from './GapOut';
+import type { LimitOverrunsOut } from './LimitOverrunsOut';
+import {
+    LimitOverrunsOutFromJSON,
+    LimitOverrunsOutFromJSONTyped,
+    LimitOverrunsOutToJSON,
+    LimitOverrunsOutToJSONTyped,
+} from './LimitOverrunsOut';
 
 /**
  * 
@@ -64,9 +78,21 @@ export interface JourneyStageOut {
      */
     breaks?: Array<BreakOut>;
     /**
-     * Longest stretch without each wanted category, m
+     * 
      */
-    gaps?: { [key: string]: number; };
+    gaps?: { [key: string]: GapOut; };
+    /**
+     * 
+     */
+    legSeconds?: number;
+    /**
+     * 
+     */
+    legM?: number;
+    /**
+     * 
+     */
+    limitOverruns?: LimitOverrunsOut;
     /**
      * 
      */
@@ -138,7 +164,10 @@ export function JourneyStageOutFromJSONTyped(json: any, ignoreDiscriminator: boo
         'path': json['path'],
         'viaPoints': json['via_points'] == null ? undefined : json['via_points'],
         'breaks': json['breaks'] == null ? undefined : ((json['breaks'] as Array<any>).map(BreakOutFromJSON)),
-        'gaps': json['gaps'] == null ? undefined : json['gaps'],
+        'gaps': json['gaps'] == null ? undefined : (mapValues(json['gaps'], GapOutFromJSON)),
+        'legSeconds': json['leg_seconds'] == null ? undefined : json['leg_seconds'],
+        'legM': json['leg_m'] == null ? undefined : json['leg_m'],
+        'limitOverruns': json['limit_overruns'] == null ? undefined : LimitOverrunsOutFromJSON(json['limit_overruns']),
         'detours': json['detours'] == null ? undefined : ((json['detours'] as Array<any>).map(PoiOutFromJSON)),
         'detourM': json['detour_m'] == null ? undefined : json['detour_m'],
         'forecastJobId': json['forecast_job_id'] === undefined ? undefined : json['forecast_job_id'] === null ? null : json['forecast_job_id'],
@@ -170,7 +199,10 @@ export function JourneyStageOutToJSONTyped(value?: JourneyStageOut | null, ignor
         'path': value['path'],
         'via_points': value['viaPoints'],
         'breaks': value['breaks'] == null ? undefined : ((value['breaks'] as Array<any>).map(BreakOutToJSON)),
-        'gaps': value['gaps'],
+        'gaps': value['gaps'] == null ? undefined : (mapValues(value['gaps'], GapOutToJSON)),
+        'leg_seconds': value['legSeconds'],
+        'leg_m': value['legM'],
+        'limit_overruns': LimitOverrunsOutToJSON(value['limitOverruns']),
         'detours': value['detours'] == null ? undefined : ((value['detours'] as Array<any>).map(PoiOutToJSON)),
         'detour_m': value['detourM'],
         'forecast_job_id': value['forecastJobId'],

@@ -582,6 +582,7 @@ class JourneyDay(models.Model):
     # Denormalised POI (core.pois.PoiHit.as_json), no FK: a POI re-import never touches it.
     lodging = models.JSONField(null=True, blank=True)
     # The day had to end where the limit ran out: no lodging of the wanted kinds nearby.
+    lodging_detour = models.JSONField(null=True, blank=True)
     lodging_missing = models.BooleanField(default=False)
     weather_routed = models.BooleanField(default=False)
 
@@ -611,7 +612,11 @@ class JourneyStage(models.Model):
     gaps = models.JSONField(default=dict, blank=True, help_text="{category: longest stretch without it, m}")
     detours = models.JSONField(default=list, blank=True, help_text="Gap-fill POIs: [{poi..., category}]")
     detour_m = models.FloatField(default=0, help_text="Extra distance the gap-fill vias cost")
-    leg_m = models.FloatField(default=0, help_text="The leg limit on this stage in metres; 0 = no breaks")
+    leg_m = models.FloatField(
+        default=0, help_text="The leg distance limit; legacy rows may hold a time-derived distance"
+    )
+    leg_seconds = models.IntegerField(default=0)
+    limit_overruns = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering: ClassVar[list[str]] = ["rank"]

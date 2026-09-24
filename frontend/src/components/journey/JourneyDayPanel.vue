@@ -9,7 +9,7 @@ import ForecastSummaryCard from "@/components/ForecastSummaryCard.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import WeatherChart from "@/components/WeatherChart.vue";
 import { useJourneyStageForecast, useJourneyStageForecasts, useJourneyStagesPois } from "@/queries/journeys";
-import { clock, dayLabel, duration, km } from "@/utils/journeys";
+import { clock, dayLabel, duration, gapExcessLabel, km } from "@/utils/journeys";
 import { CANDIDATE_COLOR, poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
 import { alternativeColor, scoreColor } from "@/utils/rideQuality";
 
@@ -140,11 +140,20 @@ const mapPois = computed<MapPoi[]>(() => {
 });
 
 const missingGaps = computed(() =>
-    Object.entries(stage.value?.gaps ?? {})
-        .filter(([category, gap]) => journey.value.poiCategories.includes(category) && gap > legLimitM.value)
-        .map(([category, gap]) => `${poiCategory(category).label}: ${km(gap)} ohne`),
+    Object.entries(stage.value?.gaps ?? {}).flatMap(([category, gap]) => {
+        if (!journey.value.poiCategories.includes(category)) return [];
+        const label = gapExcessLabel(gap, stage.value?.legSeconds, stage.value?.legM ?? journey.value.maxLegDistanceM);
+        return label ? [`${poiCategory(category).label}: ${label}`] : [];
+    }),
 );
-const legLimitM = computed(() => journey.value.maxLegDistanceM ?? Number.POSITIVE_INFINITY);
+const planningWarnings = computed(() =>
+    (stage.value?.reasons ?? []).filter(
+        reason =>
+            reason.startsWith("Tageslimit:") ||
+            /^Etappe \d+:/.test(reason) ||
+            reason.startsWith("Kein erreichbarer Stopp für "),
+    ),
+);
 
 function breakEta(elapsedS: number): string {
     const departure = stage.value?.recommendedDeparture ?? stage.value?.departureTime;
@@ -189,6 +198,13 @@ function breakEta(elapsedS: number): string {
                             <template #avatar><q-icon :name="symSharpWarning" /></template>
                             Keine passende Unterkunft nahe der Strecke gefunden. Der Tag endet, wo das Tageslimit
                             erreicht ist.
+                        </q-banner>
+                    </q-card-section>
+
+                    <q-card-section v-if="planningWarnings.length" data-testid="journey-limit-warnings">
+                        <q-banner class="bg-tint-wet rounded-borders" role="alert">
+                            <template #avatar><q-icon :name="symSharpWarning" /></template>
+                            <div v-for="warning in planningWarnings" :key="warning">{{ warning }}</div>
                         </q-banner>
                     </q-card-section>
 
@@ -367,8 +383,14 @@ function breakEta(elapsedS: number): string {
                 @select-alternative="pick"
             />
         </q-card>
-        <div v-if="stage" class="row items-center q-gutter-x-md">
-            <q-toggle v-model="showAllPois" dense label="Weitere Orte in der Umgebung der Strecken zeigen (grau)" />
+        <div v-if="stage" class="row items-center">
+            <q-toggle
+                v-model="showAllPois"
+                dense
+                label="Weitere Orte in der Umgebung der Strecken zeigen (grau)"
+                size="sm"
+                class="no-padding"
+            />
             <span class="text-caption text-muted">
                 Farbig: eingeplant ·
                 <span class="poi-dot" :style="{ background: CANDIDATE_COLOR }" aria-hidden="true" />

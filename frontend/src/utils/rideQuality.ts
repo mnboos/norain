@@ -44,10 +44,12 @@ export const CASING_LIGHT = "#1b2733";
 export const CASING_DARK = "#e8eef2";
 export const CASING_OPACITY = 0.55;
 
-// The journey alternatives the user has not picked, one colour per variant: all off the warm
-// ramp and the blue line drawn when there is no forecast. Lighter on the dark basemap.
-const ALTERNATIVE_LIGHT: readonly [string, ...string[]] = ["#0d9488", "#7c3aed", "#65a30d", "#64748b"];
-const ALTERNATIVE_DARK: readonly [string, ...string[]] = ["#2dd4bf", "#a78bfa", "#a3e635", "#94a3b8"];
+// A coordinated cool palette: ocean, indigo, mulberry, then slate as a spare.
+// Similar visual weight keeps alternatives equal; the warm weather ramp retains its meaning.
+// Dark-mode counterparts preserve the hues while lifting lightness for the dark basemap.
+// Shared by the map, variant swatches and elevation profiles.
+const ALTERNATIVE_LIGHT: readonly [string, ...string[]] = ["#28788e", "#6667ab", "#a05c83", "#657a89"];
+const ALTERNATIVE_DARK: readonly [string, ...string[]] = ["#69b8cc", "#a6a7e0", "#d794b7", "#a0b0bd"];
 
 /** The colour of the variant at `index` in the day's list, stable whichever one is picked. */
 export function alternativeColor(index: number, dark: boolean): string {

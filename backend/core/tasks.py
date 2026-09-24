@@ -6,12 +6,12 @@ Background tasks for route geometry computation and forecast grid pre-warming.
 import asyncio
 import random
 from datetime import UTC, date, datetime, timedelta
+from time import monotonic
 
 from asgiref.sync import async_to_sync, sync_to_async
 from django.db import transaction
 from django.db.models import F
 from loguru import logger
-from shapely.geometry import LineString, Point
 
 from core import departures, telemetry
 from core.claims import claim_cell, release_cell
@@ -31,18 +31,9 @@ from core.grid import (
     get_or_fetch_forecast_cell,
 )
 from core.jobs import MAX_PLAN_ATTEMPTS, PLAN_RETRY_DELAY, get_or_start_job, publish, set_status
-from core.journeys import (
-    FILL_CORRIDOR_M,
-    LODGING_CORRIDOR_M,
-    MAX_FILL_ROUNDS,
-    NEAR_M,
-    along_limit,
-    gap_fixes,
-    lodging_candidates,
-    longest_gaps,
-    place_breaks,
-    split_days,
-)
+from core.journey_geometry import Limits, LineMeasure
+from core.journey_planner import JourneyPlanner, RoutingBudget
+from core.journeys import LAST_DAY_SLACK, LODGING_CORRIDOR_M, LODGING_WINDOW, lodging_candidates
 from core.models import (
     ForecastJob,
     Journey,
@@ -68,6 +59,7 @@ from core.weather import (  # reuse existing functions
     build_geometry,
     compute_route_weather,
     forecast_days_for,
+    route_legs,
     routing_points,
 )
 from core.weather_routing import cell_weather, corridor_cells, zone_model
@@ -1082,60 +1074,43 @@ async def _plan_journey_async(journey_id: str, revision: int) -> None:
         return
     limits = await entitlements_for(journey.owner)
     road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs)) or None
+    budget = RoutingBudget()
+    began = monotonic()
     try:
-        base = await build_geometry(journey.profile, journey.routing_points, SAMPLE_INTERVAL_DEFAULT_S, road_model)
+        days = await _plan_day_ends(journey, limits, road_model, budget)
+    except JourneyPlanningError as exc:
+        await _set_plan_status(journey_id, revision, Journey.PlanStatus.FAILED, str(exc))
+        return
     except ROUTING_ERRORS as exc:
         logger.info(f"Journey {journey_id}: no route: {exc}")
         await _set_plan_status(
             journey_id, revision, Journey.PlanStatus.FAILED, "Für diese Reise wurde keine Route gefunden."
         )
         return
-
-    # Along the line as vertex_distances measures it, like the day limit and the POI positions.
-    total_m = along_limit(base, None, None)
-    day_limit = along_limit(base, _day_seconds(journey), journey.max_day_distance_m)
-    lodgings = lodging_candidates(
-        await _pois_along(base["polyline"], ["lodging"], LODGING_CORRIDOR_M), journey.lodging_kinds or []
-    )
-    try:
-        cuts = split_days(total_m, day_limit, lodgings, base)
-    except ValueError:
-        await _set_plan_status(journey_id, revision, Journey.PlanStatus.FAILED, "Das Tageslimit erlaubt keine Fahrt.")
-        return
-    if len(cuts) > MAX_JOURNEY_DAYS:
+    except Exception:
         await _set_plan_status(
-            journey_id,
-            revision,
-            Journey.PlanStatus.FAILED,
-            f"Mehr als {MAX_JOURNEY_DAYS} Tage: bitte längere Tagesetappen wählen.",
+            journey_id, revision, Journey.PlanStatus.FAILED, "Die Reise konnte nicht geplant werden."
         )
+        raise
+    finally:
+        _log_journey_routing(journey_id, budget, began)
+    if days is None:
         return
-
-    start = [base["polyline"][0][0], base["polyline"][0][1]]
-    days = []
-    for index, cut in enumerate(cuts):
-        day = journey.start_date + timedelta(days=index)
-        days.append(
-            {
-                "index": index,
-                "date": day.isoformat(),
-                "start": start,
-                "end": cut.end,
-                "lodging": cut.lodging.as_json() if cut.lodging else None,
-                "lodging_missing": cut.lodging is None and index < len(cuts) - 1,
-                "weather": _wants_weather_routing(journey, limits, day),
-            }
-        )
-        start = cut.end
-    if not await _journey_is_current(journey_id, revision).aupdate(plan_state={"days": days}, plan_attempts=0):
+    state = {"days": days, "route_requests": budget.used}
+    if not await _journey_is_current(journey_id, revision).aupdate(plan_state=state, plan_attempts=0):
         return
 
     enqueued = 0
     for day in days:
+        if not await _journey_is_current(journey_id, revision).aexists():
+            return
         if day["weather"]:
             enqueued += await _enqueue_corridor_cells(journey, day, road_model)
+    if not await _journey_is_current(journey_id, revision).aexists():
+        return
     if enqueued:
-        await _set_plan_status(journey_id, revision, Journey.PlanStatus.WEATHER)
+        if not await _set_plan_status(journey_id, revision, Journey.PlanStatus.WEATHER):
+            return
         await plan_journey_routes.using(run_after=datetime.now(tz=UTC) + CORRIDOR_RETRY_DELAY).aenqueue(
             journey_id, revision
         )
@@ -1143,10 +1118,124 @@ async def _plan_journey_async(journey_id: str, revision: int) -> None:
         await plan_journey_routes.aenqueue(journey_id, revision)
 
 
+class JourneyPlanningError(Exception):
+    """A valid request for which no progressing day plan can be made."""
+
+
+def _planner(journey, model, budget):
+    return JourneyPlanner(journey.profile, model, budget, build_geometry, route_legs, _pois_along)
+
+
+def _day_points(day):
+    return (tuple(day["start"]), *(tuple(p) for p in day.get("vias", [])), tuple(day["end"]))
+
+
+def _log_journey_routing(journey_id, budget, began):
+    logger.info(
+        "Journey {}: optional_requests={} essential_requests={} failures={} exhausted={} duration_s={:.2f}",
+        journey_id,
+        budget.used,
+        budget.essential,
+        budget.failures,
+        budget.exhausted,
+        monotonic() - began,
+    )
+
+
+async def _plan_day_ends(journey, entitlements, model, budget):
+    planner = _planner(journey, model, budget)
+    pending = list(journey.via_points or [])
+    remainder, indices = await planner.route(journey.routing_points)
+    start = list(journey.routing_points[0])
+    destination = list(journey.routing_points[-1])
+    day_limits = Limits(_day_seconds(journey), journey.max_day_distance_m)
+    days = []
+    while True:
+        if not await _journey_is_current(journey.id, journey.plan_revision).aexists():
+            return None
+        if len(days) >= MAX_JOURNEY_DAYS:
+            raise JourneyPlanningError(f"Mehr als {MAX_JOURNEY_DAYS} Tage: bitte längere Tagesetappen wählen.")
+        measure = LineMeasure(remainder)
+        last = day_limits.scaled(1 + LAST_DAY_SLACK).allows(*measure.between(0, -1))
+        lodging, lodging_detour = None, None
+        if last:
+            end, day_vias = destination, pending
+        else:
+            boundary = measure.boundary(0, day_limits)
+            if measure.meters[boundary] < 1:
+                raise JourneyPlanningError("Das Tageslimit erlaubt keine Fahrt.")
+            events = [
+                {"index": idx, "point": point, "mandatory": True}
+                for point, idx in zip(pending, indices[1:-1], strict=True)
+            ]
+            hits = lodging_candidates(
+                await planner.window_hits(
+                    remainder,
+                    measure.index(measure.meters[boundary] * (1 - LODGING_WINDOW)),
+                    boundary,
+                    ["lodging"],
+                    LODGING_CORRIDOR_M,
+                ),
+                journey.lodging_kinds or [],
+            )
+            hits = [h for h in hits if h.along_m >= measure.meters[boundary] * (1 - LODGING_WINDOW)]
+            choices = await planner.candidates(remainder, events, hits, 0, boundary, day_limits)
+            accepted = None
+            for choice in [*choices, None]:
+                if choice is not None:
+                    inserted = await planner.insert(remainder, events, choice, 0, day_limits)
+                    if not inserted:
+                        continue
+                    proposal, mapped, stop = inserted
+                    endpoint, at = stop["point"], stop["index"]
+                else:
+                    proposal, mapped, at = remainder, events, boundary
+                    endpoint = proposal["polyline"][at][:2]
+                # Partition from the actual tentative visit order; mutate nothing yet.
+                consumed = [e["point"] for e in mapped if e.get("mandatory") and e["index"] <= at]
+                still_pending = [e["point"] for e in mapped if e.get("mandatory") and e["index"] > at]
+                try:
+                    next_geometry, next_indices = await planner.route([endpoint, *still_pending, destination])
+                except ROUTING_ERRORS:
+                    budget.failures += 1
+                    if choice is None:
+                        raise
+                    continue
+                progress = LineMeasure(proposal).meters[at]
+                if progress < 1 or LineMeasure(next_geometry).meters[-1] > measure.meters[-1] - 1:
+                    continue
+                accepted = endpoint, consumed, still_pending, next_geometry, next_indices
+                if choice is not None:
+                    lodging = stop["pois"][0]
+                    lodging_detour = {"s": lodging["detour_s"], "m": lodging["detour_m"]}
+                break
+            if accepted is None:
+                raise JourneyPlanningError("Das Tageslimit erlaubt keine Fahrt.")
+            end, day_vias, next_pending, next_geometry, next_indices = accepted
+        day_date = journey.start_date + timedelta(days=len(days))
+        days.append(
+            {
+                "index": len(days),
+                "date": day_date.isoformat(),
+                "start": start,
+                "end": end,
+                "vias": day_vias,
+                "lodging": lodging,
+                "lodging_detour": lodging_detour,
+                "lodging_missing": not last and lodging is None,
+                "last_day": last,
+                "weather": _wants_weather_routing(journey, entitlements, day_date),
+            }
+        )
+        if last:
+            return days
+        start, pending, remainder, indices = end, next_pending, next_geometry, next_indices
+
+
 async def _day_corridor(journey: Journey, day: dict, model: dict | None):
     """The day routed as it stands, and the corridor cells around it with their window."""
 
-    points = (tuple(day["start"]), tuple(day["end"]))
+    points = _day_points(day)
     geometry = await build_geometry(journey.profile, points, SAMPLE_INTERVAL_DEFAULT_S, model)
     departure = _day_departure(journey, date.fromisoformat(day["date"]))
     days = forecast_days_for(departure, geometry["sample_points"], local_today())
@@ -1204,8 +1293,16 @@ async def _plan_journey_routes_async(journey_id: str, revision: int) -> None:
 
     if not await _set_plan_status(journey_id, revision, Journey.PlanStatus.ROUTING):
         return
+    budget = RoutingBudget(used=journey.plan_state.get("route_requests", 0))
+    began = monotonic()
     try:
-        planned = [await _plan_day(journey, day, limits, road_model) for day in days]
+        planned = []
+        for index, day in enumerate(days):
+            if not await _journey_is_current(journey_id, revision).aexists():
+                return
+            planned.append(
+                await _plan_day(journey, {**day, "last_day": index == len(days) - 1}, limits, road_model, budget)
+            )
     except ROUTING_ERRORS as exc:
         logger.info(f"Journey {journey_id}: a day could not be routed: {exc}")
         await _set_plan_status(
@@ -1217,6 +1314,8 @@ async def _plan_journey_routes_async(journey_id: str, revision: int) -> None:
             journey_id, revision, Journey.PlanStatus.FAILED, "Die Reise konnte nicht geplant werden."
         )
         raise
+    finally:
+        _log_journey_routing(journey_id, budget, began)
     await sync_to_async(_store_journey_plan)(journey_id, revision, planned)
 
 
@@ -1234,81 +1333,48 @@ async def _weather_model(journey: Journey, day: dict, road_model: dict | None) -
         model = merge_models(road_model or {}, zones) or None
         if not zones:
             break
-        rerouted = await build_geometry(
-            journey.profile, (tuple(day["start"]), tuple(day["end"])), SAMPLE_INTERVAL_DEFAULT_S, model
-        )
+        rerouted = await build_geometry(journey.profile, _day_points(day), SAMPLE_INTERVAL_DEFAULT_S, model)
         if abs(rerouted["total_distance_m"] - geometry["total_distance_m"]) < 0.01 * geometry["total_distance_m"]:
             break
         geometry, cells = rerouted, corridor_cells(rerouted["sample_points"])
     return model
 
 
-async def _plan_day(journey: Journey, day: dict, limits, road_model: dict | None) -> dict:
-    """The day's stages: alternatives, each gap-filled, with breaks."""
-
+async def _plan_day(journey: Journey, day: dict, limits, road_model: dict | None, budget=None) -> dict:
     model = await _weather_model(journey, day, road_model) if day["weather"] else road_model
-    points = (tuple(day["start"]), tuple(day["end"]))
-    try:
-        paths = await build_geometries(
-            journey.profile, points, limits.max_journey_alternatives, SAMPLE_INTERVAL_DEFAULT_S, model
-        )
-    except ROUTING_ERRORS:
-        # Usually GraphHopper's node cap: alternatives on a long day. One path still works.
-        paths = [await build_geometry(journey.profile, points, SAMPLE_INTERVAL_DEFAULT_S, model)]
-
-    stages = []
-    seen: set[tuple[int, int]] = set()
-    for rank, path in enumerate(paths):
-        leg_m = along_limit(path, journey.max_leg_seconds, journey.max_leg_distance_m)
-        stage = await _plan_stage(journey, day, path, model, leg_m)
-        # Gap-filling can pull two alternatives onto the same road.
-        signature = (round(stage["geometry"]["total_distance_m"]), stage["geometry"]["total_seconds"])
-        if signature in seen:
-            continue
-        seen.add(signature)
-        stages.append({**stage, "rank": rank})
-    return {**day, "stages": stages}
-
-
-def _order_along(polyline: list[list[float]], points: list[list[float]]) -> list[list[float]]:
-    line = LineString([p[:2] for p in polyline])
-    return sorted(points, key=lambda p: line.project(Point(p[0], p[1])))
-
-
-async def _plan_stage(journey: Journey, day: dict, path: dict, model: dict | None, leg_m: float) -> dict:
-    wanted = list(journey.poi_categories or [])
-    geometry = path
-    vias: list[list[float]] = []
-    detours: list[dict] = []
-    for _ in range(MAX_FILL_ROUNDS if wanted and leg_m < path["total_distance_m"] else 0):
-        hits = await _pois_along(geometry["polyline"], wanted, FILL_CORRIDOR_M)
-        fixes = gap_fixes(hits, hits, geometry["total_distance_m"], wanted, leg_m)
-        if not fixes:
-            break
-        candidate_vias = _order_along(geometry["polyline"], [*vias, *([f.lon, f.lat] for f in fixes)])
+    planner = _planner(journey, model, budget if budget is not None else RoutingBudget())
+    points = _day_points(day)
+    events = []
+    if day.get("vias"):
+        path, indices = await planner.route(points)
+        events = [{"index": i, "point": p, "mandatory": True} for p, i in zip(day["vias"], indices[1:-1], strict=True)]
+        paths = [path]
+    else:
         try:
-            geometry = await build_geometry(
-                journey.profile,
-                (tuple(day["start"]), *(tuple(v) for v in candidate_vias), tuple(day["end"])),
-                SAMPLE_INTERVAL_DEFAULT_S,
-                model,
+            paths = await build_geometries(
+                journey.profile, points, limits.max_journey_alternatives, SAMPLE_INTERVAL_DEFAULT_S, model
             )
         except ROUTING_ERRORS:
+            paths = [await build_geometry(journey.profile, points, SAMPLE_INTERVAL_DEFAULT_S, model)]
+    stages = []
+    seen = set()
+    for rank, path in enumerate(paths):
+        if not await _journey_is_current(journey.id, journey.plan_revision).aexists():
             break
-        vias = candidate_vias
-        detours.extend({**fix.as_json()} for fix in fixes)
-
-    total = geometry["total_distance_m"]
-    hits = await _pois_along(geometry["polyline"], wanted, NEAR_M) if wanted else []
-    return {
-        "geometry": geometry,
-        "via_points": vias,
-        "gaps": longest_gaps(hits, total, wanted),
-        "breaks": place_breaks(geometry, total, leg_m, hits, wanted) if leg_m < total else [],
-        "detours": detours,
-        "detour_m": round(max(0.0, total - path["total_distance_m"]), 1),
-        "leg_m": round(leg_m, 1) if leg_m < total else 0.0,
-    }
+        stage = await planner.stage(
+            path,
+            [dict(e) for e in events],
+            list(journey.poi_categories or []),
+            Limits(journey.max_leg_seconds, journey.max_leg_distance_m),
+            Limits(_day_seconds(journey), journey.max_day_distance_m),
+            last_day=day.get("last_day", False),
+        )
+        signature = tuple(tuple(p) for p in stage["geometry"]["polyline"])
+        if signature not in seen:
+            seen.add(signature)
+            stages.append({**stage, "rank": rank})
+    compliant = [s for s in stages if not s["limit_overruns"].get("day")]
+    return {**day, "stages": compliant or stages}
 
 
 def _store_journey_plan(journey_id: str, revision: int, planned: list[dict]) -> None:
@@ -1327,6 +1393,7 @@ def _store_journey_plan(journey_id: str, revision: int, planned: list[dict]) -> 
                 start=day["start"],
                 end=day["end"],
                 lodging=day["lodging"],
+                lodging_detour=day.get("lodging_detour"),
                 lodging_missing=day["lodging_missing"],
                 weather_routed=day["weather"],
             )
@@ -1348,6 +1415,8 @@ def _store_journey_plan(journey_id: str, revision: int, planned: list[dict]) -> 
                     detours=stage["detours"],
                     detour_m=stage["detour_m"],
                     leg_m=stage["leg_m"],
+                    leg_seconds=stage.get("leg_seconds", 0),
+                    limit_overruns=stage.get("limit_overruns", {}),
                 )
         journey.plan_status = Journey.PlanStatus.DONE
         journey.plan_error = ""

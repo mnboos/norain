@@ -101,6 +101,8 @@ class PoiOut(CamelSchema):
     lat: float
     along_m: float
     offset_m: float
+    detour_s: int | None = None
+    detour_m: float | None = None
 
 
 class BreakOut(CamelSchema):
@@ -111,6 +113,25 @@ class BreakOut(CamelSchema):
     pois: list[PoiOut] = Field(default_factory=list)
 
 
+class GapOut(CamelSchema):
+    s: int | None = None
+    m: float
+
+
+class OverrunOut(CamelSchema):
+    over_s: float = 0
+    over_m: float = 0
+
+
+class LegOverrunOut(OverrunOut):
+    leg: int
+
+
+class LimitOverrunsOut(CamelSchema):
+    day: OverrunOut | None = None
+    legs: list[LegOverrunOut] = Field(default_factory=list)
+
+
 class JourneyStageOut(CamelSchema):
     id: UUID
     rank: int
@@ -119,7 +140,10 @@ class JourneyStageOut(CamelSchema):
     path: list[list[float]] = Field(description="The line, simplified for an overview map")
     via_points: list[list[float]] = Field(default_factory=list)
     breaks: list[BreakOut] = Field(default_factory=list)
-    gaps: dict[str, float] = Field(default_factory=dict, description="Longest stretch without each wanted category, m")
+    gaps: dict[str, GapOut] = Field(default_factory=dict)
+    leg_seconds: int = 0
+    leg_m: float = 0
+    limit_overruns: LimitOverrunsOut = Field(default_factory=LimitOverrunsOut)
     detours: list[PoiOut] = Field(default_factory=list)
     detour_m: float = 0
     # The forecast, started or joined when the journey is read; None outside the forecast window.
@@ -140,6 +164,7 @@ class JourneyDayOut(CamelSchema):
     start: list[float]
     end: list[float]
     lodging: PoiOut | None = None
+    lodging_detour: GapOut | None = None
     lodging_missing: bool = False
     weather_routed: bool = False
     forecast_available: bool = False
@@ -332,16 +357,16 @@ async def get_journey(request: HttpRequest, journey_id: UUID):
                     "id": stage.id,
                     "total_seconds": stage.total_seconds,
                     "gaps": stage.gaps,
+                    "leg_seconds": stage.leg_seconds,
+                    "leg_m": stage.leg_m,
+                    "limit_overruns": stage.limit_overruns,
                     "detours": stage.detours,
                     # A refreshing job ranks by its stale result, so the recommendation does
                     # not blink out every time the forecast is renewed.
                     "result": _ranked_result(jobs.get(stage.id)),
                 }
             )
-        # A leg limit in time becomes metres per stage when it is planned; the day's alternatives
-        # are judged against the shortest of them.
-        day_leg = min((s.leg_m for s in stages if s.leg_m), default=0.0)
-        ranking = {row["id"]: row for row in rank_day(rows, day_leg)}
+        ranking = {row["id"]: row for row in rank_day(rows)}
         stages_out = []
         for stage in stages:
             ranked = ranking.get(stage.id, {})
@@ -357,7 +382,10 @@ async def get_journey(request: HttpRequest, journey_id: UUID):
                     path=[line[i] for i in keep],
                     via_points=stage.via_points,
                     breaks=[BreakOut(**b) for b in stage.breaks],
-                    gaps=stage.gaps,
+                    gaps={k: GapOut(**v) if isinstance(v, dict) else GapOut(m=v) for k, v in stage.gaps.items()},
+                    leg_seconds=stage.leg_seconds,
+                    leg_m=stage.leg_m,
+                    limit_overruns=LimitOverrunsOut(**stage.limit_overruns),
                     detours=[PoiOut(**d) for d in stage.detours],
                     detour_m=stage.detour_m,
                     forecast_job_id=job.id if job else None,
@@ -378,6 +406,7 @@ async def get_journey(request: HttpRequest, journey_id: UUID):
                 start=day.start,
                 end=day.end,
                 lodging=_poi_out(day.lodging),
+                lodging_detour=GapOut(**day.lodging_detour) if day.lodging_detour else None,
                 lodging_missing=day.lodging_missing,
                 weather_routed=day.weather_routed,
                 forecast_available=available,

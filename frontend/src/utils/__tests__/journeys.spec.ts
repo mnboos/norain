@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { journeyIsBusy } from "@/queries/journeys";
-import { clock, duration, journeyDates, km } from "@/utils/journeys";
+import { clock, duration, gapExcessLabel, journeyDates, km } from "@/utils/journeys";
 import { poiCategory, poiName } from "@/utils/poiCategories";
 
 describe("journey formatting", () => {
@@ -38,5 +38,18 @@ describe("journeyIsBusy", () => {
         expect(journeyIsBusy({ planStatus: "done", days: [{ stages: [{ forecastStatus: "fetching" }] }] })).toBe(true);
         const done = { planStatus: "done", days: [{ stages: [{ forecastStatus: "done" }, { forecastStatus: null }] }] };
         expect(journeyIsBusy(done)).toBe(false);
+    });
+});
+
+
+describe("journey gap limits", () => {
+    it("reports time-only and combined limits", () => {
+        expect(gapExcessLabel({ s: 2700, m: 18000 }, 1800)).toBe("45 min ohne");
+        expect(gapExcessLabel({ s: 2700, m: 18000 }, 1800, 10000)).toBe("45 min / 18 km ohne");
+    });
+    it("accepts legacy distance gaps without inventing time", () => {
+        expect(gapExcessLabel(18000, 1800)).toBe("");
+        expect(gapExcessLabel(18000, null, 10000)).toBe("18 km ohne");
+        expect(gapExcessLabel({ s: null, m: 18000 }, 1800)).toBe("");
     });
 });
