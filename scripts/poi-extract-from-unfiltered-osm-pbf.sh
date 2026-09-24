@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Extract the journey planner's POIs from raw .osm.pbf files into POIS_FILE in
-# ROUTING_OSM_IMPORT_DIR, which just poi-import reads: `just poi-extract-from-unfiltered-osm-pbf FILE…` runs this.
+# ROUTING_OSM_IMPORT_DIR, which just poi-import-into-db reads: `just poi-extract-from-unfiltered-osm-pbf FILE…` runs this.
 # The files can be anywhere; several are merged into one POI file.
 #
 # Takes from just: CONTAINER (podman or docker), POIS_FILE (named after
@@ -15,4 +15,4 @@ osm_input_mounts "$@"
 compose=("$CONTAINER" compose)
 "${compose[@]}" build graphhopper
 "${compose[@]}" run --rm --no-deps "${mounts[@]}" --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/$POIS_FILE" "${inputs[@]}"
-echo "Wrote $POIS_FILE. Load it with: just poi-import (just poi-import-prod on the VPS)"
+echo "Wrote $POIS_FILE. Load it with: just poi-import-into-db"

@@ -166,7 +166,7 @@ Netherlands, Belgium and Denmark).
 6. Load the journey planner's POIs, which step 4 extracted from the same files:
 
    ```bash
-   just poi-import
+   just poi-import-into-db
    ```
 
    On another machine, such as the VPS, copy `pois-europe-cycling.geojsonseq` into its import

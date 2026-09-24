@@ -154,12 +154,13 @@ was filtered from, wherever they are; several are merged into one POI file, name
 ```bash
 cd /srv/norain
 just poi-extract-from-unfiltered-osm-pbf ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf
-just poi-import-prod    # replaces the Poi table, in the backend image via worker-default
+just poi-import-into-db    # replaces the Poi table, in the backend image via worker-default
 ```
 
 If `just osm-filter-many-raw-pbf-into-one` ran elsewhere, it already wrote that POI file: copying
-it into `ROUTING_OSM_IMPORT_DIR` and running `just poi-import-prod` is enough.
-`just poi-import` is the development version; it uses the host's virtualenv.
+it into `ROUTING_OSM_IMPORT_DIR` and running `just poi-import-into-db` is enough.
+`just poi-import-into-db` runs in `worker-default` when `COMPOSE_FILE` is a prod file, and in the
+host's virtualenv otherwise.
 
 ## First deployment and updates
 

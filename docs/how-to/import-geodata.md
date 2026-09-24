@@ -36,7 +36,7 @@ In short:
 # in .env: ROUTING_OSM_FILE_FILTERED=bike-europe-cycling.osm.pbf, and enough memory
 just osm-filter-many-raw-pbf-into-one data/downloads/osm/*.osm.pbf
 just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
-just poi-import
+just poi-import-into-db
 ```
 
 The first command filters the files and merges them into one. The second builds the graph

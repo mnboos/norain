@@ -577,8 +577,8 @@ gets each day's GraphHopper alternatives, fills POI gaps and places breaks. Rows
 
 - **POIs are not in the graph.** The bike filter drops standalone amenity nodes, so
   `docker/osm-extract-pois.sh` (`just poi-extract-from-unfiltered-osm-pbf`) extracts them from the *raw* extract and
-  `manage.py import_pois` (`just poi-import`; `poi-import-prod` on the VPS,
-  whose host has no GDAL) replaces the `Poi` table in one transaction.
+  `manage.py import_pois` (`just poi-import-into-db`, which runs in `worker-default` under a prod
+  `COMPOSE_FILE` because the VPS host has no GDAL) replaces the `Poi` table in one transaction.
   `POI_RULES` in `core/pois.py` is the one tag map; a test checks the script filters every tag
   in it. Journeys store the POIs they use as JSON, never as FKs, so a re-import is free.
   An object gets one `Poi` row per matching category (unique on `osm_ref` + `category`): a
