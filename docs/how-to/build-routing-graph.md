@@ -170,9 +170,8 @@ Netherlands, Belgium and Denmark).
    ```
 
    On another machine, such as the VPS, copy `pois-europe-cycling.geojsonseq` into its import
-   folder too. `just poi-extract` cannot remake it from the merged file: it needs the raw files,
-   named, for example `just poi-extract germany-latest.osm.pbf austria-latest.osm.pbf` with
-   both in the import folder.
+   folder too, or remake it there from the raw files:
+   `just poi-extract data/downloads/osm/*.osm.pbf`.
 
 7. Do the checks in [after every build](#after-every-build).
 

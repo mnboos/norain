@@ -148,17 +148,21 @@ osm-filter-many-raw-pbf-into-one +files:
 osm-filter-many-raw-pbf-into-one +files:
     CONTAINER={{ quote(container) }} ROUTING_OSM_FILE_FILTERED={{ quote(env("ROUTING_OSM_FILE_FILTERED", "")) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/osm-filter-many-raw-pbf-into-one.sh "$@"
 
-# poi-extract(-prod) without files read OSM_DATA_URL's extract, which only fits a graph built
-# from it. A merged ROUTING_OSM_FILE_FILTERED has no single raw extract in the folder, and
-# reading OSM_DATA_URL's would name one country's POIs after the merged file.
-poi_default_fits := if routing_osm_file_filtered == "bike-" + file_name(osm_data_url) { "true" } else { "false" }
-poi_merged_error := routing_osm_file_filtered + " is not built from OSM_DATA_URL (" + file_name(osm_data_url) + "). Its POIs are the " + pois_file + " that just osm-filter-many-raw-pbf-into-one wrote with it: copy that file into ROUTING_OSM_IMPORT_DIR, or name the raw extracts in that folder, e.g. just poi-extract-prod germany-latest.osm.pbf austria-latest.osm.pbf"
-
-[doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) into pois-<name>.geojsonseq in ROUTING_OSM_IMPORT_DIR; just poi-import loads it. Reads the raw extracts named (they must be in that folder), else OSM_DATA_URL's. just osm-filter-many-raw-pbf-into-one already writes them for its files.")]
+[doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) from raw .osm.pbf files, anywhere (several are merged), into the POI file named after ROUTING_OSM_FILE_FILTERED in ROUTING_OSM_IMPORT_DIR, e.g. just poi-extract data/downloads/osm/*.osm.pbf. Use the same files the graph was filtered from. just poi-import (poi-import-prod on the VPS) loads it.")]
 [group('geodata')]
-poi-extract *files:
-    {{ if files == "" { if poi_default_fits == "true" { "" } else { error(poi_merged_error) } } else { "" } }}{{ container }} compose build graphhopper
-    {{ container }} compose run --rm --no-deps --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/{{ pois_file }}" {{ if files == "" { "/osm_data/" + file_name(osm_data_url) } else { replace_regex(files, '(?:\S*[/\\])?(\S+)', '/osm_data/${1}') } }}
+[positional-arguments]
+[unix]
+poi-extract +files:
+    CONTAINER={{ quote(container) }} POIS_FILE={{ quote(pois_file) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} bash scripts/poi-extract.sh "$@"
+
+# Git Bash: see osm-filter-many-raw-pbf-into-one.
+[doc("Extract the journey planner's POIs (water, toilets, shelters, lodging, ...) from raw .osm.pbf files, anywhere (several are merged), into the POI file named after ROUTING_OSM_FILE_FILTERED in ROUTING_OSM_IMPORT_DIR, e.g. just poi-extract data/downloads/osm/*.osm.pbf. Use the same files the graph was filtered from. just poi-import (poi-import-prod on the VPS) loads it.")]
+[group('geodata')]
+[positional-arguments]
+[windows]
+[script("C:/Program Files/Git/bin/bash.exe", "-eu")]
+poi-extract +files:
+    CONTAINER={{ quote(container) }} POIS_FILE={{ quote(pois_file) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/poi-extract.sh "$@"
 
 [doc("Replace the POI table with the file from just poi-extract. Readers keep the old POIs until the new set is in.")]
 [group('geodata')]
@@ -166,12 +170,7 @@ poi-extract *files:
 poi-import:
     uv run python manage.py import_pois {{ quote(join(justfile_directory(), env("ROUTING_OSM_IMPORT_DIR"), pois_file)) }}
 
-[doc("On the VPS: extract the POIs from the raw extracts named (they must be in ROUTING_OSM_IMPORT_DIR), else OSM_DATA_URL's. just poi-import-prod loads them. For a merged graph, copying the POI file just osm-filter-many-raw-pbf-into-one wrote is enough.")]
-[group('geodata')]
-poi-extract-prod *files:
-    {{ if files == "" { if poi_default_fits == "true" { "" } else { error(poi_merged_error) } } else { "" } }}{{ container }} compose --env-file .env run --rm --pull never --no-deps --entrypoint /graphhopper/extract-pois.sh graphhopper "/osm_data/{{ pois_file }}" {{ if files == "" { "/osm_data/" + file_name(osm_data_url) } else { replace_regex(files, '(?:\S*[/\\])?(\S+)', '/osm_data/${1}') } }}
-
-[doc("On the VPS: replace the POI table from just poi-extract-prod's file. Runs in the backend image, which has GDAL; the host needs none.")]
+[doc("On the VPS: replace the POI table from just poi-extract's file. Runs in the backend image, which has GDAL; the host needs none.")]
 [group('geodata')]
 poi-import-prod:
     {{ container }} compose --env-file .env run --rm --pull never --no-deps worker-default python manage.py import_pois "/osm_data/{{ pois_file }}"

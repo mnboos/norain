@@ -147,29 +147,19 @@ version; stop Photon on both machines during the copy.
 ## Import the journey planner's POIs
 
 The POIs come from the raw OSM extracts, not from the bike-filtered file. Run both steps in
-containers on the VPS (the host has no GDAL, which Django needs).
-
-If the graph was merged from several countries (`ROUTING_OSM_FILE_FILTERED`, for example
-`bike-europe-cycling.osm.pbf`), `just osm-filter-many-raw-pbf-into-one` already wrote the POI
-file (`pois-europe-cycling.geojsonseq`) next to it. Copy that file into `ROUTING_OSM_IMPORT_DIR`
-and only import it:
+containers on the VPS (the host has no GDAL, which Django needs). Name the raw files the graph
+was filtered from, wherever they are; several are merged into one POI file, named after
+`ROUTING_OSM_FILE_FILTERED` (for example `pois-europe-cycling.geojsonseq`):
 
 ```bash
 cd /srv/norain
+just poi-extract ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf
 just poi-import-prod    # replaces the Poi table, in the backend image via worker-default
 ```
 
-To extract them on the VPS instead, copy the raw extracts into `ROUTING_OSM_IMPORT_DIR` and
-name them. Without names, `poi-extract-prod` reads `OSM_DATA_URL`'s extract, and it refuses
-when the graph is not built from that file:
-
-```bash
-just poi-extract-prod germany-latest.osm.pbf austria-latest.osm.pbf   # writes pois-<name>.geojsonseq
-just poi-import-prod
-```
-
-`just poi-extract` and `just poi-import` are the development versions; they use
-`docker-compose.dev.yml` and the host's virtualenv.
+If `just osm-filter-many-raw-pbf-into-one` ran elsewhere, it already wrote that POI file: copying
+it into `ROUTING_OSM_IMPORT_DIR` and running `just poi-import-prod` is enough.
+`just poi-import` is the development version; it uses the host's virtualenv.
 
 ## First deployment and updates
 

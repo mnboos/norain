@@ -8,9 +8,7 @@
 # INVOCATION_DIR, which the file names are relative to.
 set -euo pipefail
 
-# On Windows this runs in Git Bash, which would rewrite every /container/path argument into a
-# Windows path before podman sees it.
-export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+. "$(dirname "$0")/osm-input-mounts.sh"
 
 # Writes /osm_data/$ROUTING_OSM_FILE_FILTERED and the POI file named after it, which
 # just poi-import reads.
@@ -22,22 +20,8 @@ fi
 pois="pois-${name#bike-}"
 pois="${pois%.osm.pbf}.geojsonseq"
 
-# File names are relative to where just was run. Each file is mounted at /import/<its name>.
-# `pwd -W` is Git Bash's C:/… form, which podman on Windows understands; elsewhere it fails
-# and plain `pwd` answers.
-repo=$(pwd)
-cd "$INVOCATION_DIR"
-declare -A seen=()
-mounts=() inputs=()
-for file in "$@"; do
-    base=$(basename "$file")
-    [ -f "$file" ] || { echo "Not a file: $file" >&2; exit 1; }
-    [ -z "${seen[$base]:-}" ] || { echo "Two files are named $base." >&2; exit 1; }
-    seen[$base]=1
-    mounts+=(-v "$(cd "$(dirname "$file")" && { pwd -W 2>/dev/null || pwd; })/$base:/import/$base:ro,z")
-    inputs+=("/import/$base")
-done
-cd "$repo"
+# Each file is mounted at /import/<its name>.
+osm_input_mounts "$@"
 
 # COMPOSE_FILE comes from .env through just.
 compose=("$CONTAINER" compose)
