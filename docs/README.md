@@ -19,7 +19,7 @@ the implementation, and explanation develops understanding.
 - [Monitor product usage, forecasts, and workers with Sentry](how-to/sentry-metrics.md).
 - [Change the geographic coverage](how-to/change-region.md).
 - [Build routing and search from downloaded files, for several countries](how-to/import-geodata.md).
-- [Rebuild the routing graph, or build it elsewhere and ship it to the VPS](how-to/build-routing-graph.md).
+- [Build the routing graph, step by step: one country, several countries, on the VPS, or elsewhere and copied](how-to/build-routing-graph.md).
 - [Develop, test, and regenerate the API client](how-to/development.md).
 - [Deploy and operate a production VPS](how-to/deploy-vps.md).
 - [Troubleshoot setup and missing forecasts](how-to/troubleshooting.md).

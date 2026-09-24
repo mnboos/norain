@@ -12,13 +12,13 @@ Git, and Restic. Create a non-root `norain` deployment user in the `docker` grou
 then clone this repository at `/srv/norain`.
 
 GraphHopper never builds its routing graph by itself: before the first start, build it with
-`just build-graphhopper-graph-from FILE` ([rebuild on the VPS](build-routing-graph.md#rebuild-on-the-vps)), or
+`just build-graphhopper-graph-from FILE` ([path C: build on the VPS](build-routing-graph.md#path-c-build-on-the-vps)), or
 copy one in. Until then the container stops with an error. Building needs more memory than serving:
 Switzerland needs a build heap (`GRAPHHOPPER_BUILD_HEAP`) of about 6 GB, DACH 16–24 GB.
 Serving uses `GRAPHHOPPER_DATAACCESS=MMAP`, so a 3 GB serving heap is enough for either
 (with `RAM_STORE`, DACH would need 10–14 GB). `GRAPHHOPPER_MEM_LIMIT` must fit the build heap.
 If the VPS cannot hold the build, [build the graph on another
-machine](build-routing-graph.md) and copy it in. Prepare Photon with a manual import before first startup (see below), using
+machine](build-routing-graph.md#path-d-build-on-another-computer-and-copy-it-to-the-vps) and copy it in. Prepare Photon with a manual import before first startup (see below), using
 `PHOTON_IMPORT_HEAP` (4 GB by default). The published images are built for
 both amd64 and arm64, so ARM hosts such as Oracle's Ampere A1 work. Do not expose
 GraphHopper, Photon, PostgreSQL, or Django directly.
@@ -146,13 +146,26 @@ version; stop Photon on both machines during the copy.
 
 ## Import the journey planner's POIs
 
-The POIs come from the raw OSM extract GraphHopper keeps in `ROUTING_OSM_IMPORT_DIR`.
-On the VPS, run both steps in containers (the host has no GDAL, which Django needs):
+The POIs come from the raw OSM extracts, not from the bike-filtered file. Run both steps in
+containers on the VPS (the host has no GDAL, which Django needs).
+
+If the graph was merged from several countries (`ROUTING_OSM_FILE_FILTERED`, for example
+`bike-europe-cycling.osm.pbf`), `just osm-filter-many-raw-pbf-into-one` already wrote the POI
+file (`pois-europe-cycling.geojsonseq`) next to it. Copy that file into `ROUTING_OSM_IMPORT_DIR`
+and only import it:
 
 ```bash
 cd /srv/norain
-just poi-extract-prod   # writes pois-<extract>.geojsonseq next to the extract
 just poi-import-prod    # replaces the Poi table, in the backend image via worker-default
+```
+
+To extract them on the VPS instead, copy the raw extracts into `ROUTING_OSM_IMPORT_DIR` and
+name them. Without names, `poi-extract-prod` reads `OSM_DATA_URL`'s extract, and it refuses
+when the graph is not built from that file:
+
+```bash
+just poi-extract-prod germany-latest.osm.pbf austria-latest.osm.pbf   # writes pois-<name>.geojsonseq
+just poi-import-prod
 ```
 
 `just poi-extract` and `just poi-import` are the development versions; they use

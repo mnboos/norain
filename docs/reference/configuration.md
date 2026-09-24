@@ -163,7 +163,7 @@ only the factor is ours, in `bike_speed.json`, which must stay **last** in
 
 On production, deploy the changed files, then run `just build-graphhopper-graph-from` there
 with the filtered file; the container never rebuilds by itself. On a VPS without the
-memory for that, [build the graph elsewhere](../how-to/build-routing-graph.md). Step 4
+memory for that, [build the graph elsewhere](../how-to/build-routing-graph.md#path-d-build-on-another-computer-and-copy-it-to-the-vps). Step 4
 applies there too.
 
 ## Deployment boundary

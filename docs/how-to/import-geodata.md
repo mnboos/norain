@@ -27,60 +27,28 @@ cover different areas.
 The files are kept. Running a download again only fetches files the server has updated
 since, so it is also how you get fresh data later. `data/downloads/` is not committed.
 
-## 2. Set `.env`
+## 2. Build the routing graph
+
+Follow [path B of the routing-graph guide](build-routing-graph.md#path-b-several-countries-merged-into-one).
+In short:
 
 ```bash
-# The extracts are filtered for bikes and merged into this one file; every graph build reads it.
-ROUTING_OSM_FILE_FILTERED=bike-europe-cycling.osm.pbf
-
-# Building needs far more memory than serving. DACH alone needs a 16–24 GB heap;
-# more countries need more. Leave room for the JVM outside the heap.
-GRAPHHOPPER_BUILD_HEAP=24g
-GRAPHHOPPER_MEM_LIMIT=28g
-
-# Serving uses MMAP (the default): the graph is paged in from disk, so the default
-# GRAPHHOPPER_HEAP is enough however many countries it covers.
-
-# Raise it if the Photon import stops with an OutOfMemoryError.
-PHOTON_IMPORT_HEAP=8g
-```
-
-The numbers are a starting point, not measured values. Raise them if a step runs out of
-memory.
-
-Why `ROUTING_OSM_FILE_FILTERED`: every graph build reads
-`<ROUTING_OSM_IMPORT_DIR>/<ROUTING_OSM_FILE_FILTERED>`. That includes a rebuild
-after a speed change and a fresh start with an empty graph cache. `osm-filter-many-raw-pbf-into-one` writes that
-file, so later rebuilds use the same data. `OSM_DATA_URL` only names an extract to download,
-which no merged set of countries has; a filtered file with any other name than
-`bike-<its file name>` is never made from it. `osm-filter-many-raw-pbf-into-one` refuses to run without
-`ROUTING_OSM_FILE_FILTERED`. The journey planner's POIs go into the matching
-`pois-europe-cycling.geojsonseq`.
-
-## 3. Build the routing graph
-
-```bash
+# in .env: ROUTING_OSM_FILE_FILTERED=bike-europe-cycling.osm.pbf, and enough memory
 just osm-filter-many-raw-pbf-into-one data/downloads/osm/*.osm.pbf
 just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
+just poi-import
 ```
 
-The first filters each extract down to what the bike profiles use (see
-[what the filter keeps](#what-the-bike-filter-keeps)) and merges the results into
-`bike-europe-cycling.osm.pbf` in `ROUTING_OSM_IMPORT_DIR` (`data/graphhopper/osm`), plus the
-POIs into `pois-europe-cycling.geojsonseq`. It builds no graph. The second deletes the current
-graph (the elevation tiles are kept), builds the new one from that file and starts GraphHopper
-again.
+The first command filters the files and merges them into one. The second builds the graph
+from it. The third loads the journey planner's POIs.
 
-Routing is down until the build is done. That takes a long time for this many countries.
-Follow it with:
+## 3. Build the search index
+
+In `.env`, raise the import memory if the Photon import stops with an `OutOfMemoryError`:
 
 ```bash
-podman compose -f docker-compose.dev.yml logs -f graphhopper   # or docker compose
+PHOTON_IMPORT_HEAP=8g
 ```
-
-The filter runs before anything is deleted, so if a file is broken, the old graph stays.
-
-## 4. Build the search index
 
 ```bash
 just photon-import data/downloads/photon/*.jsonl.zst
@@ -94,9 +62,9 @@ and country list, which are kept once.
 The new index is built next to the old one (`data/photon/`). The old one is replaced
 only when the import worked. Search is down while Photon is stopped.
 
-Steps 3 and 4 don't depend on each other. Run them in either order.
+Steps 2 and 3 don't depend on each other. Run them in either order.
 
-## 5. Check the result
+## 4. Check the result
 
 - Search for a town in each country, and plan a short route in each one, including one
   that crosses a border.
@@ -107,11 +75,7 @@ Steps 3 and 4 don't depend on each other. Run them in either order.
   give the container more memory (`GRAPHHOPPER_MEM_LIMIT`): what the heap doesn't use
   caches the graph file.
 
-Then refresh what depended on the old graph:
-
-- `just routing-refresh-routes` re-routes every saved route (needs a worker on the
-  `default` queue). Otherwise saved routes keep their old geometry and arrival times.
-- Restart the backend and the workers to clear their in-memory route caches.
+Then do [after every build](build-routing-graph.md#after-every-build).
 
 ## Update the data later
 
@@ -123,14 +87,13 @@ just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
 just photon-import data/downloads/photon/*.jsonl.zst
 ```
 
-After a change to `data/graphhopper/graphhopper-config.yaml` or the models,
-`just build-graphhopper-graph-from bike-europe-cycling.osm.pbf` is enough. It rebuilds from the filtered file that
-is already there.
+After a change to `data/graphhopper/graphhopper-config.yaml` or the models, only the build
+is needed: see [build again after changing the config](build-routing-graph.md#build-again-after-changing-the-config-or-a-speed).
 
 ## Use a single file
 
-Both recipes also take a single file. `osm-filter-many-raw-pbf-into-one` writes it, filtered, to
-`ROUTING_OSM_FILE_FILTERED` as well, for example `ROUTING_OSM_FILE_FILTERED=bike-switzerland.osm.pbf`
+Both recipes also take a single file. `osm-filter-many-raw-pbf-into-one` then filters that
+one file into `ROUTING_OSM_FILE_FILTERED`, for example `ROUTING_OSM_FILE_FILTERED=bike-switzerland.osm.pbf`
 for `just osm-filter-many-raw-pbf-into-one ~/Downloads/switzerland-latest.osm.pbf`.
 
 `photon-import` also takes a prebuilt `.tar.bz2` index, but only on its own: an index
@@ -156,10 +119,9 @@ profile ever needs a tag the filter drops, add it to that script and rebuild.
 
 These recipes work on the development services. For the VPS:
 
-- **Routing graph:** build it here as above, then copy `data/graphhopper/cache` over as in
-  [build the routing graph elsewhere](build-routing-graph.md#2-copy-it-to-the-vps).
-  Or copy the filtered file into the VPS's `ROUTING_OSM_IMPORT_DIR` and run
-  `just build-graphhopper-graph-from` with it there.
+- **Routing graph:** build it here and copy the graph over
+  ([path D](build-routing-graph.md#path-d-build-on-another-computer-and-copy-it-to-the-vps)), or copy the
+  filtered file to the VPS and build it there ([path C](build-routing-graph.md#path-c-build-on-the-vps)).
 - **Search index:** copy the dumps into `${APP_STORAGE_PATH}/photon/` on the VPS and
   import them as in [deploy on a VPS](deploy-vps.md), listing all of them in
   `PHOTON_INDEX_FILE` separated by spaces and adding `-e PHOTON_REPLACE_INDEX=true`.

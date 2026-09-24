@@ -19,23 +19,23 @@ several countries at once, or to build from files you already have, follow
    startup script supports `.jsonl.zst` dumps and `.tar.bz2` indexes. Select URLs
    for the desired coverage from the providers; changing one service does not
    change the other.
-3. Preserve the existing data by moving `data/graphhopper/cache` and `data/photon`
-   to backup locations outside their mounted paths. Recreate the empty directories.
-   GraphHopper must rebuild its graph; Photon only imports when its index directory
-   is absent. Changing URLs alone does not replace these indexes. Keep the old OSM
-   file if desired, but move it aside too if the new URL has the same filename.
-4. Adjust `GRAPHHOPPER_HEAP` (or `GRAPHHOPPER_BUILD_HEAP` for the build alone) and
-   `PHOTON_IMPORT_HEAP` as needed. If increasing GraphHopper's heap beyond the current
-   budget, also raise `GRAPHHOPPER_MEM_LIMIT` (default 8 GB), leaving room for non-heap
-   memory. Production works the same way: empty `graphhopper/cache` and GraphHopper
-   builds the new graph on start. If the VPS lacks the memory, build it as described in
-   [build the routing graph elsewhere](build-routing-graph.md) and copy it over.
-5. Recreate the services and monitor the import:
+3. Build the new routing graph. GraphHopper never does this by itself. Follow
+   [path A of the routing-graph guide](build-routing-graph.md#path-a-one-country-downloaded-for-you):
+   `just build-graphhopper-graph-from bike-<file name at the end of OSM_DATA_URL>`.
+   It downloads the new file, filters it and builds the graph. Set the memory first
+   ([how much memory](build-routing-graph.md#how-much-memory)).
+4. For search, move `data/photon` to a backup location and recreate the empty directory:
+   Photon only imports when its index directory is absent. Adjust `PHOTON_IMPORT_HEAP`
+   as needed. Then recreate Photon and follow its import:
 
    ```bash
-   docker compose -f docker-compose.dev.yml up -d --force-recreate graphhopper photon
-   docker compose -f docker-compose.dev.yml logs -f graphhopper photon
+   docker compose up -d --force-recreate photon
+   docker compose logs -f photon
    ```
+
+5. On production, do the same on the VPS
+   ([path C](build-routing-graph.md#path-c-build-on-the-vps)), or build the graph on another computer and copy
+   it over ([path D](build-routing-graph.md#path-d-build-on-another-computer-and-copy-it-to-the-vps)).
 
 6. Search for a town within the new area and create a short route between covered
    locations. Confirm geometry is computed and a weather forecast loads.
