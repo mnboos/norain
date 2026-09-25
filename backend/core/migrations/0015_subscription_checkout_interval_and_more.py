@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0014_recurringroute_return_of'),
+        ("core", "0014_recurringroute_return_of"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='subscription',
-            name='checkout_interval',
-            field=models.CharField(blank=True, default='', max_length=10),
+            model_name="subscription",
+            name="checkout_interval",
+            field=models.CharField(blank=True, default="", max_length=10),
         ),
         migrations.AddField(
-            model_name='subscription',
-            name='checkout_session_id',
-            field=models.CharField(blank=True, default='', max_length=255),
+            model_name="subscription",
+            name="checkout_session_id",
+            field=models.CharField(blank=True, default="", max_length=255),
         ),
     ]

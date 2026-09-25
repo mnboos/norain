@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0015_subscription_checkout_interval_and_more'),
+        ("core", "0015_subscription_checkout_interval_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='recurringroute',
-            name='via_points',
-            field=models.JSONField(blank=True, default=list, help_text='[[lon, lat], ...] points the route must pass, in riding order'),
+            model_name="recurringroute",
+            name="via_points",
+            field=models.JSONField(
+                blank=True, default=list, help_text="[[lon, lat], ...] points the route must pass, in riding order"
+            ),
         ),
     ]

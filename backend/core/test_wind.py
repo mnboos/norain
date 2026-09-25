@@ -16,8 +16,8 @@ from .test_uncertainty import sample as weather_sample
 from .uncertainty import extract_uncertainty
 from .weather import _summarize
 from .wind import (
-    WeightedDirection,
     SampleWind,
+    WeightedDirection,
     compute_wind_profile,
     felt_temperature,
     ground_bucket,

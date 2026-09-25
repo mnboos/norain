@@ -12,6 +12,7 @@ per-road travel time, so we know exactly when you reach each point of the polyli
 """
 
 import asyncio
+import itertools
 import json
 import math
 import os
@@ -27,6 +28,7 @@ from .geo import haversine_m as _haversine_m
 from .grid import (
     ENSEMBLE_MODELS,
     extract_sample,
+    get_cached_cells,
     get_cached_ensemble_cell,
     get_cached_forecast_cell,
     get_or_fetch_ensemble_cell,
@@ -351,7 +353,7 @@ def mean_felt_temp(samples: list[dict]) -> float | None:
     if len(points) == 1:
         return points[0][1]
     weighted = total = 0.0
-    for (t0, v0), (t1, v1) in zip(points, points[1:]):
+    for (t0, v0), (t1, v1) in itertools.pairwise(points):
         gap = max(0.0, t1 - t0)
         weighted += gap * (v0 + v1) / 2
         total += gap
@@ -428,6 +430,26 @@ class WeatherSnapshot:
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
     cells: dict = field(default_factory=dict)
     readings: list[list[Reading]] | None = None
+
+    async def preload(self, points, days, *, include_ensemble=True):
+        coordinates = list(dict.fromkeys((sp["lat_r"], sp["lon_r"]) for sp in points))
+        days = list(dict.fromkeys(str(day) for day in days))
+        kinds = ("forecast", "ensemble") if include_ensemble else ("forecast",)
+        missing_days = [
+            day
+            for day in days
+            if any((kind, lat, lon, day) not in self.cells for lat, lon in coordinates for kind in kinds)
+        ]
+        if not missing_days:
+            return
+        forecasts, ensembles = await get_cached_cells(
+            coordinates, [(day, self.forecast_days) for day in missing_days], include_ensemble=include_ensemble
+        )
+        for day in missing_days:
+            for lat, lon in coordinates:
+                for kind, loaded in (("forecast", forecasts), ("ensemble", ensembles)):
+                    if kind in kinds:
+                        self.cells.setdefault((kind, lat, lon, day), loaded.get((lat, lon, date.fromisoformat(day))))
 
     async def cell(self, kind, lat, lon, day):
         key = (kind, lat, lon, day)
@@ -524,6 +546,11 @@ async def compute_route_weather(
             readings = snapshot.readings or []
         else:
             readings = await get_cached_readings(sample_points, departure, datetime.now(tz=UTC))
+
+    if cache_only and snapshot is None:
+        snapshot = WeatherSnapshot(days)
+    if snapshot is not None:
+        await snapshot.preload(sample_points, [day_key_str], include_ensemble=include_uncertainty)
 
     for i, sp in enumerate(sample_points):
         logger.debug("compute_route_weather: processing sample point {}: {}", i, sp)

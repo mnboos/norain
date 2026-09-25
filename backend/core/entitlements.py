@@ -148,7 +148,8 @@ def _briefing_route_ids(routes: list[RecurringRoute], limits: Entitlements) -> l
         return []
     roots = sorted(
         (
-            route for route in _allowed_routes(routes, limits)
+            route
+            for route in _allowed_routes(routes, limits)
             if route.return_of_id is None and route.briefing_channel in {"email", "push"}
         ),
         key=lambda route: (route.created_at, route.id),

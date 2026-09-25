@@ -14,7 +14,7 @@ from django.test.utils import CaptureQueriesContext
 from core import departures
 from core.claims import claim_cell
 from core.entitlements import allowed_route_ids, briefing_route_ids, briefing_route_ids_by_owner
-from core.grid import ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE, get_cached_cell_keys
+from core.grid import ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE, get_cached_cell_keys, get_cached_cells
 from core.models import EnsembleCell, ForecastCell, ForecastJob, Plan, RecurringRoute, Subscription, User, route_point
 from core.schedule import LOCAL_TZ, local_today
 from core.tasks import _plan_forecast_job_async, _prewarm_routes, _scan_route_forecasts_async, _settle_cell
@@ -24,16 +24,29 @@ class BulkCellAvailabilityTests(TestCase):
     day = date(2026, 9, 18)
 
     def forecast(self, lat=47.0, lon=9.0, **values):
-        return ForecastCell.objects.create(**{
-            "lat_r": lat, "lon_r": lon, "day_key": self.day, "forecast_days": 3,
-            "source": "open-meteo", "data": {"hourly": {"large": []}}, **values,
-        })
+        return ForecastCell.objects.create(
+            **{
+                "lat_r": lat,
+                "lon_r": lon,
+                "day_key": self.day,
+                "forecast_days": 3,
+                "source": "open-meteo",
+                "data": {"hourly": {"large": []}},
+                **values,
+            }
+        )
 
     def ensemble(self, lat=47.0, lon=9.0, **values):
-        return EnsembleCell.objects.create(**{
-            "lat_r": lat, "lon_r": lon, "day_key": self.day, "forecast_days": 3,
-            "data": {"_norain_request_version": ENSEMBLE_REQUEST_VERSION}, **values,
-        })
+        return EnsembleCell.objects.create(
+            **{
+                "lat_r": lat,
+                "lon_r": lon,
+                "day_key": self.day,
+                "forecast_days": 3,
+                "data": {"_norain_request_version": ENSEMBLE_REQUEST_VERSION},
+                **values,
+            }
+        )
 
     def lookup(self, cells, windows=None):
         return async_to_sync(get_cached_cell_keys)(cells, windows if windows is not None else [(self.day, 3)])
@@ -122,6 +135,95 @@ class BulkCellAvailabilityTests(TestCase):
         self.assertEqual(ensembles, forecasts)
 
 
+class BulkCellDataTests(BulkCellAvailabilityTests):
+    """Apply the availability contract to full payload loading as well."""
+
+    def lookup(self, cells, windows=None):
+        forecasts, ensembles = async_to_sync(get_cached_cells)(
+            cells, windows if windows is not None else [(self.day, 3)]
+        )
+        return set(forecasts), set(ensembles)
+
+    def test_query_budget_and_projection_are_independent_of_cell_count(self):
+        forecast = self.forecast()
+        ensemble = self.ensemble()
+        for count in (1, 100):
+            with self.subTest(count=count), self.assertNumQueries(2):
+                forecasts, ensembles = async_to_sync(get_cached_cells)(
+                    [(47, round(9 + i / 100, 2)) for i in range(count)], [(self.day, 3)]
+                )
+                self.assertEqual(forecasts[(47, 9, self.day)].data, forecast.data)
+                self.assertEqual(ensembles[(47, 9, self.day)].data, ensemble.data)
+
+    def test_snapshot_reuses_loaded_cells_and_misses_across_days(self):
+        from core.weather import WeatherSnapshot
+
+        self.forecast()
+        snapshot = WeatherSnapshot(3)
+        points = [{"lat_r": 47, "lon_r": lon} for lon in (9, 9, 9.01)]
+        days = [self.day.isoformat(), (self.day + timedelta(days=1)).isoformat()]
+        with self.assertNumQueries(2):
+            async_to_sync(snapshot.preload)(points, days)
+        with self.assertNumQueries(0):
+            async_to_sync(snapshot.preload)(points, days)
+            for day in days:
+                for point in points:
+                    for kind in ("forecast", "ensemble"):
+                        cell = async_to_sync(snapshot.cell)(kind, point["lat_r"], point["lon_r"], day)
+                        self.assertEqual(
+                            cell is not None, kind == "forecast" and day == days[0] and point["lon_r"] == 9
+                        )
+
+    def test_computation_query_budget_and_output(self):
+        from core.weather import compute_route_weather
+
+        self.forecast(
+            forecast_days=16,
+            data={
+                "hourly": {
+                    "time": [f"{self.day}T12:00"],
+                    "temperature_2m": [15],
+                    "precipitation": [0],
+                    "wind_speed_10m": [12],
+                    "wind_direction_10m": [90],
+                }
+            },
+        )
+        point = {"lat": 47, "lon": 9, "lat_r": 47, "lon_r": 9, "elapsed_s": 0}
+        baseline = None
+        for count in (1, 100):
+            with (
+                self.subTest(count=count),
+                self.assertNumQueries(2),
+                patch("core.weather.get_or_fetch_forecast_cell", side_effect=AssertionError("provider fetch")),
+                patch("core.weather.get_or_fetch_ensemble_cell", side_effect=AssertionError("provider fetch")),
+            ):
+                result = async_to_sync(compute_route_weather)(
+                    47,
+                    9,
+                    47,
+                    9,
+                    "bike",
+                    f"{self.day}T12:00",
+                    sample_points=[point] * count,
+                    polyline=[[9, 47], [9, 47]],
+                    total_seconds=0,
+                    total_distance_m=0,
+                    cache_only=True,
+                    include_segments=False,
+                )
+            self.assertEqual(len(result.samples), count)
+            current = result.samples[0].model_dump()
+            if baseline is None:
+                baseline = current
+            self.assertEqual(current, baseline)
+
+    def test_skip_ensemble(self):
+        with self.assertNumQueries(1):
+            _, ensembles = async_to_sync(get_cached_cells)([(47, 9)], [(self.day, 3)], include_ensemble=False)
+        self.assertEqual(ensembles, {})
+
+
 class BulkEligibilityTests(TestCase):
     def owner(self, **subscription):
         name = f"rider-{User.objects.count()}"
@@ -130,11 +232,17 @@ class BulkEligibilityTests(TestCase):
         return user
 
     def route(self, owner, **values):
-        return RecurringRoute.objects.create(**{
-            "owner": owner, "name": "Commute", "start_point": route_point(47, 9),
-            "destination_point": route_point(47.01, 9.01), "schedule_cron": "0 * * * *",
-            "briefing_channel": "email", **values,
-        })
+        return RecurringRoute.objects.create(
+            **{
+                "owner": owner,
+                "name": "Commute",
+                "start_point": route_point(47, 9),
+                "destination_point": route_point(47.01, 9.01),
+                "schedule_cron": "0 * * * *",
+                "briefing_channel": "email",
+                **values,
+            }
+        )
 
     def test_eligibility_and_scheduler_queries_do_not_scale_per_owner(self):
         owners = [self.owner() for _ in range(20)]
@@ -142,9 +250,10 @@ class BulkEligibilityTests(TestCase):
         for count in (1, 20):
             ids = [owner.pk for owner in owners[:count]]
             with self.subTest(count=count), self.assertNumQueries(2):
-                self.assertEqual(briefing_route_ids_by_owner(ids), {
-                    owner.pk: [route.pk] for owner, route in zip(owners[:count], routes[:count], strict=True)
-                })
+                self.assertEqual(
+                    briefing_route_ids_by_owner(ids),
+                    {owner.pk: [route.pk] for owner, route in zip(owners[:count], routes[:count], strict=True)},
+                )
         with self.assertNumQueries(3):
             self.assertEqual({route.pk for route in async_to_sync(_prewarm_routes)()}, {route.pk for route in routes})
         with self.assertNumQueries(3):
@@ -153,9 +262,9 @@ class BulkEligibilityTests(TestCase):
     def test_empty_duplicate_and_batched_owners(self):
         with self.assertNumQueries(0):
             self.assertEqual(briefing_route_ids_by_owner([]), {})
-        owners = User.objects.bulk_create([
-            User(username=f"batch-{i}", email=f"batch-{i}@example.test") for i in range(501)
-        ])
+        owners = User.objects.bulk_create(
+            [User(username=f"batch-{i}", email=f"batch-{i}@example.test") for i in range(501)]
+        )
         with self.assertNumQueries(4):
             result = briefing_route_ids_by_owner([owner.pk for owner in owners] + [owners[0].pk])
         self.assertEqual(result, {owner.pk: [] for owner in owners})
@@ -236,14 +345,22 @@ class TaskQueryTests(TestCase):
 
     def points(self, count):
         return [
-            {"lat": 47.0, "lon": round(9 + i / 100, 2), "lat_r": 47.0, "lon_r": round(9 + i / 100, 2),
-             "elapsed_s": i * 60, "idx": i}
+            {
+                "lat": 47.0,
+                "lon": round(9 + i / 100, 2),
+                "lat_r": 47.0,
+                "lon_r": round(9 + i / 100, 2),
+                "elapsed_s": i * 60,
+                "idx": i,
+            }
             for i in range(count)
         ]
 
     def job(self, count, **params):
         return ForecastJob.objects.create(
-            kind=ForecastJob.Kind.ADHOC, owner=self.owner, key=f"query-{ForecastJob.objects.count()}",
+            kind=ForecastJob.Kind.ADHOC,
+            owner=self.owner,
+            key=f"query-{ForecastJob.objects.count()}",
             params={"departure_time": self.departure.isoformat(), **params},
             geometry={"sample_points": self.points(count), "polyline": [], "total_seconds": count * 60},
         )
@@ -298,6 +415,7 @@ class TaskQueryTests(TestCase):
         self.warm(self.points(1))
         progress = []
         with self.queues(stations=True) as (forecast, ensemble, station, compute):
+
             async def finish(*args):
                 current = await ForecastJob.objects.aget(pk=job.pk)
                 progress.append((current.cells_settled, current.cells_total, current.status))
@@ -344,9 +462,13 @@ class TaskQueryTests(TestCase):
 
     def scan_route(self, count):
         return RecurringRoute.objects.create(
-            owner=self.owner, name="Commute", start_point=route_point(47, 9),
-            destination_point=route_point(47.01, 9.01), schedule_cron="0 * * * *",
-            briefing_channel="email", sample_points=self.points(count),
+            owner=self.owner,
+            name="Commute",
+            start_point=route_point(47, 9),
+            destination_point=route_point(47.01, 9.01),
+            schedule_cron="0 * * * *",
+            briefing_channel="email",
+            sample_points=self.points(count),
         )
 
     @contextmanager

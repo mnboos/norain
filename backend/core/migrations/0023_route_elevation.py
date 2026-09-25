@@ -4,28 +4,27 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0022_forecastjob_stale_result'),
+        ("core", "0022_forecastjob_stale_result"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='ElevationProfile',
+            name="ElevationProfile",
             fields=[
-                ('key', models.CharField(max_length=64, primary_key=True, serialize=False)),
-                ('data', models.JSONField()),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
+                ("key", models.CharField(max_length=64, primary_key=True, serialize=False)),
+                ("data", models.JSONField()),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
             ],
         ),
         migrations.AddField(
-            model_name='journeystage',
-            name='vertex_elevations',
-            field=models.JSONField(blank=True, help_text='Elevation in metres at each polyline vertex', null=True),
+            model_name="journeystage",
+            name="vertex_elevations",
+            field=models.JSONField(blank=True, help_text="Elevation in metres at each polyline vertex", null=True),
         ),
         migrations.AddField(
-            model_name='recurringroute',
-            name='vertex_elevations',
-            field=models.JSONField(blank=True, help_text='Elevation in metres at each polyline vertex', null=True),
+            model_name="recurringroute",
+            name="vertex_elevations",
+            field=models.JSONField(blank=True, help_text="Elevation in metres at each polyline vertex", null=True),
         ),
     ]

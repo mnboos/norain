@@ -89,10 +89,16 @@ class ParseTests(SimpleTestCase):
 
     def test_observation(self):
         data = {
-            "observations": [{
-                "stationID": "A", "epoch": 1789200000, "lat": 47.0, "lon": 9.0, "qcStatus": 1,
-                "metric": {"temp": 17.3, "precipRate": 0.0},
-            }]
+            "observations": [
+                {
+                    "stationID": "A",
+                    "epoch": 1789200000,
+                    "lat": 47.0,
+                    "lon": 9.0,
+                    "qcStatus": 1,
+                    "metric": {"temp": 17.3, "precipRate": 0.0},
+                }
+            ]
         }
         obs = parse_observation(data)
         self.assertEqual(obs["temp"], 17.3)
@@ -222,39 +228,66 @@ class _NearNowRoute:
         hours = [start + timedelta(hours=h) for h in range(36)]
         for lat_r, lon_r in ((47.0, 9.0), (47.01, 9.0)):
             if cell_source == "open-meteo":
-                data = {"hourly": {
-                    "time": [h.isoformat(timespec="minutes") for h in hours],
-                    "temperature_2m": [15.0] * len(hours),
-                    "precipitation": [0.0] * len(hours),
-                    "wind_speed_10m": [10.0] * len(hours),
-                    "wind_direction_10m": [180.0] * len(hours),
-                }}
+                data = {
+                    "hourly": {
+                        "time": [h.isoformat(timespec="minutes") for h in hours],
+                        "temperature_2m": [15.0] * len(hours),
+                        "precipitation": [0.0] * len(hours),
+                        "wind_speed_10m": [10.0] * len(hours),
+                        "wind_direction_10m": [180.0] * len(hours),
+                    }
+                }
             else:
-                data = {"hourly": [
-                    {"dt": int(h.replace(tzinfo=ZURICH).timestamp()), "temp": 15.0, "wind_speed": 3.0,
-                     "wind_deg": 180, "pop": pop}
-                    for h in hours
-                ]}
+                data = {
+                    "hourly": [
+                        {
+                            "dt": int(h.replace(tzinfo=ZURICH).timestamp()),
+                            "temp": 15.0,
+                            "wind_speed": 3.0,
+                            "wind_deg": 180,
+                            "pop": pop,
+                        }
+                        for h in hours
+                    ]
+                }
             ForecastCell.objects.create(
-                lat_r=lat_r, lon_r=lon_r, day_key=self.departure.date(), source=cell_source,
-                forecast_days=16, data=data,
+                lat_r=lat_r,
+                lon_r=lon_r,
+                day_key=self.departure.date(),
+                source=cell_source,
+                forecast_days=16,
+                data=data,
             )
 
     def add_readings(self, temps=(18.0, 18.5), rates=(0.0, 0.0)):
         for i, (temp, rate) in enumerate(zip(temps, rates, strict=True)):
             StationObservation.objects.create(
-                station_id=f"IZH{i}", lat=47.002 + i * 0.001, lon=9.001, observed_at=self.observed_at,
-                temp=temp, precip_rate=rate, qc_status=1,
+                station_id=f"IZH{i}",
+                lat=47.002 + i * 0.001,
+                lon=9.001,
+                observed_at=self.observed_at,
+                temp=temp,
+                precip_rate=rate,
+                qc_status=1,
             )
 
     def compute(self, enabled=True, include_uncertainty=False):
         patches = _no_network()
         with patches[0], patches[1], patches[2], patches[3]:
             return async_to_sync(compute_route_weather)(
-                start_lat=47.0, start_lon=9.0, dest_lat=47.01, dest_lon=9.0, profile="bike",
-                departure_time=self.departure_time, sample_points=self.sample_points, polyline=self.polyline,
-                total_seconds=3 * 3600, total_distance_m=1100.0, cache_only=True,
-                include_uncertainty=include_uncertainty, station_correction_enabled=enabled,
+                start_lat=47.0,
+                start_lon=9.0,
+                dest_lat=47.01,
+                dest_lon=9.0,
+                profile="bike",
+                departure_time=self.departure_time,
+                sample_points=self.sample_points,
+                polyline=self.polyline,
+                total_seconds=3 * 3600,
+                total_distance_m=1100.0,
+                cache_only=True,
+                include_uncertainty=include_uncertainty,
+                station_correction_enabled=enabled,
             )
 
 
@@ -301,20 +334,30 @@ class ThumbnailStationTests(_NearNowRoute, TestCase):
     def setUp(self):
         self.build()
         self.add_readings()
-        self.user = get_user_model().objects.create_user(
-            username="rider", email="rider@example.com", password="pw"
-        )
+        self.user = get_user_model().objects.create_user(username="rider", email="rider@example.com", password="pw")
         self.route = RecurringRoute.objects.create(
-            owner=self.user, name="Commute", start_point=route_point(47.0, 9.0), start_name="Start",
-            destination_point=route_point(47.01, 9.0), dest_name="Destination", schedule_cron="0 8 * * *",
-            schedule_description="Daily", polyline=route_line(self.polyline), sample_points=self.sample_points,
-            total_seconds=3 * 3600, total_distance_m=1100.0,
+            owner=self.user,
+            name="Commute",
+            start_point=route_point(47.0, 9.0),
+            start_name="Start",
+            destination_point=route_point(47.01, 9.0),
+            dest_name="Destination",
+            schedule_cron="0 8 * * *",
+            schedule_description="Daily",
+            polyline=route_line(self.polyline),
+            sample_points=self.sample_points,
+            total_seconds=3 * 3600,
+            total_distance_m=1100.0,
         )
 
     def thumbnail_temps(self):
         patches = _no_network()
-        with patches[0], patches[1], patches[2], patches[3], patch(
-            "core.thumbnails.next_departure", return_value=self.departure.replace(tzinfo=None)
+        with (
+            patches[0],
+            patches[1],
+            patches[2],
+            patches[3],
+            patch("core.thumbnails.next_departure", return_value=self.departure.replace(tzinfo=None)),
         ):
             thumbnail = async_to_sync(compute_route_thumbnail)(self.route)
         return [sample["temp"] for sample in thumbnail["samples"]]
@@ -354,30 +397,41 @@ class StationJobTests(_NearNowRoute, TestCase):
     def setUp(self):
         cache.clear()
         self.build()
-        self.user = get_user_model().objects.create_user(
-            username="rider", email="rider@example.com", password="pw"
-        )
+        self.user = get_user_model().objects.create_user(username="rider", email="rider@example.com", password="pw")
 
     def make_pro(self):
         Subscription.objects.update_or_create(user=self.user, defaults={"plan": Plan.PRO, "status": "active"})
 
     def make_job(self, **fields):
-        params = {"start_lat": 47.0, "start_lon": 9.0, "dest_lat": 47.01, "dest_lon": 9.0, "profile": "bike",
-                  "departure_time": self.departure_time}
+        params = {
+            "start_lat": 47.0,
+            "start_lon": 9.0,
+            "dest_lat": 47.01,
+            "dest_lon": 9.0,
+            "profile": "bike",
+            "departure_time": self.departure_time,
+        }
         return ForecastJob.objects.create(
-            key=job_key(ForecastJob.Kind.ADHOC, self.user.id, params), kind=ForecastJob.Kind.ADHOC,
-            owner=self.user, params=params,
-            geometry={"polyline": self.polyline, "sample_points": self.sample_points,
-                      "total_seconds": 3 * 3600, "total_distance_m": 1100.0},
+            key=job_key(ForecastJob.Kind.ADHOC, self.user.id, params),
+            kind=ForecastJob.Kind.ADHOC,
+            owner=self.user,
+            params=params,
+            geometry={
+                "polyline": self.polyline,
+                "sample_points": self.sample_points,
+                "total_seconds": 3 * 3600,
+                "total_distance_m": 1100.0,
+            },
             **fields,
         )
 
     def plan(self, job):
         station_enqueue = AsyncMock()
-        with patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=AsyncMock())), patch(
-            "core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=AsyncMock())
-        ), patch("core.tasks.refresh_station_observations", SimpleNamespace(aenqueue=station_enqueue)), patch(
-            "core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())
+        with (
+            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=AsyncMock())),
+            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=AsyncMock())),
+            patch("core.tasks.refresh_station_observations", SimpleNamespace(aenqueue=station_enqueue)),
+            patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())),
         ):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
         job.refresh_from_db()
@@ -417,10 +471,14 @@ class StationJobTests(_NearNowRoute, TestCase):
         self.make_pro()
         job = self.make_job(status=ForecastJob.Status.FETCHING, cells_total=1)
         for lat_c, lon_c in {stations._lookup_cell(sp["lat"], sp["lon"]) for sp in self.sample_points}:
-            StationLookup.objects.create(lat_c=lat_c, lon_c=lon_c, stations=[
-                {"id": "FRESH", "lat": 47.001, "lon": 9.0, "qc": 1, "updated": None},
-                {"id": "STALE", "lat": 47.002, "lon": 9.0, "qc": 1, "updated": None},
-            ])
+            StationLookup.objects.create(
+                lat_c=lat_c,
+                lon_c=lon_c,
+                stations=[
+                    {"id": "FRESH", "lat": 47.001, "lon": 9.0, "qc": 1, "updated": None},
+                    {"id": "STALE", "lat": 47.002, "lon": 9.0, "qc": 1, "updated": None},
+                ],
+            )
         StationObservation.objects.create(
             station_id="FRESH", lat=47.001, lon=9.0, observed_at=self.observed_at, temp=16
         )
@@ -430,10 +488,11 @@ class StationJobTests(_NearNowRoute, TestCase):
         StationObservation.objects.filter(station_id="STALE").update(fetched_at=self.observed_at - timedelta(hours=1))
 
         fetch_observation = AsyncMock(return_value=None)
-        with patch.dict(os.environ, WITH_KEY), patch(
-            "core.stations._fetch_nearby", AsyncMock(side_effect=AssertionError("looked up!"))
-        ), patch("core.stations._fetch_observation", fetch_observation), patch(
-            "core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())
+        with (
+            patch.dict(os.environ, WITH_KEY),
+            patch("core.stations._fetch_nearby", AsyncMock(side_effect=AssertionError("looked up!"))),
+            patch("core.stations._fetch_observation", fetch_observation),
+            patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())),
         ):
             async_to_sync(_refresh_station_observations_async)(str(job.id))
 
@@ -444,8 +503,9 @@ class StationJobTests(_NearNowRoute, TestCase):
 
     def test_queued_station_task_rechecks_expired_access(self):
         job = self.make_job(status=ForecastJob.Status.FETCHING, cells_total=1)
-        with patch("core.tasks.refresh_stations_for_ride", new_callable=AsyncMock) as fetch, patch(
-            "core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())
+        with (
+            patch("core.tasks.refresh_stations_for_ride", new_callable=AsyncMock) as fetch,
+            patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())),
         ):
             async_to_sync(_refresh_station_observations_async)(str(job.id))
         fetch.assert_not_awaited()
@@ -457,11 +517,12 @@ class StationJobTests(_NearNowRoute, TestCase):
         self.make_pro()
         job = self.make_job(status=ForecastJob.Status.FETCHING, cells_total=1)
         assemble = AsyncMock()
-        with patch.dict(os.environ, WITH_KEY), patch(
-            "core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=assemble)
-        ), patch(
-            "core.tasks.refresh_stations_for_ride", AsyncMock(side_effect=RuntimeError("boom"))
-        ), self.assertRaises(RuntimeError):
+        with (
+            patch.dict(os.environ, WITH_KEY),
+            patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=assemble)),
+            patch("core.tasks.refresh_stations_for_ride", AsyncMock(side_effect=RuntimeError("boom"))),
+            self.assertRaises(RuntimeError),
+        ):
             async_to_sync(_refresh_station_observations_async)(str(job.id))
         job.refresh_from_db()
         self.assertEqual(job.cells_settled, 1)

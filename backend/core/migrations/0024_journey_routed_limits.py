@@ -4,30 +4,31 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0023_route_elevation'),
+        ("core", "0023_route_elevation"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='journeyday',
-            name='lodging_detour',
+            model_name="journeyday",
+            name="lodging_detour",
             field=models.JSONField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='journeystage',
-            name='leg_seconds',
+            model_name="journeystage",
+            name="leg_seconds",
             field=models.IntegerField(default=0),
         ),
         migrations.AddField(
-            model_name='journeystage',
-            name='limit_overruns',
+            model_name="journeystage",
+            name="limit_overruns",
             field=models.JSONField(blank=True, default=dict),
         ),
         migrations.AlterField(
-            model_name='journeystage',
-            name='leg_m',
-            field=models.FloatField(default=0, help_text='The leg distance limit; legacy rows may hold a time-derived distance'),
+            model_name="journeystage",
+            name="leg_m",
+            field=models.FloatField(
+                default=0, help_text="The leg distance limit; legacy rows may hold a time-derived distance"
+            ),
         ),
     ]

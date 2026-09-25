@@ -4,20 +4,19 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0008_forecastjob_computed_weather'),
+        ("core", "0008_forecastjob_computed_weather"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='recurringroute',
-            name='departure_flex_after_minutes',
+            model_name="recurringroute",
+            name="departure_flex_after_minutes",
             field=models.PositiveSmallIntegerField(default=0),
         ),
         migrations.AddField(
-            model_name='recurringroute',
-            name='departure_flex_before_minutes',
+            model_name="recurringroute",
+            name="departure_flex_before_minutes",
             field=models.PositiveSmallIntegerField(default=0),
         ),
     ]

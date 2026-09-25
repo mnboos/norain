@@ -7,7 +7,6 @@ class CamelSchema(Schema):
     """Base schema that emits camelCase in JSON/OpenAPI (no dual snake_case/camelCase in generated client)."""
 
     model_config = ConfigDict(
-
         alias_generator=to_camel,
         populate_by_name=True,
     )

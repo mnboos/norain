@@ -4,40 +4,40 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
-    dependencies = (
-        ('core', '0005_forecastjob_cells_failed'),
-    )
+    dependencies = (("core", "0005_forecastjob_cells_failed"),)
 
     operations = (
         migrations.CreateModel(
-            name='StationLookup',
+            name="StationLookup",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('lat_c', models.FloatField(help_text='Latitude rounded to 1/20 degree')),
-                ('lon_c', models.FloatField(help_text='Longitude rounded to 1/20 degree')),
-                ('stations', models.JSONField(help_text='[{id, lat, lon, qc, updated}, ...], nearest first')),
-                ('fetched_at', models.DateTimeField(auto_now=True)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("lat_c", models.FloatField(help_text="Latitude rounded to 1/20 degree")),
+                ("lon_c", models.FloatField(help_text="Longitude rounded to 1/20 degree")),
+                ("stations", models.JSONField(help_text="[{id, lat, lon, qc, updated}, ...], nearest first")),
+                ("fetched_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'unique_together': {('lat_c', 'lon_c')},
+                "unique_together": {("lat_c", "lon_c")},
             },
         ),
         migrations.CreateModel(
-            name='StationObservation',
+            name="StationObservation",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('station_id', models.CharField(max_length=64, unique=True)),
-                ('lat', models.FloatField()),
-                ('lon', models.FloatField()),
-                ('observed_at', models.DateTimeField()),
-                ('temp', models.FloatField(blank=True, help_text='°C', null=True)),
-                ('precip_rate', models.FloatField(blank=True, help_text='mm/h', null=True)),
-                ('qc_status', models.IntegerField(blank=True, help_text='-1 unchecked, 0 possibly wrong, 1 passed', null=True)),
-                ('fetched_at', models.DateTimeField(auto_now=True)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("station_id", models.CharField(max_length=64, unique=True)),
+                ("lat", models.FloatField()),
+                ("lon", models.FloatField()),
+                ("observed_at", models.DateTimeField()),
+                ("temp", models.FloatField(blank=True, help_text="°C", null=True)),
+                ("precip_rate", models.FloatField(blank=True, help_text="mm/h", null=True)),
+                (
+                    "qc_status",
+                    models.IntegerField(blank=True, help_text="-1 unchecked, 0 possibly wrong, 1 passed", null=True),
+                ),
+                ("fetched_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'indexes': [models.Index(fields=['observed_at'], name='core_statio_observe_b5b9f7_idx')],
+                "indexes": [models.Index(fields=["observed_at"], name="core_statio_observe_b5b9f7_idx")],
             },
         ),
     )

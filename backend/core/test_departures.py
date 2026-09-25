@@ -169,6 +169,7 @@ class DepartureJobTests(TestCase):
     def setUp(self):
         fixtures.ForecastJobTests.setUp(self)
         from .models import Plan, Subscription
+
         Subscription.objects.create(user=self.user, plan=Plan.PRO)
         self.route.briefing_channel = "email"
         self.route.save()
@@ -181,10 +182,10 @@ class DepartureJobTests(TestCase):
 
         self.route.departure_flex_after_minutes = 60
         self.route.save()
-        route = {"paths": [{"points": {"coordinates": [[9, 47], [9.01, 47.01]]},
-                            "time": 600_000, "distance": 1500}]}
-        with patch("core.weather._fetch_route", AsyncMock(return_value=route)), patch(
-            "core.tasks.refresh_route_thumbnail", SimpleNamespace(aenqueue=AsyncMock())
+        route = {"paths": [{"points": {"coordinates": [[9, 47], [9.01, 47.01]]}, "time": 600_000, "distance": 1500}]}
+        with (
+            patch("core.weather._fetch_route", AsyncMock(return_value=route)),
+            patch("core.tasks.refresh_route_thumbnail", SimpleNamespace(aenqueue=AsyncMock())),
         ):
             async_to_sync(_refresh_route_geometry_async)(str(self.route.id))
         self.route.refresh_from_db()
@@ -330,15 +331,15 @@ class DepartureJobTests(TestCase):
             geometry=geometry,
             params={**self._job_params(), "departure_flex_after_minutes": 60},
         )
-        from .weather import get_cached_forecast_cell
+        from .weather import get_cached_cells
 
         with (
-            patch("core.weather.get_cached_forecast_cell", wraps=get_cached_forecast_cell) as cached,
+            patch("core.weather.get_cached_cells", wraps=get_cached_cells) as cached,
             patch("core.weather.get_or_fetch_forecast_cell", side_effect=AssertionError("provider fetch")),
             patch("core.tasks.assemble_forecast_job", SimpleNamespace(enqueue=Mock())),
         ):
             async_to_sync(_compute_route_weather_job_async)(str(job.id))
-        self.assertEqual(cached.call_count, 2)
+        self.assertEqual(cached.call_count, 1)
         async_to_sync(_assemble_forecast_job_async)(str(job.id))
         job.refresh_from_db()
         self.assertEqual(job.status, ForecastJob.Status.DONE, job.error)

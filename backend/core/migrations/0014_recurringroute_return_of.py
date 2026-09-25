@@ -5,15 +5,20 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0013_subscription_complimentary_until'),
+        ("core", "0013_subscription_complimentary_until"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='recurringroute',
-            name='return_of',
-            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='return_journey', to='core.recurringroute'),
+            model_name="recurringroute",
+            name="return_of",
+            field=models.OneToOneField(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="return_journey",
+                to="core.recurringroute",
+            ),
         ),
     ]

@@ -5,21 +5,25 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0016_recurringroute_via_points'),
+        ("core", "0016_recurringroute_via_points"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Poi',
+            name="Poi",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('osm_ref', models.CharField(help_text='n123 / w456 / r789', max_length=32, unique=True)),
-                ('category', models.CharField(db_index=True, max_length=32)),
-                ('name', models.CharField(blank=True, default='', max_length=300)),
-                ('tags', models.JSONField(blank=True, default=dict, help_text='A whitelist of OSM tags, see core.pois.KEPT_TAGS')),
-                ('location', django.contrib.gis.db.models.fields.PointField(geography=True, srid=4326)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("osm_ref", models.CharField(help_text="n123 / w456 / r789", max_length=32, unique=True)),
+                ("category", models.CharField(db_index=True, max_length=32)),
+                ("name", models.CharField(blank=True, default="", max_length=300)),
+                (
+                    "tags",
+                    models.JSONField(
+                        blank=True, default=dict, help_text="A whitelist of OSM tags, see core.pois.KEPT_TAGS"
+                    ),
+                ),
+                ("location", django.contrib.gis.db.models.fields.PointField(geography=True, srid=4326)),
             ],
         ),
     ]

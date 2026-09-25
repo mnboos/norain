@@ -6,65 +6,81 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0011_allauth_email_addresses'),
+        ("core", "0011_allauth_email_addresses"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='recurringroute',
-            name='briefing_channel',
-            field=models.CharField(blank=True, choices=[('', 'Off'), ('email', 'Email'), ('push', 'Push')], default='', max_length=10),
+            model_name="recurringroute",
+            name="briefing_channel",
+            field=models.CharField(
+                blank=True, choices=[("", "Off"), ("email", "Email"), ("push", "Push")], default="", max_length=10
+            ),
         ),
         migrations.AddField(
-            model_name='recurringroute',
-            name='free_selected',
+            model_name="recurringroute",
+            name="free_selected",
             field=models.BooleanField(default=False),
         ),
         migrations.AddField(
-            model_name='subscription',
-            name='trial_ends_at',
+            model_name="subscription",
+            name="trial_ends_at",
             field=models.DateTimeField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='subscription',
-            name='trial_started_at',
+            model_name="subscription",
+            name="trial_started_at",
             field=models.DateTimeField(blank=True, null=True),
         ),
         migrations.AlterField(
-            model_name='subscription',
-            name='plan',
-            field=models.CharField(choices=[('free', 'Free'), ('pro', 'Plus')], default='free', max_length=20),
+            model_name="subscription",
+            name="plan",
+            field=models.CharField(choices=[("free", "Free"), ("pro", "Plus")], default="free", max_length=20),
         ),
         migrations.CreateModel(
-            name='PushSubscription',
+            name="PushSubscription",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('endpoint', models.URLField(max_length=2048, unique=True)),
-                ('keys', models.JSONField()),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='push_subscriptions', to=settings.AUTH_USER_MODEL)),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("endpoint", models.URLField(max_length=2048, unique=True)),
+                ("keys", models.JSONField()),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "user",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="push_subscriptions",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='RideBriefing',
+            name="RideBriefing",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('departure', models.DateTimeField()),
-                ('earliest_departure', models.DateTimeField()),
-                ('due_at', models.DateTimeField(db_index=True)),
-                ('channel', models.CharField(max_length=10)),
-                ('status', models.CharField(default='pending', max_length=16)),
-                ('body', models.TextField(blank=True)),
-                ('delivery_started_at', models.DateTimeField(null=True)),
-                ('sent_at', models.DateTimeField(null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('job', models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to='core.forecastjob')),
-                ('route', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='briefings', to='core.recurringroute')),
+                ("id", models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name="ID")),
+                ("departure", models.DateTimeField()),
+                ("earliest_departure", models.DateTimeField()),
+                ("due_at", models.DateTimeField(db_index=True)),
+                ("channel", models.CharField(max_length=10)),
+                ("status", models.CharField(default="pending", max_length=16)),
+                ("body", models.TextField(blank=True)),
+                ("delivery_started_at", models.DateTimeField(null=True)),
+                ("sent_at", models.DateTimeField(null=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "job",
+                    models.ForeignKey(null=True, on_delete=django.db.models.deletion.SET_NULL, to="core.forecastjob"),
+                ),
+                (
+                    "route",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE, related_name="briefings", to="core.recurringroute"
+                    ),
+                ),
             ],
             options={
-                'constraints': [models.UniqueConstraint(fields=('route', 'departure'), name='unique_ride_briefing')],
+                "constraints": [models.UniqueConstraint(fields=("route", "departure"), name="unique_ride_briefing")],
             },
         ),
     ]

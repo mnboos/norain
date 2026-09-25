@@ -286,9 +286,13 @@ async def publish(job: ForecastJob) -> None:
 async def set_status(job: ForecastJob, status: str, *, error: str = "") -> None:
     """Move a job to a new state, persist it and tell the watchers."""
     if status == ForecastJob.Status.FAILED:
-        won = await ForecastJob.objects.filter(pk=job.pk, status=job.status, updated_at=job.updated_at).exclude(
-            status__in=ForecastJob.TERMINAL_STATUSES,
-        ).aupdate(status=status, error=error, updated_at=datetime.now(tz=UTC))
+        won = (
+            await ForecastJob.objects.filter(pk=job.pk, status=job.status, updated_at=job.updated_at)
+            .exclude(
+                status__in=ForecastJob.TERMINAL_STATUSES,
+            )
+            .aupdate(status=status, error=error, updated_at=datetime.now(tz=UTC))
+        )
         if not won:
             return
         await job.arefresh_from_db()
@@ -430,6 +434,7 @@ async def get_or_start_job(
 def restrict_job_result(job, limits):
     """Read-time expiry guard for polling and WebSocket delivery."""
     from copy import deepcopy
+
     for field in ("result", "stale_result"):
         payload = getattr(job, field, None)
         if not payload:

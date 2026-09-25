@@ -4,15 +4,12 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
-    dependencies = (
-        ('core', '0007_alter_recurringroute_profile'),
-    )
+    dependencies = (("core", "0007_alter_recurringroute_profile"),)
 
     operations = (
         migrations.AddField(
-            model_name='forecastjob',
-            name='computed_weather',
+            model_name="forecastjob",
+            name="computed_weather",
             field=models.JSONField(blank=True, null=True),
         ),
     )

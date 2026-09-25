@@ -4,15 +4,12 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
-    dependencies = (
-        ('core', '0004_recurringroute_vertex_times'),
-    )
+    dependencies = (("core", "0004_recurringroute_vertex_times"),)
 
     operations = (
         migrations.AddField(
-            model_name='forecastjob',
-            name='cells_failed',
+            model_name="forecastjob",
+            name="cells_failed",
             field=models.IntegerField(default=0),
         ),
     )

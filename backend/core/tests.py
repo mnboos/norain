@@ -839,9 +839,12 @@ class RouteThumbnailTests(TestCase):
     def _compute(self):
         forecast_patch, ensemble_patch = self._no_network()
         # The thumbnail may read station readings but must never fetch them either.
-        with forecast_patch, ensemble_patch, patch(
-            "core.stations._fetch_nearby", AsyncMock(side_effect=AssertionError("fetched!"))
-        ), patch("core.stations._fetch_observation", AsyncMock(side_effect=AssertionError("fetched!"))):
+        with (
+            forecast_patch,
+            ensemble_patch,
+            patch("core.stations._fetch_nearby", AsyncMock(side_effect=AssertionError("fetched!"))),
+            patch("core.stations._fetch_observation", AsyncMock(side_effect=AssertionError("fetched!"))),
+        ):
             return async_to_sync(compute_route_thumbnail)(self.route)
 
     def test_warm_cells_produce_scoreable_samples_without_fetching(self):
@@ -1000,9 +1003,7 @@ class EntitlementTests(TestCase):
 
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
-        self.user = User.objects.create_user(
-            username="rider", email="rider@example.test", password=self.password
-        )
+        self.user = User.objects.create_user(username="rider", email="rider@example.test", password=self.password)
         self.client.force_login(self.user)
 
     def csrf_headers(self):
@@ -1155,9 +1156,7 @@ class EntitlementTests(TestCase):
         mine = [self.add_route(f"mine-{i}", sample_points=points) for i in range(3)]
         for i, route in enumerate(mine):
             RecurringRoute.objects.filter(id=route.id).update(created_at=datetime(2026, 1, i + 1, tzinfo=UTC))
-        other = User.objects.create_user(
-            username="other", email="other@example.test", password="x"
-        )
+        other = User.objects.create_user(username="other", email="other@example.test", password="x")
         self.add_route("theirs", owner=other, sample_points=points)
 
         enqueue = AsyncMock()
@@ -1175,9 +1174,7 @@ class StripeWebhookTests(TestCase):
 
     def setUp(self):
         self.client = Client()
-        self.user = User.objects.create_user(
-            username="rider", email="rider@example.test", password="x"
-        )
+        self.user = User.objects.create_user(username="rider", email="rider@example.test", password="x")
         self.subscription = Subscription.objects.create(user=self.user, stripe_customer_id="cus_123", plan=Plan.FREE)
 
     def post_event(self, event: dict):
@@ -1336,9 +1333,7 @@ class BillingEndpointTests(TestCase):
 
     def setUp(self):
         self.client = Client(enforce_csrf_checks=True)
-        self.user = User.objects.create_user(
-            username="rider", email="rider@example.test", password="x"
-        )
+        self.user = User.objects.create_user(username="rider", email="rider@example.test", password="x")
 
     def test_entitlements_reports_the_free_tier_and_route_usage(self):
         self.client.force_login(self.user)
@@ -1478,9 +1473,7 @@ class ForecastJobTests(TestCase):
 
     def setUp(self):
         cache.clear()
-        self.user = User.objects.create_user(
-            username="rider", email="rider@example.com", password="pw"
-        )
+        self.user = User.objects.create_user(username="rider", email="rider@example.com", password="pw")
         self.departure = next_departure("0 8 * * *")
         # Two sample points inside one ~1 km² cell plus one in another: three samples,
         # two distinct cells.
@@ -1548,14 +1541,17 @@ class ForecastJobTests(TestCase):
 
     def test_route_weather_enqueues_instead_of_routing(self):
         """The ad-hoc endpoint must not call GraphHopper on the request path either."""
-        with patch("core.weather._fetch_route", AsyncMock(side_effect=AssertionError("routed!"))), patch(
-            "core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())
+        with (
+            patch("core.weather._fetch_route", AsyncMock(side_effect=AssertionError("routed!"))),
+            patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())),
         ):
             response = self.client.get(
                 "/api/route_weather",
                 {
-                    "start_lat": 47.0, "start_lon": 9.0,
-                    "dest_lat": 47.01, "dest_lon": 9.01,
+                    "start_lat": 47.0,
+                    "start_lon": 9.0,
+                    "dest_lat": 47.01,
+                    "dest_lon": 9.01,
                     "profile": "bike",
                     "departure_time": f"{self.departure.date().isoformat()}T08:00",
                 },
@@ -1568,8 +1564,10 @@ class ForecastJobTests(TestCase):
             response = self.client.get(
                 "/api/route_weather",
                 {
-                    "start_lat": 47.0, "start_lon": 9.0,
-                    "dest_lat": 47.01, "dest_lon": 9.01,
+                    "start_lat": 47.0,
+                    "start_lon": 9.0,
+                    "dest_lat": 47.01,
+                    "dest_lon": 9.01,
                     "profile": "foot",
                     "departure_time": f"{self.departure.date().isoformat()}T08:00",
                 },
@@ -1595,16 +1593,23 @@ class ForecastJobTests(TestCase):
         self.route.geometry_fetched_at = datetime.now(tz=UTC)
         self.route.save(update_fields=["geometry_fetched_at"])
         with patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
-            response = self.client.get(f"/api/routes/{self.route.id}/forecast",
-                                       {"date": self.departure.date().isoformat(), "time": "08:00"})
+            response = self.client.get(
+                f"/api/routes/{self.route.id}/forecast", {"date": self.departure.date().isoformat(), "time": "08:00"}
+            )
         self.assertEqual(response.status_code, 202)
 
     def test_times_survive_geometry_storage_and_job_snapshot(self):
         times = [0.0, 300.125, 600.75]
-        geometry = {"polyline": self.route.polyline_coordinates, "sample_points": self.sample_points,
-                    "vertex_times": times, "total_seconds": 600, "total_distance_m": 1500}
-        with patch("core.tasks.build_geometry", AsyncMock(return_value=geometry)), patch(
-            "core.tasks.refresh_route_thumbnail", SimpleNamespace(aenqueue=AsyncMock())
+        geometry = {
+            "polyline": self.route.polyline_coordinates,
+            "sample_points": self.sample_points,
+            "vertex_times": times,
+            "total_seconds": 600,
+            "total_distance_m": 1500,
+        }
+        with (
+            patch("core.tasks.build_geometry", AsyncMock(return_value=geometry)),
+            patch("core.tasks.refresh_route_thumbnail", SimpleNamespace(aenqueue=AsyncMock())),
         ):
             async_to_sync(_refresh_route_geometry_async)(str(self.route.id))
         self.route.refresh_from_db()
@@ -1636,13 +1641,30 @@ class ForecastJobTests(TestCase):
 
     def test_actual_assembly_uses_warm_cells_without_fetching(self):
         times = [0.0, 300.125, 600.75]
-        geometry = {"polyline": self.route.polyline_coordinates, "sample_points": self.sample_points,
-                    "vertex_times": times, "total_seconds": 600, "total_distance_m": 1500}
+        geometry = {
+            "polyline": self.route.polyline_coordinates,
+            "sample_points": self.sample_points,
+            "vertex_times": times,
+            "total_seconds": 600,
+            "total_distance_m": 1500,
+        }
         dep = datetime.fromisoformat(self._job_params()["departure_time"])
         for lat, lon in ((47.0, 9.0), (47.01, 9.01)):
-            ForecastCell.objects.create(lat_r=lat, lon_r=lon, day_key=dep.date(), source="open-meteo", forecast_days=16,
-                                        data={"hourly": {"time": [dep.isoformat()], "temperature_2m": [18],
-                                                         "wind_speed_10m": [12], "wind_direction_10m": [90]}})
+            ForecastCell.objects.create(
+                lat_r=lat,
+                lon_r=lon,
+                day_key=dep.date(),
+                source="open-meteo",
+                forecast_days=16,
+                data={
+                    "hourly": {
+                        "time": [dep.isoformat()],
+                        "temperature_2m": [18],
+                        "wind_speed_10m": [12],
+                        "wind_direction_10m": [90],
+                    }
+                },
+            )
         job = self._make_job(status=ForecastJob.Status.ASSEMBLING, geometry=geometry)
         with (
             patch(
@@ -1655,14 +1677,25 @@ class ForecastJobTests(TestCase):
             async_to_sync(_compute_route_weather_job_async)(str(job.id))
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
             kwargs = dict(
-                start_lat=0, start_lon=0, dest_lat=0, dest_lon=0, profile="bike",
-                departure_time=dep.isoformat(), cache_only=True, **geometry,
+                start_lat=0,
+                start_lon=0,
+                dest_lat=0,
+                dest_lon=0,
+                profile="bike",
+                departure_time=dep.isoformat(),
+                cache_only=True,
+                **geometry,
             )
             plain = async_to_sync(compute_route_weather)(**kwargs, include_segments=False)
             with patch("core.weather.build_geometry", AsyncMock(return_value=geometry)):
                 adhoc = async_to_sync(compute_route_weather)(
-                    start_lat=0, start_lon=0, dest_lat=0, dest_lon=0,
-                    profile="bike", departure_time=dep.isoformat(), cache_only=True,
+                    start_lat=0,
+                    start_lon=0,
+                    dest_lat=0,
+                    dest_lon=0,
+                    profile="bike",
+                    departure_time=dep.isoformat(),
+                    cache_only=True,
                 )
             fetch.assert_not_awaited()
             ensemble.assert_not_awaited()
@@ -1677,9 +1710,7 @@ class ForecastJobTests(TestCase):
     def test_another_account_cannot_read_a_job(self):
         """Job ids are capabilities for ad-hoc runs, but an owned job stays private."""
         job = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
-        other = User.objects.create_user(
-            username="other", email="other@example.com", password="pw"
-        )
+        other = User.objects.create_user(username="other", email="other@example.com", password="pw")
         client = Client(enforce_csrf_checks=True)
         client.force_login(other)
         self.assertEqual(client.get(f"/api/forecast_jobs/{job.id}").status_code, 404)
@@ -1690,9 +1721,11 @@ class ForecastJobTests(TestCase):
         """Two sample points in one cell must produce one fetch, not two."""
         job = self._make_job()
         forecast_enqueue, ensemble_enqueue = AsyncMock(), AsyncMock()
-        with patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)), patch(
-            "core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble_enqueue)
-        ), patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())):
+        with (
+            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)),
+            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble_enqueue)),
+            patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())),
+        ):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
 
         # Three sample points, two distinct cells, one deterministic + one ensemble each.
@@ -1714,11 +1747,13 @@ class ForecastJobTests(TestCase):
                     claim_cell(kind, lat_r, lon_r, day_key, days)
 
         forecast_enqueue, ensemble_enqueue = AsyncMock(), AsyncMock()
-        with patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)), patch(
-            "core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble_enqueue)
-        ), patch(
-            "core.tasks.refresh_route_thumbnail",
-            SimpleNamespace(using=lambda **kw: SimpleNamespace(aenqueue=AsyncMock())),
+        with (
+            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)),
+            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble_enqueue)),
+            patch(
+                "core.tasks.refresh_route_thumbnail",
+                SimpleNamespace(using=lambda **kw: SimpleNamespace(aenqueue=AsyncMock())),
+            ),
         ):
             async_to_sync(_scan_route_forecasts_async)(str(self.route.id))
 
@@ -1743,9 +1778,11 @@ class ForecastJobTests(TestCase):
             self.assertTrue(claim_cell("forecast", lat_r, lon_r, day_key, days))
 
         forecast_enqueue = AsyncMock()
-        with patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)), patch(
-            "core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=AsyncMock())
-        ), patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())):
+        with (
+            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)),
+            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=AsyncMock())),
+            patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())),
+        ):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
 
         self.assertEqual(forecast_enqueue.await_count, 2)
@@ -1755,8 +1792,12 @@ class ForecastJobTests(TestCase):
         self.route.sample_points = None
         self.route.save(update_fields=["sample_points"])
         job = self._make_job(attempts=MAX_PLAN_ATTEMPTS - 1)
-        with patch("core.tasks.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())), patch(
-            "core.tasks.plan_forecast_job", SimpleNamespace(using=lambda **kw: SimpleNamespace(aenqueue=AsyncMock()))
+        with (
+            patch("core.tasks.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())),
+            patch(
+                "core.tasks.plan_forecast_job",
+                SimpleNamespace(using=lambda **kw: SimpleNamespace(aenqueue=AsyncMock())),
+            ),
         ):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
         job.refresh_from_db()
@@ -1787,8 +1828,9 @@ class ForecastJobTests(TestCase):
         day_key = self.departure.date().isoformat()
         self.assertTrue(claim_cell("forecast", 47.0, 9.0, day_key, 2))
 
-        with patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())), patch(
-            "core.tasks.get_or_fetch_forecast_cell", AsyncMock(return_value=None)
+        with (
+            patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())),
+            patch("core.tasks.get_or_fetch_forecast_cell", AsyncMock(return_value=None)),
         ):
             async_to_sync(_refresh_forecast_cell_async)(47.0, 9.0, day_key, 2, str(job.id))
 
@@ -1806,9 +1848,10 @@ class ForecastJobTests(TestCase):
                 async_to_sync(_refresh_ensemble_cell_async)(47.0, 9.0, day_key, 2, str(job.id))
             with patch("core.tasks.get_or_fetch_ensemble_cell", AsyncMock(return_value=SimpleNamespace())):
                 async_to_sync(_refresh_ensemble_cell_async)(47.0, 9.01, day_key, 2, str(job.id))
-            with patch(
-                "core.tasks.get_or_fetch_ensemble_cell", AsyncMock(side_effect=RuntimeError("boom"))
-            ), self.assertRaises(RuntimeError):
+            with (
+                patch("core.tasks.get_or_fetch_ensemble_cell", AsyncMock(side_effect=RuntimeError("boom"))),
+                self.assertRaises(RuntimeError),
+            ):
                 async_to_sync(_refresh_ensemble_cell_async)(47.0, 9.02, day_key, 2, str(job.id))
 
         job.refresh_from_db()
@@ -1839,8 +1882,9 @@ class ForecastJobTests(TestCase):
     def test_broken_computation_marks_the_job_failed_and_reraises(self):
         """The watcher must hear about it, and the worker must still see the traceback."""
         job = self._make_job(status=ForecastJob.Status.ASSEMBLING, geometry={"sample_points": [], "polyline": []})
-        with patch("core.tasks.compute_route_weather", AsyncMock(side_effect=KeyError("samples"))), self.assertRaises(
-            KeyError
+        with (
+            patch("core.tasks.compute_route_weather", AsyncMock(side_effect=KeyError("samples"))),
+            self.assertRaises(KeyError),
         ):
             async_to_sync(_compute_route_weather_job_async)(str(job.id))
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
@@ -1941,9 +1985,14 @@ class ForecastJobTests(TestCase):
 
     def test_compute_enqueue_failure_rolls_back_intermediate(self):
         job, forecast = self._compute_fixture()
-        with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)), patch(
-            "core.tasks.assemble_forecast_job", SimpleNamespace(enqueue=Mock(side_effect=RuntimeError("queue failed")))
-        ), self.assertRaises(RuntimeError):
+        with (
+            patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)),
+            patch(
+                "core.tasks.assemble_forecast_job",
+                SimpleNamespace(enqueue=Mock(side_effect=RuntimeError("queue failed"))),
+            ),
+            self.assertRaises(RuntimeError),
+        ):
             async_to_sync(_compute_route_weather_job_async)(str(job.id))
         job.refresh_from_db()
         self.assertEqual(job.status, ForecastJob.Status.FAILED)
@@ -1973,9 +2022,11 @@ class ForecastJobTests(TestCase):
         job, forecast = self._compute_fixture()
         with patch("core.tasks.compute_route_weather", AsyncMock(return_value=forecast)):
             async_to_sync(_compute_route_weather_job_async)(str(job.id))
-        with patch("core.tasks.compute_sections", side_effect=RuntimeError("sections failed")), patch(
-            "core.tasks.publish", AsyncMock()
-        ) as publish, self.assertRaises(RuntimeError):
+        with (
+            patch("core.tasks.compute_sections", side_effect=RuntimeError("sections failed")),
+            patch("core.tasks.publish", AsyncMock()) as publish,
+            self.assertRaises(RuntimeError),
+        ):
             async_to_sync(_assemble_forecast_job_async)(str(job.id))
         publish.assert_awaited_once()
         job.refresh_from_db()
@@ -2005,11 +2056,18 @@ class ForecastJobTests(TestCase):
                 job = self._make_job(geometry={"sample_points": points, "polyline": []})
                 for lat, lon in {(sp["lat_r"], sp["lon_r"]) for sp in points}:
                     ForecastCell.objects.create(
-                        lat_r=lat, lon_r=lon, day_key=self.departure.date(), forecast_days=16,
-                        source="open-meteo", data={},
+                        lat_r=lat,
+                        lon_r=lon,
+                        day_key=self.departure.date(),
+                        forecast_days=16,
+                        source="open-meteo",
+                        data={},
                     )
                     EnsembleCell.objects.create(
-                        lat_r=lat, lon_r=lon, day_key=self.departure.date(), forecast_days=16,
+                        lat_r=lat,
+                        lon_r=lon,
+                        day_key=self.departure.date(),
+                        forecast_days=16,
                         data={"_norain_request_version": ENSEMBLE_REQUEST_VERSION},
                     )
                 with patch(
@@ -2023,9 +2081,10 @@ class ForecastJobTests(TestCase):
 
     def test_missing_and_terminal_jobs_skip_both_stages(self):
         job = self._make_job(status=ForecastJob.Status.DONE, result=_finished_payload())
-        with patch("core.tasks.compute_route_weather", AsyncMock()) as compute, patch(
-            "core.tasks.compute_sections"
-        ) as sections:
+        with (
+            patch("core.tasks.compute_route_weather", AsyncMock()) as compute,
+            patch("core.tasks.compute_sections") as sections,
+        ):
             for status in (ForecastJob.Status.DONE, ForecastJob.Status.FAILED):
                 ForecastJob.objects.filter(id=job.id).update(status=status)
                 async_to_sync(_compute_route_weather_job_async)(str(job.id))
@@ -2332,8 +2391,9 @@ class ForecastJobTests(TestCase):
     def test_prebuild_never_spends_station_calls(self):
         """A Pro ride near now would plan a Weather Underground fetch; a free one would not."""
         soon = datetime.now(tz=UTC) + timedelta(minutes=30)
-        with patch.dict(os.environ, {"WEATHERUNDERGROUND_API_KEY": "test-key"}), patch(
-            "core.tasks.next_departure", return_value=soon
+        with (
+            patch.dict(os.environ, {"WEATHERUNDERGROUND_API_KEY": "test-key"}),
+            patch("core.tasks.next_departure", return_value=soon),
         ):
             self.assertFalse(self._prebuild()["built"])
             RecurringRoute.objects.filter(pk=self.route.pk).update(briefing_channel="email")
@@ -2348,18 +2408,25 @@ class ForecastJobTests(TestCase):
         self.route.schedule_cron = "0 * * * *"
         self.route.save()
         stale = RecurringRoute.objects.create(
-            owner=self.user, name="Old", start_point=route_point(47.0, 9.0), start_name="Start",
-            destination_point=route_point(47.01, 9.01), dest_name="Destination",
-            schedule_cron="0 8 * * *", schedule_description="Daily at 08:00",
-            sample_points=self.sample_points, total_seconds=600,
+            owner=self.user,
+            name="Old",
+            start_point=route_point(47.0, 9.0),
+            start_name="Start",
+            destination_point=route_point(47.01, 9.01),
+            dest_name="Destination",
+            schedule_cron="0 8 * * *",
+            schedule_description="Daily at 08:00",
+            sample_points=self.sample_points,
+            total_seconds=600,
             last_viewed_at=datetime.now(tz=UTC) - timedelta(days=30),
         )
         RecurringRoute.objects.filter(id=self.route.id).update(last_viewed_at=datetime.now(tz=UTC))
 
         enqueue = AsyncMock()
         prebuild = SimpleNamespace(using=Mock(return_value=SimpleNamespace(aenqueue=enqueue)))
-        with patch("core.tasks.scan_route_forecasts", SimpleNamespace(aenqueue=AsyncMock())), patch(
-            "core.tasks.prebuild_route_forecast", prebuild
+        with (
+            patch("core.tasks.scan_route_forecasts", SimpleNamespace(aenqueue=AsyncMock())),
+            patch("core.tasks.prebuild_route_forecast", prebuild),
         ):
             result = async_to_sync(_refresh_user_forecasts_async)(self.user.id)
 
@@ -2392,8 +2459,14 @@ def _long_payload(vertices: int = 2000, every: int = 150) -> dict:
     line = [[9.0 + i / 10_000, 47.0 + (i % 2) / 100_000] for i in range(vertices)]
     samples = [
         {
-            "lat": line[i][1], "lon": line[i][0], "elapsed_s": i, "eta": "2026-09-14T08:00",
-            "rain_mm": 0.0, "temp": 15.0, "weather_desc": "Klar", "uncertainty": _uncertainty(),
+            "lat": line[i][1],
+            "lon": line[i][0],
+            "elapsed_s": i,
+            "eta": "2026-09-14T08:00",
+            "rain_mm": 0.0,
+            "temp": 15.0,
+            "weather_desc": "Klar",
+            "uncertainty": _uncertainty(),
         }
         for i in range(0, vertices, every)
     ]
@@ -2409,10 +2482,22 @@ def _long_payload(vertices: int = 2000, every: int = 150) -> dict:
 
 def _wind_segment(start_m: float, **overrides) -> dict:
     segment = {
-        "start_m": start_m, "end_m": start_m + 100, "lat": 47.123456789, "lon": 9.0 + start_m / 100_000,
-        "elapsed_s": start_m / 5, "bearing": 90.04, "rider_speed": 18.0, "wind_speed": 12.0,
-        "wind_dir": 270.04, "headwind": -10.0, "crosswind": 1.0, "felt_speed": 8.26, "felt_angle": -12.34,
-        "wind_power_w": -33.6, "wind_coverage": 1.0, "felt_coverage": 1.0,
+        "start_m": start_m,
+        "end_m": start_m + 100,
+        "lat": 47.123456789,
+        "lon": 9.0 + start_m / 100_000,
+        "elapsed_s": start_m / 5,
+        "bearing": 90.04,
+        "rider_speed": 18.0,
+        "wind_speed": 12.0,
+        "wind_dir": 270.04,
+        "headwind": -10.0,
+        "crosswind": 1.0,
+        "felt_speed": 8.26,
+        "felt_angle": -12.34,
+        "wind_power_w": -33.6,
+        "wind_coverage": 1.0,
+        "felt_coverage": 1.0,
     }
     return {**segment, **overrides}
 
@@ -2427,9 +2512,7 @@ class ForecastViewTests(TestCase):
     """The job result goes out slim; pages fetch the parts they draw on their own."""
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            username="viewer", email="viewer@example.com", password="pw"
-        )
+        self.user = User.objects.create_user(username="viewer", email="viewer@example.com", password="pw")
         self.client = Client(enforce_csrf_checks=True)
         self.client.force_login(self.user)
 
@@ -2480,10 +2563,30 @@ class ForecastViewTests(TestCase):
         payload["samples"][0]["temp"] = -6.0
         payload["samples"][0]["weather_code"] = 75  # starker Schneefall
         payload["sections"] = [
-            {"start_km": 0, "end_km": 1, "start_time": "0:00", "end_time": "0:10", "condition": "dry",
-             "max_rain_mm": 0.0, "temp_min": -6.0, "temp_max": 15.0, "start_index": 0, "end_index": 0},
-            {"start_km": 1, "end_km": 2, "start_time": "0:10", "end_time": "0:20", "condition": "dry",
-             "max_rain_mm": 0.0, "temp_min": 15.0, "temp_max": 15.0, "start_index": 1, "end_index": 1},
+            {
+                "start_km": 0,
+                "end_km": 1,
+                "start_time": "0:00",
+                "end_time": "0:10",
+                "condition": "dry",
+                "max_rain_mm": 0.0,
+                "temp_min": -6.0,
+                "temp_max": 15.0,
+                "start_index": 0,
+                "end_index": 0,
+            },
+            {
+                "start_km": 1,
+                "end_km": 2,
+                "start_time": "0:10",
+                "end_time": "0:20",
+                "condition": "dry",
+                "max_rain_mm": 0.0,
+                "temp_min": 15.0,
+                "temp_max": 15.0,
+                "start_index": 1,
+                "end_index": 1,
+            },
         ]
         view = forecast_view(self._job(payload, key="frost"))
 
@@ -2496,8 +2599,16 @@ class ForecastViewTests(TestCase):
         """Old jobs live for hours; a required index would 500 the detail page until they expire."""
         payload = _long_payload(vertices=10, every=5)
         payload["sections"] = [
-            {"start_km": 0, "end_km": 2, "start_time": "0:00", "end_time": "0:20", "condition": "dry",
-             "max_rain_mm": 0.0, "temp_min": 15.0, "temp_max": 15.0},
+            {
+                "start_km": 0,
+                "end_km": 2,
+                "start_time": "0:00",
+                "end_time": "0:20",
+                "condition": "dry",
+                "max_rain_mm": 0.0,
+                "temp_min": 15.0,
+                "temp_max": 15.0,
+            },
         ]
         job = self._job(payload, key="old-sections")
 
@@ -2563,8 +2674,14 @@ class ForecastViewTests(TestCase):
         self.assertEqual(
             coarse[0],
             {
-                "lat": 47.12346, "lon": 9.0, "bearing": 90.0, "wind_speed": 12.0, "wind_dir": 270.0,
-                "wind_power_w": -34, "wind_effort_level": "Wind hilft", "wind_effort": 0.0,
+                "lat": 47.12346,
+                "lon": 9.0,
+                "bearing": 90.0,
+                "wind_speed": 12.0,
+                "wind_dir": 270.0,
+                "wind_power_w": -34,
+                "wind_effort_level": "Wind hilft",
+                "wind_effort": 0.0,
             },
         )
         self.assertEqual(
@@ -2584,8 +2701,9 @@ class ForecastViewTests(TestCase):
             _wind_segment(200.0, wind_speed=None),
             _wind_segment(300.0, bearing=None),
             # No timing: no felt wind and no effort, but the real wind is still an arrow.
-            _wind_segment(400.0, elapsed_s=None, felt_speed=None, felt_angle=None, felt_coverage=0.0,
-                          wind_power_w=None),
+            _wind_segment(
+                400.0, elapsed_s=None, felt_speed=None, felt_angle=None, felt_coverage=0.0, wind_power_w=None
+            ),
             _wind_segment(500.0),
             _wind_segment(2300.0, wind_coverage=0.99),
             _wind_segment(2400.0),
@@ -2627,9 +2745,7 @@ class ForecastViewTests(TestCase):
             self.assertEqual(self.client.get(f"/api/forecast_jobs/{pending.id}/{path}").status_code, 404, path)
 
         job = self._job()
-        other = User.objects.create_user(
-            username="other", email="other@example.com", password="pw"
-        )
+        other = User.objects.create_user(username="other", email="other@example.com", password="pw")
         client = Client(enforce_csrf_checks=True)
         client.force_login(other)
         for path in ("map_detail?detail=full", "samples/0/uncertainty"):
@@ -2641,9 +2757,7 @@ class ForecastJobConsumerTests(TransactionTestCase):
     """The socket must deliver a result even when the job finished before it opened."""
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            username="watcher", email="watcher@example.com", password="pw"
-        )
+        self.user = User.objects.create_user(username="watcher", email="watcher@example.com", password="pw")
 
     def _job(self, **overrides):
         params = {"route_id": "x", "departure_time": "2026-09-14T08:00"}
@@ -2699,9 +2813,7 @@ class ForecastJobConsumerTests(TransactionTestCase):
     def test_another_account_cannot_watch_an_owned_job(self):
         """An owned job is as private on the socket as it is on the job endpoint."""
         job = self._job(owner=self.user)
-        other = User.objects.create_user(
-            username="nosy", email="nosy@example.com", password="pw"
-        )
+        other = User.objects.create_user(username="nosy", email="nosy@example.com", password="pw")
 
         async def run():
             communicator, connected = await self._connect(job, user=other)

@@ -1,7 +1,7 @@
 import { mount } from "@vue/test-utils";
 import { ref } from "vue";
 import { describe, expect, it, vi } from "vitest";
-import type { JourneyOut, JourneyDayOut } from "@norain/api/models";
+import type { JourneyOut, JourneyDayOut, JourneyStageOut } from "@norain/api/models";
 import JourneyDayPanel from "../journey/JourneyDayPanel.vue";
 
 vi.mock("quasar", async importOriginal => ({
@@ -55,6 +55,16 @@ describe("journey warnings", () => {
             weatherPrefs: {},
             planStatus: "planned",
         };
+        const stage: JourneyStageOut = {
+            id: "s",
+            rank: 0,
+            path: [],
+            distanceM: 2000,
+            totalSeconds: 1000,
+            breaks: [],
+            gaps: {},
+            reasons,
+        };
         const day: JourneyDayOut = {
             id: "d",
             index: 0,
@@ -62,9 +72,7 @@ describe("journey warnings", () => {
             start: [8, 47],
             end: [9, 47],
             forecastAvailable: false,
-            stages: [
-                { id: "s", rank: 0, path: [], distanceM: 2000, totalSeconds: 1000, breaks: [], gaps: {}, reasons },
-            ],
+            stages: [stage],
         };
         const wrapper = mount(JourneyDayPanel, {
             props: {
@@ -94,21 +102,26 @@ describe("journey warnings", () => {
                 },
             },
         });
+        const variantButton = (index: number) => {
+            const button = wrapper.findAll(".variant-button")[index];
+            if (!button) throw new Error(`Variant button ${index} is missing`);
+            return button;
+        };
         const warnings = wrapper.get('[data-testid="journey-limit-warnings"]');
         for (const reason of reasons) expect(warnings.text()).toContain(reason);
         expect(wrapper.find(".variant-button").exists()).toBe(false);
         expect(wrapper.text()).not.toContain("Keine Pause nötig.");
-        const first = { ...day.stages![0]!, reasons: [...reasons, "Erste Route"], recommended: true };
+        const first = { ...stage, reasons: [...reasons, "Erste Route"], recommended: true };
         const second = { ...first, id: "s2", recommended: false, reasons: ["Zweite Route"], forecastStatus: "failed" };
         await wrapper.setProps({ day: { ...day, stages: [first, second] } });
         expect(wrapper.get(".variant-button").attributes("aria-pressed")).toBe("true");
         expect(wrapper.text()).toContain("Wetter fehlgeschlagen");
         await wrapper.get('[data-testid="toggle-details"]').trigger("click");
         expect(wrapper.text()).toContain("Erste Route");
-        await wrapper.findAll(".variant-button")[1]!.trigger("click");
+        await variantButton(1).trigger("click");
         expect(wrapper.text()).toContain("Zweite Route");
         expect(wrapper.text()).not.toContain("Erste Route");
-        expect(wrapper.findAll(".variant-button")[1]!.attributes("aria-pressed")).toBe("true");
+        expect(variantButton(1).attributes("aria-pressed")).toBe("true");
         await wrapper.setProps({ day: { ...day, id: "next-day", stages: [first, second] } });
         expect(wrapper.text()).not.toContain("Erste Route");
         expect(wrapper.get(".variant-button").attributes("aria-pressed")).toBe("true");

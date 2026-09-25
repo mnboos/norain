@@ -94,10 +94,16 @@ FROST_DRY_SHARE = 0.5
 # raises the penalty - it never decides that there is no frost.
 FROST_CODES = {
     48: 0.5,  # Reifnebel
-    56: 0.9, 57: 1.0,  # gefrierender Niesel
-    66: 0.9, 67: 1.0,  # gefrierender Regen
-    71: 0.7, 73: 0.85, 75: 1.0, 77: 0.7,  # Schneefall, Schneegriesel
-    85: 0.85, 86: 1.0,  # Schneeschauer
+    56: 0.9,
+    57: 1.0,  # gefrierender Niesel
+    66: 0.9,
+    67: 1.0,  # gefrierender Regen
+    71: 0.7,
+    73: 0.85,
+    75: 1.0,
+    77: 0.7,  # Schneefall, Schneegriesel
+    85: 0.85,
+    86: 1.0,  # Schneeschauer
 }
 
 # Weather-aware journey routing (core/weather_routing.py): how much more a road costs inside
@@ -109,7 +115,10 @@ ROUTING_WIND_ZONES = ((30.0, 0.6), (18.0, 0.85))  # (wind km/h at least, multipl
 
 BAND_LABELS = ("sehr gut", "gut", "mässig", "schlecht", "sehr schlecht")
 FACTOR_LABELS: dict[RideFactor, str] = {
-    "rain": "Regen", "wind": "Wind", "temp": "Temperatur", "frost": "Frost",
+    "rain": "Regen",
+    "wind": "Wind",
+    "temp": "Temperatur",
+    "frost": "Frost",
 }
 
 # Naming a single cause is only honest when one factor actually dominates. Below this share

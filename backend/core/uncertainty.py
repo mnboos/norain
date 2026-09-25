@@ -177,8 +177,7 @@ def ensemble_central(data: dict, eta: datetime, requested_models: list[str]) -> 
     temps = [e["temperature_2m"] for e in entries if "temperature_2m" in e]
     gusts = [e["wind_gusts_10m"] for e in entries if "wind_gusts_10m" in e]
     winds = [
-        w for e in entries
-        if (w := normalize_wind(e.get("wind_speed_10m"), e.get("wind_direction_10m"))) is not None
+        w for e in entries if (w := normalize_wind(e.get("wind_speed_10m"), e.get("wind_direction_10m"))) is not None
     ]
     central = EnsembleCentral(
         temp=statistics.median(temps) if len(temps) >= 2 else None,

@@ -4,15 +4,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0006_station_observations'),
+        ("core", "0006_station_observations"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='recurringroute',
-            name='profile',
-            field=models.CharField(default='bike', help_text='GraphHopper routing profile: bike, ebike, fast_ebike', max_length=50),
+            model_name="recurringroute",
+            name="profile",
+            field=models.CharField(
+                default="bike", help_text="GraphHopper routing profile: bike, ebike, fast_ebike", max_length=50
+            ),
         ),
     ]

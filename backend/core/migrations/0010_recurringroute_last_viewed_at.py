@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0009_recurringroute_departure_flex_after_minutes_and_more'),
+        ("core", "0009_recurringroute_departure_flex_after_minutes_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='recurringroute',
-            name='last_viewed_at',
+            model_name="recurringroute",
+            name="last_viewed_at",
             field=models.DateTimeField(blank=True, null=True),
         ),
     ]

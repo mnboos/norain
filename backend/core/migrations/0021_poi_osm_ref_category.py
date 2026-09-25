@@ -4,19 +4,18 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0020_cellfetchlease'),
+        ("core", "0020_cellfetchlease"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='poi',
-            name='osm_ref',
-            field=models.CharField(db_index=True, help_text='n123 / w456 / r789', max_length=32),
+            model_name="poi",
+            name="osm_ref",
+            field=models.CharField(db_index=True, help_text="n123 / w456 / r789", max_length=32),
         ),
         migrations.AddConstraint(
-            model_name='poi',
-            constraint=models.UniqueConstraint(fields=('osm_ref', 'category'), name='unique_poi_category'),
+            model_name="poi",
+            constraint=models.UniqueConstraint(fields=("osm_ref", "category"), name="unique_poi_category"),
         ),
     ]

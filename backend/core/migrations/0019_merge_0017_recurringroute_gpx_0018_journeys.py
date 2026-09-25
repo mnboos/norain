@@ -4,11 +4,9 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0017_recurringroute_gpx'),
-        ('core', '0018_journeys'),
+        ("core", "0017_recurringroute_gpx"),
+        ("core", "0018_journeys"),
     ]
 
-    operations = [
-    ]
+    operations = []

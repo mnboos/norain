@@ -4,25 +4,28 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0016_recurringroute_via_points'),
+        ("core", "0016_recurringroute_via_points"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='recurringroute',
-            name='duration_seconds',
+            model_name="recurringroute",
+            name="duration_seconds",
             field=models.PositiveIntegerField(blank=True, null=True),
         ),
         migrations.AddField(
-            model_name='recurringroute',
-            name='geometry_source',
-            field=models.CharField(choices=[('graphhopper', 'GraphHopper'), ('imported', 'Imported path')], default='graphhopper', max_length=20),
+            model_name="recurringroute",
+            name="geometry_source",
+            field=models.CharField(
+                choices=[("graphhopper", "GraphHopper"), ("imported", "Imported path")],
+                default="graphhopper",
+                max_length=20,
+            ),
         ),
         migrations.AddField(
-            model_name='recurringroute',
-            name='imported_coordinates',
+            model_name="recurringroute",
+            name="imported_coordinates",
             field=models.JSONField(blank=True, default=list),
         ),
     ]

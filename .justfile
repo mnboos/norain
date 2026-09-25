@@ -303,3 +303,14 @@ download-pbf:
 download-photon-dumps:
     chmod +x scripts/download-photon-dumps.sh
     ./scripts/download-photon-dumps.sh
+
+[working-directory("backend")]
+lint-backend:
+    ruff format
+    ruff check --fix
+
+[working-directory("frontend")]
+lint-frontend:
+    npm run lint
+
+lint: lint-backend lint-frontend

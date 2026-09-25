@@ -421,9 +421,13 @@ def _store_ensemble_cell_sync(
 
 
 def _cached_cell_keys_sync(
-    cells: list[tuple[float, float]], windows: list[tuple[str | date, int]]
-) -> tuple[set[CellKey], set[CellKey]]:
-    """Read availability metadata only, with two queries per batch of exact cell keys."""
+    cells: list[tuple[float, float]],
+    windows: list[tuple[str | date, int]],
+    *,
+    load_data: bool = False,
+    include_ensemble: bool = True,
+):
+    """Read availability or full cells with bounded queries over exact cell keys."""
     requirements: dict[CellKey, int] = {}
     for day_key, days in windows:
         day = date.fromisoformat(day_key) if isinstance(day_key, str) else day_key
@@ -434,32 +438,59 @@ def _cached_cell_keys_sync(
     cutoff = datetime.now(tz=UTC) - MAX_CELL_AGE
     forecasts: set[CellKey] = set()
     ensembles: set[CellKey] = set()
+    forecast_cells = {}
+    ensemble_cells = {}
     for batch in batched(requirements.items(), CELL_LOOKUP_BATCH_SIZE, strict=False):
         requested = Q(
             *(Q(lat_r=lat, lon_r=lon, day_key=day, forecast_days__gte=days) for (lat, lon, day), days in batch),
             _connector=Q.OR,
         )
         sources: dict[CellKey, str] = {}
-        for lat, lon, day, source in ForecastCell.objects.filter(
+        forecast_query = ForecastCell.objects.filter(
             requested, fetched_at__gte=cutoff, source__in=("open-meteo", "openweathermap")
-        ).values_list("lat_r", "lon_r", "day_key", "source"):
+        )
+        rows = (
+            ((cell.lat_r, cell.lon_r, cell.day_key, cell.source, cell) for cell in forecast_query)
+            if load_data
+            else ((*row, None) for row in forecast_query.values_list("lat_r", "lon_r", "day_key", "source"))
+        )
+        for lat, lon, day, source, cell in rows:
             key = (lat, lon, day)
             if key not in sources or source == "open-meteo":
                 sources[key] = source
+                if load_data:
+                    forecast_cells[key] = cell
         forecasts.update(sources)
-        warm_ensembles = set(
-            EnsembleCell.objects.filter(
+        warm_ensembles = set()
+        if include_ensemble:
+            ensemble_query = EnsembleCell.objects.filter(
                 requested, fetched_at__gte=cutoff, data___norain_request_version=ENSEMBLE_REQUEST_VERSION
-            ).values_list("lat_r", "lon_r", "day_key")
-        )
+            )
+            if load_data:
+                for cell in ensemble_query:
+                    key = (cell.lat_r, cell.lon_r, cell.day_key)
+                    ensemble_cells[key] = cell
+                    warm_ensembles.add(key)
+            else:
+                warm_ensembles = set(ensemble_query.values_list("lat_r", "lon_r", "day_key"))
         ensembles.update(warm_ensembles)
         for key, _ in batch:
             if source := sources.get(key):
                 emit("count", "cache.lookup", kind="forecast", outcome="hit", source=source)
             else:
                 emit("count", "cache.lookup", kind="forecast", outcome="miss")
-            emit("count", "cache.lookup", kind="ensemble", outcome="hit" if key in warm_ensembles else "miss")
-    return forecasts, ensembles
+            if include_ensemble:
+                emit("count", "cache.lookup", kind="ensemble", outcome="hit" if key in warm_ensembles else "miss")
+    return (forecast_cells, ensemble_cells) if load_data else (forecasts, ensembles)
+
+
+async def get_cached_cells(
+    cells: list[tuple[float, float]], windows: list[tuple[str | date, int]], *, include_ensemble: bool = True
+) -> tuple[dict[CellKey, ForecastCell], dict[CellKey, EnsembleCell]]:
+    """Load usable weather cells in batches, without provider calls."""
+    return await sync_to_async(_cached_cell_keys_sync)(
+        cells, windows, load_data=True, include_ensemble=include_ensemble
+    )
 
 
 async def get_cached_cell_keys(

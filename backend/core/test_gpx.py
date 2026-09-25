@@ -28,11 +28,20 @@ class GpxTests(SimpleTestCase):
         for version in ("1.0", "1.1"):
             for ns in ("", f' xmlns="http://www.topografix.com/GPX/1/{version[-1]}"'):
                 with self.subTest(version=version, ns=ns):
-                    raw = f'<gpx version="{version}"{ns}><rte><rtept lat="47" lon="9"/><rtept lat="48" lon="10"/></rte></gpx>'
+                    raw = (
+                        f'<gpx version="{version}"{ns}>'
+                        '<rte><rtept lat="47" lon="9"/><rtept lat="48" lon="10"/></rte>'
+                        "</gpx>"
+                    )
                     self.assertEqual(parse_gpx(raw.encode())[0]["coordinates"], [[9, 47], [10, 48]])
 
     def test_segments_are_separate_choices(self):
-        raw = b'<gpx version="1.1"><trk><name>Ride</name><trkseg><trkpt lat="47" lon="9"/><trkpt lat="48" lon="10"/></trkseg><trkseg><trkpt lat="49" lon="11"/><trkpt lat="50" lon="12"/></trkseg></trk></gpx>'
+        raw = (
+            b'<gpx version="1.1"><trk><name>Ride</name>'
+            b'<trkseg><trkpt lat="47" lon="9"/><trkpt lat="48" lon="10"/></trkseg>'
+            b'<trkseg><trkpt lat="49" lon="11"/><trkpt lat="50" lon="12"/></trkseg>'
+            b"</trk></gpx>"
+        )
         paths = parse_gpx(raw)
         self.assertEqual(len(paths), 2)
         self.assertEqual(paths[0]["coordinates"][-1], [10, 48])
@@ -49,7 +58,10 @@ class GpxTests(SimpleTestCase):
                 parse_gpx(raw)
 
     def test_dtd_and_entities_rejected_in_utf8_and_utf16(self):
-        xml = '<!DOCTYPE gpx [<!ENTITY leak SYSTEM "file:///not-read">]><gpx version="1.1"><rte><name>&leak;</name></rte></gpx>'
+        xml = (
+            '<!DOCTYPE gpx [<!ENTITY leak SYSTEM "file:///not-read">]>'
+            '<gpx version="1.1"><rte><name>&leak;</name></rte></gpx>'
+        )
         for encoding in ("utf-8", "utf-16"):
             with self.subTest(encoding=encoding), self.assertRaises(ValueError):
                 parse_gpx(xml.encode(encoding))

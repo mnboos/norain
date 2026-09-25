@@ -4,15 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('core', '0021_poi_osm_ref_category'),
+        ("core", "0021_poi_osm_ref_category"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='forecastjob',
-            name='stale_result',
+            model_name="forecastjob",
+            name="stale_result",
             field=models.JSONField(blank=True, null=True),
         ),
     ]

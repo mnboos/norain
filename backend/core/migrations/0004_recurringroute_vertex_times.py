@@ -4,9 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = (
-        ("core", "0003_forecastjob"),
-    )
+    dependencies = (("core", "0003_forecastjob"),)
 
     operations = (
         migrations.AddField(

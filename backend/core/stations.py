@@ -129,8 +129,12 @@ async def _get_json(url: str, params: dict) -> dict | None:
     finally:
         telemetry.emit("count", "provider.request", provider="weather-underground", outcome=outcome)
         telemetry.emit(
-            "distribution", "provider.duration", perf_counter() - started,
-            unit="second", provider="weather-underground", outcome=outcome,
+            "distribution",
+            "provider.duration",
+            perf_counter() - started,
+            unit="second",
+            provider="weather-underground",
+            outcome=outcome,
         )
     return data if isinstance(data, dict) else None
 
@@ -177,13 +181,15 @@ def parse_nearby(data: dict) -> list[dict]:
             continue
         qc = column("qcStatus", i)
         updated = _number(column("updateTimeUtc", i))
-        stations.append({
-            "id": station_id,
-            "lat": lat,
-            "lon": lon,
-            "qc": int(qc) if isinstance(qc, int) else None,
-            "updated": int(updated) if updated is not None else None,
-        })
+        stations.append(
+            {
+                "id": station_id,
+                "lat": lat,
+                "lon": lon,
+                "qc": int(qc) if isinstance(qc, int) else None,
+                "updated": int(updated) if updated is not None else None,
+            }
+        )
     return stations
 
 
@@ -303,8 +309,9 @@ def _store_lookup_sync(lat_c: float, lon_c: float, stations: list[dict]) -> None
 def _fresh_observation_ids_sync(station_ids: list[str]) -> set[str]:
     cutoff = datetime.now(tz=UTC) - OBSERVATION_TTL
     return set(
-        StationObservation.objects.filter(station_id__in=station_ids, fetched_at__gte=cutoff)
-        .values_list("station_id", flat=True)
+        StationObservation.objects.filter(station_id__in=station_ids, fetched_at__gte=cutoff).values_list(
+            "station_id", flat=True
+        )
     )
 
 

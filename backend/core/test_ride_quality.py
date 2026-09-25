@@ -178,8 +178,17 @@ class RainImpactTests(SimpleTestCase):
 
 class WindEffortTests(SimpleTestCase):
     def test_levels_follow_the_wind_curve_breakpoints(self):
-        cases = {-20: "Wind hilft", 0.4: "keiner", 1: "niedrig", 49: "niedrig", 50: "mittel", 129: "mittel",
-                 130: "hoch", 229: "hoch", 230: "sehr hoch"}
+        cases = {
+            -20: "Wind hilft",
+            0.4: "keiner",
+            1: "niedrig",
+            49: "niedrig",
+            50: "mittel",
+            129: "mittel",
+            130: "hoch",
+            229: "hoch",
+            230: "sehr hoch",
+        }
         for watts, level in cases.items():
             self.assertEqual(wind_effort_level(watts), level, watts)
         self.assertIsNone(wind_effort_level(None))
@@ -292,8 +301,18 @@ class ServedRideQualityTests(SimpleTestCase):
         # per-sample series.
         self.assertEqual(
             set(out),
-            {"departure", "path", "computed_at", "ride_score", "ride_label", "rain_level",
-             "frost_level", "rain_probability", "max_rain_rate_mm_h", "temp_min"},
+            {
+                "departure",
+                "path",
+                "computed_at",
+                "ride_score",
+                "ride_label",
+                "rain_level",
+                "frost_level",
+                "rain_probability",
+                "max_rain_rate_mm_h",
+                "temp_min",
+            },
         )
 
     def test_thumbnail_reports_the_worst_point_of_the_ride_not_the_worst_sample(self):
@@ -329,8 +348,16 @@ class ServedRideQualityTests(SimpleTestCase):
         self.assertIsNone(_thumbnail_out(None))
 
     def test_wind_arrows_carry_the_effort_level_and_share(self):
-        segment = {"lat": 47, "lon": 9, "bearing": 0, "wind_speed": 20, "wind_dir": 0, "wind_coverage": 1,
-                   "start_m": 0, "wind_power_w": 115}
+        segment = {
+            "lat": 47,
+            "lon": 9,
+            "bearing": 0,
+            "wind_speed": 20,
+            "wind_dir": 0,
+            "wind_coverage": 1,
+            "start_m": 0,
+            "wind_power_w": 115,
+        }
         [arrow] = wind_arrows_at_detail({"wind_segments": [segment]}, "full")
         self.assertEqual(arrow["wind_effort_level"], "mittel")
         self.assertAlmostEqual(arrow["wind_effort"], 0.5)

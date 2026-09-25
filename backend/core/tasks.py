@@ -625,6 +625,7 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
             times = departures.candidate_times(params)
             windows = departures.fetch_windows(params, geometry["sample_points"], local_today())
             weather_args["snapshot"] = WeatherSnapshot(max(days for _, days in windows))
+            await weather_args["snapshot"].preload(geometry["sample_points"], [day for day, _ in windows])
             # Give the baseline the same elapsed-time semantics as the alternatives.
             weather_args["departure_time"] = departures.local_iso(departures.instant(params["departure_time"]))
         forecast = await compute_route_weather(**weather_args)

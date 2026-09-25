@@ -196,7 +196,7 @@ class EnsembleCentralTests(SimpleTestCase):
             self.assertAlmostEqual(ensemble_weight(FETCHED + timedelta(hours=hours), FETCHED), weight, msg=hours)
 
     def test_naive_eta_is_swiss_wall_time(self):
-        eta = datetime(2026, 9, 13, 12)
+        eta = datetime(2026, 9, 13, 12, tzinfo=LOCAL_TZ).replace(tzinfo=None)
         reference = datetime(2026, 9, 10, 12, tzinfo=LOCAL_TZ)
         self.assertEqual(ensemble_weight(eta, reference), 1.0)
         self.assertEqual(ensemble_weight(eta, reference + timedelta(hours=12)), 0.5)
@@ -229,8 +229,14 @@ class EnsembleCentralTests(SimpleTestCase):
         self.assertEqual(central.temp, 15.0)
 
     def test_one_member_or_outside_hours_is_none(self):
-        one = {"hourly": {"time": ["2026-09-10T12:00"], "temperature_2m_a": [10.0], "wind_speed_10m_a": [5.0],
-                          "wind_direction_10m_a": [0.0]}}
+        one = {
+            "hourly": {
+                "time": ["2026-09-10T12:00"],
+                "temperature_2m_a": [10.0],
+                "wind_speed_10m_a": [5.0],
+                "wind_direction_10m_a": [0.0],
+            }
+        }
         self.assertIsNone(ensemble_central(one, ETA, ["a"]))
         self.assertIsNone(ensemble_central(ensemble_data(), ETA - timedelta(hours=1), ["a", "b"]))
 
@@ -241,12 +247,20 @@ class EnsembleBlendRouteTests(SimpleTestCase):
 
     async def compute(self, lead_hours):
         cell = SimpleNamespace(data={}, source="open-meteo")
-        ens = SimpleNamespace(data=ensemble_data(), fetched_at=ETA.replace(tzinfo=LOCAL_TZ) - timedelta(hours=lead_hours))
+        ens = SimpleNamespace(
+            data=ensemble_data(), fetched_at=ETA.replace(tzinfo=LOCAL_TZ) - timedelta(hours=lead_hours)
+        )
         point = {"lat": 47.5, "lon": 9.5, "lat_r": 47.5, "lon_r": 9.5, "elapsed_s": 0, "idx": 0}
         # Wind from the south: the ensemble's is from the north, so the headwind flips sign.
         extracted = {
-            "rain_mm": 0.0, "precipitation_interval_s": 900, "temp": 5.0, "wind_speed": 10.0,
-            "wind_dir": 180.0, "wind_gust": 20.0, "weather_code": 3, "source": "open-meteo",
+            "rain_mm": 0.0,
+            "precipitation_interval_s": 900,
+            "temp": 5.0,
+            "wind_speed": 10.0,
+            "wind_dir": 180.0,
+            "wind_gust": 20.0,
+            "weather_code": 3,
+            "source": "open-meteo",
         }
         with (
             patch("core.weather.get_or_fetch_forecast_cell", AsyncMock(return_value=cell)),
@@ -254,9 +268,16 @@ class EnsembleBlendRouteTests(SimpleTestCase):
             patch("core.weather.extract_sample", return_value=extracted),
         ):
             result = await compute_route_weather(
-                start_lat=47.5, start_lon=9.5, dest_lat=47.6, dest_lon=9.5, profile="bike",
-                departure_time=ETA.isoformat(), sample_points=[point], polyline=[[9.5, 47.5], [9.5, 47.6]],
-                total_seconds=600, total_distance_m=11_000.0,
+                start_lat=47.5,
+                start_lon=9.5,
+                dest_lat=47.6,
+                dest_lon=9.5,
+                profile="bike",
+                departure_time=ETA.isoformat(),
+                sample_points=[point],
+                polyline=[[9.5, 47.5], [9.5, 47.6]],
+                total_seconds=600,
+                total_distance_m=11_000.0,
             )
         return result.samples[0]
 
