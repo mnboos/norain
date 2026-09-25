@@ -23,7 +23,9 @@ osm_data_url := env("OSM_DATA_URL", "https://download.geofabrik.de/europe/switze
 
 # The bike-filtered file every graph build reads; same default as the GraphHopper entrypoint.
 # just osm-filter-many-raw-pbf-into-one writes it, so for such files it must be set in .env.
-routing_osm_file_filtered := env("ROUTING_OSM_FILE_FILTERED", "bike-" + file_name(osm_data_url))
+# Treat an explicitly empty dotenv value like an unset value, as documented in .env.template.
+routing_osm_file_filtered_env := env("ROUTING_OSM_FILE_FILTERED", "")
+routing_osm_file_filtered := if routing_osm_file_filtered_env == "" { "bike-" + file_name(osm_data_url) } else { routing_osm_file_filtered_env }
 
 # The POIs that belong to that file: pois-<its name without bike- and .osm.pbf>, next to it in
 # ROUTING_OSM_IMPORT_DIR. just poi-extract-from-unfiltered-osm-pbf and just osm-filter-many-raw-pbf-into-one write it, just poi-import-into-db reads it.
