@@ -7,7 +7,7 @@
 # ---------------------------------------------------------------------------------------------
 
 # The build output is static files, so build natively instead of under QEMU for arm64.
-FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS frontend-build
+FROM --platform=$BUILDPLATFORM docker.io/library/node:22-bookworm-slim AS frontend-build
 
 WORKDIR /app
 
@@ -31,7 +31,7 @@ RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN npm run build
 RUN find dist -name '*.map' -print -delete
 
 
-FROM caddy:2.10-alpine AS frontend
+FROM docker.io/library/caddy:2.10-alpine AS frontend
 
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
 COPY --from=frontend-build /app/frontend/dist /srv
@@ -41,7 +41,7 @@ COPY --from=frontend-build /app/frontend/dist /srv
 # graphhopper + photon
 # ---------------------------------------------------------------------------------------------
 
-FROM eclipse-temurin:24-jre AS java-base
+FROM docker.io/library/eclipse-temurin:24-jre AS java-base
 
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends ca-certificates wget && \
@@ -49,7 +49,7 @@ RUN apt-get update -y && \
 
 
 # Build Java once on the build host; the shaded jar includes the platform-specific WebP libraries.
-FROM --platform=$BUILDPLATFORM eclipse-temurin:25-jdk AS graphhopper-build
+FROM --platform=$BUILDPLATFORM docker.io/library/eclipse-temurin:25-jdk AS graphhopper-build
 ARG GRAPHHOPPER_COMMIT=d9506cd7d36d5d068d9118b19b86cf0609dbe773
 RUN apt-get update && apt-get install -y --no-install-recommends git maven ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -68,7 +68,7 @@ RUN sed -i '/environment.jersey().register(new RootResource());/a\        enviro
     web/src/main/java/com/graphhopper/application/GraphHopperApplication.java
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -pl web -am package -DskipTests
 
-FROM eclipse-temurin:25-jre AS graphhopper
+FROM docker.io/library/eclipse-temurin:25-jre AS graphhopper
 ARG TARGETARCH
 WORKDIR /graphhopper
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -122,7 +122,7 @@ ENTRYPOINT ["/entrypoint.sh"]
 # ---------------------------------------------------------------------------------------------
 
 # Interpreter, system libraries, uv and the locked dependencies — everything but the source.
-FROM python:3.14-slim-bookworm AS python-base
+FROM docker.io/library/python:3.14-slim-bookworm AS python-base
 
 ENV PATH="/app/backend/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
