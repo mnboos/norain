@@ -531,6 +531,20 @@ which it requires to be set, plus the matching `pois-<name without bike->.geojso
 no graph, `just build-graphhopper-graph-from FILE` does.
 If a profile ever needs a tag the filter drops, add it to that script and rebuild.
 
+**Terrain is zoom 15 with a zoom-12 fallback.** `routing-terrain-from` writes `terrain.pmtiles`
+(Mapterhorn zoom 15, which has gaps: Italy, the Balkans, the east) and `fallback.pmtiles`
+(the planet archive's zoom 12). `FallbackElevationProvider` (patched into the jar in the
+Dockerfile, with a `grep` guard) reads the fallback wherever zoom 15 is NaN. Without it
+GraphHopper stores 0 m there (`OSMReader` default elevation), and the slope next to real
+heights becomes a cliff that `average_slope` punishes. The import and `/elevation` must both
+go through `withFallback`, or saved paths read gaps the graph filled. Gaps are counted in the
+manifest's `coverage`, never an error. Heights are baked in at import, so new terrain means a
+new graph. Terrain covers only the zoom-11 cells holding a node of the file (`node_cells` →
+`region.geojson` → `pmtiles extract --region`), never its bounding box. GraphHopper reads just the
+zoom-15 tile under each node (interpolation stays inside the tile, long-edge sampling is off).
+Turning on `long_edge_sampling_distance` would read points between nodes. `check` requires the
+file's cells to be a subset of `cells.json`.
+
 The whole download-and-import workflow is in `docs/how-to/import-geodata.md`.
 `just photon-import FILE…` imports several Photon dumps into **one** index (one dump per country).
 Photon's import takes one file and drops what the index already holds, so the entrypoint

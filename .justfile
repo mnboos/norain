@@ -128,6 +128,12 @@ routing-terrain-from filtered_pbf:
 build-graphhopper-graph-from filtered_pbf:
     {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper build
 
+[doc("Copy the local candidate graph, the terrain it was built with and the POI file to the VPS (VPS_USER@VPS_HOST, paths from its /srv/norain/.env) and make it the candidate there. Validate and activate on the VPS. Needs rsync: on Windows, run it from WSL.")]
+[group('geodata')]
+[unix]
+routing-ship-candidate:
+    POIS_FILE={{ quote(pois_file) }} bash scripts/routing-ship-candidate.sh
+
 [doc('Start an isolated candidate and test all profiles. Points: JSON [[lon,lat],[lon,lat]] within the graph. Marks a passing candidate ready for activation.')]
 [group('geodata')]
 routing-validate-candidate points:
