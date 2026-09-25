@@ -66,6 +66,12 @@ RUN git init && git remote add origin https://github.com/graphhopper/graphhopper
 COPY docker/graphhopper/ElevationResource.java /source/web/src/main/java/com/graphhopper/application/resources/ElevationResource.java
 RUN sed -i '/environment.jersey().register(new RootResource());/a\        environment.jersey().register(com.graphhopper.application.resources.ElevationResource.class);' \
     web/src/main/java/com/graphhopper/application/GraphHopperApplication.java
+# Where the zoom-15 terrain has no value, read the zoom-12 archive instead of storing 0 m.
+# The grep fails the build if the line moved and the sed matched nothing.
+COPY docker/graphhopper/FallbackElevationProvider.java /source/core/src/main/java/com/graphhopper/reader/dem/FallbackElevationProvider.java
+RUN sed -i 's/ElevationProvider elevationProvider = createElevationProvider(ghConfig);/ElevationProvider elevationProvider = com.graphhopper.reader.dem.FallbackElevationProvider.withFallback(createElevationProvider(ghConfig), ghConfig, ghConfig.getString("graph.elevation.pmtiles.fallback.cache_dir", ""));/' \
+    core/src/main/java/com/graphhopper/GraphHopper.java \
+    && grep -q 'FallbackElevationProvider.withFallback' core/src/main/java/com/graphhopper/GraphHopper.java
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -pl web -am package -DskipTests
 
 FROM docker.io/library/eclipse-temurin:25-jre AS graphhopper

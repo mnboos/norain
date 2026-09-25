@@ -164,6 +164,9 @@ graphhopper:
   graph.elevation.pmtiles.terrain_encoding: terrarium
   graph.elevation.interpolate: bilinear
   graph.elevation.clear: false
+  # Where zoom 15 has no value, the build and serve read the terrain's zoom-12 fallback.pmtiles
+  # (FallbackElevationProvider, patched into the jar). The entrypoint sets
+  # graph.elevation.pmtiles.fallback.{location,cache_dir} when the terrain has one.
 
   # Each terrain artifact gets its own decoded cache; never mix dataset revisions.
   # Raw tiles are only read at import (elevation is baked into the graph), so keep them out of

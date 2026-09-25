@@ -18,7 +18,7 @@ several countries at once, or to build from files you already have, follow
    change the other.
 3. Prepare Mapterhorn terrain and import a candidate graph following the
    [routing-graph guide](build-routing-graph.md). Run `routing-terrain-estimate`,
-   `routing-terrain-from` and `build-graphhopper-graph-from` with the same filtered
+   `download-elevation-for` and `build-graphhopper-graph-from` with the same filtered
    OSM filename. Validate endpoints inside the new region, then run
    `routing-activate`. Zoom-15 terrain must cover the entire OSM extent.
 4. For search, move `data/photon` to a backup location and recreate the empty directory:
