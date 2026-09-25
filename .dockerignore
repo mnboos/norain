@@ -9,6 +9,8 @@
 !deploy/Caddyfile
 !import-photon-dump.sh
 
+**/*.jsonl.zst
+
 # Inside the allowed directories. `**/`: backend/.venv would overwrite the image's venv
 # on `COPY backend/`.
 **/.venv
