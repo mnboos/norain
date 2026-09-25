@@ -4,12 +4,7 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="build(graphhopper): improve docker build">
-      <change beforePath="$PROJECT_DIR$/.dockerignore" beforeDir="false" afterPath="$PROJECT_DIR$/.dockerignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources.local.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources.local.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources/data_sources_history.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources/data_sources_history.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_15_09_26,_19_48_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_15_09_26__19_48__Changes_.xml" beforeDir="false" />
+    <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="build(docker): exclude jsonl.zst files">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -91,61 +86,61 @@
   </component>
   <component name="NextEditCompletionFeaturesState">
     <decayedCancelled>
-      <entry key="MS100" value="1.1015315495445295" />
-      <entry key="MS500" value="1.6328782969851399" />
-      <entry key="S2" value="1.8919285194200928" />
-      <entry key="S5" value="1.9552830634704865" />
-      <entry key="S10" value="1.9783580216080532" />
-      <entry key="S30" value="2.3830362654525006" />
-      <entry key="S60" value="3.7940282499457" />
-      <entry key="M2" value="6.383017345380666" />
-      <entry key="M5" value="11.953996540372087" />
-      <entry key="M10" value="16.91627584286426" />
-      <entry key="M15" value="19.538019831620193" />
-      <entry key="M30" value="24.604741372030425" />
-      <entry key="H1" value="37.524186817071474" />
-      <entry key="H2" value="74.24217947613622" />
-      <entry key="H4" value="146.34692516079465" />
-      <entry key="D1" value="661.5869139636671" />
-      <entry key="W1" value="2188.1126597636403" />
+      <entry key="MS100" value="1.7797624712006788" />
+      <entry key="MS500" value="4.9975303416562165" />
+      <entry key="S2" value="11.675788749838544" />
+      <entry key="S5" value="16.76216810084503" />
+      <entry key="S10" value="21.132109331087296" />
+      <entry key="S30" value="26.694219406792016" />
+      <entry key="S60" value="28.849316410303214" />
+      <entry key="M2" value="32.36371350677267" />
+      <entry key="M5" value="45.84526953097768" />
+      <entry key="M10" value="61.16306442947317" />
+      <entry key="M15" value="69.94658237238149" />
+      <entry key="M30" value="83.34889353645201" />
+      <entry key="H1" value="100.81561996315376" />
+      <entry key="H2" value="139.26196426366883" />
+      <entry key="H4" value="212.30912422085945" />
+      <entry key="D1" value="729.5554203300985" />
+      <entry key="W1" value="2258.2576314617722" />
     </decayedCancelled>
     <decayedSelected>
       <entry key="MS100" value="0.0" />
-      <entry key="MS500" value="0.0" />
-      <entry key="S2" value="0.0" />
-      <entry key="S5" value="0.0" />
-      <entry key="S10" value="3.648994465451777E-242" />
-      <entry key="S30" value="3.3168390783465834E-81" />
-      <entry key="S60" value="5.759200533361018E-41" />
-      <entry key="M2" value="7.588939671232748E-21" />
-      <entry key="M5" value="8.955141246871844E-9" />
-      <entry key="M10" value="9.463294320438912E-5" />
-      <entry key="M15" value="0.002077876471098293" />
-      <entry key="M30" value="0.04726416754135933" />
-      <entry key="H1" value="0.3178250789327297" />
-      <entry key="H2" value="1.4639648816874806" />
-      <entry key="H4" value="4.432156647861534" />
-      <entry key="D1" value="38.67705599592536" />
-      <entry key="W1" value="191.15948413618662" />
+      <entry key="MS500" value="2.0615404346428275E-282" />
+      <entry key="S2" value="3.789203801581976E-71" />
+      <entry key="S5" value="6.782958902925044E-29" />
+      <entry key="S10" value="8.235872086746526E-15" />
+      <entry key="S30" value="2.0194659313146484E-5" />
+      <entry key="S60" value="0.004493846827957816" />
+      <entry key="M2" value="0.06703616059976752" />
+      <entry key="M5" value="0.33925296751823675" />
+      <entry key="M10" value="0.5824949505088866" />
+      <entry key="M15" value="0.6986253764328954" />
+      <entry key="M30" value="0.8708032713590819" />
+      <entry key="H1" value="1.1899726912100834" />
+      <entry key="H2" value="2.3204908537805298" />
+      <entry key="H4" value="5.256726721084553" />
+      <entry key="D1" value="39.44727425452653" />
+      <entry key="W1" value="191.998951392167" />
     </decayedSelected>
     <decayedShown>
-      <entry key="MS100" value="0.920187725031174" />
-      <entry key="MS500" value="1.0210271811351612" />
-      <entry key="S2" value="1.4359792598760335" />
-      <entry key="S5" value="1.7185032604593578" />
-      <entry key="S10" value="1.8487656924649358" />
-      <entry key="S30" value="2.336981319527569" />
-      <entry key="S60" value="3.770372566430647" />
-      <entry key="M2" value="6.370849485487993" />
-      <entry key="M5" value="11.948926603433218" />
-      <entry key="M10" value="16.913763696757545" />
-      <entry key="M15" value="19.538333936560342" />
-      <entry key="M30" value="24.65106104686236" />
-      <entry key="H1" value="37.8411486224165" />
-      <entry key="H2" value="75.70434461056972" />
-      <entry key="H4" value="150.77641636529452" />
-      <entry key="D1" value="700.2605465515348" />
-      <entry key="W1" value="2379.2695098104496" />
+      <entry key="MS100" value="1.659370473803866" />
+      <entry key="MS500" value="4.92664911073576" />
+      <entry key="S2" value="11.633596476877699" />
+      <entry key="S5" value="16.737832317623496" />
+      <entry key="S10" value="21.1167367289701" />
+      <entry key="S30" value="26.687757205654002" />
+      <entry key="S60" value="28.850279784553152" />
+      <entry key="M2" value="32.42846422022846" />
+      <entry key="M5" value="46.182251724839304" />
+      <entry key="M10" value="61.743557245679455" />
+      <entry key="M15" value="70.64354796459533" />
+      <entry key="M30" value="84.21861603958924" />
+      <entry key="H1" value="102.00464716827712" />
+      <entry key="H2" value="141.58067677083554" />
+      <entry key="H4" value="217.56322639030927" />
+      <entry key="D1" value="768.9992825340918" />
+      <entry key="W1" value="2450.2539497308017" />
     </decayedShown>
   </component>
   <component name="ProjectColorInfo">{
@@ -331,7 +326,7 @@
       <workItem from="1790014073558" duration="1527000" />
       <workItem from="1790017542597" duration="4708000" />
       <workItem from="1790091215762" duration="4884000" />
-      <workItem from="1790348282887" duration="618000" />
+      <workItem from="1790348282887" duration="1848000" />
     </task>
     <task id="LOCAL-00001" summary="chore(ide): update settings">
       <option name="closed" value="true" />
@@ -621,7 +616,31 @@
       <option name="project" value="LOCAL" />
       <updated>1790168759312</updated>
     </task>
-    <option name="localTasksCounter" value="37" />
+    <task id="LOCAL-00037" summary="chore(ide): remove shelf from git">
+      <option name="closed" value="true" />
+      <created>1790349079806</created>
+      <option name="number" value="00037" />
+      <option name="presentableId" value="LOCAL-00037" />
+      <option name="project" value="LOCAL" />
+      <updated>1790349079806</updated>
+    </task>
+    <task id="LOCAL-00038" summary="chore(ide): update config">
+      <option name="closed" value="true" />
+      <created>1790349090997</created>
+      <option name="number" value="00038" />
+      <option name="presentableId" value="LOCAL-00038" />
+      <option name="project" value="LOCAL" />
+      <updated>1790349090997</updated>
+    </task>
+    <task id="LOCAL-00039" summary="build(docker): exclude jsonl.zst files">
+      <option name="closed" value="true" />
+      <created>1790349107825</created>
+      <option name="number" value="00039" />
+      <option name="presentableId" value="LOCAL-00039" />
+      <option name="project" value="LOCAL" />
+      <updated>1790349107825</updated>
+    </task>
+    <option name="localTasksCounter" value="40" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -639,8 +658,6 @@
     </option>
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="docs: create docs according to diataxis" />
-    <MESSAGE value="style(ui): improvate layout" />
     <MESSAGE value="refactor: refactor auth and subscription" />
     <MESSAGE value="feat(wind): use more advanced logic for impact of wind" />
     <MESSAGE value="feat(web): improve ux" />
@@ -659,12 +676,14 @@
     <MESSAGE value="feat(web): improve layout" />
     <MESSAGE value="chore(web): add branding" />
     <MESSAGE value="chore(web): improve layout" />
-    <MESSAGE value="chore(ide): update config" />
     <MESSAGE value="feat(web): many improvements&#10;&#10;* felt wind&#10;* wind animation&#10;* single-forecast with ensemble-band" />
     <MESSAGE value="feat(journey): improve journey planning" />
     <MESSAGE value="build(just): run poi-import via docker" />
     <MESSAGE value="feat(web): keep stale forecasts for faster route-viewing" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(web): keep stale forecasts for faster route-viewing" />
+    <MESSAGE value="chore(ide): remove shelf from git" />
+    <MESSAGE value="chore(ide): update config" />
+    <MESSAGE value="build(docker): exclude jsonl.zst files" />
+    <option name="LAST_COMMIT_MESSAGE" value="build(docker): exclude jsonl.zst files" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
