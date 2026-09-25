@@ -62,7 +62,7 @@ terrain, but can still perform this OSM preparation.
 
 ```sh
 just routing-terrain-estimate bike-switzerland-latest.osm.pbf
-just routing-terrain-from bike-switzerland-latest.osm.pbf
+just download-elevation-for bike-switzerland-latest.osm.pbf
 ```
 
 The area is **where the file has roads**, not its bounding box. One pass over the
@@ -134,7 +134,7 @@ inspection and can be removed once no import uses them.
 smaller heap. Serving defaults to `GRAPHHOPPER_DATAACCESS=MMAP`. Leave enough RAM
 for the running graph plus the import, or build on another machine.
 
-A different filtered file needs its own terrain: run `routing-terrain-from` for it
+A different filtered file needs its own terrain: run `download-elevation-for` for it
 before the import, or the check refuses the build.
 
 ### Build elsewhere, serve in production

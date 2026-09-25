@@ -531,7 +531,7 @@ which it requires to be set, plus the matching `pois-<name without bike->.geojso
 no graph, `just build-graphhopper-graph-from FILE` does.
 If a profile ever needs a tag the filter drops, add it to that script and rebuild.
 
-**Terrain is zoom 15 with a zoom-12 fallback.** `routing-terrain-from` writes `terrain.pmtiles`
+**Terrain is zoom 15 with a zoom-12 fallback.** `download-elevation-for` writes `terrain.pmtiles`
 (Mapterhorn zoom 15, which has gaps: Italy, the Balkans, the east) and `fallback.pmtiles`
 (the planet archive's zoom 12). `FallbackElevationProvider` (patched into the jar in the
 Dockerfile, with a `grep` guard) reads the fallback wherever zoom 15 is NaN. Without it

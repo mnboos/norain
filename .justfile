@@ -109,18 +109,14 @@ thumbnail-refresh $route_id:
 routing-backfill *args:
     uv run python manage.py backfill_route_vertex_times {{ args }}
 
-[group("geodata")]
-download-elevation-for:
-    echo NotImplemented
-
 [doc("Estimate the zoom-15 Mapterhorn download for a filtered OSM file. The file must already exist in ROUTING_OSM_IMPORT_DIR.")]
 [group('geodata')]
 routing-terrain-estimate filtered_pbf:
     {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper terrain --dry-run
 
-[doc("Prepare and verify zoom-15 Mapterhorn terrain for a filtered OSM file; keeps the active graph running.")]
+[doc("Download and verify Mapterhorn elevation (zoom 15, zoom-12 fallback) for the cells a filtered OSM file in ROUTING_OSM_IMPORT_DIR covers, into ROUTING_OSM_IMPORT_DIR/elevation/<key>/ (terrain.pmtiles, fallback.pmtiles, manifest.json), and point ROUTING_OSM_IMPORT_DIR/elevation/current at it. Builds no graph; the active one keeps running.")]
 [group('geodata')]
-routing-terrain-from filtered_pbf:
+download-elevation-for filtered_pbf:
     {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper terrain
 
 [doc("Import a candidate graph using prepared Mapterhorn terrain. Does not stop, delete or activate the current graph.")]
@@ -160,7 +156,7 @@ routing-speeds *args:
 routing-refresh-routes:
     uv run python manage.py shell -c "from core.models import RecurringRoute; from core.tasks import refresh_route_geometry; print(sum(refresh_route_geometry.enqueue(str(i)) is not None for i in RecurringRoute.objects.values_list('id', flat=True)), 'routes queued')"
 
-[doc("Filter raw .osm.pbf files for bikes and merge them into ROUTING_OSM_FILE_FILTERED (e.g. bike-europe-cycling.osm.pbf) in ROUTING_OSM_IMPORT_DIR, plus the matching POI file, e.g. just osm-filter-many-raw-pbf-into-one ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Builds no graph: prepare terrain with routing-terrain-from, then import, validate and activate the candidate.")]
+[doc("Filter raw .osm.pbf files for bikes and merge them into ROUTING_OSM_FILE_FILTERED (e.g. bike-europe-cycling.osm.pbf) in ROUTING_OSM_IMPORT_DIR, plus the matching POI file, e.g. just osm-filter-many-raw-pbf-into-one ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Builds no graph: prepare terrain with download-elevation-for, then import, validate and activate the candidate.")]
 [group('geodata')]
 [confirm("This overwrites ROUTING_OSM_FILE_FILTERED (" + env("ROUTING_OSM_IMPORT_DIR") +"/"+ env("ROUTING_OSM_FILE_FILTERED") + ") and its POI file. Continue?")]
 [positional-arguments]
@@ -170,7 +166,7 @@ osm-filter-many-raw-pbf-into-one +files:
 
 # Git Bash: just runs a shebang recipe through cygpath, which Git does not put on PATH, and
 # the bash on PATH is WSL's. [script] needs neither.
-[doc("Filter raw .osm.pbf files for bikes and merge them into ROUTING_OSM_FILE_FILTERED (e.g. bike-europe-cycling.osm.pbf) in ROUTING_OSM_IMPORT_DIR, plus the matching POI file, e.g. just osm-filter-many-raw-pbf-into-one ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Builds no graph: prepare terrain with routing-terrain-from, then import, validate and activate the candidate.")]
+[doc("Filter raw .osm.pbf files for bikes and merge them into ROUTING_OSM_FILE_FILTERED (e.g. bike-europe-cycling.osm.pbf) in ROUTING_OSM_IMPORT_DIR, plus the matching POI file, e.g. just osm-filter-many-raw-pbf-into-one ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Builds no graph: prepare terrain with download-elevation-for, then import, validate and activate the candidate.")]
 [group('geodata')]
 [confirm("This overwrites ROUTING_OSM_FILE_FILTERED and its POI file. Continue?")]
 [positional-arguments]

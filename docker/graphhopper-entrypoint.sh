@@ -68,7 +68,7 @@ build() {
     prepare_osm
     if [ ! -d /osm_data/elevation/current ]; then
         echo "Elevation data has not been prepared in ROUTING_OSM_IMPORT_DIR (${ROUTING_OSM_IMPORT_DIR:-unknown})." >&2
-        echo "Run: just routing-terrain-from $ROUTING_OSM_FILE_FILTERED" >&2
+        echo "Run: just download-elevation-for $ROUTING_OSM_FILE_FILTERED" >&2
         echo "Then retry: just build-graphhopper-graph-from $ROUTING_OSM_FILE_FILTERED" >&2
         exit 1
     fi
@@ -77,7 +77,7 @@ build() {
     flock -s 8
     if ! python /graphhopper/terrain.py check "$BIKE_DATA_FILE"; then
         echo "The prepared elevation data in ROUTING_OSM_IMPORT_DIR (${ROUTING_OSM_IMPORT_DIR:-unknown}) is for another OSM file." >&2
-        echo "Run: just routing-terrain-from $ROUTING_OSM_FILE_FILTERED" >&2
+        echo "Run: just download-elevation-for $ROUTING_OSM_FILE_FILTERED" >&2
         echo "Then retry: just build-graphhopper-graph-from $ROUTING_OSM_FILE_FILTERED" >&2
         exit 1
     fi

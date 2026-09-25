@@ -36,7 +36,7 @@ In short:
 # in .env: ROUTING_OSM_FILE_FILTERED=bike-europe-cycling.osm.pbf, and enough memory
 just osm-filter-many-raw-pbf-into-one data/downloads/osm/*.osm.pbf
 just routing-terrain-estimate bike-europe-cycling.osm.pbf
-just routing-terrain-from bike-europe-cycling.osm.pbf
+just download-elevation-for bike-europe-cycling.osm.pbf
 just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
 just poi-import-into-db
 ```
@@ -87,7 +87,7 @@ just download-pbf
 just download-photon-dumps
 just osm-filter-many-raw-pbf-into-one data/downloads/osm/*.osm.pbf
 just routing-terrain-estimate bike-europe-cycling.osm.pbf
-just routing-terrain-from bike-europe-cycling.osm.pbf
+just download-elevation-for bike-europe-cycling.osm.pbf
 just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
 just photon-import data/downloads/photon/*.jsonl.zst
 ```
