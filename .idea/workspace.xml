@@ -5,19 +5,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="build(docker): exclude jsonl.zst files">
-      <change afterPath="$PROJECT_DIR$/scripts/routing-ship-candidate.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.codex/config.toml" beforeDir="false" afterPath="$PROJECT_DIR$/.codex/config.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_22_09_2026,_09_18_[Changes]/shelved.patch" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_22_09_2026__09_18__Changes_.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.justfile" beforeDir="false" afterPath="$PROJECT_DIR$/.justfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/graphhopper/graphhopper-config.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/data/graphhopper/graphhopper-config.yaml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker/graphhopper-entrypoint.sh" beforeDir="false" afterPath="$PROJECT_DIR$/docker/graphhopper-entrypoint.sh" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker/graphhopper-terrain.py" beforeDir="false" afterPath="$PROJECT_DIR$/docker/graphhopper-terrain.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker/graphhopper/ElevationResource.java" beforeDir="false" afterPath="$PROJECT_DIR$/docker/graphhopper/ElevationResource.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker/tests/test_graphhopper_terrain.py" beforeDir="false" afterPath="$PROJECT_DIR$/docker/tests/test_graphhopper_terrain.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/how-to/build-routing-graph.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/build-routing-graph.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
