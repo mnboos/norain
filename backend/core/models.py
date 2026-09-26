@@ -9,6 +9,8 @@ from django.contrib.gis.db import models
 from django.contrib.gis.geos import LineString, Point
 from django.db.models.functions import Lower
 
+from core.route_input import RoutingProfile
+
 
 def route_point(lat: float, lon: float) -> Point:
     """Build a WGS84 point while keeping the app-facing latitude-first API explicit."""
@@ -53,6 +55,10 @@ class User(AbstractUser):
     # until step 2 (core.auth.views.complete_signup_view). Not inferred from the password:
     # a password reset sets one without the user ever picking a username.
     signup_completed = models.BooleanField(default=False)
+    # Pre-selected in the route, journey and map forms; picked in step 2 of sign-up.
+    default_profile = models.CharField(
+        max_length=16, choices=[(p.value, p.value) for p in RoutingProfile], default=RoutingProfile.BIKE.value
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = UserManager()

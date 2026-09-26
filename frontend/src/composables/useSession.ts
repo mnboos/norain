@@ -1,13 +1,15 @@
 import { computed, ref } from "vue";
 
 import { identifyUser } from "@/services/telemetry";
-import { authApi, type SessionState } from "@/services/auth";
+import { authApi, type BikeProfile, type SessionState } from "@/services/auth";
 
 const session = ref<SessionState>({ authenticated: false, user: null });
 const sessionLoaded = ref(false);
 
 export function useSession() {
     const isAuthenticated = computed(() => session.value.authenticated);
+    /** The profile new routes, journeys and map searches start with. */
+    const defaultProfile = computed<BikeProfile>(() => session.value.user?.defaultProfile ?? "bike");
 
     async function refreshSession() {
         try {
@@ -27,5 +29,5 @@ export function useSession() {
         sessionLoaded.value = true;
     }
 
-    return { session, sessionLoaded, isAuthenticated, refreshSession, setSession };
+    return { session, sessionLoaded, isAuthenticated, defaultProfile, refreshSession, setSession };
 }
