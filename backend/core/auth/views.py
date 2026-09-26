@@ -7,6 +7,7 @@ headless API under /api/allauth/. Only what allauth has no endpoint for lives he
 import json
 
 from allauth.account.adapter import get_adapter
+from django.contrib import admin
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser
@@ -14,6 +15,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.urls import reverse
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
@@ -47,7 +49,13 @@ def _account_payload(user: AbstractBaseUser | AnonymousUser | None) -> dict:
 @ensure_csrf_cookie
 def session_view(request: HttpRequest) -> HttpResponse:
     """Return session state and establish a CSRF cookie for SPA requests."""
-    return JsonResponse(_account_payload(request.user))
+    payload = _account_payload(request.user)
+    if request.user.is_authenticated and request.user.is_active and request.user.is_staff:
+        payload["system"] = {
+            "allowed": admin.site.has_permission(request),
+            "login_url": reverse("admin:login") + "?next=/system",
+        }
+    return JsonResponse(payload)
 
 
 @require_POST

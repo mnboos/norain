@@ -1243,6 +1243,359 @@
                     "Journeys"
                 ]
             }
+        },
+        "/api/system/summary": {
+            "get": {
+                "operationId": "core_api_system_summary",
+                "summary": "Summary",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemSummary"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/api/system/map": {
+            "get": {
+                "operationId": "core_api_system_map_features",
+                "summary": "Map Features",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "layer",
+                        "schema": {
+                            "enum": [
+                                "routes",
+                                "journeys",
+                                "cells"
+                            ],
+                            "title": "Layer",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "bbox",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Bbox"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "zoom",
+                        "schema": {
+                            "default": 8,
+                            "maximum": 24,
+                            "minimum": 0,
+                            "title": "Zoom",
+                            "type": "number"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "default": 0,
+                            "minimum": 0,
+                            "title": "Offset",
+                            "type": "integer"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "default": 500,
+                            "maximum": 1000,
+                            "minimum": 1,
+                            "title": "Limit",
+                            "type": "integer"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "kind",
+                        "schema": {
+                            "default": "forecast",
+                            "enum": [
+                                "forecast",
+                                "ensemble"
+                            ],
+                            "title": "Kind",
+                            "type": "string"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "source",
+                        "schema": {
+                            "default": "all",
+                            "enum": [
+                                "all",
+                                "open-meteo",
+                                "openweathermap"
+                            ],
+                            "title": "Source",
+                            "type": "string"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "day",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "format": "date",
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Day"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "active",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "boolean"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Active"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "profile",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "enum": [
+                                        "bike",
+                                        "ebike",
+                                        "fast_ebike"
+                                    ],
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Profile"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "alternatives",
+                        "schema": {
+                            "default": false,
+                            "title": "Alternatives",
+                            "type": "boolean"
+                        },
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemMapPage"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/api/system/cells": {
+            "get": {
+                "operationId": "core_api_system_cell_history",
+                "summary": "Cell History",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "lat",
+                        "schema": {
+                            "title": "Lat",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "lon",
+                        "schema": {
+                            "title": "Lon",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "default": 0,
+                            "title": "Offset",
+                            "type": "integer"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "default": 25,
+                            "title": "Limit",
+                            "type": "integer"
+                        },
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemMapPage"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/api/system/coverage/{kind}/{item_id}": {
+            "get": {
+                "operationId": "core_api_system_coverage",
+                "summary": "Coverage",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "kind",
+                        "schema": {
+                            "enum": [
+                                "route",
+                                "stage"
+                            ],
+                            "title": "Kind",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "item_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Item Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemCoverage"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/api/system/jobs": {
+            "get": {
+                "operationId": "core_api_system_jobs",
+                "summary": "Jobs",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "default": 0,
+                            "title": "Offset",
+                            "type": "integer"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "default": 25,
+                            "title": "Limit",
+                            "type": "integer"
+                        },
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemJobsPage"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "system"
+                ]
+            }
         }
     },
     "components": {
@@ -4351,6 +4704,616 @@
                     "startDate"
                 ],
                 "title": "JourneyIn",
+                "type": "object"
+            },
+            "SystemCacheCount": {
+                "properties": {
+                    "kind": {
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "source": {
+                        "title": "Source",
+                        "type": "string"
+                    },
+                    "records": {
+                        "title": "Records",
+                        "type": "integer"
+                    },
+                    "fresh": {
+                        "title": "Fresh",
+                        "type": "integer"
+                    },
+                    "stale": {
+                        "title": "Stale",
+                        "type": "integer"
+                    },
+                    "locations": {
+                        "title": "Locations",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "kind",
+                    "source",
+                    "records",
+                    "fresh",
+                    "stale",
+                    "locations"
+                ],
+                "title": "SystemCacheCount",
+                "type": "object"
+            },
+            "SystemSummary": {
+                "properties": {
+                    "generated_at": {
+                        "format": "date-time",
+                        "title": "Generated At",
+                        "type": "string"
+                    },
+                    "max_cell_age_seconds": {
+                        "title": "Max Cell Age Seconds",
+                        "type": "integer"
+                    },
+                    "recurring_routes": {
+                        "title": "Recurring Routes",
+                        "type": "integer"
+                    },
+                    "journeys": {
+                        "title": "Journeys",
+                        "type": "integer"
+                    },
+                    "stages": {
+                        "title": "Stages",
+                        "type": "integer"
+                    },
+                    "missing_geometry": {
+                        "title": "Missing Geometry",
+                        "type": "integer"
+                    },
+                    "cache_locations": {
+                        "title": "Cache Locations",
+                        "type": "integer"
+                    },
+                    "caches": {
+                        "items": {
+                            "$ref": "#/components/schemas/SystemCacheCount"
+                        },
+                        "title": "Caches",
+                        "type": "array"
+                    },
+                    "bounds": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "type": "number"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Bounds"
+                    }
+                },
+                "required": [
+                    "generated_at",
+                    "max_cell_age_seconds",
+                    "recurring_routes",
+                    "journeys",
+                    "stages",
+                    "missing_geometry",
+                    "cache_locations",
+                    "caches",
+                    "bounds"
+                ],
+                "title": "SystemSummary",
+                "type": "object"
+            },
+            "SystemMapFilter": {
+                "properties": {
+                    "layer": {
+                        "enum": [
+                            "routes",
+                            "journeys",
+                            "cells"
+                        ],
+                        "title": "Layer",
+                        "type": "string"
+                    },
+                    "bbox": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Bbox"
+                    },
+                    "zoom": {
+                        "default": 8,
+                        "maximum": 24,
+                        "minimum": 0,
+                        "title": "Zoom",
+                        "type": "number"
+                    },
+                    "offset": {
+                        "default": 0,
+                        "minimum": 0,
+                        "title": "Offset",
+                        "type": "integer"
+                    },
+                    "limit": {
+                        "default": 500,
+                        "maximum": 1000,
+                        "minimum": 1,
+                        "title": "Limit",
+                        "type": "integer"
+                    },
+                    "kind": {
+                        "default": "forecast",
+                        "enum": [
+                            "forecast",
+                            "ensemble"
+                        ],
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "source": {
+                        "default": "all",
+                        "enum": [
+                            "all",
+                            "open-meteo",
+                            "openweathermap"
+                        ],
+                        "title": "Source",
+                        "type": "string"
+                    },
+                    "day": {
+                        "anyOf": [
+                            {
+                                "format": "date",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Day"
+                    },
+                    "active": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Active"
+                    },
+                    "profile": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "bike",
+                                    "ebike",
+                                    "fast_ebike"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Profile"
+                    },
+                    "alternatives": {
+                        "default": false,
+                        "title": "Alternatives",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "layer"
+                ],
+                "title": "SystemMapFilter",
+                "type": "object"
+            },
+            "SystemFeature": {
+                "properties": {
+                    "id": {
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "kind": {
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "coordinates": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Coordinates",
+                        "type": "array"
+                    },
+                    "name": {
+                        "default": "",
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "profile": {
+                        "default": "",
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "active": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Active"
+                    },
+                    "rank": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rank"
+                    },
+                    "source": {
+                        "default": "",
+                        "title": "Source",
+                        "type": "string"
+                    },
+                    "fetched_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Fetched At"
+                    },
+                    "day_key": {
+                        "anyOf": [
+                            {
+                                "format": "date",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Day Key"
+                    },
+                    "forecast_days": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Forecast Days"
+                    },
+                    "lat": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lat"
+                    },
+                    "lon": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lon"
+                    }
+                },
+                "required": [
+                    "id",
+                    "kind",
+                    "coordinates"
+                ],
+                "title": "SystemFeature",
+                "type": "object"
+            },
+            "SystemMapPage": {
+                "properties": {
+                    "items": {
+                        "items": {
+                            "$ref": "#/components/schemas/SystemFeature"
+                        },
+                        "title": "Items",
+                        "type": "array"
+                    },
+                    "total": {
+                        "title": "Total",
+                        "type": "integer"
+                    },
+                    "next_offset": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Next Offset"
+                    },
+                    "generated_at": {
+                        "format": "date-time",
+                        "title": "Generated At",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "items",
+                    "total",
+                    "next_offset",
+                    "generated_at"
+                ],
+                "title": "SystemMapPage",
+                "type": "object"
+            },
+            "SystemCoverage": {
+                "properties": {
+                    "id": {
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "kind": {
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "profile": {
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "distance_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Distance M"
+                    },
+                    "duration_seconds": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Duration Seconds"
+                    },
+                    "geometry_fetched_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Geometry Fetched At"
+                    },
+                    "departure": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Departure"
+                    },
+                    "unavailable": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Unavailable"
+                    },
+                    "points": {
+                        "items": {
+                            "$ref": "#/components/schemas/SystemCoveragePoint"
+                        },
+                        "title": "Points",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "id",
+                    "kind",
+                    "name",
+                    "profile",
+                    "distance_m",
+                    "duration_seconds",
+                    "geometry_fetched_at",
+                    "departure",
+                    "unavailable",
+                    "points"
+                ],
+                "title": "SystemCoverage",
+                "type": "object"
+            },
+            "SystemCoveragePoint": {
+                "properties": {
+                    "lat": {
+                        "title": "Lat",
+                        "type": "number"
+                    },
+                    "lon": {
+                        "title": "Lon",
+                        "type": "number"
+                    },
+                    "forecast": {
+                        "enum": [
+                            "usable",
+                            "stale",
+                            "missing",
+                            "insufficient"
+                        ],
+                        "title": "Forecast",
+                        "type": "string"
+                    },
+                    "ensemble": {
+                        "enum": [
+                            "usable",
+                            "stale",
+                            "missing",
+                            "insufficient"
+                        ],
+                        "title": "Ensemble",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "lat",
+                    "lon",
+                    "forecast",
+                    "ensemble"
+                ],
+                "title": "SystemCoveragePoint",
+                "type": "object"
+            },
+            "SystemJob": {
+                "properties": {
+                    "id": {
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "kind": {
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "status": {
+                        "title": "Status",
+                        "type": "string"
+                    },
+                    "cells_total": {
+                        "title": "Cells Total",
+                        "type": "integer"
+                    },
+                    "cells_settled": {
+                        "title": "Cells Settled",
+                        "type": "integer"
+                    },
+                    "cells_failed": {
+                        "title": "Cells Failed",
+                        "type": "integer"
+                    },
+                    "created_at": {
+                        "format": "date-time",
+                        "title": "Created At",
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "format": "date-time",
+                        "title": "Updated At",
+                        "type": "string"
+                    },
+                    "error": {
+                        "title": "Error",
+                        "type": "string"
+                    },
+                    "possibly_stalled": {
+                        "title": "Possibly Stalled",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "kind",
+                    "status",
+                    "cells_total",
+                    "cells_settled",
+                    "cells_failed",
+                    "created_at",
+                    "updated_at",
+                    "error",
+                    "possibly_stalled"
+                ],
+                "title": "SystemJob",
+                "type": "object"
+            },
+            "SystemJobsPage": {
+                "properties": {
+                    "items": {
+                        "items": {
+                            "$ref": "#/components/schemas/SystemJob"
+                        },
+                        "title": "Items",
+                        "type": "array"
+                    },
+                    "total": {
+                        "title": "Total",
+                        "type": "integer"
+                    },
+                    "next_offset": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Next Offset"
+                    }
+                },
+                "required": [
+                    "items",
+                    "total",
+                    "next_offset"
+                ],
+                "title": "SystemJobsPage",
                 "type": "object"
             }
         }

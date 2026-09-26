@@ -16,6 +16,7 @@ router.beforeEach(async to => {
     if (to.meta.requiresAuth && !isAuthenticated.value) {
         return { path: "/account", query: { next: to.fullPath } };
     }
+    if (to.meta.requiresSystem && !session.value.system) return { path: "/account" };
     // Between the two sign-up steps the account has a generated username and no password
     // of its own; nothing else opens until step 2 on /account is done.
     if (isAuthenticated.value && session.value.user?.signupComplete === false && to.name !== "account") {

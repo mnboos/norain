@@ -4,6 +4,7 @@ apis/JourneysApi.ts
 apis/PlacesApi.ts
 apis/RecurringRoutesApi.ts
 apis/RouteWeatherApi.ts
+apis/SystemApi.ts
 apis/index.ts
 index.ts
 models/BreakOut.ts
@@ -47,6 +48,15 @@ models/RouteSection.ts
 models/RouteThumbnail.ts
 models/RouteWeatherSummary.ts
 models/RoutingProfile.ts
+models/SystemCacheCount.ts
+models/SystemCoverage.ts
+models/SystemCoveragePoint.ts
+models/SystemFeature.ts
+models/SystemJob.ts
+models/SystemJobsPage.ts
+models/SystemMapFilter.ts
+models/SystemMapPage.ts
+models/SystemSummary.ts
 models/WeatherPrefsIn.ts
 models/WindArrow.ts
 models/WindDistribution.ts

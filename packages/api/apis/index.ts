@@ -6,3 +6,4 @@ export * from './JourneysApi';
 export * from './PlacesApi';
 export * from './RecurringRoutesApi';
 export * from './RouteWeatherApi';
+export * from './SystemApi';
