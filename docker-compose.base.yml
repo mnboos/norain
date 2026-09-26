@@ -13,7 +13,7 @@ services:
       target: frontend
 
   db:
-    image: postgis/postgis:18-3.6
+    image: docker.io/postgis/postgis:18-3.6
     restart: unless-stopped
     command: -c config_file=/etc/postgresql/postgresql.conf
     shm_size: 4gb
@@ -86,7 +86,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:8
+    image: docker.io/library/redis:8
     container_name: redis
     environment:
       - REDIS_ARGS=--appendonly yes

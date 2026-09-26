@@ -1,6 +1,8 @@
 package com.graphhopper.application.resources;
 
 import com.graphhopper.GraphHopperConfig;
+import com.graphhopper.reader.dem.ElevationProvider;
+import com.graphhopper.reader.dem.FallbackElevationProvider;
 import com.graphhopper.reader.dem.PMTilesElevationProvider;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
@@ -41,10 +43,11 @@ public class ElevationResource {
         // native provider on the same local archive, without a shared writable cache.
         List<Double> heights = new ArrayList<>();
         for (int start = 0; start < input.points().size(); start += 64) {
-            PMTilesElevationProvider provider = new PMTilesElevationProvider(
+            // The same zoom-12 fallback as the import, or a saved path would read gaps the graph filled.
+            ElevationProvider provider = FallbackElevationProvider.withFallback(new PMTilesElevationProvider(
                 config.getString("graph.elevation.pmtiles.location", ""),
                 PMTilesElevationProvider.TerrainEncoding.TERRARIUM, true,
-                config.getInt("graph.elevation.pmtiles.zoom", 15), "");
+                config.getInt("graph.elevation.pmtiles.zoom", 15), ""), config, "");
             try {
                 provider.init();
                 for (List<Double> point : input.points().subList(start, Math.min(start + 64, input.points().size()))) {

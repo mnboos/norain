@@ -10,7 +10,7 @@ There are three separate artifacts:
 | Artifact | Container location | Purpose |
 | --- | --- | --- |
 | Filtered OSM | `/osm_data/bike-*.osm.pbf` | Roads and bike-route relations |
-| Terrain | `/osm_data/elevation/<manifest-hash>/` | Verified PMTiles, attribution, and reusable decoded cache |
+| Terrain | `/osm_data/elevation/<manifest-hash>/` | Zoom-15 and zoom-12 fallback PMTiles, attribution, and reusable decoded caches |
 | Routing graph | `/graph-cache/releases/<id>/` | Graph, configuration snapshot, models, and build identity |
 
 `/graph-cache/current` selects the active graph. `candidate` selects the newest
@@ -62,28 +62,53 @@ terrain, but can still perform this OSM preparation.
 
 ```sh
 just routing-terrain-estimate bike-switzerland-latest.osm.pbf
-just routing-terrain-from bike-switzerland-latest.osm.pbf
+just download-elevation-for bike-switzerland-latest.osm.pbf
 ```
 
-Bounds come from the actual OSM nodes, expanded by one complete zoom-15 tile on
-all sides. The helper reads Mapterhorn's archive catalog, extracts only zoom 15
-from intersecting regional archives, then merges them. The planet archive alone
-only contains zooms 0–12 and cannot provide this resolution.
+The area is **where the file has roads**, not its bounding box. One pass over the
+nodes (`osmium cat`) collects the zoom-11 cells that hold a node. A cell is 16×16
+zoom-15 tiles, about 13 km at 47°N. Adjacent cells in a row are merged into
+rectangles and written as `region.geojson`, and every extract uses
+`pmtiles extract --region`. GraphHopper reads only the zoom-15 tile under each node,
+so nothing outside the cells is ever used. Two distant countries fetch only
+themselves (Liechtenstein + Andorra: 25 cells, about 780 MB), not the sea or the
+countries between them. The helper reads Mapterhorn's archive catalog and writes two
+archives:
 
-The estimate prints transfer/archive sizes before downloading terrain. Allow
-additional space for temporary extracts, the merged archive, decoded terrain
-cache, the new graph and the retained previous graph. Zoom 15 over a large region
-can require substantial disk space and import time; start with a small extract.
+- `terrain.pmtiles`: zoom 15 from the intersecting regional archives, merged.
+  At Swiss latitudes that is about 1.6 m pixels.
+- `fallback.pmtiles`: zoom 12 (about 13 m at 47°N) from the planet archive, which
+  covers everywhere.
 
-Preparation verifies PMTiles structure, WebP decoding and absence of terrain voids.
-If Mapterhorn has no tile for part of the requested area, preparation continues and
-prints a warning; GraphHopper returns a height gap for routes crossing that tile and
-the charts leave that segment blank. There is no silent low-resolution fallback. A
-higher zoom cannot improve the accuracy of the original survey. At Swiss latitudes
-zoom 15 corresponds to roughly 1.6 m pixels.
+Zoom 15 has gaps: it is missing in central and southern Italy, the Balkans, Greece,
+Iceland and east of about 28°E, and some tiles contain nodata pixels. Wherever zoom 15
+has no value, GraphHopper reads the zoom-12 fallback (`FallbackElevationProvider`,
+patched into the jar), in the import and in `/elevation` alike. Without the fallback it
+would store 0 m for such a node, and the slope against the real heights beside it
+would become a cliff that the speed rules take seriously. At the edge of zoom-15
+coverage the two sources can differ by a few metres. Only where the fallback has no
+value either does a node get 0 m.
+
+The estimate prints transfer/archive sizes for both before downloading terrain.
+Allow additional space for temporary extracts, the merged archive, decoded terrain
+caches, the new graph and the retained previous graph.
+
+The cells are kept as `cells.json`. Before an import, the check runs the same pass
+over the file and requires its cells to be a subset of the prepared ones, so terrain
+for more countries also serves a file with fewer. That is one extra pass per build,
+minutes for a large file. Terrain prepared for a bounding box, before the cells
+existed, is still compared by its bounds.
+
+Preparation verifies the PMTiles structure. For up to 250,000 tile positions per
+archive it also decodes every tile, and it records missing tiles and tiles with
+nodata in the manifest's `coverage`: counts and a few examples, never an error.
+Larger areas skip that per-tile pass. Terrain prepared before the fallback existed
+has no `fallback.pmtiles` and still builds and serves as before. **Heights are baked
+into the graph at import**, and slopes set speeds and arrival times. Better terrain
+therefore takes a new terrain preparation and a new graph.
 
 Downloads are staged and only published when complete. The manifest records source
-URLs and source checksums, bounds, zoom, and the completed extract's SHA-256. A
+URLs and source checksums, bounds, zoom, and the completed extracts' SHA-256. A
 matching completed extract is reused after checksum verification. Interrupted
 preparation leaves the prior `elevation/current` untouched and preserves completed
 source extracts in `.prepare-<hash>/` for the next attempt, so they are not
@@ -109,9 +134,57 @@ inspection and can be removed once no import uses them.
 smaller heap. Serving defaults to `GRAPHHOPPER_DATAACCESS=MMAP`. Leave enough RAM
 for the running graph plus the import, or build on another machine.
 
-To build elsewhere, use the same image and copy the **entire release directory**
-to the serving machine under `graphhopper/cache/releases/`, then set `candidate`
-to that relative release path. Keep the matching terrain release at the same path on the serving machine: the internal `/elevation` endpoint uses GraphHopper’s native provider to enrich existing saved paths without rerouting them. Ordinary routing loads elevations from the graph. Neither endpoint downloads terrain at request time.
+A different filtered file needs its own terrain: run `download-elevation-for` for it
+before the import, or the check refuses the build.
+
+### Build elsewhere, serve in production
+
+A graph can be built on a larger machine (steps 2–4 there) and copied over. The serving
+machine accepts it when:
+
+- the image has the same GraphHopper revision. Build with production's
+  `GRAPHHOPPER_IMAGE` (`export GRAPHHOPPER_IMAGE=…; docker compose pull graphhopper`).
+  The image is multi-arch, so an amd64 build serves on arm64. Only an image with
+  `FallbackElevationProvider` reads the zoom-12 fallback. Deploy that image to
+  production first (its revision is unchanged, so the current graph keeps serving),
+  then build with the same tag.
+- the release directory is unchanged. Its `config.yaml` and `models/` are the snapshot the
+  checksum covers.
+- the terrain sits at the same container path. `artifact.json` records
+  `/osm_data/elevation/<hash>`, and serving reads `terrain.pmtiles` and
+  `fallback.pmtiles` from there. The decoded `cache/` and `cache-fallback/` are only
+  used by an import and need not be copied. The
+  internal `/elevation` endpoint uses it to enrich saved paths without rerouting them.
+  Ordinary routing reads elevations from the graph. Neither downloads terrain.
+
+On Windows, build from WSL with the data on the WSL filesystem. The symlinks and MMAP
+files do not work well on an NTFS bind mount.
+
+`just routing-ship-candidate` does the copy and the links below in one step. It reads
+`VPS_USER`/`VPS_HOST` from the local `.env`, and the VPS paths from
+`/srv/norain/.env` there (`VPS_NORAIN_DIR` overrides the checkout). It takes the terrain
+recorded in the candidate's `artifact.json`, so it ships the terrain the graph was
+actually built with. Validate and activate on the VPS afterwards. By hand: after the import, run
+`readlink data/graphhopper/cache/candidate` (`releases/<id>`) and
+`readlink "$ROUTING_OSM_IMPORT_DIR/elevation/current"` (`<hash>`), then copy both
+directories and the POI file (the paths on the right are production's):
+
+```sh
+rsync -aP data/graphhopper/cache/releases/<id>/ vps:$APP_STORAGE_PATH/graphhopper/cache/releases/<id>/
+rsync -aP --exclude /cache/ --exclude /cache-fallback/ "$ROUTING_OSM_IMPORT_DIR/elevation/<hash>/" vps:$ROUTING_OSM_IMPORT_DIR/elevation/<hash>/
+rsync -aP "$ROUTING_OSM_IMPORT_DIR/pois-<name>.geojsonseq" vps:$ROUTING_OSM_IMPORT_DIR/
+```
+
+Symlinks are not copied. Set them on the serving machine, then continue with step 5 there:
+
+```sh
+ln -sfn releases/<id> "$APP_STORAGE_PATH/graphhopper/cache/candidate"
+ln -sfn <hash> "$ROUTING_OSM_IMPORT_DIR/elevation/current"   # a later build there passes the check
+```
+
+Validate and activate on the serving machine even if you already validated the candidate
+where it was built, then run `just poi-import-into-db` for the new area's POIs. The
+filtered `.pbf` is needed only for a rebuild on that machine.
 
 ## 5. Validate, activate, and check
 
