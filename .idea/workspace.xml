@@ -6,6 +6,17 @@
   <component name="ChangeListManager">
     <list default="true" id="44d6a4c7-3a7f-4eba-8a89-e44069bd48e1" name="Changes" comment="build(docker): exclude jsonl.zst files">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.justfile" beforeDir="false" afterPath="$PROJECT_DIR$/.justfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/core/api/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/core/auth/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/auth/views.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/openapi.json" beforeDir="false" afterPath="$PROJECT_DIR$/backend/openapi.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/App.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/App.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/router/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/router/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/services/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/services/auth.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/typed-router.d.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/typed-router.d.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/.openapi-generator/FILES" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/.openapi-generator/FILES" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/apis/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/apis/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/api/models/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/index.ts" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

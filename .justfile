@@ -137,6 +137,9 @@ routing-ship-candidate:
 routing-validate-candidate points:
     CONTAINER={{ quote(container) }} uv run --no-project python scripts/routing-candidate.py {{ quote(points) }}
 
+routing-validate:
+    just routing-validate-candidate '[[9.252563780995018,47.52192433810265],[9.117005261038337,47.563715465507286]]'
+
 [doc("Activate the validated candidate with the currently configured GraphHopper image. Preserve the old image/config for rollback before the first 10.2 migration.")]
 [group('geodata')]
 routing-activate:

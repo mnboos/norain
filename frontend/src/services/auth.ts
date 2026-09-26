@@ -12,6 +12,7 @@ export interface SessionUser {
 export interface SessionState {
     authenticated: boolean;
     user: SessionUser | null;
+    system?: { allowed: boolean; loginUrl: string };
 }
 
 const parseUser: Parse<SessionUser> = value => {
@@ -33,7 +34,13 @@ const parseSession: Parse<SessionState> = value => {
     const authenticated = value.authenticated;
     if (value.user == null) return { authenticated, user: null };
     const user = parseUser(value.user);
-    return user ? { authenticated, user } : null;
+    const system =
+        isRecord(value.system) &&
+        typeof value.system.allowed === "boolean" &&
+        typeof value.system.login_url === "string"
+            ? { allowed: value.system.allowed, loginUrl: value.system.login_url }
+            : undefined;
+    return user ? { authenticated, user, system } : null;
 };
 
 /** The ids of the steps allauth is still waiting for, e.g. `verify_email` or `login_by_code`. */

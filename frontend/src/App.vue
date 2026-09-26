@@ -27,6 +27,7 @@ const { isAuthenticated, session } = useSession();
                     <span class="text-subtitle1 self-center text-weight-bold">Brisavia</span>
                 </router-link>
                 <q-space />
+                <q-btn v-if="session.system" flat dense no-caps size="sm" to="/system" label="Systemübersicht" />
                 <!--                <NavTabs v-if="!$q.screen.lt.sm" />-->
                 <q-btn flat dense no-caps size="sm" to="/account" :icon="symSharpSettings">
                     <q-tooltip v-if="isAuthenticated">{{ session.user?.email }}</q-tooltip>
