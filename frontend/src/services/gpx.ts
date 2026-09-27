@@ -16,34 +16,6 @@ export function routingProfile(value: string): RoutingProfile {
     return RoutingProfile.Bike;
 }
 
-export function parseDraft(raw: string | null): RouteDraft | null {
-    if (!raw) return null;
-    const value: unknown = JSON.parse(raw);
-    if (!isRecord(value) || !isRecord(value.plan) || !isRecord(value.preview)) return null;
-    const plan = value.plan;
-    const preview = value.preview;
-    const coordinates = readCoordinates(plan.coordinates);
-    const line = readCoordinates(preview.coordinates);
-    if (!coordinates || !line || typeof preview.distanceM !== "number" || typeof preview.timeS !== "number") return null;
-    return { plan: {
-        name: typeof plan.name === "string" ? plan.name : "NoRain",
-        geometrySource: plan.geometrySource === "imported" ? GeometrySource.Imported : GeometrySource.Graphhopper,
-        profile: routingProfile(typeof plan.profile === "string" ? plan.profile : "bike"),
-        coordinates, durationSeconds: typeof plan.durationSeconds === "number" ? plan.durationSeconds : null,
-    }, preview: { coordinates: line, distanceM: preview.distanceM, timeS: preview.timeS } };
-}
-function readCoordinates(value: unknown): number[][] | null {
-    if (!Array.isArray(value) || value.length < 2 || value.length > 100000) return null;
-    const points: number[][] = [];
-    for (const point of value) {
-        if (!Array.isArray(point) || point.length < 2 || point.length > 3) return null;
-        const numbers: number[] = [];
-        for (const n of point) { if (typeof n !== "number" || !Number.isFinite(n)) return null; numbers.push(n); }
-        points.push(numbers);
-    }
-    return points;
-}
-
 export function routePlace(point: number[], name: string): PlacesSearchResult {
     return { type: "Feature", properties: { name, city: null, state: "", countrycode: "", showCanton: false },
         geometry: { type: "Point", coordinates: point.slice(0, 2) } };

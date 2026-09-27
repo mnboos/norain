@@ -266,6 +266,7 @@ deploy-local:
     {{ container }} compose --env-file .env pull db redis
     {{ container }} compose --env-file .env run --rm --pull never backend python manage.py migrate --noinput
     {{ container }} compose --env-file .env run --rm --pull never --user root backend python manage.py collectstatic --noinput
+    {{ container }} compose --env-file .env run --rm --pull never --no-deps --user root --entrypoint chown backend app:app /app/backend/media
     {{ container }} compose --env-file .env up -d --pull never --remove-orphans
 
 # Mirrors the deploy job in .github/workflows/release.yml; the images must already be published.

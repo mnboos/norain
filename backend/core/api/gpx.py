@@ -9,7 +9,7 @@ from ninja import File, Router, UploadedFile
 from ninja.errors import HttpError
 from pydantic import Field
 
-from ..auth.backend import optional_session_auth
+from ..auth.backend import session_auth
 from ..elevation import with_heights
 from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut
@@ -23,7 +23,8 @@ from .recurring_route import _owned_route
 from .route_weather import _readable_job, flexibility_params, job_out
 from .route_weather import router as weather_router
 
-router = Router(auth=optional_session_auth, tags=["GPX"])
+# The planner is for signed-in accounts only.
+router = Router(auth=session_auth, tags=["GPX"])
 
 
 def limit_request(request, action, limit=30):
@@ -31,7 +32,7 @@ def limit_request(request, action, limit=30):
     import time
 
     user = request.auth
-    identity = str(user.pk) if user.is_authenticated else request.META.get("REMOTE_ADDR", "unknown")
+    identity = str(user.pk)
     key = f"gpx:{action}:{hashlib.sha256(identity.encode()).hexdigest()}:{int(time.time() // 60)}"
     cache.add(key, 0, 90)
     if cache.incr(key) > limit:
@@ -135,10 +136,12 @@ class RoutePlanForecastIn(RoutePlanIn):
     departure_flex_after_minutes: int = Field(default=0, ge=0, le=120, multiple_of=15)
 
 
-@weather_router.post("/route_weather", response={200: ForecastJobOut, 202: ForecastJobOut}, tags=["GPX"])
+@weather_router.post(
+    "/route_weather", response={200: ForecastJobOut, 202: ForecastJobOut}, tags=["GPX"], auth=session_auth
+)
 async def forecast_route_plan(request, data: RoutePlanForecastIn):
     limit_request(request, "forecast")
-    user = request.auth if request.auth.is_authenticated else None
+    user = request.auth
     if (data.departure_flex_before_minutes or data.departure_flex_after_minutes) and not (
         await entitlements_for(user)
     ).departure_comparison:

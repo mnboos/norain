@@ -37,7 +37,10 @@ export const LODGING_KINDS = [
     { value: "wilderness_hut", label: "Unbewartete Hütte", emoji: "🛖" },
 ];
 
-const BY_VALUE = new Map(POI_CATEGORIES.map(category => [category.value, category]));
+/** Drawn on the map like a POI but never offered to the journey planner. */
+export const PHOTO_CATEGORY: PoiCategory = { value: "photo", label: "Foto", emoji: "📷", color: "#6a3d9a" };
+
+const BY_VALUE = new Map([...POI_CATEGORIES, PHOTO_CATEGORY].map(category => [category.value, category]));
 
 export function poiCategory(value: string): PoiCategory {
     return BY_VALUE.get(value) ?? { value, label: value, emoji: "📍", color: "#555555" };

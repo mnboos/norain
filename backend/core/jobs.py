@@ -310,7 +310,7 @@ async def _uses_stations(job: ForecastJob, owner, now: datetime) -> bool:
     """Whether this job's result would be corrected with station readings if planned now."""
 
     departure = job.params.get("departure_time")
-    if job.kind == ForecastJob.Kind.JOURNEY_STAGE or not api_key() or not departure:
+    if job.kind in {ForecastJob.Kind.JOURNEY_STAGE, ForecastJob.Kind.PUBLIC_ROUTE} or not api_key() or not departure:
         return False
     total_seconds = (job.geometry or {}).get("total_seconds")
     if not any(ride_in_window(t, total_seconds, now) for t in candidate_times(job.params)):

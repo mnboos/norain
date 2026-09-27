@@ -135,8 +135,7 @@ class GpxApiTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         self.route.refresh_from_db()
 
-    def test_public_import_export_and_no_saved_route_created(self):
-        self.client.logout()
+    def test_import_export_and_no_saved_route_created(self):
         before = RecurringRoute.objects.count()
         response = self.client.post(
             "/api/gpx/import", {"file": SimpleUploadedFile("ride.gpx", serialize_gpx("Ride", POINTS))}
@@ -158,7 +157,6 @@ class GpxApiTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_rate_limit(self):
-        self.client.logout()
         with patch("time.time", return_value=1900000000):
             for _ in range(30):
                 response = self.client.post("/api/gpx/export", {"coordinates": POINTS}, content_type="application/json")
@@ -176,8 +174,31 @@ class GpxApiTests(TestCase):
         self.route.refresh_from_db()
         self.assertEqual(self.route.geometry_source, "graphhopper")
 
-    def test_public_forecast_uses_exact_geometry_without_routing(self):
+    def test_planning_needs_a_signed_in_account(self):
         self.client.logout()
+        body = {"coordinates": POINTS}
+        self.assertEqual(self.client.post("/api/gpx/export", body, content_type="application/json").status_code, 401)
+        upload = {"file": SimpleUploadedFile("ride.gpx", serialize_gpx("Ride", POINTS))}
+        self.assertEqual(self.client.post("/api/gpx/import", upload).status_code, 401)
+        with patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())) as plan:
+            forecast = {
+                "geometry_source": "imported",
+                "coordinates": POINTS,
+                "duration_seconds": 1800,
+                "departure_time": self.departure.isoformat(),
+            }
+            response = self.client.post("/api/route_weather", forecast, content_type="application/json")
+            self.assertEqual(response.status_code, 401)
+            query = "start_lat=47&start_lon=9&dest_lat=47.01&dest_lon=9.01&profile=bike&departure_time=2030-01-01T08:00"
+            self.assertEqual(self.client.get(f"/api/route_weather?{query}").status_code, 401)
+        plan.aenqueue.assert_not_awaited()
+        self.assertFalse(ForecastJob.objects.exists())
+        elevation = {"coordinates": POINTS, "total_seconds": 1800}
+        response = self.client.post("/api/elevation", elevation, content_type="application/json")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(self.client.get("/api/search?query=Bern&zoom=10&lat=47&lon=8").status_code, 401)
+
+    def test_forecast_uses_exact_geometry_without_routing(self):
         with patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):
             response = self.client.post(
                 "/api/route_weather",
@@ -191,7 +212,7 @@ class GpxApiTests(TestCase):
             )
         self.assertEqual(response.status_code, 202, response.content)
         job = ForecastJob.objects.get(id=response.json()["job_id"])
-        self.assertIsNone(job.owner_id)
+        self.assertEqual(job.owner_id, self.user.id)
         with patch("core.tasks.build_geometry", AsyncMock(side_effect=AssertionError("routed"))):
             geometry = async_to_sync(_job_geometry)(job)
         self.assertEqual(geometry["total_seconds"], 1800)

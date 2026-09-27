@@ -23,6 +23,16 @@ from .models import (
     Subscription,
     User,
 )
+from .models import (
+    EnsembleCell,
+    ForecastCell,
+    ProcessedStripeEvent,
+    RecurringRoute,
+    RouteComment,
+    RoutePhoto,
+    Subscription,
+    User,
+)
 
 
 @admin.register(User)
@@ -78,8 +88,8 @@ class ProcessedStripeEventAdmin(admin.ModelAdmin):
 
 @admin.register(RecurringRoute)
 class RecurringRouteAdmin(admin.ModelAdmin):
-    list_display = ("name", "owner", "profile", "schedule_description", "active", "created_at")
-    list_filter = ("active", "profile")
+    list_display = ("name", "owner", "profile", "schedule_description", "active", "visibility", "created_at")
+    list_filter = ("active", "profile", "visibility")
     search_fields = ("name", "owner__email", "owner__username", "start_name", "dest_name")
     list_select_related = ("owner",)
 
@@ -205,3 +215,20 @@ class JourneyStageAdmin(admin.ModelAdmin):
 class ElevationProfileAdmin(admin.ModelAdmin):
     list_display = ("key", "created_at")
     search_fields = ("key",)
+
+
+# Moderation: public routes carry what users wrote and uploaded. Deleting here removes it
+# from the public page at once (the photo files go with the row, see core.signals).
+@admin.register(RouteComment)
+class RouteCommentAdmin(admin.ModelAdmin):
+    list_display = ("author", "route", "created_at", "body")
+    search_fields = ("body", "author__username", "route__name")
+    raw_id_fields = ("route", "author")
+
+
+@admin.register(RoutePhoto)
+class RoutePhotoAdmin(admin.ModelAdmin):
+    list_display = ("uploader", "route", "caption", "created_at")
+    search_fields = ("caption", "uploader__username", "route__name")
+    raw_id_fields = ("route", "uploader")
+    exclude = ("location",)
