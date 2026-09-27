@@ -302,13 +302,8 @@ async def preview_route(profile: str, points: RoutingPoints, custom_model: dict 
 
 
 # --------------------------------------------------------------------------- geometry
-def _path_geometry(path: dict, interval_seconds: int) -> dict:
-    """Sample one GraphHopper path at fixed *time* intervals."""
-    raw_coords = path["points"]["coordinates"]
-    coords = [point[:2] for point in raw_coords]
-    time_details = path.get("details", {}).get("time", [[0, len(coords) - 1, path.get("time", 0)]])
-    cum_s = _cumulative_times_s(coords, time_details)
-
+def sample_line(coords: list, cum_s: list[float], interval_seconds: int) -> list[dict]:
+    """The sample points of a timed line: one vertex every ``interval_seconds`` and the last."""
     sample_points = []
     for idx in _sample_indices(cum_s, max(60, interval_seconds)):
         lon, lat = coords[idx][0], coords[idx][1]
@@ -322,6 +317,16 @@ def _path_geometry(path: dict, interval_seconds: int) -> dict:
                 "idx": idx,
             }
         )
+    return sample_points
+
+
+def _path_geometry(path: dict, interval_seconds: int) -> dict:
+    """Sample one GraphHopper path at fixed *time* intervals."""
+    raw_coords = path["points"]["coordinates"]
+    coords = [point[:2] for point in raw_coords]
+    time_details = path.get("details", {}).get("time", [[0, len(coords) - 1, path.get("time", 0)]])
+    cum_s = _cumulative_times_s(coords, time_details)
+    sample_points = sample_line(coords, cum_s, interval_seconds)
 
     return {
         "polyline": coords,

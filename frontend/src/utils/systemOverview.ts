@@ -57,3 +57,28 @@ export function coverageGeoJson(points: SystemCoveragePoint[], kind: "forecast" 
         })),
     };
 }
+
+/** What a change notice from `/ws/system/` names (`core/system_events.py`). */
+export const SYSTEM_TOPICS = ["cells", "jobs", "routes", "journeys"] as const;
+
+/** The panels, besides its own map layer, that read what each topic changes. */
+const TOPIC_PANELS: Record<string, readonly string[]> = {
+    cells: ["summary", "history", "coverage"],
+    routes: ["summary", "coverage"],
+    journeys: ["summary", "coverage"],
+    jobs: ["jobs"],
+};
+
+/**
+ * Whether a system query (`["system", panel, ...]`) reads data one of *topics* changed.
+ * A map query is keyed by its params, and the layer in them is named like its topic.
+ */
+export function systemQueryAffected(topics: readonly string[], queryKey: readonly unknown[]): boolean {
+    const [root, panel, params] = queryKey;
+    if (root !== "system") return false;
+    return topics.some(topic =>
+        panel === "map"
+            ? typeof params === "object" && params !== null && "layer" in params && params.layer === topic
+            : (TOPIC_PANELS[topic] ?? []).includes(String(panel)),
+    );
+}

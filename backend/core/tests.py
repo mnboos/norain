@@ -11,7 +11,9 @@ import httpx
 import stripe
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
+from django.apps import apps
 from django.conf import settings
+from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
 from django.core.management import call_command
@@ -84,6 +86,12 @@ from core.weather import (
     forecast_days_for,
 )
 from core.wind import wind_components as _wind_components
+
+
+class AdminRegistryTests(SimpleTestCase):
+    def test_every_core_model_is_in_the_admin(self):
+        missing = [m.__name__ for m in apps.get_app_config("core").get_models() if m not in admin.site._registry]
+        self.assertEqual(missing, [])
 
 
 class LoadDotenvTests(SimpleTestCase):

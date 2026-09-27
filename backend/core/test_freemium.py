@@ -34,6 +34,9 @@ class FreemiumTests(TestCase):
     def post(self, path, body):
         return self.client.post(path, json.dumps(body), content_type="application/json", **self.headers)
 
+    def put(self, path, body):
+        return self.client.put(path, json.dumps(body), content_type="application/json", **self.headers)
+
     def plus(self, **values):
         return Subscription.objects.update_or_create(user=self.user, defaults={"plan": Plan.PRO, **values})[0]
 
@@ -202,6 +205,45 @@ class FreemiumTests(TestCase):
         self.assertEqual(len(allowed_route_ids(self.user)), 4)
         self.client.delete(f"/api/routes/{root.id}", **self.headers)
         self.assertFalse(RecurringRoute.objects.filter(pk=returning.id).exists())
+
+    def test_return_journey_always_rides_on_the_outbound_days(self):
+        body = {
+            "name": "Commute",
+            "startLat": 47,
+            "startLon": 9,
+            "startName": "Home",
+            "destLat": 47.1,
+            "destLon": 9.1,
+            "destName": "Work",
+            "scheduleCron": "0 8 * * 1,3",
+            "scheduleDescription": "Mo, Mi um 08:00",
+            "returnScheduleCron": "30 17 * * 6,0",
+            "returnScheduleDescription": "Sa, So um 17:30",
+        }
+        geometry = SimpleNamespace(aenqueue=AsyncMock())
+        with patch("core.api.recurring_route.refresh_route_geometry", geometry):
+            response = self.post("/api/routes", body)
+            self.assertEqual(response.status_code, 200, response.content)
+            root = RecurringRoute.objects.get(id=response.json()["id"])
+            returning = root.return_journey
+            self.assertEqual(returning.schedule_cron, "30 17 * * 1,3")
+            self.assertEqual(returning.schedule_description, "Mo, Mi um 17:30")
+
+            # The outbound days move, the return journey follows without being sent again.
+            update = {**body, "scheduleCron": "0 8 * * 5", "scheduleDescription": "Fr um 08:00"}
+            del update["returnScheduleCron"]
+            self.assertEqual(self.put(f"/api/routes/{root.id}", update).status_code, 200)
+            returning.refresh_from_db()
+            self.assertEqual(returning.schedule_cron, "30 17 * * 5")
+            self.assertEqual(returning.schedule_description, "Fr um 17:30")
+
+            # Editing the return journey directly keeps its time, never its days.
+            direct = {**body, "scheduleCron": "15 18 * * 2", "scheduleDescription": "Di um 18:15"}
+            del direct["returnScheduleCron"]
+            self.assertEqual(self.put(f"/api/routes/{returning.id}", direct).status_code, 200)
+            returning.refresh_from_db()
+            self.assertEqual(returning.schedule_cron, "15 18 * * 5")
+            self.assertEqual(returning.schedule_description, "Fr um 18:15")
 
     def test_plus_is_capped_at_twenty(self):
         self.plus()

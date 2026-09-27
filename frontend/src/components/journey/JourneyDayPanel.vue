@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useRoutePosition } from "@/composables/useRoutePosition";
 import ElevationChart from "@/components/ElevationChart.vue";
 import { computed, ref, toRefs, watch } from "vue";
 import { useQuasar } from "quasar";
@@ -101,12 +102,7 @@ const refreshing = computed(() => {
     return forecastQuery.isFetching.value && !!status && status !== "done" && status !== "failed";
 });
 const refreshFailed = computed(() => !!forecastQuery.error.value && !forecastQuery.isFetching.value);
-const selectedSample = ref(0);
-// Not on every new result: a stale forecast and the fresh one replacing it share the job and
-// the samples' places, so the user's pick stays where it was.
-watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () => {
-    selectedSample.value = 0;
-});
+const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePosition(() => forecast.value);
 
 // The candidates the planner did not pick, grey, when the user asks for them: the wanted
 // categories in the area of every variant, and other lodging where the day could have ended.
@@ -327,7 +323,9 @@ function breakEta(elapsedS: number): string {
                 :color="selectedProfileColor"
                 :label="selectedLabel"
                 :alternatives="alternativeProfiles"
+                :position="position"
                 compact
+                @select-position="selectPosition"
             >
                 <template v-if="alternativeProfiles.length" #footer>
                     <span
@@ -351,9 +349,9 @@ function breakEta(elapsedS: number): string {
                     <WeatherChart
                         :kind="kind"
                         :version="forecast.version"
-                        :selected-sample="selectedSample"
+                        :cursor-minutes="positionMinutes"
                         :samples="forecast.samples"
-                        @select-sample="selectedSample = $event"
+                        @select-minutes="selectMinutes"
                     />
                 </q-card>
             </template>
@@ -364,10 +362,10 @@ function breakEta(elapsedS: number): string {
             <NiceMap
                 :route-weather="forecast"
                 :preview-line="forecast ? undefined : stage.path"
-                :selected-sample="selectedSample"
+                :position="position"
                 :pois="mapPois"
                 :alternative-lines="alternativeLines"
-                @select-sample="selectedSample = $event"
+                @select-position="selectPosition"
                 @select-alternative="pick"
             />
         </q-card>

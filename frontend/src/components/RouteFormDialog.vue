@@ -68,8 +68,8 @@ const days = ref<number[]>([1, 2, 3, 4, 5]);
 const time = ref("08:00");
 const twoWay = ref(false);
 const returnTime = ref("17:00");
-const returnDays = ref<number[]>([1, 2, 3, 4, 5]);
-const returnValid = computed(() => /^([01]\d|2[0-3]):[0-5]\d$/.test(returnTime.value) && returnDays.value.length > 0);
+// The return journey rides on the outbound days, never its own: a restriction on purpose.
+const returnValid = computed(() => /^([01]\d|2[0-3]):[0-5]\d$/.test(returnTime.value));
 const flexBefore = ref(0);
 const flexAfter = ref(0);
 
@@ -166,8 +166,8 @@ function onSave() {
         departureFlexBeforeMinutes: flexBefore.value,
         departureFlexAfterMinutes: flexAfter.value,
         scheduleDescription: scheduleDescription.value,
-        returnScheduleCron: twoWay.value ? `${Number(returnTime.value.slice(3))} ${Number(returnTime.value.slice(0, 2))} * * ${returnDays.value.join(",")}` : null,
-        returnScheduleDescription: twoWay.value ? `${returnDays.value.map(d => dayLabels[d - 1]).join(", ")} um ${returnTime.value}` : "",
+        returnScheduleCron: twoWay.value ? `${Number(returnTime.value.slice(3))} ${Number(returnTime.value.slice(0, 2))} * * ${days.value.join(",")}` : null,
+        returnScheduleDescription: twoWay.value ? `${days.value.map(d => dayLabels[d - 1]).join(", ")} um ${returnTime.value}` : "",
     });
     emit("update:modelValue", false);
 }
@@ -314,12 +314,8 @@ function onClose() {
                 <div v-if="twoWay" class="q-gutter-sm">
                     <q-input
 v-model="returnTime" label="Abfahrtszeit der Rückfahrt" outlined dense mask="##:##" fill-mask
-                        :rules="[() => returnValid || 'Gültige Uhrzeit und mindestens einen Tag auswählen']" />
-                    <div class="text-caption">Tage der Rückfahrt</div>
-                    <q-option-group
-v-model="returnDays" type="checkbox" inline
-                        :options="dayLabels.map((label, i) => ({ label, value: i + 1 }))" />
-                    <p class="text-caption">Die Rückfahrt wird vom Ziel zum Start separat berechnet. Beide Fahrten zählen zusammen als eine Route.</p>
+                        :rules="[() => returnValid || 'Gültige Uhrzeit angeben']" />
+                    <q-item-label caption>Die Rückfahrt fährt an denselben Tagen wie die Hinfahrt und wird vom Ziel zum Start separat berechnet. Beide Fahrten zählen zusammen als eine Route.</q-item-label>
                 </div>
 
                 <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />

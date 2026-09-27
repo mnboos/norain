@@ -5,7 +5,6 @@ from math import isfinite
 from typing import Literal
 from uuid import UUID
 
-from django.contrib import admin
 from django.contrib.gis.db.models import Extent, GeometryField
 from django.contrib.gis.geos import Polygon
 from django.db.models import Count, Max, Min, Q
@@ -17,6 +16,7 @@ from ninja.errors import HttpError
 from ninja.utils import check_csrf
 from pydantic import Field
 
+from ..auth.admin_access import has_system_access
 from ..departures import cell_covers, instant
 from ..geo import simplify_line
 from ..grid import ENSEMBLE_MODELS, ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE
@@ -33,7 +33,7 @@ def system_auth(request):
         raise HttpError(403, "CSRF check failed.")
     if not request.user.is_authenticated:
         raise HttpError(401, "Sign in first.")
-    if not admin.site.has_permission(request):
+    if not has_system_access(request.user, request.session):
         raise HttpError(403, "Administrator access and admin verification are required.")
     return request.user
 
@@ -441,6 +441,9 @@ class SystemJobsPage(CamelSchema):
     items: list[SystemJob]
     total: int
     next_offset: int | None
+    # A stalled job writes nothing, so no change notice ever says so: the page re-derives
+    # possibly_stalled from updated_at on its own clock.
+    stall_timeout_seconds: int
 
 
 @router.get("/jobs", response=SystemJobsPage)
@@ -471,4 +474,9 @@ def jobs(request, offset: int = 0, limit: int = 25):
             row["status"] not in ForecastJob.TERMINAL_STATUSES and now - row["updated_at"] > JOB_STALL_TIMEOUT
         )
         items.append(row)
-    return {"items": items, "total": total, "next_offset": offset + len(items) if offset + len(items) < total else None}
+    return {
+        "items": items,
+        "total": total,
+        "next_offset": offset + len(items) if offset + len(items) < total else None,
+        "stall_timeout_seconds": int(JOB_STALL_TIMEOUT.total_seconds()),
+    }

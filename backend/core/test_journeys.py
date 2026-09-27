@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 from asgiref.sync import async_to_sync
 from django.conf import settings
+from django.db import connection
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 
 from . import tests as fixtures
@@ -164,6 +165,26 @@ class PoiImportTests(TestCase):
         self.assertEqual(
             sorted(Poi.objects.values_list("osm_ref", "category")), [("n5", "vending_drinks"), ("n5", "vending_sweets")]
         )
+
+    def test_import_rebuilds_the_indexes_it_drops(self):
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT indexname FROM pg_indexes WHERE tablename = %s ORDER BY 1", [Poi._meta.db_table])
+            before = cursor.fetchall()
+            path = self._write(
+                [
+                    {
+                        "type": "Feature",
+                        "id": "n1",
+                        "properties": {"amenity": "toilets"},
+                        "geometry": {"type": "Point", "coordinates": [8, 47]},
+                    }
+                ]
+            )
+            import_pois(path)
+            cursor.execute("SELECT indexname FROM pg_indexes WHERE tablename = %s ORDER BY 1", [Poi._meta.db_table])
+            self.assertEqual(cursor.fetchall(), before)
+        self.assertIn(("unique_poi_category",), before)
+        self.assertEqual(len(before), 3, "primary key, unique_poi_category and the location GIST")
 
     def test_a_failed_import_keeps_the_old_pois(self):
         Poi.objects.create(osm_ref="n1", category="toilets", location=route_point(47, 8))

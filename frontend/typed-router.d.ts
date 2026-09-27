@@ -52,6 +52,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    'explore': RouteRecordInfo<
+      'explore',
+      '/explore',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     'journeys': RouteRecordInfo<
       'journeys',
       '/journeys',
@@ -71,6 +78,13 @@ declare module 'vue-router/auto-routes' {
       '/map',
       Record<never, never>,
       Record<never, never>,
+      | never
+    >,
+    'public-route': RouteRecordInfo<
+      'public-route',
+      '/r/:slug',
+      { slug: ParamValue<true> },
+      { slug: ParamValue<false> },
       | never
     >,
     'random-rides': RouteRecordInfo<
@@ -131,6 +145,14 @@ declare module 'vue-router/auto-routes' {
       pathParamNames:
         | never
     }
+    'src/pages/explore.vue': {
+      routes:
+        | 'explore'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
     'src/pages/journeys/index.vue': {
       routes:
         | 'journeys'
@@ -154,6 +176,14 @@ declare module 'vue-router/auto-routes' {
         | never
       pathParamNames:
         | never
+    }
+    'src/pages/r/[slug].vue': {
+      routes:
+        | 'public-route'
+      views:
+        | never
+      pathParamNames:
+        | 'slug'
     }
     'src/pages/random/index.vue': {
       routes:
