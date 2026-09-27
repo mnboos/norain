@@ -77,7 +77,7 @@ const copy = {
                 a: "Aus Open-Meteo, mit OpenWeatherMap als Rückfallebene. Fehlende oder unvollständige Daten werden immer als solche gekennzeichnet.",
             },
         ],
-        footer: "Velowetter für die Schweiz",
+        footer: "Wetter für unterwegs",
     },
     en: {
         navFeatures: "Features",
@@ -144,7 +144,7 @@ const copy = {
                 a: "From Open-Meteo, with OpenWeatherMap as a fallback. Missing or incomplete data is always labelled as such.",
             },
         ],
-        footer: "Ride weather for Switzerland",
+        footer: "Weather for the way ahead",
     },
 } as const;
 
@@ -159,9 +159,8 @@ const { isAuthenticated } = useSession();
     <q-page class="welcome bg-brand-page text-brand-ink" :lang="lang">
         <q-card tag="header" flat square :dark="false" class="hero bg-brand-gradient text-white">
             <q-toolbar class="landing-wrap row items-center justify-between q-py-xs">
-                <router-link to="/welcome" class="brand row items-center no-wrap text-white q-pa-none">
-                    <img src="/brand/mark-master%20-%20Copy.png" alt="" />
-                    <span class="text-weight-bold">Meteolane</span>
+                <router-link to="/welcome" class="brand row items-center no-wrap text-white text-weight-bold q-pa-none">
+                    Meteolane
                 </router-link>
                 <div class="bar-right row items-center justify-between q-gutter-x-md">
                     <nav class="links gt-sm row q-gutter-x-md">
@@ -230,15 +229,9 @@ const { isAuthenticated } = useSession();
                             </q-card-actions>
                         </q-card>
                     </div>
-                    <div class="col-12 col-md-6 self-end">
-                        <!-- Replace the placeholder with a product screenshot when available. -->
-                        <q-responsive :ratio="4 / 3" class="shot hero-shot shadow-10">
-                            <div class="flex flex-center">
-                                <span class="text-caption bg-white text-brand-faint rounded-borders q-px-sm q-py-xs">
-                                    product shot — route detail
-                                </span>
-                            </div>
-                        </q-responsive>
+                    <!-- The mark sits on the bottom edge so its road runs out of the section. -->
+                    <div class="col-12 col-md-6 self-end row justify-center hero-mark">
+                        <img src="/brand/mark-master%20-%20Copy.png" alt="" />
                     </div>
                 </div>
             </q-card-section>
@@ -389,7 +382,7 @@ const { isAuthenticated } = useSession();
 
         <q-card tag="footer" flat square :dark="false" class="bg-brand-navy text-brand-mist">
             <q-card-section class="landing-wrap row items-center justify-between q-gutter-y-md q-py-lg">
-                <img class="footer-logo" src="/brand/logo-light.png" alt="Meteolane" />
+                <span class="footer-brand text-weight-bold text-white">Meteolane</span>
                 <span class="text-caption">{{ t.footer }}</span>
             </q-card-section>
         </q-card>
@@ -413,10 +406,6 @@ const { isAuthenticated } = useSession();
 .brand {
     height: 56px;
     font-size: 17px;
-    img {
-        height: 64px;
-        translate: -10px 3px;
-    }
 }
 .hero-content {
     padding-top: 72px;
@@ -444,11 +433,17 @@ const { isAuthenticated } = useSession();
         font-family: ui-monospace, monospace;
     }
 }
-.hero-shot {
-    border-radius: 12px 12px 0 0;
+.hero-mark {
+    margin-top: -24px;
+    img {
+        display: block;
+        width: 100%;
+        max-width: 500px;
+        height: auto;
+    }
 }
-.footer-logo {
-    height: 28px;
+.footer-brand {
+    font-size: 17px;
 }
 @media (max-width: 599px) {
     .hero .q-toolbar {
