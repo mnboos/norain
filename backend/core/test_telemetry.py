@@ -2,23 +2,20 @@
 
 import asyncio
 import json
-import re
 from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
-from urllib.parse import unquote
 
 import httpx
 from asgiref.sync import async_to_sync
-from django.core import mail
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from django_tasks_db.models import DBTaskResult
 
 from . import grid, telemetry
 from .jobs import get_or_start_job, set_status
 from .models import ForecastJob, ProcessedStripeEvent, Subscription, User
-from .test_signup import TEST_SETTINGS
+from .test_signup import TEST_SETTINGS, after_code_cooldown, mailed_code
 
 
 @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
@@ -182,13 +179,13 @@ class TelemetryDatabaseTests(TestCase):
             with self.captureOnCommitCallbacks(execute=True):
                 self.assertEqual(self.client.post(signup, data=body, content_type="application/json").status_code, 401)
                 self.assertFalse(any(c.kwargs.get("action") == "created" for c in event.call_args_list))
-            # The same address again: allauth mails the owner and creates nothing.
-            with self.captureOnCommitCallbacks(execute=True):
-                self.assertEqual(self.client.post(signup, data=body, content_type="application/json").status_code, 401)
-            key = unquote(re.search(r"verify_key=(\S+)", mail.outbox[0].body).group(1))
+            # The same address again, in another browser: allauth mails the owner and
+            # creates nothing.
+            with self.captureOnCommitCallbacks(execute=True), after_code_cooldown():
+                self.assertEqual(Client().post(signup, data=body, content_type="application/json").status_code, 401)
             self.client.post(
                 "/api/allauth/browser/v1/auth/email/verify",
-                data=json.dumps({"key": key}),
+                data=json.dumps({"key": mailed_code(0)}),
                 content_type="application/json",
             )
         self.assertEqual(sum(c.kwargs.get("action") == "created" for c in event.call_args_list), 1)

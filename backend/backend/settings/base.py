@@ -191,9 +191,10 @@ AXES_LOCKOUT_CALLABLE = "core.auth.lockout.lockout_response"
 # Sign-up, sign-in and password reset are django-allauth in headless mode: it serves JSON
 # under /api/allauth/ and the Vue app draws every form. Sign-up has two steps. Step 1 takes
 # only the email; allauth creates the user with a generated username and no usable
-# password and mails a link. Step 2 (core.auth.views.complete_signup_view) sets the real
-# username and password. A link opened in another browser verifies the email but does not
-# sign in, so sign-in by emailed code is on as the way back in.
+# password and mails a code, which the user types into the same tab: that verifies the
+# address and signs in, whichever device the mail is read on. Step 2
+# (core.auth.views.complete_signup_view) sets the username, the default bike profile and,
+# optionally, a password; without one the account signs in by emailed code.
 ACCOUNT_ADAPTER = "core.auth.adapter.AccountAdapter"
 HEADLESS_ADAPTER = "core.auth.adapter.HeadlessAdapter"
 ACCOUNT_LOGIN_METHODS = {"email", "username"}
@@ -201,6 +202,9 @@ ACCOUNT_SIGNUP_FIELDS = ["email*"]
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
+ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED = True
+# Two new codes per sign-up, on top of allauth's own mail rate limits.
+ACCOUNT_EMAIL_VERIFICATION_SUPPORTS_RESEND = True
 ACCOUNT_LOGIN_BY_CODE_ENABLED = True
 ACCOUNT_EMAIL_SUBJECT_PREFIX = "NoRain: "
 # Axes is the only lockout for failed sign-ins. allauth's own `login_failed` limit would
@@ -212,7 +216,6 @@ HEADLESS_CLIENTS = ("browser",)
 # Paths only: HeadlessAdapter.get_frontend_url puts FRONTEND_URL in front when a mail is
 # sent, because production.py sets FRONTEND_URL after this file is read.
 HEADLESS_FRONTEND_URLS = {
-    "account_confirm_email": "/account?verify_key={key}",
     "account_reset_password": "/account?mode=reset",
     "account_reset_password_from_key": "/account?reset_key={key}",
     "account_signup": "/account?mode=signup",

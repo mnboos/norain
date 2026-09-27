@@ -23,6 +23,7 @@ import CurrentLocationButton from "@/components/CurrentLocationButton.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import { QSelect, useQuasar } from "quasar";
 import { useQuery } from "@tanstack/vue-query";
+import { useSession } from "@/composables/useSession";
 import GpxImportDialog from "@/components/GpxImportDialog.vue";
 import RouteTimingFields from "@/components/RouteTimingFields.vue";
 import RouteFormDialog from "@/components/RouteFormDialog.vue";
@@ -30,6 +31,7 @@ import { canShareFiles, gpxApi, gpxError, exportDraft, routePlace, savedRoutePla
 import type { RoutePlanIn, RecurringRouteIn } from "@norain/api/models";
 import { computed, ref, watchEffect, watch } from "vue";
 import { symSharpElectricBike, symSharpElectricMoped, symSharpPedalBike, symSharpShare, symSharpDownload } from "@quasar/extras/material-symbols-sharp";
+import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
 import type { PlacesSearchResult } from "@norain/api/models";
 import { useRoute, useRouter } from "vue-router";
 import { usePlaceSearch } from "@/queries/places";
@@ -39,6 +41,7 @@ import { useRouteWeather } from "@/queries/routeWeather";
 const route = useRoute();
 const router = useRouter();
 const $q = useQuasar();
+const { isAuthenticated, defaultProfile } = useSession();
 const importing = ref(false);
 const showSave = ref(false);
 const draft = ref<RouteDraft | null>(null);
@@ -50,7 +53,7 @@ const createRoute = useCreateRecurringRoute();
 const exact = computed(() => draft.value?.plan.geometrySource === GeometrySource.Imported);
 const { isPro } = useEntitlements();
 
-const profile = ref("bike");
+const profile = ref<string>(defaultProfile.value);
 const departureTime = ref<string>(defaultDepartureTime());
 const flexBefore = ref(0);
 const flexAfter = ref(0);
@@ -64,11 +67,7 @@ function defaultDepartureTime(): string {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:00`;
 }
 
-const profiles = [
-    { label: "Velo", value: "bike", icon: symSharpPedalBike },
-    { label: "E-Bike", value: "ebike", icon: symSharpElectricBike },
-    { label: "S-Pedelec", value: "fast_ebike", icon: symSharpElectricMoped },
-];
+const profiles = BIKE_PROFILE_OPTIONS;
 
 const routeIdParam = computed(() => (typeof route.query.route === "string" ? route.query.route : null));
 
@@ -149,7 +148,7 @@ function applyImport(value: RouteDraft) {
     zielort.value = routePlace(last, "Ziel");
     viaPoints.value = value.plan.geometrySource === GeometrySource.Graphhopper ? points.slice(1, -1) : [];
     duration.value = value.plan.durationSeconds ?? value.preview.timeS;
-    profile.value = value.plan.profile ?? "bike";
+    profile.value = value.plan.profile ?? defaultProfile.value;
 }
 function clearImport() { draft.value = null; viaPoints.value = []; }
 // The planner is for signed-in accounts only (the router guard), so a draft saves at once.

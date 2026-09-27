@@ -1,0 +1,14 @@
+{% autoescape off %}Hallo
+
+Jemand – hoffentlich du – möchte mit dieser Adresse ein Konto bei {{ current_site.name }} erstellen.
+
+Dein Bestätigungscode:
+
+{{ code }}
+
+Gib ihn im Fenster ein, in dem du dich registriert hast. Er ist 15 Minuten gültig.
+
+Warst du das nicht? Dann kannst du diese E-Mail ignorieren; das Konto wird nach einer Woche gelöscht.
+
+{{ current_site.name }} · {{ current_site.domain }}
+{% endautoescape %}
