@@ -775,6 +775,48 @@
                 ]
             }
         },
+        "/api/reverse": {
+            "get": {
+                "operationId": "core_api_places_reverse",
+                "summary": "Reverse",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "lat",
+                        "schema": {
+                            "title": "Lat",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "lon",
+                        "schema": {
+                            "title": "Lon",
+                            "type": "number"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PlacesSearchResult"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "The place at a point, for \"current location\": a name to show and save instead of coordinates.",
+                "tags": [
+                    "Places"
+                ]
+            }
+        },
         "/api/gpx/import": {
             "post": {
                 "operationId": "core_api_gpx_import_gpx",
@@ -1242,6 +1284,777 @@
                 "tags": [
                     "Journeys"
                 ]
+            }
+        },
+        "/api/routes/{route_id}/sharing": {
+            "get": {
+                "operationId": "core_api_community_get_sharing",
+                "summary": "Get Sharing",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SharingOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Sharing"
+                ]
+            },
+            "put": {
+                "operationId": "core_api_community_update_sharing",
+                "summary": "Update Sharing",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SharingOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Publish or hide a route, and choose how much of either end stays hidden.",
+                "tags": [
+                    "Sharing"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SharingIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/routes/{route_id}/photos": {
+            "get": {
+                "operationId": "core_api_community_list_photos",
+                "summary": "List Photos",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/PhotoOut"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Sharing"
+                ]
+            },
+            "post": {
+                "operationId": "core_api_community_upload_photo",
+                "summary": "Upload Photo",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PhotoOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Add a photo. It is re-encoded without metadata; its position is only what the owner sets.",
+                "tags": [
+                    "Sharing"
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "properties": {
+                                    "file": {
+                                        "format": "binary",
+                                        "title": "File",
+                                        "type": "string"
+                                    },
+                                    "caption": {
+                                        "default": "",
+                                        "title": "Caption",
+                                        "type": "string"
+                                    },
+                                    "lat": {
+                                        "anyOf": [
+                                            {
+                                                "type": "number"
+                                            },
+                                            {
+                                                "type": "null"
+                                            }
+                                        ],
+                                        "title": "Lat"
+                                    },
+                                    "lon": {
+                                        "anyOf": [
+                                            {
+                                                "type": "number"
+                                            },
+                                            {
+                                                "type": "null"
+                                            }
+                                        ],
+                                        "title": "Lon"
+                                    }
+                                },
+                                "required": [
+                                    "file"
+                                ],
+                                "title": "MultiPartBodyParams",
+                                "type": "object"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/routes/{route_id}/photos/{photo_id}": {
+            "patch": {
+                "operationId": "core_api_community_update_photo",
+                "summary": "Update Photo",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "photo_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Photo Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PhotoOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Sharing"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PhotoUpdateIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "core_api_community_delete_photo",
+                "summary": "Delete Photo",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "photo_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Photo Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                },
+                "tags": [
+                    "Sharing"
+                ]
+            }
+        },
+        "/api/photos/{photo_id}/{size}": {
+            "get": {
+                "operationId": "core_api_community_photo_file",
+                "summary": "Photo File",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "photo_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Photo Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "size",
+                        "schema": {
+                            "enum": [
+                                "full",
+                                "thumb"
+                            ],
+                            "title": "Size",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                },
+                "description": "The image itself: to anyone when its route is public, else only to the route's owner.",
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes": {
+            "get": {
+                "operationId": "core_api_community_list_public_routes",
+                "summary": "List Public Routes",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "sort",
+                        "schema": {
+                            "default": "new",
+                            "enum": [
+                                "new",
+                                "popular"
+                            ],
+                            "title": "Sort",
+                            "type": "string"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "q",
+                        "schema": {
+                            "default": "",
+                            "title": "Q",
+                            "type": "string"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "bbox",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Bbox"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "default": 0,
+                            "title": "Offset",
+                            "type": "integer"
+                        },
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/PublicRouteSummary"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Discover public routes, newest or most liked first, optionally inside a map box.\n\n``bbox`` is ``minLon,minLat,maxLon,maxLat``. It is checked against the public line, so a\nroute never turns up for a box that only its hidden ends touch.",
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}": {
+            "get": {
+                "operationId": "core_api_community_get_public_route",
+                "summary": "Get Public Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicRouteDetail"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}/elevation": {
+            "get": {
+                "operationId": "core_api_community_public_route_elevation",
+                "summary": "Public Route Elevation",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ElevationOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}/forecast": {
+            "get": {
+                "operationId": "core_api_community_public_route_forecast",
+                "summary": "Public Route Forecast",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "date",
+                        "schema": {
+                            "title": "Date",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "time",
+                        "schema": {
+                            "title": "Time",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastJobOut"
+                                }
+                            }
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastJobOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "The weather on this route for the visitor's own departure: a forecast job like any other.\n\nSigned-in visitors only, like all planning. The job is the visitor's, so the result is\nshaped for the visitor's tier, and it runs on the public line only.",
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}/comments": {
+            "get": {
+                "operationId": "core_api_community_list_comments",
+                "summary": "List Comments",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/CommentOut"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ]
+            },
+            "post": {
+                "operationId": "core_api_community_add_comment",
+                "summary": "Add Comment",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CommentOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CommentIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/public/comments/{comment_id}": {
+            "patch": {
+                "operationId": "core_api_community_edit_comment",
+                "summary": "Edit Comment",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "comment_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Comment Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CommentOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CommentIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "core_api_community_delete_comment",
+                "summary": "Delete Comment",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "comment_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Comment Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                },
+                "description": "The author may delete a comment, and so may the route's owner: it is their page.",
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}/like": {
+            "put": {
+                "operationId": "core_api_community_like_route",
+                "summary": "Like Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LikeOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ]
+            },
+            "delete": {
+                "operationId": "core_api_community_unlike_route",
+                "summary": "Unlike Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LikeOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}/copy": {
+            "post": {
+                "operationId": "core_api_community_copy_route",
+                "summary": "Copy Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecurringRouteOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Save the public line as one of the visitor's own routes, with their own schedule.\n\nIt is an imported path, so the copy rides exactly the line shown (never the hidden ends)\nand counts against the visitor's route quota like any other route.",
+                "tags": [
+                    "Public routes"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CopyIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
             }
         },
         "/api/system/summary": {
@@ -3203,6 +4016,26 @@
                             }
                         ],
                         "title": "Return Next Departure"
+                    },
+                    "visibility": {
+                        "default": "private",
+                        "enum": [
+                            "private",
+                            "public"
+                        ],
+                        "title": "Visibility",
+                        "type": "string"
+                    },
+                    "public_slug": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Public Slug"
                     }
                 },
                 "required": [
@@ -4706,6 +5539,553 @@
                 "title": "JourneyIn",
                 "type": "object"
             },
+            "SharingOut": {
+                "properties": {
+                    "visibility": {
+                        "enum": [
+                            "private",
+                            "public"
+                        ],
+                        "title": "Visibility",
+                        "type": "string"
+                    },
+                    "public_slug": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Public Slug"
+                    },
+                    "published_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Published At"
+                    },
+                    "privacy_zone_m": {
+                        "title": "Privacy Zone M",
+                        "type": "integer"
+                    },
+                    "public_distance_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Public Distance M"
+                    },
+                    "public_line": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "items": {
+                                        "type": "number"
+                                    },
+                                    "type": "array"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Public Line"
+                    }
+                },
+                "required": [
+                    "visibility",
+                    "privacy_zone_m"
+                ],
+                "title": "SharingOut",
+                "type": "object"
+            },
+            "SharingIn": {
+                "properties": {
+                    "visibility": {
+                        "enum": [
+                            "private",
+                            "public"
+                        ],
+                        "title": "Visibility",
+                        "type": "string"
+                    },
+                    "privacyZoneM": {
+                        "default": 500,
+                        "title": "Privacyzonem",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "visibility"
+                ],
+                "title": "SharingIn",
+                "type": "object"
+            },
+            "PhotoOut": {
+                "properties": {
+                    "id": {
+                        "format": "uuid",
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "url": {
+                        "title": "Url",
+                        "type": "string"
+                    },
+                    "thumbnail_url": {
+                        "title": "Thumbnail Url",
+                        "type": "string"
+                    },
+                    "width": {
+                        "title": "Width",
+                        "type": "integer"
+                    },
+                    "height": {
+                        "title": "Height",
+                        "type": "integer"
+                    },
+                    "caption": {
+                        "title": "Caption",
+                        "type": "string"
+                    },
+                    "lat": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lat"
+                    },
+                    "lon": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lon"
+                    },
+                    "created_at": {
+                        "format": "date-time",
+                        "title": "Created At",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "url",
+                    "thumbnail_url",
+                    "width",
+                    "height",
+                    "caption",
+                    "created_at"
+                ],
+                "title": "PhotoOut",
+                "type": "object"
+            },
+            "PhotoUpdateIn": {
+                "properties": {
+                    "caption": {
+                        "default": "",
+                        "maxLength": 500,
+                        "title": "Caption",
+                        "type": "string"
+                    },
+                    "lat": {
+                        "anyOf": [
+                            {
+                                "maximum": 90,
+                                "minimum": -90,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lat"
+                    },
+                    "lon": {
+                        "anyOf": [
+                            {
+                                "maximum": 180,
+                                "minimum": -180,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lon"
+                    }
+                },
+                "title": "PhotoUpdateIn",
+                "type": "object"
+            },
+            "PublicRouteSummary": {
+                "properties": {
+                    "slug": {
+                        "title": "Slug",
+                        "type": "string"
+                    },
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "description": {
+                        "title": "Description",
+                        "type": "string"
+                    },
+                    "author": {
+                        "title": "Author",
+                        "type": "string"
+                    },
+                    "profile": {
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "distance_m": {
+                        "title": "Distance M",
+                        "type": "number"
+                    },
+                    "duration_s": {
+                        "title": "Duration S",
+                        "type": "integer"
+                    },
+                    "ascent_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ascent M"
+                    },
+                    "published_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Published At"
+                    },
+                    "like_count": {
+                        "default": 0,
+                        "title": "Like Count",
+                        "type": "integer"
+                    },
+                    "comment_count": {
+                        "default": 0,
+                        "title": "Comment Count",
+                        "type": "integer"
+                    },
+                    "photo_count": {
+                        "default": 0,
+                        "title": "Photo Count",
+                        "type": "integer"
+                    },
+                    "cover_url": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Cover Url"
+                    },
+                    "path": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Path",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "slug",
+                    "name",
+                    "description",
+                    "author",
+                    "profile",
+                    "distance_m",
+                    "duration_s"
+                ],
+                "title": "PublicRouteSummary",
+                "type": "object"
+            },
+            "PublicRouteDetail": {
+                "properties": {
+                    "slug": {
+                        "title": "Slug",
+                        "type": "string"
+                    },
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "description": {
+                        "title": "Description",
+                        "type": "string"
+                    },
+                    "author": {
+                        "title": "Author",
+                        "type": "string"
+                    },
+                    "profile": {
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "distance_m": {
+                        "title": "Distance M",
+                        "type": "number"
+                    },
+                    "duration_s": {
+                        "title": "Duration S",
+                        "type": "integer"
+                    },
+                    "ascent_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ascent M"
+                    },
+                    "published_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Published At"
+                    },
+                    "like_count": {
+                        "default": 0,
+                        "title": "Like Count",
+                        "type": "integer"
+                    },
+                    "comment_count": {
+                        "default": 0,
+                        "title": "Comment Count",
+                        "type": "integer"
+                    },
+                    "photo_count": {
+                        "default": 0,
+                        "title": "Photo Count",
+                        "type": "integer"
+                    },
+                    "cover_url": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Cover Url"
+                    },
+                    "path": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Path",
+                        "type": "array"
+                    },
+                    "line": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Line",
+                        "type": "array"
+                    },
+                    "photos": {
+                        "items": {
+                            "$ref": "#/components/schemas/PhotoOut"
+                        },
+                        "title": "Photos",
+                        "type": "array"
+                    },
+                    "is_owner": {
+                        "default": false,
+                        "title": "Is Owner",
+                        "type": "boolean"
+                    },
+                    "liked": {
+                        "default": false,
+                        "title": "Liked",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "slug",
+                    "name",
+                    "description",
+                    "author",
+                    "profile",
+                    "distance_m",
+                    "duration_s",
+                    "line",
+                    "photos"
+                ],
+                "title": "PublicRouteDetail",
+                "type": "object"
+            },
+            "CommentOut": {
+                "properties": {
+                    "id": {
+                        "format": "uuid",
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "author": {
+                        "title": "Author",
+                        "type": "string"
+                    },
+                    "body": {
+                        "title": "Body",
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "format": "date-time",
+                        "title": "Created At",
+                        "type": "string"
+                    },
+                    "edited_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Edited At"
+                    },
+                    "can_edit": {
+                        "default": false,
+                        "title": "Can Edit",
+                        "type": "boolean"
+                    },
+                    "can_delete": {
+                        "default": false,
+                        "title": "Can Delete",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "author",
+                    "body",
+                    "created_at"
+                ],
+                "title": "CommentOut",
+                "type": "object"
+            },
+            "CommentIn": {
+                "properties": {
+                    "body": {
+                        "maxLength": 2000,
+                        "minLength": 1,
+                        "title": "Body",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "body"
+                ],
+                "title": "CommentIn",
+                "type": "object"
+            },
+            "LikeOut": {
+                "properties": {
+                    "liked": {
+                        "title": "Liked",
+                        "type": "boolean"
+                    },
+                    "like_count": {
+                        "title": "Like Count",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "liked",
+                    "like_count"
+                ],
+                "title": "LikeOut",
+                "type": "object"
+            },
+            "CopyIn": {
+                "properties": {
+                    "name": {
+                        "anyOf": [
+                            {
+                                "maxLength": 200,
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Name"
+                    },
+                    "scheduleCron": {
+                        "default": "0 8 * * 6",
+                        "title": "Schedulecron",
+                        "type": "string"
+                    },
+                    "scheduleDescription": {
+                        "default": "Jeden Samstag um 08:00",
+                        "maxLength": 200,
+                        "title": "Scheduledescription",
+                        "type": "string"
+                    }
+                },
+                "title": "CopyIn",
+                "type": "object"
+            },
             "SystemCacheCount": {
                 "properties": {
                     "kind": {
@@ -5306,12 +6686,17 @@
                             }
                         ],
                         "title": "Next Offset"
+                    },
+                    "stall_timeout_seconds": {
+                        "title": "Stall Timeout Seconds",
+                        "type": "integer"
                     }
                 },
                 "required": [
                     "items",
                     "total",
-                    "next_offset"
+                    "next_offset",
+                    "stall_timeout_seconds"
                 ],
                 "title": "SystemJobsPage",
                 "type": "object"

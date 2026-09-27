@@ -163,8 +163,24 @@ export interface RecurringRouteOut {
      * 
      */
     returnNextDeparture?: string | null;
+    /**
+     * 
+     */
+    visibility?: RecurringRouteOutVisibilityEnum;
+    /**
+     * 
+     */
+    publicSlug?: string | null;
 }
 
+/**
+* @export
+* @enum {string}
+*/
+export enum RecurringRouteOutVisibilityEnum {
+    Private = 'private',
+    Public = 'public'
+}
 
 
 /**
@@ -229,6 +245,8 @@ export function RecurringRouteOutFromJSONTyped(json: any, ignoreDiscriminator: b
         'returnScheduleCron': json['return_schedule_cron'] === undefined ? undefined : json['return_schedule_cron'] === null ? null : json['return_schedule_cron'],
         'returnScheduleDescription': json['return_schedule_description'] == null ? undefined : json['return_schedule_description'],
         'returnNextDeparture': json['return_next_departure'] === undefined ? undefined : json['return_next_departure'] === null ? null : json['return_next_departure'],
+        'visibility': json['visibility'] == null ? undefined : json['visibility'],
+        'publicSlug': json['public_slug'] === undefined ? undefined : json['public_slug'] === null ? null : json['public_slug'],
     };
 }
 
@@ -275,6 +293,8 @@ export function RecurringRouteOutToJSONTyped(value?: RecurringRouteOut | null, i
         'return_schedule_cron': value['returnScheduleCron'],
         'return_schedule_description': value['returnScheduleDescription'],
         'return_next_departure': value['returnNextDeparture'],
+        'visibility': value['visibility'],
+        'public_slug': value['publicSlug'],
     };
 }
 

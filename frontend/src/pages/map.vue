@@ -1,11 +1,12 @@
 <route lang="json5">
 {
     name: "map",
-    meta: { title: "Karte" },
+    meta: { title: "Karte", requiresAuth: true },
 }
 </route>
 
 <script setup lang="ts">
+import { useRoutePosition } from "@/composables/useRoutePosition";
 import ElevationChart from "@/components/ElevationChart.vue";
 import { GeometrySource } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
@@ -18,6 +19,7 @@ import WindDistributionBar from "@/components/WindDistributionBar.vue";
 import ForecastDetails from "@/components/ForecastDetails.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
+import CurrentLocationButton from "@/components/CurrentLocationButton.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import { QSelect, useQuasar } from "quasar";
 import { useQuery } from "@tanstack/vue-query";
@@ -25,9 +27,10 @@ import { useSession } from "@/composables/useSession";
 import GpxImportDialog from "@/components/GpxImportDialog.vue";
 import RouteTimingFields from "@/components/RouteTimingFields.vue";
 import RouteFormDialog from "@/components/RouteFormDialog.vue";
-import { gpxApi, gpxError, exportDraft, routePlace, savedRoutePlan, routingProfile, parseDraft, type RouteDraft } from "@/services/gpx";
+import { canShareFiles, gpxApi, gpxError, exportDraft, routePlace, savedRoutePlan, routingProfile, type RouteDraft } from "@/services/gpx";
 import type { RoutePlanIn, RecurringRouteIn } from "@norain/api/models";
 import { computed, ref, watchEffect, watch } from "vue";
+import { symSharpElectricBike, symSharpElectricMoped, symSharpPedalBike, symSharpShare, symSharpDownload } from "@quasar/extras/material-symbols-sharp";
 import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
 import type { PlacesSearchResult } from "@norain/api/models";
 import { useRoute, useRouter } from "vue-router";
@@ -45,6 +48,7 @@ const draft = ref<RouteDraft | null>(null);
 const duration = ref(0);
 const viaPoints = ref<number[][]>([]);
 const exporting = ref(false);
+const sharing = canShareFiles();
 const createRoute = useCreateRecurringRoute();
 const exact = computed(() => draft.value?.plan.geometrySource === GeometrySource.Imported);
 const { isPro } = useEntitlements();
@@ -147,19 +151,9 @@ function applyImport(value: RouteDraft) {
     profile.value = value.plan.profile ?? defaultProfile.value;
 }
 function clearImport() { draft.value = null; viaPoints.value = []; }
-async function saveDraft() {
-    if (!currentDraft.value) return;
-    if (!isAuthenticated.value) {
-        sessionStorage.setItem("norain.plannerDraft", JSON.stringify(currentDraft.value));
-        await router.push({ path: "/account", query: { next: "/map?restoreDraft=1" } });
-    } else showSave.value = true;
-}
-if (route.query.restoreDraft === "1") {
-    try {
-        const value = parseDraft(sessionStorage.getItem("norain.plannerDraft"));
-        if (value) { applyImport(value); showSave.value = isAuthenticated.value; }
-    } catch { /* A stale browser draft can be discarded. */ }
-    sessionStorage.removeItem("norain.plannerDraft");
+// The planner is for signed-in accounts only (the router guard), so a draft saves at once.
+function saveDraft() {
+    if (currentDraft.value) showSave.value = true;
 }
 async function saveRoute(data: RecurringRouteIn) {
     try {
@@ -201,10 +195,7 @@ watch(
     { deep: true, flush: "sync" },
 );
 
-const selectedSample = ref(0);
-watch(routeWeather, () => {
-    selectedSample.value = 0;
-});
+const { position, selectedSample, selectSample, selectPosition } = useRoutePosition(() => routeWeather.value);
 
 function makeOnFilter(filter: ReturnType<typeof ref<string>>) {
     return (val: string, doneFn: (cb: () => void, after?: (ref: QSelect) => void) => void) => {
@@ -243,8 +234,8 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
             :preview-line="previewQuery.data.value?.coordinates"
             :abfahrtsort="abfahrtsort"
             :zielort="zielort"
-            :selected-sample="selectedSample"
-            @select-sample="selectedSample = $event"
+            :position="position"
+            @select-position="selectPosition"
             @map-view="onMapView"
         >
             <template #search>
@@ -255,7 +246,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                     <q-card class="q-pa-md q-mt-md q-gutter-y-sm">
                         <div class="row q-gutter-xs">
                             <q-btn flat no-caps label="GPX importieren" @click="importing = true" />
-                            <q-btn flat no-caps label="GPX exportieren" :disable="!currentDraft" :loading="exporting" @click="exportRoute" />
+                            <q-btn flat no-caps :icon="sharing ? symSharpShare : symSharpDownload" :label="sharing ? 'GPX teilen' : 'GPX herunterladen'" :disable="!currentDraft" :loading="exporting" @click="exportRoute" />
                             <q-btn flat no-caps label="Route speichern" :disable="!currentDraft" @click="saveDraft" />
                         </div>
                         <template v-if="draft">
@@ -282,6 +273,9 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             @filter="onFilterStart"
                             @focus="selectInputText"
                         >
+                            <template #append>
+                                <CurrentLocationButton :disable="exact" @select="abfahrtsort = $event" />
+                            </template>
                             <template #option="props">
                                 <PlaceSearchItem
                                     :feature="props.opt"
@@ -310,6 +304,9 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             @filter="onFilterDest"
                             @focus="selectInputText"
                         >
+                            <template #append>
+                                <CurrentLocationButton :disable="exact" @select="zielort = $event" />
+                            </template>
                             <template #option="props">
                                 <PlaceSearchItem
                                     :feature="props.opt"
@@ -347,7 +344,10 @@ v-if="!exact"
 v-if="previewQuery.data.value"
                             :coordinates="previewQuery.data.value.coordinates"
                             :total-seconds="previewQuery.data.value.timeS"
-                            :vertex-times="previewQuery.data.value.vertexTimes" />
+                            :vertex-times="previewQuery.data.value.vertexTimes"
+                            :position="position"
+                            @select-position="selectPosition"
+                        />
                         <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
 
                         <q-btn-toggle
@@ -387,7 +387,11 @@ v-if="previewQuery.data.value"
                                 <div class="text-subtitle2">Wind entlang der Strecke</div>
                                 <WindDistributionBar :distribution="routeWeather.summary.windDistribution" />
                             </template>
-                            <ForecastDetails v-model:selected-sample="selectedSample" :forecast="routeWeather" />
+                            <ForecastDetails
+                                :selected-sample="selectedSample"
+                                :forecast="routeWeather"
+                                @update:selected-sample="selectSample"
+                            />
                         </template>
 
                         <div v-else-if="!ready" class="text-caption text-muted">

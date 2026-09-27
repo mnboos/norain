@@ -16,13 +16,16 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     stations.py      Weather Underground stations: budgeted fetch, cache, near-now correction
     models.py        User (custom, AUTH_USER_MODEL), Subscription, ProcessedStripeEvent,
                      RecurringRoute, ForecastCell, EnsembleCell, StationLookup,
-                     StationObservation, ForecastJob
+                     StationObservation, ForecastJob, RoutePhoto, RouteComment, RouteLike
     jobs.py          forecast-job identity, lifecycle and channel-layer publishing
     claims.py        cache-backed in-flight claim for grid-cell fetches
-    consumers.py     ForecastJobConsumer (websocket), routing.py maps it to a URL
+    consumers.py     ForecastJobConsumer, SystemEventsConsumer (websocket); routing.py maps URLs
+    system_events.py notify_system: change notices for the admin system dashboard
     forecast_schemas.py  the forecast payload (RouteWeatherOut, WeatherSample, ForecastJobOut, …)
     api/             ninja routers: route_weather.py, recurring_route.py (route CRUD),
-                     billing.py, places.py
+                     billing.py, places.py, community.py (sharing, photos, comments, likes)
+    public_routes.py the public view of a route: privacy zones, public_geometry
+    photos.py        upload re-encoding (no EXIF/GPS); signals.py deletes the files with the row
     auth/            backend.py (session_auth), adapter.py (allauth rules), signals.py,
                      views.py (session, sign-up step 2, profile), lockout.py
     entitlements.py  every tier limit, in one place
@@ -213,6 +216,14 @@ Use `client.v1.*` for every Stripe call (`v1.customers`, `v1.checkout`, `v1.bill
 the accessors without `v1` are deprecated. `stripe.Webhook.construct_event` is deliberately
 *not* the client method — the webhook needs only `STRIPE_WEBHOOK_SECRET`, and
 `client.construct_event` would make it need a secret key too.
+
+### Planning needs an account
+
+Every endpoint that plans a ride is `session_auth` (401 without a session): the ad-hoc forecast
+(`GET`/`POST /api/route_weather`), a public route's forecast, `POST /api/routes/preview`,
+`POST /api/elevation`, place search and the whole GPX router. Each spends provider or
+GraphHopper budget. The SPA's `/map` planner is `requiresAuth`. What stays open to anyone is
+reading: a public route, its photos and comments, and a forecast job by its unguessable id.
 
 ### Every heavy operation is a task
 
@@ -540,6 +551,14 @@ absolute range, which the details panel still shows. Don't add a median line bac
 a chart that needs a new value needs it on the sample, not a figures endpoint. Results
 stored before this still carry a `figures` key; `forecast_view` drops it.
 
+**The selection is a route position, not a sample.** `composables/useRoutePosition.ts` holds one
+share (0..1) of the route's distance per page; the map, the elevation profile and the forecast
+charts each convert it to their own axis (line point, km or minutes) and write it back on hover,
+anywhere along the route, not only at samples. `selectedSample` is just the sample nearest to it,
+for the details panel. Sample places are measured on the forecast's own `line`; the map pins a
+finer detail line to the same samples (`remapProgress`), so don't measure positions on whichever
+line happens to be drawn.
+
 ### Routing graph
 
 GraphHopper is bike-only (`bike`, `ebike`, `fast_ebike`, each with CH); `ROUTING_PROFILES`
@@ -599,7 +618,9 @@ and every eta still come from GraphHopper. Changing the via points in `update_ro
 geometry and enqueues `refresh_route_geometry`, like a changed start or profile. The new
 `geometry_fetched_at` is in the job params (`start_forecast_job`), so no old forecast is reused.
 The return journey gets the via points reversed, set in `_save_return` like its swapped
-endpoints. To edit it, the user reshapes the outbound route; the UI offers no editor on a
+endpoints. It always rides on the outbound days (a restriction on purpose): only minute and hour
+come from its own schedule (`_on_outbound_days`), in `_save_return` and in `update_route` on a
+return route alike, so a change to the outbound days carries over. To edit it, the user reshapes the outbound route; the UI offers no editor on a
 return route.
 
 The editor (`components/RouteEditorDialog.vue`) draws its line from `POST /api/routes/preview`,
@@ -627,6 +648,9 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   `docker/osm-extract-pois.sh` (`just poi-extract-from-unfiltered-osm-pbf`) extracts them from the *raw* extract and
   `manage.py import_pois` (`just poi-import-into-db`, which runs in `worker-default` under a prod
   `COMPOSE_FILE` because the VPS host has no GDAL) replaces the `Poi` table in one transaction.
+  It is a bulk load: drop the secondary indexes (read from the catalog, so their names survive),
+  `TRUNCATE`, `COPY`, rebuild. POI readers wait on its lock until it commits. Don't add
+  `db_index` to `Poi` fields: the unique (osm_ref, category) and the location GIST cover every query.
   `POI_RULES` in `core/pois.py` is the one tag map; a test checks the script filters every tag
   in it. Journeys store the POIs they use as JSON, never as FKs, so a re-import is free.
   An object gets one `Poi` row per matching category (unique on `osm_ref` + `category`): a
@@ -686,6 +710,37 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
 - **Revisions.** Every edit or re-plan bumps `plan_revision`; a planning task writes only
   while its revision is current, and replaces the days in one transaction.
 
+### Public routes, photos and comments
+
+A route can be published (`RecurringRoute.visibility`, `public_slug`, `privacy_zone_m`) and is
+then readable by anyone at `/r/<slug>` and listed under "Entdecken" (`pages/explore.vue`). The
+owner's side is `core/api/community.py` `owner_router` (session auth), the visitor's side is
+`public_router` (optional session auth for reading; commenting, liking, copying and the
+weather need a session). Rules that hold this together:
+
+- **Nothing public reads `polyline`.** A commute starts at someone's door and its schedule says
+  when they leave. Every public answer (detail, list, card path, elevation, a visitor's
+  forecast, a copy into the visitor's routes) is built from `public_routes.public_geometry`: the
+  line between two circles of `privacy_zone_m` round start and destination (circles, so a round
+  trip or a route that doubles back past home is trimmed past its last pass). The start and
+  destination, their names, the via points, the schedule and the route's UUID never leave in a
+  public reply; a test greps for each. Less than `MIN_PUBLIC_DISTANCE_M` left is a 422 on publish
+  and a 404 on read. The list's `bbox` filter is checked against the public line too.
+- **A visitor's weather is an ordinary forecast job** (`ForecastJob.Kind.PUBLIC_ROUTE`): owner =
+  the signed-in visitor, so it is shaped for the visitor's tier; geometry from `public_geometry`,
+  with `privacy_zone_m` and the geometry revision in the params; planning fails once the route is
+  private again. Never station calls: any number of visitors can open one route.
+- **Photos are re-encoded from pixels** (`core/photos.py`): no EXIF, no GPS, at most 2048 px, and
+  only JPEG/PNG/WebP. A photo's position is only what the uploader sends (the SPA reads it from
+  EXIF in the browser, `utils/exifGps.ts`, when "Aufnahmeort übernehmen" is on), and the public
+  page drops it inside a privacy zone. Files are never under a static URL: `/api/photos/{id}/…`
+  checks that the route is public or the viewer owns it. `core/signals.py` removes the files after
+  the row is deleted (photo, route or account). `max_route_photos` is in `entitlements.py`.
+- **Comments** are the author's to edit and the author's or the route owner's to delete; staff
+  moderate in the admin. Posting is limited per account per minute (fails open).
+- **Copy** ("In meine Routen") saves the public line as an *imported* route of the visitor's, so it
+  goes through `create_route` and its quota and never contains the hidden ends.
+
 ### Recurring routes
 
 Users configure routes with cron schedules. `next_departure()` computes the next departure,
@@ -714,6 +769,31 @@ departure is within 48 h. Rules that hold this together:
 - **Staggered 30 s apart**, because `compute` and `forecasts` each have one worker and a user's
   own forecast would otherwise queue behind every build.
 - The dashboard's own prefetch sends `X-NoRain-Prefetch: 1`, which does not count as a view.
+
+### System dashboard (admin)
+
+`/system` (`pages/system.vue`, `core/api/system.py`) reads everything over REST and does not
+poll. `ws/system/` (`SystemEventsConsumer`) sends change notices only, never data:
+`{"type": "hello" | "changed", "topics": [...]}`, and the page invalidates the queries that read
+those topics (`systemQueryAffected` in `utils/systemOverview.ts`). Rules that hold this together:
+
+- **Every write the dashboard shows calls `core.system_events.notify_system`** with its topic
+  (`cells`, `jobs`, `routes`, `journeys`), after the write is committed. Today that is the grid
+  cell stores, `jobs.publish` plus job creation, restart and purge, route geometry and route
+  CRUD, and journey CRUD plus the stored plan. A new writer that skips it leaves the dashboard
+  stale without any error.
+- **The consumer throttles per topic** (`THROTTLE`: jobs 1 s, the rest 5 s, and the last change
+  is always delivered). A job's fan-out stores a cell on every settle, and the cell layer
+  refetches every page. The client invalidates with `cancelRefetch: false` for the same reason.
+- **Access is `core.auth.admin_access.has_system_access`**, for the REST auth, the socket and
+  the session's `system.allowed` alike. It applies `ADMIN_OTP` itself and never goes through
+  `admin.site.has_permission`: the `OTPAdminSite` swap happens when `backend/urls.py` is first
+  imported, and a socket can reach a fresh daphne process before any HTTP request does.
+  A refused socket is accepted and then closed with 4003: if it were closed before `accept()`,
+  the browser would see only 1006 and could not tell a refusal from a dropped connection.
+- **Values that change only with time get no notice.** A stalled job writes nothing, so the page
+  works out "possibly stalled" from `updatedAt` and the jobs page's `stall_timeout_seconds`.
+  Cache freshness in the summary and coverage updates on the next notice or on "Aktualisieren".
 
 ## Testing
 

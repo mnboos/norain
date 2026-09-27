@@ -11,7 +11,9 @@ import httpx
 import stripe
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
+from django.apps import apps
 from django.conf import settings
+from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
 from django.core.management import call_command
@@ -19,7 +21,7 @@ from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, o
 
 from backend import load_dotenv
 from backend.asgi import application
-from core.api.places import retrieve_places
+from core.api.places import retrieve_places, reverse_url
 from core.api.recurring_route import _route_to_out
 from core.claims import claim_cell
 from core.entitlements import FREE, PRO, entitlements_for_sync, strip_uncertainty
@@ -84,6 +86,12 @@ from core.weather import (
     forecast_days_for,
 )
 from core.wind import wind_components as _wind_components
+
+
+class AdminRegistryTests(SimpleTestCase):
+    def test_every_core_model_is_in_the_admin(self):
+        missing = [m.__name__ for m in apps.get_app_config("core").get_models() if m not in admin.site._registry]
+        self.assertEqual(missing, [])
 
 
 class LoadDotenvTests(SimpleTestCase):
@@ -1415,6 +1423,49 @@ class PlaceSearchTests(SimpleTestCase):
         ):
             async_to_sync(retrieve_places)(query="unconfigured-geocoder-probe", lat=47.0, lon=9.0, zoom=12)
         self.assertIn("GEOCODER_API_URL", str(caught.exception))
+
+    def test_reverse_url_sits_beside_the_search_endpoint(self):
+        self.assertEqual(reverse_url("http://photon:2322/api"), "http://photon:2322/reverse")
+        self.assertEqual(reverse_url("http://127.0.0.1:2322/api/"), "http://127.0.0.1:2322/reverse")
+
+
+class ReverseGeocodeTests(TestCase):
+    """Current location names the point, but keeps the user's own coordinates."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("reverse", "reverse@example.com", "pw")
+        self.client.force_login(self.user)
+
+    def _get(self, features):
+        with patch("core.api.places.retrieve_reverse", AsyncMock(return_value=features)):
+            return self.client.get("/api/reverse", {"lat": 47.5, "lon": 9.3})
+
+    def test_names_the_street_and_keeps_the_users_point(self):
+        response = self._get(
+            [
+                {
+                    "properties": {
+                        "street": "Hauptstrasse",
+                        "housenumber": "3",
+                        "city": "Amriswil",
+                        "state": "Thurgau",
+                    },
+                    "geometry": {"type": "Point", "coordinates": [9.31, 47.51]},
+                }
+            ]
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["properties"]["name"], "Hauptstrasse 3")
+        self.assertEqual(body["properties"]["city"], "Amriswil")
+        self.assertEqual(body["geometry"]["coordinates"], [9.3, 47.5])
+
+    def test_nothing_there_is_a_404(self):
+        self.assertEqual(self._get([]).status_code, 404)
+
+    def test_needs_a_session(self):
+        self.client.logout()
+        self.assertEqual(self.client.get("/api/reverse", {"lat": 47.5, "lon": 9.3}).status_code, 401)
 
 
 def _sample_with_uncertainty() -> WeatherSample:

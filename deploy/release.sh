@@ -16,4 +16,6 @@ $compose pull
 $compose run --rm --no-deps --entrypoint python graphhopper /graphhopper/artifact.py ready current
 $compose run --rm backend python manage.py migrate --noinput
 $compose run --rm --user root backend python manage.py collectstatic --noinput
+# daphne runs as `app` and writes uploaded route photos here.
+$compose run --rm --no-deps --user root --entrypoint chown backend app:app /app/backend/media
 $compose up -d --remove-orphans

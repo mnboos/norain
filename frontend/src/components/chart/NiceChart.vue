@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, toRaw, toRefs, useTemplateRe
 import Plotly from "./plotly";
 import type { Config, Data, Layout, PlotMouseEvent } from "plotly.js";
 import { useQuasar } from "quasar";
-import { nearestSampleByTime, selectedSeriesPoint, type TimedSample } from "@/utils/forecastSelection";
+import { seriesPointAt } from "@/utils/forecastSelection";
 
 // Plotly draws SVG text from layout.font and ignores CSS; keep in sync with --app-font in base.css.
 const FONT_FAMILY = '"Lexend Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -12,7 +12,6 @@ const $q = useQuasar();
 const tooltip = ref<{ time: string; label: string; value: string } | null>(null);
 const tooltipPosition = ref({ left: "12px", top: "12px" });
 function showPoint(event: PlotMouseEvent) {
-    selectPoint(event);
     const point = event.points[0];
     if (!point || typeof point.y !== "number") return;
     const trace = point.data;
@@ -43,27 +42,46 @@ function moveTooltip(event: PointerEvent) {
 function hideTooltip() {
     tooltip.value = null;
 }
-const emit = defineEmits<{ selectSample: [index: number] }>();
-function selectPoint(event: PlotMouseEvent) {
-    const point = event.points[0];
-    const custom = point?.customdata;
-    const index =
-        Array.isArray(custom) && Number.isInteger(custom[0])
-            ? Number(custom[0])
-            : typeof point?.x === "number"
-              ? nearestSampleByTime(props.samples ?? [], point.x)
-              : undefined;
-    if (index !== undefined && index >= 0 && index < (props.samples?.length ?? 0) && index !== props.selectedSample) {
-        emit("selectSample", index);
-    }
+/** The x value under the pointer, anywhere along the plot: not only where a trace has a point. */
+const emit = defineEmits<{ cursor: [x: number] }>();
+let cursorFrame: number | undefined;
+let pendingCursor: number | undefined;
+function emitCursor(x: number) {
+    pendingCursor = x;
+    if (cursorFrame !== undefined) return;
+    cursorFrame = requestAnimationFrame(() => {
+        cursorFrame = undefined;
+        if (pendingCursor !== undefined && pendingCursor !== props.cursorX) emit("cursor", pendingCursor);
+        pendingCursor = undefined;
+    });
+}
+function trackPointer(event: PointerEvent) {
+    moveTooltip(event);
+    const el = chart.value;
+    const xaxis = el && ready ? plotAxis(el, "x", undefined) : undefined;
+    const yaxis = el && ready ? plotAxis(el, "y", undefined) : undefined;
+    if (!el || !xaxis || !yaxis) return;
+    const bounds = el.getBoundingClientRect();
+    const px = event.clientX - bounds.left - xaxis._offset;
+    const py = event.clientY - bounds.top - yaxis._offset;
+    if (px < 0 || px > xaxis._length || py < 0 || py > yaxis._length) return;
+    const x = xaxis.p2c(px);
+    if (Number.isFinite(x)) emitCursor(x);
+}
+function clickPoint(event: PlotMouseEvent) {
+    showPoint(event);
+    const x = event.points[0]?.x;
+    if (typeof x === "number") emitCursor(x);
 }
 
 const props = defineProps<{
     figure: { data?: Data[]; layout?: Partial<Layout> };
     temperature?: boolean;
     xUnit?: string;
-    selectedSample?: number;
-    samples?: TimedSample[];
+    /** The selected position, in the chart's own x units: marked with a rule and a dot on every line. */
+    cursorX?: number;
+    /** Only lines of this legend group get a dot at the cursor. All lines without it. */
+    cursorGroup?: string;
     /** Keep each trace's own line width instead of the uniform 1.5 (the elevation profile's
      * picked variant is drawn thicker than the others). */
     keepLineWidths?: boolean;
@@ -292,10 +310,11 @@ const config = ref<Partial<Config>>({
     displayModeBar: false,
 });
 
-// The selected sample is an SVG overlay, not extra Plotly traces: moving a trace's x/y is a
+// The selected position is an SVG overlay, not extra Plotly traces: moving a trace's x/y is a
 // calc-level restyle (supplyDefaults, calcdata, a redraw of the whole figure), and with three
 // charts following every map hover that stalled the page.
 const selectionDots = ref<{ cx: number; cy: number; color: string }[]>([]);
+const selectionRule = ref<{ x: number; y1: number; y2: number } | undefined>(undefined);
 const selectionStroke = computed(() => ($q.dark.isActive ? "#e8eef2" : "#1b2733"));
 let selectionFrame: number | undefined;
 let ready = false;
@@ -309,6 +328,7 @@ interface PlotAxis {
     _offset: number;
     _length: number;
     c2p: (value: number) => number;
+    p2c: (pixel: number) => number;
 }
 function isPlotAxis(value: unknown): value is PlotAxis {
     return (
@@ -316,7 +336,8 @@ function isPlotAxis(value: unknown): value is PlotAxis {
         value !== null &&
         typeof Reflect.get(value, "_offset") === "number" &&
         typeof Reflect.get(value, "_length") === "number" &&
-        typeof Reflect.get(value, "c2p") === "function"
+        typeof Reflect.get(value, "c2p") === "function" &&
+        typeof Reflect.get(value, "p2c") === "function"
     );
 }
 /** A trace's axis id ("x", "y2" or unset) -> its laid-out axis ("xaxis", "yaxis2"). */
@@ -332,6 +353,39 @@ function toPixel(axis: PlotAxis, value: number): number | undefined {
     return Number.isFinite(offset) && offset >= 0 && offset <= axis._length ? axis._offset + offset : undefined;
 }
 
+/**
+ * The y pixel (inside the subplot) of the curve Plotly drew for a trace, at `px` (inside the
+ * subplot). Read off the rendered path, so the dot sits on the spline between two samples
+ * rather than on the straight line through them. Undefined where the path cannot be measured
+ * (jsdom) or does not reach `px`; the caller then interpolates the data.
+ */
+function renderedY(el: HTMLElement, traceIndex: number, px: number): number | undefined {
+    const calcdata: unknown = Reflect.get(el, "calcdata");
+    const traceData: unknown = Array.isArray(calcdata) ? calcdata[traceIndex] : undefined;
+    const first: unknown = Array.isArray(traceData) ? traceData[0] : undefined;
+    const node3: unknown = typeof first === "object" && first !== null ? Reflect.get(first, "node3") : undefined;
+    const nodeFn: unknown = typeof node3 === "object" && node3 !== null ? Reflect.get(node3, "node") : undefined;
+    const group: unknown = typeof nodeFn === "function" ? nodeFn.call(node3) : undefined;
+    if (!(group instanceof Element)) return undefined;
+    for (const path of group.querySelectorAll<SVGPathElement>("path.js-line")) {
+        if (typeof path.getTotalLength !== "function" || typeof path.getPointAtLength !== "function") return undefined;
+        const total = path.getTotalLength();
+        if (!(total > 0)) continue;
+        if (px < path.getPointAtLength(0).x || px > path.getPointAtLength(total).x) continue;
+        // The lines run left to right, so x grows with the length along the path.
+        let lo = 0;
+        let hi = total;
+        for (let i = 0; i < 20; i++) {
+            const mid = (lo + hi) / 2;
+            if (path.getPointAtLength(mid).x < px) lo = mid;
+            else hi = mid;
+        }
+        const y = path.getPointAtLength((lo + hi) / 2).y;
+        return Number.isFinite(y) ? y : undefined;
+    }
+    return undefined;
+}
+
 function scheduleSelection() {
     if (disposed || selectionFrame !== undefined) return;
     selectionFrame = requestAnimationFrame(() => {
@@ -342,35 +396,44 @@ function scheduleSelection() {
 
 function updateSelection() {
     const el = chart.value;
-    const index = props.selectedSample ?? -1;
-    const sample = props.samples?.[index];
-    if (!el || !ready || disposed || !sample) {
+    const cursor = props.cursorX;
+    const mainX = el && ready && !disposed ? plotAxis(el, "x", undefined) : undefined;
+    const mainY = el && ready && !disposed ? plotAxis(el, "y", undefined) : undefined;
+    const ruleX = mainX && cursor !== undefined ? toPixel(mainX, cursor) : undefined;
+    if (!el || !mainX || !mainY || cursor === undefined || ruleX === undefined) {
         selectionDots.value = [];
+        selectionRule.value = undefined;
         return;
     }
+    selectionRule.value = { x: ruleX, y1: mainY._offset, y2: mainY._offset + mainY._length };
     // Sources are the drawn lines only; bands and invisible helper traces carry no dot.
-    selectionDots.value = el.data.flatMap(trace => {
+    selectionDots.value = el.data.flatMap((trace, traceIndex) => {
         if (
             !isScatter(trace) ||
             trace.hoverinfo === "skip" ||
             trace.line?.width === 0 ||
             trace.visible === false ||
-            trace.visible === "legendonly"
+            trace.visible === "legendonly" ||
+            (props.cursorGroup !== undefined && trace.legendgroup !== props.cursorGroup)
         ) {
             return [];
         }
-        const point = selectedSeriesPoint(trace, index, sample.elapsedS / 60);
+        const point = seriesPointAt(trace, cursor);
         const xaxis = plotAxis(el, "x", trace.xaxis);
         const yaxis = plotAxis(el, "y", trace.yaxis);
         if (!point || !xaxis || !yaxis) return [];
         const cx = toPixel(xaxis, point.x);
-        const cy = toPixel(yaxis, point.y);
+        const drawn = cx === undefined ? undefined : renderedY(el, traceIndex, cx - xaxis._offset);
+        const cy =
+            drawn !== undefined && drawn >= 0 && drawn <= yaxis._length
+                ? yaxis._offset + drawn
+                : toPixel(yaxis, point.y);
         const color = typeof trace.line?.color === "string" ? trace.line.color : "#2f7fd8";
         return cx === undefined || cy === undefined ? [] : [{ cx, cy, color }];
     });
 }
 
-watch([() => props.selectedSample, () => props.samples], scheduleSelection);
+watch(() => props.cursorX, scheduleSelection);
 
 async function render() {
     // Plotly measures label text during layout; measuring the fallback font before Lexend
@@ -380,6 +443,7 @@ async function render() {
     ready = false;
     // The old dots sit at the old figure's pixels; drop them until the new layout exists.
     selectionDots.value = [];
+    selectionRule.value = undefined;
     await fontDocument.fonts?.ready;
     if (disposed) return;
     const el = chart.value;
@@ -418,7 +482,7 @@ onMounted(async () => {
     await render();
     if (disposed) return;
     chart.value?.on("plotly_hover", showPoint);
-    chart.value?.on("plotly_click", showPoint);
+    chart.value?.on("plotly_click", clickPoint);
     chart.value?.on("plotly_unhover", hideTooltip);
     // After every react, resize, re-theme and legend toggle: the axes (and visibility) may have moved.
     chart.value?.on("plotly_afterplot", scheduleSelection);
@@ -448,6 +512,7 @@ onBeforeUnmount(() => {
     disposed = true;
     ready = false;
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame);
+    if (cursorFrame !== undefined) cancelAnimationFrame(cursorFrame);
     resizeObserver?.disconnect();
     if (chart.value) {
         chart.value.removeAllListeners("plotly_hover");
@@ -464,12 +529,23 @@ onBeforeUnmount(() => {
         flat
         class="chart-shell"
         :class="{ 'chart-shell--compact': compact }"
-        @pointermove="moveTooltip"
+        @pointermove="trackPointer"
         @pointerleave="hideTooltip"
         @keydown.esc="hideTooltip"
     >
         <div ref="chartRef" class="chart-plot" />
         <svg class="chart-selection" aria-hidden="true">
+            <line
+                v-if="selectionRule"
+                data-testid="chart-selection-rule"
+                :x1="selectionRule.x"
+                :x2="selectionRule.x"
+                :y1="selectionRule.y1"
+                :y2="selectionRule.y2"
+                :stroke="selectionStroke"
+                stroke-opacity="0.35"
+                stroke-width="1"
+            />
             <circle
                 v-for="(dot, i) in selectionDots"
                 :key="i"

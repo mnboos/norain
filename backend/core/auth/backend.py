@@ -6,7 +6,7 @@ from ninja.utils import check_csrf
 
 
 async def optional_session_auth(request: HttpRequest):
-    """Public planner access while retaining CSRF and signed-in ownership."""
+    """Public reads (a public route, a forecast job by its id) that still know a signed-in user."""
     error_response = check_csrf(request)
     if error_response:
         raise HttpError(403, "CSRF check failed.")

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useRoutePosition } from "@/composables/useRoutePosition";
 import ElevationChart from "@/components/ElevationChart.vue";
 import { GeometrySource } from "@norain/api/models";
 import { computed, ref, toRefs, watch } from "vue";
@@ -7,7 +8,10 @@ import {
     symSharpCloudOff,
     symSharpPedalBike,
     symSharpEditRoad,
+    symSharpShare,
     symSharpDownload,
+    symSharpPublic,
+    symSharpShare,
 } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
@@ -21,7 +25,8 @@ import WeatherChart from "@/components/WeatherChart.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import RouteEditorDialog from "@/components/RouteEditorDialog.vue";
 import RouteTimingFields from "@/components/RouteTimingFields.vue";
-import { gpxApi, downloadGpx, gpxError } from "@/services/gpx";
+import RouteShareDialog from "@/components/sharing/RouteShareDialog.vue";
+import { canShareFiles, gpxApi, shareGpx, gpxError } from "@/services/gpx";
 import { toLonLat, type LonLat } from "@/utils/routeEditing";
 import { useRecurringRoute, useRecurringRouteForecast, useUpdateRecurringRoute } from "@/queries/recurringRoutes";
 
@@ -48,6 +53,7 @@ const profileLabel = computed(() => PROFILE_LABELS[route.value.profile] ?? route
 // Polls until the geometry is built. The page reads the same query key, so `route` updates with it.
 useRecurringRoute(routeId, () => (hasGeometry.value ? false : 3000));
 
+const sharingOpen = ref(false);
 const flexBefore = ref(route.value.departureFlexBeforeMinutes ?? 0);
 const flexAfter = ref(route.value.departureFlexAfterMinutes ?? 0);
 const selectedDeparture = ref<string | null>(null);
@@ -112,6 +118,7 @@ function saveFlexibility() {
 // Reshaping is done on the outbound route; the server mirrors its via points onto the return.
 const editing = ref(false);
 const exporting = ref(false);
+const sharing = canShareFiles();
 const duration = ref(route.value.durationSeconds ?? 0);
 watch(
     () => route.value.durationSeconds,
@@ -123,7 +130,7 @@ async function exportRoute() {
     exporting.value = true;
     try {
         const response = await gpxApi.coreApiGpxExportSavedGpxRaw({ routeId: route.value.id });
-        await downloadGpx(response.raw, route.value.name);
+        await shareGpx(response.raw, route.value.name);
     } catch (e) {
         $q.notify({ type: "negative", message: await gpxError(e) });
     } finally {
@@ -169,12 +176,7 @@ const refreshing = computed(() => {
     return forecastLoading.value && !!status && status !== "done" && status !== "failed";
 });
 const refreshFailed = computed(() => !!forecastError.value && !forecastLoading.value);
-const selectedSample = ref(0);
-// Not on every new result: a stale forecast and the fresh one replacing it share the job and
-// the samples' places, so the user's pick stays where it was.
-watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () => {
-    selectedSample.value = 0;
-});
+const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePosition(() => forecast.value);
 </script>
 
 <template>
@@ -225,12 +227,22 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
                             flat
                             dense
                             no-caps
-                            :icon="symSharpDownload"
-                            label="GPX exportieren"
+                            :icon="sharing ? symSharpShare : symSharpDownload"
+                            :label="sharing ? 'GPX teilen' : 'GPX herunterladen'"
                             :disable="!hasGeometry && route.geometrySource !== 'imported'"
                             :loading="exporting"
                             @click="exportRoute"
                         />
+                        <q-btn
+                            flat
+                            dense
+                            no-caps
+                            :icon="route.visibility === 'public' ? symSharpPublic : symSharpShare"
+                            :label="route.visibility === 'public' ? 'Öffentlich · Fotos' : 'Teilen & Fotos'"
+                            :color="route.visibility === 'public' ? 'primary' : undefined"
+                            @click="sharingOpen = true"
+                        />
+                        <RouteShareDialog v-if="sharingOpen" v-model="sharingOpen" :route-id="route.id" :route-name="route.name" />
                         <template v-if="route.geometrySource === 'imported' && !route.parentRouteId">
                             <div class="q-my-sm">Originalstrecke aus GPX</div>
                             <RouteTimingFields v-model="duration" :distance-m="route.totalDistanceM ?? 0" />
@@ -309,9 +321,9 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
                             <WeatherChart
                                 kind="headwind"
                                 :version="forecast.version"
-                                :selected-sample="selectedSample"
+                                :cursor-minutes="positionMinutes"
                                 :samples="forecast.samples"
-                                @select-sample="selectedSample = $event"
+                                @select-minutes="selectMinutes"
                             />
                         </q-card-section>
                     </q-card>
@@ -323,9 +335,9 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
                             <WeatherChart
                                 kind="temperature"
                                 :version="forecast.version"
-                                :selected-sample="selectedSample"
+                                :cursor-minutes="positionMinutes"
                                 :samples="forecast.samples"
-                                @select-sample="selectedSample = $event"
+                                @select-minutes="selectMinutes"
                             />
                         </q-card-section>
                     </q-card>
@@ -333,7 +345,12 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
             </template>
 
             <div v-if="hasGeometry" class="col-12">
-                <ElevationChart :route-id="route.id" :version="String(route.updatedAt)" />
+                <ElevationChart
+                    :route-id="route.id"
+                    :version="String(route.updatedAt)"
+                    :position="position"
+                    @select-position="selectPosition"
+                />
             </div>
             <div
                 v-if="!hasGeometry || (forecastError && !forecast) || (!route.forecastAvailable && !forecastLoading)"
@@ -364,9 +381,9 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
             <q-card class="col column overflow-hidden">
                 <NiceMap
                     :route-weather="forecast"
-                    :selected-sample="selectedSample"
+                    :position="position"
                     :height="$q.screen.lt.md ? '45vh' : undefined"
-                    @select-sample="selectedSample = $event"
+                    @select-position="selectPosition"
                 />
             </q-card>
         </div>

@@ -332,3 +332,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Bounded GPX drafts can include up to 100000 coordinates.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+
+# Route photos. Never served from here directly: core.api.community checks the route is
+# public (or the viewer's own) and streams the file, so MEDIA_URL is deliberately unset.
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT") or BASE_DIR / "media")
+# A phone photo is 3-12 MB. Uploads over this are refused before Pillow sees them.
+PHOTO_UPLOAD_MAX_BYTES = 20 * 1024 * 1024

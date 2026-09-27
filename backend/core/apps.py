@@ -6,5 +6,8 @@ class CoreConfig(AppConfig):
     name = "core"
 
     def ready(self):
-        from . import tracing  # noqa: F401 -- register task-envelope propagation
-        from .auth import signals  # noqa: F401 -- connect the allauth receivers
+        from . import (
+            signals,  # noqa: F401 -- remove photo files with their rows
+            tracing,  # noqa: F401 -- register task-envelope propagation
+        )
+        from .auth import signals as auth_signals  # noqa: F401 -- connect the allauth receivers
