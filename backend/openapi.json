@@ -977,7 +977,28 @@
             "get": {
                 "operationId": "core_api_journey_list_journeys",
                 "summary": "List Journeys",
-                "parameters": [],
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "kind",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "enum": [
+                                        "tour",
+                                        "random"
+                                    ],
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Kind"
+                        },
+                        "required": false
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1058,7 +1079,7 @@
                         }
                     }
                 },
-                "description": "Change a journey. Every change re-plans it: the days depend on all of the inputs.",
+                "description": "Change a journey. Every change re-plans it: the days depend on all of the inputs.\n\nThe kind stays what it was created as; a random ride keeps its dice.",
                 "tags": [
                     "Journeys"
                 ],
@@ -1158,7 +1179,7 @@
                         }
                     }
                 },
-                "description": "Plan again with the same inputs: newer weather, POIs or graph.",
+                "description": "Plan again with the same inputs: newer weather, POIs or graph. A random ride gets new\ncandidates: its dice are thrown again.",
                 "tags": [
                     "Journeys"
                 ]
@@ -1216,6 +1237,60 @@
                 "tags": [
                     "Journeys"
                 ]
+            }
+        },
+        "/api/journeys/{journey_id}/stages/{stage_id}/route": {
+            "post": {
+                "operationId": "core_api_journey_save_variant_as_route",
+                "summary": "Save Variant As Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "journey_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Journey Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "stage_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Stage Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecurringRouteOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Save one variant of a random ride as a route of the rider's, with their own schedule.\n\nIt is an imported path, so the route rides exactly the variant's line, and it goes through\n``create_route``: the route quota (402), the geometry task and, from then on, the route's\nown forecast. Call it once per variant the rider picked.",
+                "tags": [
+                    "Journeys"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveVariantIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
             }
         },
         "/api/journeys/{journey_id}/stages/{stage_id}/pois": {
@@ -4392,7 +4467,8 @@
                         "default": "neutral",
                         "enum": [
                             "neutral",
-                            "avoid"
+                            "avoid",
+                            "hilly"
                         ],
                         "title": "Climbing",
                         "type": "string"
@@ -4868,6 +4944,18 @@
                         "title": "Name",
                         "type": "string"
                     },
+                    "kind": {
+                        "default": "tour",
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "random_prefs": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RandomPrefsOut"
+                            }
+                        ]
+                    },
                     "start_lat": {
                         "title": "Start Lat",
                         "type": "number"
@@ -5129,6 +5217,18 @@
                         "title": "Detour M",
                         "type": "number"
                     },
+                    "ascent_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "Total climb of the line, metres",
+                        "title": "Ascent M"
+                    },
                     "forecast_job_id": {
                         "anyOf": [
                             {
@@ -5349,15 +5449,52 @@
                 "title": "PoiOut",
                 "type": "object"
             },
+            "RandomPrefsOut": {
+                "properties": {
+                    "round_trip": {
+                        "default": true,
+                        "title": "Round Trip",
+                        "type": "boolean"
+                    },
+                    "heading": {
+                        "anyOf": [
+                            {
+                                "exclusiveMaximum": 360,
+                                "minimum": 0,
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "Preferred direction, degrees from north",
+                        "title": "Heading"
+                    },
+                    "consider_weather": {
+                        "default": false,
+                        "description": "Plus: forecast and rank the candidates (and route around the weather if chosen). Off: variants to pick from and save as routes, no forecast.",
+                        "title": "Consider Weather",
+                        "type": "boolean"
+                    },
+                    "seed": {
+                        "default": 0,
+                        "title": "Seed",
+                        "type": "integer"
+                    }
+                },
+                "title": "RandomPrefsOut",
+                "type": "object"
+            },
             "WeatherPrefsIn": {
+                "description": "Whether to ride around bad weather: the rider's choice, off unless they make it, and only\nkept for accounts with ``weather_routing`` (Plus). See ``_values``.",
                 "properties": {
                     "avoid_rain": {
-                        "default": true,
+                        "default": false,
                         "title": "Avoid Rain",
                         "type": "boolean"
                     },
                     "avoid_headwind": {
-                        "default": true,
+                        "default": false,
                         "title": "Avoid Headwind",
                         "type": "boolean"
                     },
@@ -5379,6 +5516,16 @@
                         "maxLength": 200,
                         "minLength": 1,
                         "title": "Name",
+                        "type": "string"
+                    },
+                    "kind": {
+                        "default": "tour",
+                        "description": "A random ride is one day of generated candidates; fixed at creation",
+                        "enum": [
+                            "tour",
+                            "random"
+                        ],
+                        "title": "Kind",
                         "type": "string"
                     },
                     "startLat": {
@@ -5524,6 +5671,13 @@
                                 "$ref": "#/components/schemas/WeatherPrefsIn"
                             }
                         ]
+                    },
+                    "randomPrefs": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RandomPrefsIn"
+                            }
+                        ]
                     }
                 },
                 "required": [
@@ -5537,6 +5691,62 @@
                     "startDate"
                 ],
                 "title": "JourneyIn",
+                "type": "object"
+            },
+            "RandomPrefsIn": {
+                "description": "A random ride's shape. The dice (``seed``) are the server's: a re-plan throws them again.",
+                "properties": {
+                    "roundTrip": {
+                        "default": true,
+                        "title": "Roundtrip",
+                        "type": "boolean"
+                    },
+                    "heading": {
+                        "anyOf": [
+                            {
+                                "exclusiveMaximum": 360,
+                                "minimum": 0,
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "Preferred direction, degrees from north",
+                        "title": "Heading"
+                    },
+                    "considerWeather": {
+                        "default": false,
+                        "description": "Plus: forecast and rank the candidates (and route around the weather if chosen). Off: variants to pick from and save as routes, no forecast.",
+                        "title": "Considerweather",
+                        "type": "boolean"
+                    }
+                },
+                "title": "RandomPrefsIn",
+                "type": "object"
+            },
+            "SaveVariantIn": {
+                "properties": {
+                    "name": {
+                        "default": "",
+                        "maxLength": 200,
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "scheduleCron": {
+                        "title": "Schedulecron",
+                        "type": "string"
+                    },
+                    "scheduleDescription": {
+                        "title": "Scheduledescription",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "scheduleCron",
+                    "scheduleDescription"
+                ],
+                "title": "SaveVariantIn",
                 "type": "object"
             },
             "SharingOut": {

@@ -45,6 +45,8 @@ models/PoiOut.ts
 models/PropertiesSchema.ts
 models/PublicRouteDetail.ts
 models/PublicRouteSummary.ts
+models/RandomPrefsIn.ts
+models/RandomPrefsOut.ts
 models/RecurringRouteIn.ts
 models/RecurringRouteOut.ts
 models/RoadPrefsIn.ts
@@ -58,6 +60,7 @@ models/RouteSection.ts
 models/RouteThumbnail.ts
 models/RouteWeatherSummary.ts
 models/RoutingProfile.ts
+models/SaveVariantIn.ts
 models/SharingIn.ts
 models/SharingOut.ts
 models/SystemCacheCount.ts
