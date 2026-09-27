@@ -660,6 +660,9 @@ class ElevationProfile(models.Model):
     data = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"ElevationProfile({self.key})"
+
 
 def _photo_path(photo: RoutePhoto, filename: str) -> str:
     return f"route-photos/{photo.route_id}/{filename}"
@@ -709,6 +712,3 @@ class RouteLike(models.Model):
 
     class Meta:
         constraints = (models.UniqueConstraint(fields=["route", "user"], name="core_routelike_once"),)
-
-    def __str__(self):
-        return f"ElevationProfile({self.key})"
