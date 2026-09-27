@@ -18,18 +18,11 @@ from .models import (
     PushSubscription,
     RecurringRoute,
     RideBriefing,
+    RouteComment,
+    RouteLike,
+    RoutePhoto,
     StationLookup,
     StationObservation,
-    Subscription,
-    User,
-)
-from .models import (
-    EnsembleCell,
-    ForecastCell,
-    ProcessedStripeEvent,
-    RecurringRoute,
-    RouteComment,
-    RoutePhoto,
     Subscription,
     User,
 )
@@ -232,3 +225,10 @@ class RoutePhotoAdmin(admin.ModelAdmin):
     search_fields = ("caption", "uploader__username", "route__name")
     raw_id_fields = ("route", "uploader")
     exclude = ("location",)
+
+
+@admin.register(RouteLike)
+class RouteLikeAdmin(admin.ModelAdmin):
+    list_display = ("user", "route", "created_at")
+    search_fields = ("user__username", "route__name")
+    raw_id_fields = ("route", "user")
