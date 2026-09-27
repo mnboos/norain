@@ -8,8 +8,8 @@
 # working when Redis (which the Django limits count in) is down. Counters live in this Caddy
 # process's memory: a restart resets them.
 #
-# Every IP key is {client_ip}, the same address Django trusts via X-Real-IP, so behind the
-# outer proxy it is the real client (trusted_proxies), never the proxy.
+# Every IP key is {client_ip}, the same address Django trusts via X-Real-IP, so behind
+# Cloudflare it is the real client (trusted_proxies + CF-Connecting-IP), never Cloudflare.
 (auth_rate_limits) {
 	rate_limit {
 		# Password sign-in, app and admin. Axes counts wrong passwords; this caps attempts.

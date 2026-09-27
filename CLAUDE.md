@@ -149,11 +149,11 @@ axes counts to 10, with a different reply. Axes does **not** cover sign-in by co
 password is checked, so a locked-out address can still get in by code). That is on
 purpose: a code proves the mailbox, and guessing one is capped by allauth (3 tries per
 code, `request_login_code` 3 a minute per address). A test pins this. The IP comes only from `X-Real-IP`, which Caddy sets from `{client_ip}`
-(`core/auth/lockout.py`); daphne has no proxy headers and `X-Forwarded-For` differs between
-the two Caddyfiles. The lockout reply is JSON because the SPA's `request()` parses every body.
+(`core/auth/lockout.py`); daphne has no proxy headers, and behind Cloudflare
+`X-Forwarded-For` is a chain, not the client. The lockout reply is JSON because the SPA's `request()` parses every body.
 
 **Caddy rate-limits the auth endpoints in front of all that** (`deploy/auth-ratelimit.caddy`,
-imported by both Caddyfiles; the image builds Caddy with the `caddy-ratelimit` plugin, which
+imported by `deploy/Caddyfile`; the image builds Caddy with the `caddy-ratelimit` plugin, which
 needs `order rate_limit before basic_auth`). Per `{client_ip}`: password sign-in (app and
 admin), sign-up, the mail-sending calls and code/key checks. Per user (the `sessionid` cookie)
 *and* per IP: the username check and the step-2/profile saves. These are floods stopped before

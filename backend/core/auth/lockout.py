@@ -8,8 +8,8 @@ def client_ip(request: HttpRequest) -> str | None:
 
     daphne runs without proxy headers, so ``REMOTE_ADDR`` is always Caddy. Caddy sets
     ``X-Real-IP`` from ``{client_ip}`` and overwrites any value the client sent, so it is
-    the only header trusted here. ``X-Forwarded-For`` is not: its shape differs between
-    the direct and the outer-proxy setup. Without Caddy (development) it falls back to
+    the only header trusted here. ``X-Forwarded-For`` is not: behind Cloudflare it is a
+    chain of addresses. Caddy takes the client from ``CF-Connecting-IP``. Without Caddy (development) it falls back to
     ``REMOTE_ADDR``.
     """
     return request.META.get("HTTP_X_REAL_IP") or request.META.get("REMOTE_ADDR")

@@ -11,7 +11,8 @@ the VPS, both **proxied**, with SSL/TLS mode **Full (strict)**. Caddy redirects 
 `DOMAIN` permanently (so `DJANGO_ALLOWED_HOSTS` and the other origin settings name `DOMAIN`
 only). It serves a Cloudflare Origin CA certificate for both names instead of getting its own:
 create one under SSL/TLS → Origin Server for `DOMAIN` and `*.DOMAIN`, and save it as
-`$APP_STORAGE_PATH/caddy/certs/origin.pem` and `origin.key` (mode 600). Caddy takes the
+`$APP_STORAGE_PATH/caddy/certs/origin.pem` and `origin.key` (mode 600). This stack's Caddy
+owns ports 80/443: no other proxy may run on the VPS. Caddy takes the
 rider's IP from `CF-Connecting-IP`, trusting only Cloudflare's published ranges, which are
 listed in `deploy/Caddyfile`: update them there when https://www.cloudflare.com/ips/ changes.
 Open only SSH, HTTP (80), and
@@ -268,25 +269,6 @@ builds.
 To roll back a published-image deployment, run the release command with the prior known-good immutable SHA. The
 configured bind-mount directories persist PostgreSQL, Caddy certificates, and
 imported geographic data across releases.
-
-## Shared hostname reverse proxy
-
-On a server hosting several apps, run one independent Caddy stack that owns ports
-80/443 and TLS certificates. Each app's frontend joins the external `server-proxy`
-network under a unique alias; databases and backend services remain private.
-See [the proxy setup and hostname activation guide](../../deploy/proxy/README.md).
-
-After creating the shared network, set this in Meteolane's production `.env`:
-
-```dotenv
-COMPOSE_FILE=docker-compose.prod.yml:docker-compose.proxy.yml
-```
-
-Then `docker compose up -d`, `just deploy-local`, and `deploy/release.sh` use both
-files. Commands that explicitly supply `-f` must include both files too. The Meteolane
-frontend listens internally at `norain-web:80`, with no host ports, and preserves
-the central proxy's forwarded HTTPS headers. Keep the Meteolane hostname template
-inactive until you choose a domain and configure its DNS and application origins.
 
 ## Backups and recovery
 
