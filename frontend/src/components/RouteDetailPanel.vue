@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useRoutePosition } from "@/composables/useRoutePosition";
 import ElevationChart from "@/components/ElevationChart.vue";
 import { GeometrySource } from "@norain/api/models";
 import { computed, ref, toRefs, watch } from "vue";
@@ -169,12 +170,7 @@ const refreshing = computed(() => {
     return forecastLoading.value && !!status && status !== "done" && status !== "failed";
 });
 const refreshFailed = computed(() => !!forecastError.value && !forecastLoading.value);
-const selectedSample = ref(0);
-// Not on every new result: a stale forecast and the fresh one replacing it share the job and
-// the samples' places, so the user's pick stays where it was.
-watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () => {
-    selectedSample.value = 0;
-});
+const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePosition(() => forecast.value);
 </script>
 
 <template>
@@ -309,9 +305,9 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
                             <WeatherChart
                                 kind="headwind"
                                 :version="forecast.version"
-                                :selected-sample="selectedSample"
+                                :cursor-minutes="positionMinutes"
                                 :samples="forecast.samples"
-                                @select-sample="selectedSample = $event"
+                                @select-minutes="selectMinutes"
                             />
                         </q-card-section>
                     </q-card>
@@ -323,9 +319,9 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
                             <WeatherChart
                                 kind="temperature"
                                 :version="forecast.version"
-                                :selected-sample="selectedSample"
+                                :cursor-minutes="positionMinutes"
                                 :samples="forecast.samples"
-                                @select-sample="selectedSample = $event"
+                                @select-minutes="selectMinutes"
                             />
                         </q-card-section>
                     </q-card>
@@ -333,7 +329,12 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
             </template>
 
             <div v-if="hasGeometry" class="col-12">
-                <ElevationChart :route-id="route.id" :version="String(route.updatedAt)" />
+                <ElevationChart
+                    :route-id="route.id"
+                    :version="String(route.updatedAt)"
+                    :position="position"
+                    @select-position="selectPosition"
+                />
             </div>
             <div
                 v-if="!hasGeometry || (forecastError && !forecast) || (!route.forecastAvailable && !forecastLoading)"
@@ -364,9 +365,9 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
             <q-card class="col column overflow-hidden">
                 <NiceMap
                     :route-weather="forecast"
-                    :selected-sample="selectedSample"
+                    :position="position"
                     :height="$q.screen.lt.md ? '45vh' : undefined"
-                    @select-sample="selectedSample = $event"
+                    @select-position="selectPosition"
                 />
             </q-card>
         </div>

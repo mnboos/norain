@@ -30,7 +30,14 @@ import MapLegend from "@/components/MapLegend.vue";
 import { useForecastMapDetail, type LineDetail } from "@/queries/forecastParts";
 import { finerDetail, lineDetailForZoom } from "@/utils/mapDetail";
 import { groundArrowBearing, groundWindText, visibleWindArrows, windArrowSize, windPowerText } from "@/utils/wind";
-import { lineProgress, sampleAtRoutePoint, type ScreenPoint } from "@/utils/forecastSelection";
+import {
+    interpolate,
+    lineProgress,
+    pointAtProgress,
+    progressAtRoutePoint,
+    remapProgress,
+    type ScreenPoint,
+} from "@/utils/forecastSelection";
 import { buildWindField } from "@/utils/windField";
 import { WindParticleLayer } from "@/map/windParticles";
 import { CANDIDATE_COLOR, poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
@@ -54,7 +61,8 @@ const props = defineProps<{
     zielort?: PlacesSearchResult;
     /** CSS height of the map canvas. Defaults to the full viewport. */
     height?: string;
-    selectedSample?: number;
+    /** The selected route position, a share (0..1) of the route's distance (see useRoutePosition). */
+    position?: number;
     pickLocation?: boolean;
     /** Journey POIs: breaks, lodging, what is on the way. None by default. */
     pois?: MapPoi[];
@@ -70,7 +78,7 @@ const { routeWeather, abfahrtsort, zielort } = toRefs(props);
 
 const emit = defineEmits<{
     mapView: [view: { zoom: number; lat: number; lng: number }];
-    selectSample: [index: number];
+    selectPosition: [position: number];
     selectLocation: [point: { lng: number; lat: number }];
     selectAlternative: [id: string];
 }>();
@@ -94,10 +102,28 @@ let startMarker: Marker | undefined;
 let destMarker: Marker | undefined;
 let selectedMarker: Marker | undefined;
 
-function highlightSample() {
+/** The ride time at a position, for the marker's label: between samples, by their times. */
+function positionTime(position: number): string | undefined {
+    const samples = routeWeather.value?.samples ?? [];
+    const first = samples[0];
+    const elapsed = interpolate(position, forecastSampleProgress.value, samples.map(s => s.elapsedS));
+    if (!first || elapsed === undefined) return undefined;
+    // An eta without an offset is Swiss local time already: shift it as a wall-clock time.
+    const offsetless = !/(Z|[+-]\d\d:\d\d)$/.test(first.eta);
+    const base = Date.parse(offsetless ? `${first.eta}Z` : first.eta);
+    if (!Number.isFinite(base)) return undefined;
+    const at = new Date(base + (elapsed - first.elapsedS) * 1000).toISOString();
+    return swissTime(offsetless ? at.slice(0, 19) : at);
+}
+
+function highlightPosition() {
     const map = mymap.value;
-    const sample = props.routeWeather?.samples[props.selectedSample ?? -1];
-    if (!map || !sample) {
+    const position = props.position;
+    const point =
+        position === undefined
+            ? undefined
+            : pointAtProgress(drawnLine.value, routeProgress.value, toDrawnProgress(position));
+    if (!map || !point || position === undefined) {
         selectedMarker?.remove();
         return;
     }
@@ -108,10 +134,12 @@ function highlightSample() {
         element.setAttribute("role", "img");
         selectedMarker = new Marker({ element });
     }
-    selectedMarker.getElement().setAttribute("aria-label", `Ausgewählter Punkt: ${swissTime(sample.eta)} Uhr`);
-    selectedMarker.setLngLat([sample.lon, sample.lat]).addTo(map);
+    const time = positionTime(position);
+    selectedMarker
+        .getElement()
+        .setAttribute("aria-label", time ? `Ausgewählter Punkt: ${time} Uhr` : "Ausgewählter Punkt");
+    selectedMarker.setLngLat(point).addTo(map);
 }
-watch([() => props.selectedSample, routeWeather, hasMap], highlightSample);
 
 function placeMarker(
     existing: Marker | undefined,
@@ -156,6 +184,21 @@ const routeProgress = computed(() => lineProgress(drawnLine.value));
 const routeSampleProgress = computed(() =>
     sampleProgress(drawnLine.value, routeWeather.value?.samples ?? [], routeWeather.value?.totalSeconds ?? 0),
 );
+// Positions are measured on the forecast's own line; a finer drawn line is pinned to it at the samples.
+const forecastSampleProgress = computed(() =>
+    routeWeather.value
+        ? sampleProgress(routeWeather.value.line, routeWeather.value.samples, routeWeather.value.totalSeconds)
+        : [],
+);
+const drawnSampleProgress = computed(() => (routeWeather.value ? routeSampleProgress.value : []));
+function toDrawnProgress(position: number): number {
+    return remapProgress(position, forecastSampleProgress.value, drawnSampleProgress.value);
+}
+function fromDrawnProgress(position: number): number {
+    return remapProgress(position, drawnSampleProgress.value, forecastSampleProgress.value);
+}
+watch([() => props.position, drawnLine, forecastSampleProgress, hasMap], highlightPosition);
+
 let projectedLine: ScreenPoint[] | undefined;
 let hoverFrame: number | undefined;
 let hoverPoint: ScreenPoint | undefined;
@@ -165,16 +208,13 @@ function invalidateProjection() {
 watch(drawnLine, invalidateProjection);
 function selectRoutePoint(point: ScreenPoint) {
     const map = mymap.value;
-    if (!map || !routeWeather.value?.samples.length) return;
+    if (!map || drawnLine.value.length < 2) return;
     projectedLine ??= drawnLine.value.map(c => map.project([c[0] ?? 0, c[1] ?? 0]));
-    const index = sampleAtRoutePoint(
-        point,
-        projectedLine,
-        routeProgress.value,
-        routeSampleProgress.value,
-        props.selectedSample,
-    );
-    if (index !== undefined && index !== props.selectedSample) emit("selectSample", index);
+    const current = props.position === undefined ? 0 : toDrawnProgress(props.position);
+    const position = progressAtRoutePoint(point, projectedLine, routeProgress.value, current);
+    if (position === undefined) return;
+    const selected = fromDrawnProgress(position);
+    if (selected !== props.position) emit("selectPosition", selected);
 }
 function hoverRoute(event: MapMouseEvent) {
     if (mymap.value?.isMoving()) return;
@@ -515,6 +555,12 @@ function samplePopupHtml(s: ForecastSampleOut): string {
     </div>`;
 }
 
+/** A weather chip picks its sample's own place on the route. */
+function selectSample(index: number) {
+    const position = forecastSampleProgress.value[index];
+    if (position !== undefined && position !== props.position) emit("selectPosition", position);
+}
+
 function createSampleMarker(map: MapLibreMap, s: ForecastSampleOut, index: number): SampleMarker {
     const marker = new Marker({ element: sampleMarkerEl(s), anchor: "bottom" }).setLngLat([s.lon, s.lat]).addTo(map);
     const entry: SampleMarker = { marker };
@@ -523,17 +569,17 @@ function createSampleMarker(map: MapLibreMap, s: ForecastSampleOut, index: numbe
     el.setAttribute("role", "button");
     el.setAttribute("aria-label", `Wetter um ${fmtTime(s.eta)} Uhr auswählen`);
     el.addEventListener("click", () => {
-        emit("selectSample", index);
+        selectSample(index);
     });
     el.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            emit("selectSample", index);
+            selectSample(index);
         }
     });
     el.addEventListener("mouseenter", () => {
         leaveRoute();
-        emit("selectSample", index);
+        selectSample(index);
         if (!entry.popup) {
             entry.popup = new Popup({ offset: 16, closeButton: false }).setHTML(samplePopupHtml(s));
             marker.setPopup(entry.popup);
@@ -707,7 +753,7 @@ async function renderRoute() {
     // A new forecast can put a different wind at the same spot, so no arrow carries over.
     clearWindMarkers();
     renderWindMarkers();
-    highlightSample();
+    highlightPosition();
 }
 
 watch(
