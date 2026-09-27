@@ -16,13 +16,15 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     stations.py      Weather Underground stations: budgeted fetch, cache, near-now correction
     models.py        User (custom, AUTH_USER_MODEL), Subscription, ProcessedStripeEvent,
                      RecurringRoute, ForecastCell, EnsembleCell, StationLookup,
-                     StationObservation, ForecastJob
+                     StationObservation, ForecastJob, RoutePhoto, RouteComment, RouteLike
     jobs.py          forecast-job identity, lifecycle and channel-layer publishing
     claims.py        cache-backed in-flight claim for grid-cell fetches
     consumers.py     ForecastJobConsumer (websocket), routing.py maps it to a URL
     forecast_schemas.py  the forecast payload (RouteWeatherOut, WeatherSample, ForecastJobOut, …)
     api/             ninja routers: route_weather.py, recurring_route.py (route CRUD),
-                     billing.py, places.py
+                     billing.py, places.py, community.py (sharing, photos, comments, likes)
+    public_routes.py the public view of a route: privacy zones, public_geometry
+    photos.py        upload re-encoding (no EXIF/GPS); signals.py deletes the files with the row
     auth/            backend.py (session_auth), adapter.py (allauth rules), signals.py,
                      views.py (session + sign-up step 2), lockout.py
     entitlements.py  every tier limit, in one place
@@ -654,6 +656,37 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   and reasons only, never the weights.
 - **Revisions.** Every edit or re-plan bumps `plan_revision`; a planning task writes only
   while its revision is current, and replaces the days in one transaction.
+
+### Public routes, photos and comments
+
+A route can be published (`RecurringRoute.visibility`, `public_slug`, `privacy_zone_m`) and is
+then readable by anyone at `/r/<slug>` and listed under "Entdecken" (`pages/explore.vue`). The
+owner's side is `core/api/community.py` `owner_router` (session auth), the visitor's side is
+`public_router` (optional session auth; commenting, liking and copying need a session). Rules
+that hold this together:
+
+- **Nothing public reads `polyline`.** A commute starts at someone's door and its schedule says
+  when they leave. Every public answer (detail, list, card path, elevation, a visitor's
+  forecast, a copy into the visitor's routes) is built from `public_routes.public_geometry`: the
+  line between two circles of `privacy_zone_m` round start and destination (circles, so a round
+  trip or a route that doubles back past home is trimmed past its last pass). The start and
+  destination, their names, the via points, the schedule and the route's UUID never leave in a
+  public reply; a test greps for each. Less than `MIN_PUBLIC_DISTANCE_M` left is a 422 on publish
+  and a 404 on read. The list's `bbox` filter is checked against the public line too.
+- **A visitor's weather is an ordinary forecast job** (`ForecastJob.Kind.PUBLIC_ROUTE`): owner =
+  the visitor (or none), so it is shaped for the visitor's tier; geometry from `public_geometry`,
+  with `privacy_zone_m` and the geometry revision in the params; planning fails once the route is
+  private again. Never station calls: any number of visitors can open one route.
+- **Photos are re-encoded from pixels** (`core/photos.py`): no EXIF, no GPS, at most 2048 px, and
+  only JPEG/PNG/WebP. A photo's position is only what the uploader sends (the SPA reads it from
+  EXIF in the browser, `utils/exifGps.ts`, when "Aufnahmeort übernehmen" is on), and the public
+  page drops it inside a privacy zone. Files are never under a static URL: `/api/photos/{id}/…`
+  checks that the route is public or the viewer owns it. `core/signals.py` removes the files after
+  the row is deleted (photo, route or account). `max_route_photos` is in `entitlements.py`.
+- **Comments** are the author's to edit and the author's or the route owner's to delete; staff
+  moderate in the admin. Posting is limited per account per minute (fails open).
+- **Copy** ("In meine Routen") saves the public line as an *imported* route of the visitor's, so it
+  goes through `create_route` and its quota and never contains the hidden ends.
 
 ### Recurring routes
 

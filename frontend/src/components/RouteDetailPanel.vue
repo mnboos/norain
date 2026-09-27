@@ -8,6 +8,8 @@ import {
     symSharpPedalBike,
     symSharpEditRoad,
     symSharpDownload,
+    symSharpPublic,
+    symSharpShare,
 } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
@@ -21,6 +23,7 @@ import WeatherChart from "@/components/WeatherChart.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import RouteEditorDialog from "@/components/RouteEditorDialog.vue";
 import RouteTimingFields from "@/components/RouteTimingFields.vue";
+import RouteShareDialog from "@/components/sharing/RouteShareDialog.vue";
 import { gpxApi, downloadGpx, gpxError } from "@/services/gpx";
 import { toLonLat, type LonLat } from "@/utils/routeEditing";
 import { useRecurringRoute, useRecurringRouteForecast, useUpdateRecurringRoute } from "@/queries/recurringRoutes";
@@ -48,6 +51,7 @@ const profileLabel = computed(() => PROFILE_LABELS[route.value.profile] ?? route
 // Polls until the geometry is built. The page reads the same query key, so `route` updates with it.
 useRecurringRoute(routeId, () => (hasGeometry.value ? false : 3000));
 
+const sharingOpen = ref(false);
 const flexBefore = ref(route.value.departureFlexBeforeMinutes ?? 0);
 const flexAfter = ref(route.value.departureFlexAfterMinutes ?? 0);
 const selectedDeparture = ref<string | null>(null);
@@ -231,6 +235,16 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
                             :loading="exporting"
                             @click="exportRoute"
                         />
+                        <q-btn
+                            flat
+                            dense
+                            no-caps
+                            :icon="route.visibility === 'public' ? symSharpPublic : symSharpShare"
+                            :label="route.visibility === 'public' ? 'Öffentlich · Fotos' : 'Teilen & Fotos'"
+                            :color="route.visibility === 'public' ? 'primary' : undefined"
+                            @click="sharingOpen = true"
+                        />
+                        <RouteShareDialog v-if="sharingOpen" v-model="sharingOpen" :route-id="route.id" :route-name="route.name" />
                         <template v-if="route.geometrySource === 'imported' && !route.parentRouteId">
                             <div class="q-my-sm">Originalstrecke aus GPX</div>
                             <RouteTimingFields v-model="duration" :distance-m="route.totalDistanceM ?? 0" />

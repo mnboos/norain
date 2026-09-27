@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from "vue";
 import { useQueries, useQuery } from "@tanstack/vue-query";
-import { ElevationApi } from "@norain/api/apis";
+import { ElevationApi, PublicRoutesApi } from "@norain/api/apis";
 import type { ElevationOut } from "@norain/api/models";
 import { elevationFigure, type ElevationSeries } from "@/utils/elevation";
 
@@ -9,6 +9,8 @@ const NiceChart = defineAsyncComponent(() => import("./chart/NiceChart.vue"));
 const props = defineProps<{
     routeId?: string;
     stageId?: string;
+    /** A public route's profile: its line between the privacy zones only. */
+    publicSlug?: string;
     version?: string;
     coordinates?: number[][];
     totalSeconds?: number;
@@ -21,6 +23,7 @@ const props = defineProps<{
     compact?: boolean;
 }>();
 const api = new ElevationApi();
+const publicApi = new PublicRoutesApi();
 const axis = ref<"distance" | "time">("distance");
 const STALE_TIME = 60 * 60 * 1000;
 // One key per stage, whether it is the main line or an alternative, so switching variants
@@ -34,14 +37,20 @@ const query = useQuery({
                   "elevation",
                   props.routeId,
                   props.stageId,
+                  props.publicSlug,
                   props.version,
                   props.coordinates,
                   props.totalSeconds,
                   props.vertexTimes,
               ],
     ),
-    enabled: () => !!props.routeId || !!props.stageId || (!!props.coordinates?.length && !!props.totalSeconds),
+    enabled: () =>
+        !!props.routeId ||
+        !!props.stageId ||
+        !!props.publicSlug ||
+        (!!props.coordinates?.length && !!props.totalSeconds),
     queryFn: () => {
+        if (props.publicSlug) return publicApi.coreApiCommunityPublicRouteElevation({ slug: props.publicSlug });
         if (props.routeId) return api.coreApiElevationRouteElevation({ routeId: props.routeId });
         if (props.stageId) return api.coreApiElevationStageElevation({ stageId: props.stageId });
         if (!props.coordinates || !props.totalSeconds) throw new Error("Route is not ready");

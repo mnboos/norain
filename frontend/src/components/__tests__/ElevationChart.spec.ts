@@ -6,12 +6,15 @@ import type { ElevationOut } from "@norain/api/models";
 import type { elevationFigure } from "@/utils/elevation";
 import ElevationChart from "../ElevationChart.vue";
 
-const api = vi.hoisted(() => ({ stage: vi.fn(), route: vi.fn(), preview: vi.fn() }));
+const api = vi.hoisted(() => ({ stage: vi.fn(), route: vi.fn(), preview: vi.fn(), publicRoute: vi.fn() }));
 vi.mock("@norain/api/apis", () => ({
     ElevationApi: class {
         coreApiElevationStageElevation = api.stage;
         coreApiElevationRouteElevation = api.route;
         coreApiElevationPreviewElevation = api.preview;
+    },
+    PublicRoutesApi: class {
+        coreApiCommunityPublicRouteElevation = api.publicRoute;
     },
 }));
 
@@ -278,5 +281,14 @@ describe("ElevationChart", () => {
         void h.client.invalidateQueries({ queryKey: ["elevation"] });
         await settle();
         expect(h.figure().data).toMatchObject([{ name: "Höhe", line: { color: "#32966b" } }]);
+    });
+    it("loads a public route's profile by its slug alone", async () => {
+        api.publicRoute.mockResolvedValue(profile());
+        const { chart } = setup({ publicSlug: "abc" });
+        await flushPromises();
+        expect(api.publicRoute).toHaveBeenCalledWith({ slug: "abc" });
+        expect(api.route).not.toHaveBeenCalled();
+        expect(api.preview).not.toHaveBeenCalled();
+        expect(chart().exists()).toBe(true);
     });
 });

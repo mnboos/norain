@@ -171,6 +171,9 @@ class RecurringRouteOut(CamelSchema):
     return_schedule_cron: str | None = None
     return_schedule_description: str = ""
     return_next_departure: str | None = None
+    visibility: Literal["private", "public"] = "private"
+    # Only while public: a hidden route's old link is nobody's business in the list.
+    public_slug: str | None = None
 
 
 async def _current_user(request: HttpRequest) -> User:
@@ -232,6 +235,8 @@ def _route_to_out(route: RecurringRoute, *, detail=False) -> RecurringRouteOut:
         # Read straight from the stored blob: the list endpoint must not parse forecast
         # cells. refresh_route_thumbnail keeps it current; scoring it is cheap arithmetic.
         thumbnail=_thumbnail_out(route.thumbnail),
+        visibility=route.visibility,
+        public_slug=route.public_slug if route.visibility == RecurringRoute.Visibility.PUBLIC else None,
     )
 
 

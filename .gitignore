@@ -12,6 +12,8 @@ db
 *.osm.pbf
 *.jsonl.zst
 backend/db.sqlite3
+# uploaded route photos (MEDIA_ROOT in development)
+backend/media/
 # large artifacts that must never be committed
 data/otp/*.obj
 *.sqlite3
