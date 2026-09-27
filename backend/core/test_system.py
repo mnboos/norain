@@ -2,16 +2,22 @@
 
 from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
-from django.contrib import admin
-from django.test import Client, SimpleTestCase, TestCase, override_settings
-from django.urls import reverse
+from asgiref.sync import async_to_sync
+from channels.testing import WebsocketCommunicator
+from django.contrib.auth.models import AnonymousUser
+from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
-from django_otp.admin import OTPAdminSite
 from django_otp.plugins.otp_totp.models import TOTPDevice
+from redis.exceptions import ConnectionError as RedisConnectionError
 
+from backend.asgi import application
+
+from . import jobs
 from .api.system import cell_ring, coverage_state, viewport_boxes
+from .auth.admin_access import has_system_access
+from .consumers import SystemEventsConsumer
 from .grid import ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE
 from .models import (
     EnsembleCell,
@@ -26,6 +32,7 @@ from .models import (
     route_point,
 )
 from .schedule import LOCAL_TZ
+from .system_events import notify_system
 from .test_signup import TEST_SETTINGS
 
 
@@ -76,15 +83,11 @@ class SystemCoverageTests(SimpleTestCase):
         self.assertEqual(len(viewport_boxes("170,-10,-170,10")), 2)
 
 
-@override_settings(**TEST_SETTINGS)
+# ADMIN_OTP: exercise the production policy even when local development turns it off.
+@override_settings(**TEST_SETTINGS, ADMIN_OTP=True)
 class SystemApiTests(TestCase):
     def setUp(self):
         self.now = timezone.now()
-        # Exercise production OTP policy even when local development disables it.
-        reverse("admin:index")
-        permission = patch.object(admin.site, "has_permission", OTPAdminSite().has_permission)
-        permission.start()
-        self.addCleanup(permission.stop)
         self.user = User.objects.create_user(
             username="Operator", email="operator@example.test", is_staff=True, signup_completed=True
         )
@@ -276,7 +279,128 @@ class SystemApiTests(TestCase):
         self.assertEqual(page["total"], 2)
         self.assertEqual(page["items"][0]["status"], "failed")
         self.assertTrue(self.get("jobs", offset=1)["items"][0]["possibly_stalled"])
+        self.assertEqual(page["stall_timeout_seconds"], 300)
         self.route.polyline = None
         self.route.save(update_fields=["polyline"])
         self.assertEqual(self.get("summary")["missing_geometry"], 1)
         self.assertTrue(self.get(f"coverage/route/{self.route.pk}")["unavailable"])
+
+
+@override_settings(ADMIN_OTP=True)
+class SystemAccessTests(TestCase):
+    """The access rule must not depend on admin.site: before daphne serves its first HTTP
+    request the OTPAdminSite swap in backend/urls.py has not happened yet."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="Operator", email="operator@example.test", is_staff=True)
+        self.device = TOTPDevice.objects.create(user=self.user, name="admin", confirmed=True)
+
+    def test_staff_needs_a_verified_device_of_their_own(self):
+        self.assertTrue(has_system_access(self.user, {"otp_device_id": self.device.persistent_id}))
+        self.assertFalse(has_system_access(self.user, {}))
+        self.assertFalse(has_system_access(self.user, None))
+        other = User.objects.create_user(username="Other", email="other@example.test", is_staff=True)
+        foreign = TOTPDevice.objects.create(user=other, name="admin", confirmed=True)
+        self.assertFalse(has_system_access(self.user, {"otp_device_id": foreign.persistent_id}))
+
+    def test_staff_and_active_are_required(self):
+        session = {"otp_device_id": self.device.persistent_id}
+        self.user.is_staff = False
+        self.assertFalse(has_system_access(self.user, session))
+        self.user.is_staff, self.user.is_active = True, False
+        self.assertFalse(has_system_access(self.user, session))
+        self.assertFalse(has_system_access(AnonymousUser(), session))
+
+    @override_settings(ADMIN_OTP=False)
+    def test_without_admin_otp_staff_is_enough(self):
+        self.assertTrue(has_system_access(self.user, {}))
+
+
+INMEM_CHANNELS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+
+@override_settings(**TEST_SETTINGS, ADMIN_OTP=True, CHANNEL_LAYERS=INMEM_CHANNELS)
+class SystemEventsConsumerTests(TransactionTestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="Operator", email="operator@example.test", is_staff=True)
+        self.device = TOTPDevice.objects.create(user=self.user, name="admin", confirmed=True)
+        throttle = patch.dict(
+            SystemEventsConsumer.THROTTLE, {"jobs": 0.1, "cells": 0.3, "routes": 0.3, "journeys": 0.3}
+        )
+        throttle.start()
+        self.addCleanup(throttle.stop)
+
+    def session_cookie(self, *, verified=True):
+        client = Client()
+        client.force_login(self.user)
+        session = client.session
+        if verified:
+            session["otp_device_id"] = self.device.persistent_id
+        session.save()
+        return [(b"cookie", f"sessionid={session.session_key}".encode())]
+
+    async def connect(self, headers=()):
+        communicator = WebsocketCommunicator(application, "/ws/system/", headers=list(headers))
+        connected, code = await communicator.connect()
+        return communicator, connected, code
+
+    def test_refuses_anyone_but_verified_staff(self):
+        unverified = self.session_cookie(verified=False)
+
+        async def run():
+            results = []
+            for headers in ((), unverified):
+                communicator, connected, _ = await self.connect(headers)
+                # Accepted, then closed with the code, so a browser can tell it was refused.
+                results.append((connected, await communicator.receive_output()))
+                await communicator.disconnect()
+            return results
+
+        refused = (True, {"type": "websocket.close", "code": 4003})
+        self.assertEqual(async_to_sync(run)(), [refused, refused])
+
+    def test_hello_then_throttled_topics(self):
+        headers = self.session_cookie()
+
+        async def run():
+            communicator, connected, _ = await self.connect(headers)
+            self.assertTrue(connected)
+            frames = [await communicator.receive_json_from()]
+            await notify_system("cells")
+            frames.append(await communicator.receive_json_from())
+            # Inside the cells window: held back and merged, while jobs goes out at once.
+            await notify_system("cells")
+            await notify_system("cells")
+            await notify_system("jobs")
+            frames.append(await communicator.receive_json_from())
+            frames.append(await communicator.receive_json_from(timeout=2))
+            self.assertTrue(await communicator.receive_nothing(0.5))
+            await communicator.disconnect()
+            return frames
+
+        self.assertEqual(
+            async_to_sync(run)(),
+            [
+                {"type": "hello", "topics": ["cells", "jobs", "routes", "journeys"]},
+                {"type": "changed", "topics": ["cells"]},
+                {"type": "changed", "topics": ["jobs"]},
+                {"type": "changed", "topics": ["cells"]},
+            ],
+        )
+
+
+class SystemNotifyTests(SimpleTestCase):
+    def test_a_failing_layer_never_fails_the_write(self):
+        layer = SimpleNamespace(group_send=AsyncMock(side_effect=RedisConnectionError("down")))
+        with patch("core.system_events.get_channel_layer", return_value=layer):
+            async_to_sync(notify_system)("cells")
+        layer.group_send.assert_awaited_once()
+
+    def test_job_progress_notifies_the_dashboard(self):
+        job = ForecastJob(key="k", kind="route", params={})
+        with (
+            patch("core.jobs.notify_system", new=AsyncMock()) as notify,
+            patch("core.jobs.get_channel_layer", return_value=None),
+        ):
+            async_to_sync(jobs.publish)(job)
+        notify.assert_awaited_once_with("jobs")

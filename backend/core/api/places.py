@@ -11,10 +11,11 @@ from django.http import HttpRequest
 from ninja import Router
 
 from .. import telemetry
-from ..auth.backend import optional_session_auth
+from ..auth.backend import session_auth
 from ..schemas import CamelSchema
 
-router = Router(auth=optional_session_auth, tags=["Places"])
+# Place search serves the planner and the route forms, both for signed-in accounts only.
+router = Router(auth=session_auth, tags=["Places"])
 
 
 class GeometrySchema(CamelSchema):

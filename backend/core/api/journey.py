@@ -27,6 +27,7 @@ from ..pois import LODGING_KINDS, POI_CATEGORIES, pois_along_sync
 from ..random_rides import RandomPrefs, new_seed
 from ..schedule import LOCAL_TZ, forecast_available_at
 from ..schemas import CamelSchema
+from ..system_events import notify_system
 from ..tasks import plan_journey, start_forecast_job
 from .recurring_route import RoadPrefsIn, _current_user, check_via_points
 from .route_weather import check_routing_profile, job_out
@@ -344,6 +345,7 @@ async def create_journey(request: HttpRequest, data: JourneyIn):
         )
     extra = {"kind": data.kind, "random_prefs": _random_prefs(data, new_seed())} if data.kind == "random" else {}
     journey = await Journey.objects.acreate(owner=user, **_values(data, limits), **extra)
+    await notify_system("journeys")
     await plan_journey.aenqueue(str(journey.id), journey.plan_revision)
     return 201, _journey_out(journey)
 
@@ -362,6 +364,7 @@ async def update_journey(request: HttpRequest, journey_id: UUID, data: JourneyIn
     if journey.kind == Journey.Kind.RANDOM:
         journey.random_prefs = _random_prefs(data, RandomPrefs.from_json(journey.random_prefs).seed)
     await journey.asave()
+    await notify_system("journeys")
     return _journey_out(await _replan(journey))
 
 
@@ -377,6 +380,7 @@ async def replan_journey(request: HttpRequest, journey_id: UUID):
 async def delete_journey(request: HttpRequest, journey_id: UUID):
     journey = await _owned_journey(request, journey_id)
     await journey.adelete()
+    await notify_system("journeys")
     return 204, None
 
 

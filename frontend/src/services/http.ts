@@ -133,3 +133,16 @@ export function isQuotaExceeded(error: unknown): boolean {
     if (error instanceof ResponseError) return error.response.status === 402;
     return false;
 }
+
+/** The server's `detail` for a failed request from either client, or `fallback`. */
+export async function apiErrorMessage(error: unknown, fallback: string): Promise<string> {
+    if (error instanceof ApiError) return error.message;
+    if (error instanceof ResponseError) {
+        const body: unknown = await error.response
+            .clone()
+            .json()
+            .catch(() => null);
+        return detailOf(body) ?? fallback;
+    }
+    return fallback;
+}

@@ -5,7 +5,7 @@ from django.http import HttpRequest
 from ninja import Router
 from ninja.errors import HttpError
 
-from ..auth.backend import optional_session_auth
+from ..auth.backend import optional_session_auth, session_auth
 from ..departures import candidate_times, check_flexibility
 from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut, ForecastMapDetailOut, ForecastUncertainty
@@ -45,7 +45,9 @@ def flexibility_params(departure: str, before: int, after: int) -> dict:
         return params
 
 
-@router.get("/route_weather", response={200: ForecastJobOut, 202: ForecastJobOut})
+# Planning (starting a forecast) is for signed-in accounts only: every job spends provider
+# budget. Reading a job by its id stays open below.
+@router.get("/route_weather", response={200: ForecastJobOut, 202: ForecastJobOut}, auth=session_auth)
 async def route_weather(
     request: HttpRequest,
     start_lat: float,
@@ -75,7 +77,7 @@ async def route_weather(
         raise HttpError(402, "Departure comparison requires Plus. Try Plus free for 14 days.")
     job = await start_forecast_job(
         ForecastJob.Kind.ADHOC,
-        request.auth if request.auth.is_authenticated else None,
+        request.auth,
         {
             "start_lat": start_lat,
             "start_lon": start_lon,

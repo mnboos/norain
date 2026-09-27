@@ -1,20 +1,61 @@
 import { haversineM } from "./rideQuality";
 
-export interface TimedSample { elapsedS: number }
+/**
+ * The selected place on the route is one continuous position: a share (0..1) of the route's
+ * distance, not a sample index. The map, the elevation profile and the forecast charts each
+ * convert it into their own axis, so hovering any of them moves the selection in all of them,
+ * between forecast samples too. The details panel shows the sample nearest to it.
+ */
+
 export interface ScreenPoint { x: number; y: number }
 
-export function nearestSampleByTime(samples: readonly TimedSample[], minutes: number): number | undefined {
-    if (!Number.isFinite(minutes)) return undefined;
+/**
+ * `ys` at `x`, linear between the neighbouring `xs` (ascending, repeats allowed), clamped to
+ * the ends. Undefined without data.
+ */
+export function interpolate(x: number, xs: readonly number[], ys: readonly number[]): number | undefined {
+    const n = Math.min(xs.length, ys.length);
+    if (!n || !Number.isFinite(x)) return undefined;
+    if (x <= (xs[0] ?? 0)) return ys[0];
+    if (x >= (xs[n - 1] ?? 0)) return ys[n - 1];
+    // First index whose x is >= the value.
+    let lo = 0;
+    let hi = n - 1;
+    while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if ((xs[mid] ?? 0) < x) lo = mid + 1;
+        else hi = mid;
+    }
+    const x0 = xs[lo - 1] ?? 0;
+    const x1 = xs[lo] ?? 0;
+    const y0 = ys[lo - 1] ?? 0;
+    const y1 = ys[lo] ?? 0;
+    return x1 > x0 ? y0 + ((y1 - y0) * (x - x0)) / (x1 - x0) : y1;
+}
+
+/** The index of the value nearest to `target`. */
+export function nearestIndex(values: readonly number[], target: number): number | undefined {
     let selected: number | undefined;
     let distance = Infinity;
-    samples.forEach((sample, index) => {
-        const delta = Math.abs(sample.elapsedS / 60 - minutes);
+    values.forEach((value, index) => {
+        const delta = Math.abs(value - target);
         if (delta < distance) {
             selected = index;
             distance = delta;
         }
     });
     return selected;
+}
+
+/**
+ * A position measured on one line, measured on another line through the same samples. Two
+ * levels of detail of one route differ a little in length, so a share of one is not quite the
+ * same share of the other; pinned to the samples, which every line level keeps exactly, a
+ * selected sample lands on its own vertex whichever line is drawn.
+ */
+export function remapProgress(position: number, from: readonly number[], to: readonly number[]): number {
+    if (from.length !== to.length || !from.length) return position;
+    return interpolate(position, [0, ...from, 1], [0, ...to, 1]) ?? position;
 }
 
 /** Physical distance fractions, independent of map projection and riding speed. */
@@ -28,18 +69,37 @@ export function lineProgress(line: readonly (readonly number[])[]): number[] {
     return distances.map(distance => total > 0 ? distance / total : 0);
 }
 
-/** Project onto the actual line first; geographically close samples may be on another leg. */
-export function sampleAtRoutePoint(
+/** The `[lon, lat]` at a position along the line (`progress` from `lineProgress`). */
+export function pointAtProgress(
+    line: readonly (readonly number[])[],
+    progress: readonly number[],
+    position: number,
+): [number, number] | undefined {
+    if (!line.length || line.length !== progress.length || !Number.isFinite(position)) return undefined;
+    let i = 1;
+    while (i < line.length - 1 && (progress[i] ?? 0) < position) i++;
+    const a = line[i - 1] ?? line[0] ?? [];
+    const b = line[i] ?? a;
+    const from = progress[i - 1] ?? 0;
+    const to = progress[i] ?? from;
+    const t = to > from ? Math.max(0, Math.min(1, (position - from) / (to - from))) : 0;
+    return [(a[0] ?? 0) + t * ((b[0] ?? 0) - (a[0] ?? 0)), (a[1] ?? 0) + t * ((b[1] ?? 0) - (a[1] ?? 0))];
+}
+
+/**
+ * The position under the pointer, projected onto the line itself: geographically close
+ * stretches may be other legs of the ride. Undefined when the pointer is off the line.
+ */
+export function progressAtRoutePoint(
     pointer: ScreenPoint,
     line: readonly ScreenPoint[],
     progress: readonly number[],
-    samples: readonly number[],
     current = 0,
     tolerance = 12,
 ): number | undefined {
     let bestDistance = Infinity;
     let bestContinuity = Infinity;
-    let selectedProgress: number | undefined;
+    let selected: number | undefined;
     for (let i = 1; i < line.length; i++) {
         const a = line[i - 1];
         const b = line[i];
@@ -54,53 +114,35 @@ export function sampleAtRoutePoint(
         const distance = Math.hypot(pointer.x - a.x - t * dx, pointer.y - a.y - t * dy);
         if (distance > tolerance) continue;
         const position = from + t * (to - from);
-        const continuity = Math.abs(position - (samples[current] ?? 0));
+        const continuity = Math.abs(position - current);
         // Only use continuity to disambiguate visually coincident segments (within half a pixel).
         if (distance < bestDistance - 0.5 || (Math.abs(distance - bestDistance) <= 0.5 && continuity < bestContinuity)) {
             bestDistance = distance;
             bestContinuity = continuity;
-            selectedProgress = position;
+            selected = position;
         }
     }
-    if (selectedProgress === undefined) return undefined;
-    let selected: number | undefined;
-    let distance = Infinity;
-    samples.forEach((position, index) => {
-        const delta = Math.abs(position - selectedProgress);
-        if (delta < distance) {
-            selected = index;
-            distance = delta;
-        }
-    });
     return selected;
 }
 
-interface Series { x?: unknown; y?: unknown; customdata?: unknown; legendgroup?: string }
+interface Series { x?: unknown; y?: unknown }
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
-/** Sample-backed traces use IDs, never trace point offsets (bands can contain only a subset). */
-export function selectedSeriesPoint(series: Series, index: number, minutes: number): { x: number; y: number } | undefined {
-    if (!Array.isArray(series.x) || !Array.isArray(series.y)) return undefined;
-    const custom = series.customdata;
-    if (Array.isArray(custom)) {
-        const point = custom.findIndex(value => Array.isArray(value) && value[0] === index);
-        if (point >= 0) {
-            const x: unknown = series.x[point];
-            const y: unknown = series.y[point];
-            return finite(x) && finite(y) ? { x, y } : undefined;
-        }
-    }
-    // Felt wind is sampled more densely, with no forecast sample IDs. Its segments are linear.
-    if (series.legendgroup !== "felt" || !finite(minutes)) return undefined;
+/**
+ * The drawn point of a trace at `x`, linear between its two neighbouring points. Undefined
+ * outside the trace and across a gap: the dot never bridges missing data.
+ */
+export function seriesPointAt(series: Series, x: number): { x: number; y: number } | undefined {
+    if (!Array.isArray(series.x) || !Array.isArray(series.y) || !finite(x)) return undefined;
     for (let i = 0; i < series.x.length; i++) {
-        const x: unknown = series.x[i];
-        const y: unknown = series.y[i];
-        if (!finite(x) || !finite(y)) continue;
-        if (x === minutes) return { x, y };
-        const nextX: unknown = series.x[i + 1];
-        const nextY: unknown = series.y[i + 1];
-        if (finite(nextX) && finite(nextY) && x < minutes && minutes < nextX) {
-            return { x: minutes, y: y + (nextY - y) * (minutes - x) / (nextX - x) };
+        const x0: unknown = series.x[i];
+        const y0: unknown = series.y[i];
+        if (!finite(x0) || !finite(y0)) continue;
+        if (x0 === x) return { x, y: y0 };
+        const x1: unknown = series.x[i + 1];
+        const y1: unknown = series.y[i + 1];
+        if (finite(x1) && finite(y1) && x0 < x && x < x1) {
+            return { x, y: y0 + ((y1 - y0) * (x - x0)) / (x1 - x0) };
         }
     }
     return undefined;

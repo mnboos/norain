@@ -125,6 +125,7 @@ async function mockSystem(page: Page, { allowed = true, staff = true, empty = fa
                       ],
                 total: empty ? 0 : 1,
                 next_offset: null,
+                stall_timeout_seconds: 300,
             },
         });
     });

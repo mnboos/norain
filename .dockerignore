@@ -18,6 +18,7 @@
 **/__pycache__
 **/.pytest_cache
 **/*.sqlite3
+backend/media
 **/.env
 **/.env.*
 frontend/dist

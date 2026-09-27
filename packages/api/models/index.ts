@@ -2,6 +2,9 @@
 /* tslint:disable */
 /* eslint-disable */
 export * from './BreakOut';
+export * from './CommentIn';
+export * from './CommentOut';
+export * from './CopyIn';
 export * from './DepartureCandidate';
 export * from './DepartureComparison';
 export * from './ElevationIn';
@@ -24,13 +27,18 @@ export * from './JourneyIn';
 export * from './JourneyOut';
 export * from './JourneyStageOut';
 export * from './LegOverrunOut';
+export * from './LikeOut';
 export * from './LimitOverrunsOut';
 export * from './OverrunOut';
+export * from './PhotoOut';
+export * from './PhotoUpdateIn';
 export * from './PlacesSearchResult';
 export * from './PoiOut';
 export * from './PropertiesSchema';
 export * from './RandomPrefsIn';
 export * from './RandomPrefsOut';
+export * from './PublicRouteDetail';
+export * from './PublicRouteSummary';
 export * from './RecurringRouteIn';
 export * from './RecurringRouteOut';
 export * from './RoadPrefsIn';
@@ -44,6 +52,8 @@ export * from './RouteSection';
 export * from './RouteThumbnail';
 export * from './RouteWeatherSummary';
 export * from './RoutingProfile';
+export * from './SharingIn';
+export * from './SharingOut';
 export * from './SystemCacheCount';
 export * from './SystemCoverage';
 export * from './SystemCoveragePoint';

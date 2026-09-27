@@ -49,11 +49,13 @@ from core.pois import pois_along_sync
 from core.random_rides import RandomPrefs, area_cells, generate_candidate
 from core.random_rides import headings as random_headings
 from core.random_rides import ride_seconds as random_ride_seconds
+from core.public_routes import public_geometry
 from core.ratelimit import ProviderThrottled
 from core.road_prefs import RoadPrefs, road_prefs_model
 from core.schedule import LOCAL_TZ, forecast_available_at, local_today, next_departure, upcoming_departures
 from core.sections import compute_sections
 from core.stations import api_key, purge_station_data, refresh_stations_for_ride, ride_in_window
+from core.system_events import notify_system
 from core.thumbnails import compute_route_thumbnail
 from core.tracing import traced_task as task
 from core.weather import (  # reuse existing functions
@@ -117,6 +119,7 @@ async def _refresh_route_geometry_async(route_id: str, *, backfill_only: bool = 
         return
 
     logger.info(f"Route geometry stored for {route.name} ({len(sample_points)} sample points)")
+    await notify_system("routes")
 
     # Give the new shape a thumbnail straight away. Scores stay grey until the cells warm.
     await refresh_route_thumbnail.aenqueue(str(route.id))
@@ -411,6 +414,16 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
             "total_distance_m": stage.total_distance_m,
         }
 
+    if job.kind == ForecastJob.Kind.PUBLIC_ROUTE:
+        # Only ever the line between the privacy zones: this result goes to a visitor.
+        route = await RecurringRoute.objects.filter(
+            id=params["public_route_id"], visibility=RecurringRoute.Visibility.PUBLIC
+        ).afirst()
+        geometry = public_geometry(route) if route else None
+        if geometry is None:
+            raise ValueError(f"Public route {params['public_route_id']} is not public any more")
+        return geometry
+
     if params.get("geometry_source") == "imported":
         return exact_geometry(
             params["coordinates"], params["duration_seconds"], params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S)
@@ -456,6 +469,14 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         ).aexists()
     ):
         await _fail_not_allowed(job, "Diese Etappe gibt es nicht mehr.")
+        return
+    if (
+        job.kind == ForecastJob.Kind.PUBLIC_ROUTE
+        and not await RecurringRoute.objects.filter(
+            id=job.params.get("public_route_id"), visibility=RecurringRoute.Visibility.PUBLIC
+        ).aexists()
+    ):
+        await _fail_not_allowed(job, "Diese Route ist nicht mehr öffentlich.")
         return
     await telemetry.bind_job(job)
     await set_status(job, ForecastJob.Status.PLANNING)
@@ -546,9 +567,10 @@ async def _wants_stations(job: ForecastJob, total_seconds: float | None) -> bool
     """Whether this job should spend Weather Underground calls: a key, a Pro owner, a ride near now.
 
     Never for a journey stage: journeys are planned ahead, and one plan makes a job per day
-    and alternative, which would burn the fail-closed budget (30 calls a minute).
+    and alternative, which would burn the fail-closed budget (30 calls a minute). Nor for a
+    public route, which any number of visitors may open at once.
     """
-    if job.kind == ForecastJob.Kind.JOURNEY_STAGE:
+    if job.kind in {ForecastJob.Kind.JOURNEY_STAGE, ForecastJob.Kind.PUBLIC_ROUTE}:
         return False
     now = datetime.now(tz=UTC)
     if not api_key() or not any(ride_in_window(t, total_seconds, now) for t in departures.candidate_times(job.params)):
@@ -763,6 +785,15 @@ async def start_forecast_job(kind: str, owner, params: dict, *, min_remaining: t
     if kind == ForecastJob.Kind.JOURNEY_STAGE:
         stage = await JourneyStage.objects.only("geometry_fetched_at").filter(id=params["journey_stage_id"]).afirst()
         params = {**params, "geometry_revision": stage.geometry_fetched_at.isoformat() if stage else None}
+    if kind == ForecastJob.Kind.PUBLIC_ROUTE:
+        # The zone is part of the geometry: a wider one must not reuse the narrower line.
+        route = (
+            await RecurringRoute.objects.only("geometry_fetched_at", "privacy_zone_m")
+            .filter(id=params["public_route_id"])
+            .afirst()
+        )
+        revision = route.geometry_fetched_at.isoformat() if route and route.geometry_fetched_at else None
+        params = {**params, "geometry_revision": revision, "privacy_zone_m": route.privacy_zone_m if route else None}
     job, needs_planning = await get_or_start_job(kind, owner, params, min_remaining=min_remaining)
     if needs_planning:
         await plan_forecast_job.aenqueue(str(job.id))
@@ -939,6 +970,8 @@ async def _refresh_upcoming_forecasts_async() -> dict:
     # grow forever.
     purged = await sync_to_async(_purge_processed_events)()
     jobs_purged = await sync_to_async(_purge_expired_jobs)()
+    if jobs_purged:
+        await notify_system("jobs")
     stations_purged = await sync_to_async(purge_station_data)()
 
     logger.info(
@@ -1324,7 +1357,9 @@ async def _plan_journey_routes_async(journey_id: str, revision: int) -> None:
         raise
     finally:
         _log_journey_routing(journey_id, budget, began)
+    # Committed by the time it returns, so a dashboard refetching on the notice sees it.
     await sync_to_async(_store_journey_plan)(journey_id, revision, planned)
+    await notify_system("journeys")
 
 
 async def _weather_field(journey: Journey, day: dict, road_model: dict | None) -> dict | None:

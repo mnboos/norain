@@ -13,6 +13,7 @@ function mountTabs(compact: boolean) {
         routes: [
             { path: "/", component: { template: "<div />" } },
             { path: "/map", component: { template: "<div />" } },
+            { path: "/explore", component: { template: "<div />" } },
         ],
     });
     return mount(NavTabs, { props: { compact }, global: { plugins: [Quasar, router] } });
@@ -21,7 +22,7 @@ function mountTabs(compact: boolean) {
 describe("nav tabs", () => {
     it.each([false, true])("lists every page (compact: %s)", compact => {
         const labels = mountTabs(compact).findAll('[role="tab"]').map(tab => tab.text());
-        expect(labels).toEqual(["Dashboard", "Karte"]);
+        expect(labels).toEqual(["Dashboard", "Karte", "Entdecken"]);
     });
     it("shows the Dashboard icon only in the compact row", () => {
         expect(mountTabs(false).find('[role="tab"] .q-tab__icon').exists()).toBe(false);
