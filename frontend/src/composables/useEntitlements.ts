@@ -13,10 +13,12 @@ export function useEntitlements() {
     const entitlements = computed(() => query.data.value ?? null);
     const isPro = computed(() => entitlements.value?.plan === "pro");
     const maxRoutes = computed(() => entitlements.value?.maxRoutes ?? null);
+    /** Routing around rain and headwind (Plus); the rider still switches it on per ride. */
+    const weatherRouting = computed(() => entitlements.value?.weatherRouting ?? false);
     const atRouteLimit = computed(() => {
         const limit = maxRoutes.value;
         return limit != null && (entitlements.value?.routeCount ?? 0) >= limit;
     });
 
-    return { query, entitlements, isPro, maxRoutes, atRouteLimit };
+    return { query, entitlements, isPro, maxRoutes, atRouteLimit, weatherRouting };
 }

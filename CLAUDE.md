@@ -138,7 +138,16 @@ exists and fail with "Related model 'core.user' cannot be resolved" — so `0002
 
 Every limit lives in `core/entitlements.py`: free = 2 active routes, no ensemble
 spread and no station correction; journeys: free = 1 journey, 1 alternative per day and no
-weather-aware routing (enforced in `create_journey` and `plan_journey`). The route and forecast
+weather-aware routing (enforced in `create_journey` and `plan_journey`).
+
+**Riding around bad weather is the rider's choice and a Plus feature** (`weather_routing`), for
+journeys and random rides alike. `weather_prefs.avoid_rain` / `avoid_headwind` are off unless
+the rider switches them on (`WeatherPrefsIn` defaults, and `prefs.get(..., False)` for rows
+without them). `_values` in `api/journey.py` stores them off for an account without Plus, so an
+upgrade never starts routing around weather nobody chose. `_wants_weather_routing` checks the
+tier and the choice again at planning time, so a downgrade stops it on the next plan. The
+entitlements payload carries `weatherRouting`; the SPA's `WeatherRoutingChoice` shows the
+switches locked for free accounts. The route and forecast
 limits are enforced at **three** places, and a limit is only real if all three hold:
 
 1. `create_route` / `update_route` (`api/recurring_route.py`) — the route count, 402 when full.
@@ -694,8 +703,12 @@ the generated candidates, so their forecasts, POI stops and ranking are the jour
 (`JOURNEY_STAGE` jobs, `rank_day` on read); the weather picks the recommended one. The SPA
 lists them at `/random` and opens them on the journey page. Rules that hold this together:
 
-- **Planned in `plan_journey`, one task.** `_plan_random_ride` branches off before the day
-  cutting: no corridor cells, no weather-aware routing, no `plan_journey_routes`.
+- **Planned in `plan_journey`.** `_plan_random_ride` branches off before the day cutting, with
+  no `plan_journey_routes`. When the rider chose weather routing (Plus, within
+  `WEATHER_ROUTING_DAYS`), it first warms the ride's area (`random_rides.area_cells`: the box
+  around both ends widened by a quarter of the length) and re-enqueues `plan_journey` until the
+  cells are warm, bounded by `MAX_CORRIDOR_ATTEMPTS`; then every candidate routes through the
+  field, and one GraphHopper refuses is routed plainly instead.
 - **A loop is a GraphHopper round trip** (`weather.build_round_trip`, through `_route_body`,
   uncached): GraphHopper picks the waypoints and avoids riding a road twice. It needs LM or
   flexible mode, never CH. **Point to point** routes start → one via → destination, the via on an

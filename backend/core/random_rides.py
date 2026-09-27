@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 from .journey_geometry import Limits
 from .weather import ROUTING_ERRORS, RoundTrip, RoutingPoints
+from .weather_routing import LATTICE_STEP, CellKey
 
 # The pace a profile's GraphHopper model gives on mixed roads (see "Ride speed" in CLAUDE.md),
 # only for the first guess at how far a time target reaches. Sizing corrects it.
@@ -40,6 +41,10 @@ MAX_SCALE_STEP = 2.5
 # Point to point with a known heading: candidates leave within this many degrees of it.
 HEADING_SPREAD_DEG = 50.0
 EARTH_RADIUS_M = 6_371_000.0
+# A loop of length L rarely strays further than L / 4 from its start (a circle reaches L / 2π,
+# a narrow loop L / 2), nor the long way round from the straight line between its ends. Weather
+# routing warms this area, so it is bounded: a cell costs Open-Meteo budget.
+AREA_REACH_SHARE = 0.25
 
 
 @dataclass(frozen=True)
@@ -150,6 +155,27 @@ def detour_via(
     return round(mid_lon + x / kx, 6), round(mid_lat + y / ky, 6)
 
 
+def ride_seconds(profile: str, target: Limits) -> float:
+    """How long the ride will take, for the weather field's hours."""
+    return float(target.seconds or first_guess_m(profile, target) / (NOMINAL_SPEED_KMH.get(profile, 18.0) / 3.6))
+
+
+def area_cells(points: RoutingPoints, profile: str, target: Limits) -> list[CellKey]:
+    """The weather lattice cells a candidate may ride through: the box around both ends,
+    widened by ``AREA_REACH_SHARE`` of the length. Only these are warmed and sent."""
+    reach_m = first_guess_m(profile, target) * AREA_REACH_SHARE
+    lats, lons = [p[1] for p in points], [p[0] for p in points]
+    dlat = reach_m / 111_320
+    dlon = reach_m / (111_320 * max(0.2, math.cos(math.radians(sum(lats) / len(lats)))))
+
+    def lattice(value: float) -> int:
+        return math.floor(value / LATTICE_STEP + 0.5)
+
+    rows = range(lattice(min(lats) - dlat), lattice(max(lats) + dlat) + 1)
+    cols = range(lattice(min(lons) - dlon), lattice(max(lons) + dlon) + 1)
+    return [(round(r * LATTICE_STEP, 2), round(c * LATTICE_STEP, 2)) for r in rows for c in cols]
+
+
 async def size(route: Callable[[float], Awaitable[dict]], target: Limits, guess: float) -> dict:
     """Route with ``guess``, scale it by how far the result missed the target, repeat.
 
@@ -187,24 +213,29 @@ async def generate_candidate(
     build_geometry: Callable[..., Awaitable[dict]],
     model: dict | None,
     interval_seconds: int,
+    weather: dict | None = None,
 ) -> dict:
     """One sized candidate: a loop from ``points[0]``, or ``points[0]`` → via → ``points[-1]``.
 
     The routers are passed in, as ``JourneyPlanner`` takes them, so tests need no GraphHopper.
+    ``weather`` (Plus, when the rider chose it) makes GraphHopper route around it.
     """
+    extra = {"weather": weather} if weather is not None else {}
     start, dest = tuple(points[0]), tuple(points[-1])
     guess = first_guess_m(profile, target)
     if prefs.round_trip:
         seed = candidate_seed(prefs, index)
 
         async def loop(distance_m: float) -> dict:
-            return await build_round_trip(profile, start, RoundTrip(distance_m, seed, heading), interval_seconds, model)
+            return await build_round_trip(
+                profile, start, RoundTrip(distance_m, seed, heading), interval_seconds, model, **extra
+            )
 
         return await size(loop, target, guess)
 
     async def detour(crow_sum_m: float) -> dict:
         via = detour_via(start, dest, crow_sum_m, heading)
         routed = (start, via, dest) if via else (start, dest)
-        return await build_geometry(profile, routed, interval_seconds, model)
+        return await build_geometry(profile, routed, interval_seconds, model, **extra)
 
     return await size(detour, target, guess / DETOUR_FACTOR)

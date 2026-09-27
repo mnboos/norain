@@ -71,6 +71,7 @@ def _entitlements_payload(user: AbstractBaseUser | AnonymousUser) -> dict[str, A
         "maxRoutes": limits.max_routes,
         "ensembleUncertainty": limits.ensemble_uncertainty,
         "departureComparison": limits.departure_comparison,
+        "weatherRouting": limits.weather_routing,
         "maxBriefingRoutes": limits.max_briefing_routes,
         "trialEligible": bool(
             user.is_authenticated and not limits.is_pro and (not subscription or not subscription.trial_started_at)

@@ -5,6 +5,7 @@ export interface Entitlements {
     maxRoutes: number | null;
     ensembleUncertainty: boolean;
     departureComparison: boolean;
+    weatherRouting: boolean;
     maxBriefingRoutes: number;
     routeCount: number;
     status: string;
@@ -41,6 +42,7 @@ export const parseEntitlements: Parse<Entitlements> = value => {
         cancelAtPeriodEnd: value.cancelAtPeriodEnd,
         billingConfigured: value.billingConfigured,
         departureComparison: value.departureComparison === true,
+        weatherRouting: value.weatherRouting === true,
         maxBriefingRoutes: typeof value.maxBriefingRoutes === "number" ? value.maxBriefingRoutes : 0,
         trialEligible: value.trialEligible === true,
         trialEndsAt: typeof value.trialEndsAt === "string" ? value.trialEndsAt : null,

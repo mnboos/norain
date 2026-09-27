@@ -13,6 +13,7 @@ import {
     type PlacesSearchResult,
 } from "@norain/api/models";
 import ChipMultiSelect from "@/components/ChipMultiSelect.vue";
+import WeatherRoutingChoice from "@/components/WeatherRoutingChoice.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
 import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import { useEntitlements } from "@/composables/useEntitlements";
@@ -32,7 +33,7 @@ const emit = defineEmits<{
     save: [data: JourneyIn];
 }>();
 
-const { isPro } = useEntitlements();
+const { isPro, weatherRouting } = useEntitlements();
 
 type Length = "time" | "distance";
 
@@ -71,6 +72,9 @@ const surface = ref(Surface.Any);
 const climbing = ref(Climbing.Neutral);
 const traffic = ref(Traffic.Neutral);
 const towns = ref(Towns.Neutral);
+// Off until the rider chooses it; see WeatherRoutingChoice.
+const avoidRain = ref(false);
+const avoidHeadwind = ref(false);
 
 function load(ride: JourneyOut | undefined) {
     if (!ride) {
@@ -94,6 +98,8 @@ function load(ride: JourneyOut | undefined) {
     climbing.value = ride.roadPrefs.climbing ?? Climbing.Neutral;
     traffic.value = ride.roadPrefs.traffic ?? Traffic.Neutral;
     towns.value = ride.roadPrefs.towns ?? Towns.Neutral;
+    avoidRain.value = ride.weatherPrefs.avoidRain ?? false;
+    avoidHeadwind.value = ride.weatherPrefs.avoidHeadwind ?? false;
 }
 watch(
     () => [props.modelValue, props.ride] as const,
@@ -208,6 +214,10 @@ function onSave() {
         lodgingKinds: [],
         roadPrefs: { surface: surface.value, climbing: climbing.value, traffic: traffic.value, towns: towns.value },
         randomPrefs: { roundTrip: roundTrip.value, heading: heading.value },
+        weatherPrefs: {
+            avoidRain: weatherRouting.value && avoidRain.value,
+            avoidHeadwind: weatherRouting.value && avoidHeadwind.value,
+        },
     };
     emit("save", data);
     emit("update:modelValue", false);
@@ -373,6 +383,8 @@ function onClose() {
                     hint="Optional: NoRain legt einen Halt auf die Strecke"
                     :options="POI_CATEGORIES.filter(c => c.value !== 'lodging')"
                 />
+
+                <WeatherRoutingChoice v-model:avoid-rain="avoidRain" v-model:avoid-headwind="avoidHeadwind" />
 
                 <q-expansion-item dense label="Strasse" header-class="text-caption q-px-none">
                     <div class="row q-col-gutter-sm q-pt-sm">

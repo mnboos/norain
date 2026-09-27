@@ -316,3 +316,137 @@ class RandomRideApiTests(TestCase):
             self.assertEqual(ride.plan_revision, 2)
             response = self.client.put(f"/api/journeys/{ride.id}", self.TOUR, content_type="application/json")
             self.assertEqual(response.status_code, 422)
+
+
+@override_settings(CACHES=fixtures.LOCMEM_CACHE, CHANNEL_LAYERS=fixtures.INMEM_CHANNELS)
+class WeatherChoiceTests(TestCase):
+    """Riding around bad weather is the rider's choice, and a Plus feature."""
+
+    BODY = RandomRideApiTests.BODY
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="rider", email="r@example.com", password="pw")
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def _plus(self):
+        Subscription.objects.create(
+            user=self.user, plan=Plan.PRO, complimentary_until=datetime.now(UTC) + timedelta(days=1)
+        )
+
+    def _post(self, body):
+        with patch("core.api.journey.plan_journey", SimpleNamespace(aenqueue=AsyncMock())):
+            response = self.client.post("/api/journeys", body, content_type="application/json")
+        self.assertEqual(response.status_code, 201, response.content)
+        return Journey.objects.get(id=response.json()["id"])
+
+    def test_off_unless_chosen(self):
+        self._plus()
+        ride = self._post(self.BODY)
+        self.assertFalse(ride.weather_prefs["avoid_rain"])
+        self.assertFalse(ride.weather_prefs["avoid_headwind"])
+        chosen = self._post({**self.BODY, "weatherPrefs": {"avoidRain": True, "avoidHeadwind": False}})
+        self.assertTrue(chosen.weather_prefs["avoid_rain"])
+        self.assertFalse(chosen.weather_prefs["avoid_headwind"])
+
+    def test_a_free_account_cannot_store_it_on(self):
+        ride = self._post({**self.BODY, "weatherPrefs": {"avoidRain": True, "avoidHeadwind": True}})
+        self.assertEqual((ride.weather_prefs["avoid_rain"], ride.weather_prefs["avoid_headwind"]), (False, False))
+        with patch("core.api.journey.plan_journey", SimpleNamespace(aenqueue=AsyncMock())):
+            self.client.put(
+                f"/api/journeys/{ride.id}",
+                {**self.BODY, "weatherPrefs": {"avoidRain": True}},
+                content_type="application/json",
+            )
+        ride.refresh_from_db()
+        self.assertFalse(ride.weather_prefs["avoid_rain"], "an edit does not switch it on either")
+
+    def test_entitlements_say_whether_the_account_has_it(self):
+        self.assertFalse(self.client.get("/api/billing/entitlements").json()["weatherRouting"])
+        self._plus()
+        self.assertTrue(self.client.get("/api/billing/entitlements").json()["weatherRouting"])
+
+
+@override_settings(CACHES=fixtures.LOCMEM_CACHE, CHANNEL_LAYERS=fixtures.INMEM_CHANNELS)
+class RandomRideWeatherTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="rider", email="r@example.com", password="pw")
+        Subscription.objects.create(
+            user=self.user, plan=Plan.PRO, complimentary_until=datetime.now(UTC) + timedelta(days=1)
+        )
+        self.ride = Journey.objects.create(
+            owner=self.user,
+            name="Runde",
+            kind=Journey.Kind.RANDOM,
+            random_prefs={"round_trip": True, "seed": 11},
+            start_point=route_point(47.0, 8.0),
+            start_name="A",
+            destination_point=route_point(47.0, 8.0),
+            dest_name="A",
+            start_date=local_today() + timedelta(days=1),
+            earliest_start=time(9),
+            latest_arrival=time(23, 59),
+            max_day_distance_m=40_000,
+            weather_prefs={"avoid_rain": True, "avoid_headwind": True},
+        )
+
+    def _plan(self, *, warm: bool):
+        field = {"rows": 1}
+        cells = SimpleNamespace(aenqueue=AsyncMock())
+        replan = SimpleNamespace(aenqueue=AsyncMock())
+
+        async def cached_keys(keys, windows):
+            day = self.ride.start_date
+            return ({(k[0], k[1], day) for k in keys} if warm else set()), set()
+
+        with (
+            patch("core.tasks.build_round_trip", AsyncMock(side_effect=fake_round_trip)) as loops,
+            patch("core.tasks._pois_along", AsyncMock(return_value=[])),
+            patch("core.tasks.get_cached_cell_keys", cached_keys),
+            patch("core.tasks.weather_field", AsyncMock(return_value=field)),
+            patch("core.tasks.refresh_forecast_cell", cells),
+            patch("core.tasks.plan_journey", SimpleNamespace(using=lambda **_: replan)),
+        ):
+            async_to_sync(_plan_journey_async)(str(self.ride.id), self.ride.plan_revision)
+        self.ride.refresh_from_db()
+        return loops, cells, replan, field
+
+    def test_cold_cells_are_fetched_and_the_plan_waits(self):
+        loops, cells, replan, _ = self._plan(warm=False)
+        self.assertEqual(self.ride.plan_status, Journey.PlanStatus.WEATHER)
+        self.assertEqual(self.ride.plan_attempts, 1)
+        self.assertGreater(cells.aenqueue.await_count, 0)
+        replan.aenqueue.assert_awaited_once_with(str(self.ride.id), self.ride.plan_revision)
+        loops.assert_not_awaited()
+
+    def test_warm_cells_route_every_candidate_around_the_weather(self):
+        loops, cells, _, field = self._plan(warm=True)
+        self.assertEqual(self.ride.plan_status, Journey.PlanStatus.DONE, self.ride.plan_error)
+        cells.aenqueue.assert_not_awaited()
+        self.assertTrue(all(call.kwargs.get("weather") is field for call in loops.await_args_list))
+        self.assertTrue(self.ride.days.get().weather_routed)
+
+    def test_without_the_choice_or_without_plus_nothing_is_warmed(self):
+        self.ride.weather_prefs = {"avoid_rain": False, "avoid_headwind": False}
+        self.ride.save()
+        loops, cells, _, _ = self._plan(warm=False)
+        cells.aenqueue.assert_not_awaited()
+        self.assertNotIn("weather", loops.await_args.kwargs)
+        self.assertFalse(self.ride.days.get().weather_routed)
+
+        Subscription.objects.filter(user=self.user).delete()
+        self.ride.weather_prefs = {"avoid_rain": True, "avoid_headwind": True}
+        self.ride.plan_revision += 1
+        self.ride.save()
+        loops, cells, _, _ = self._plan(warm=False)
+        cells.aenqueue.assert_not_awaited()
+        self.assertNotIn("weather", loops.await_args.kwargs)
+
+    def test_the_area_reaches_a_quarter_of_the_length(self):
+        from .random_rides import area_cells
+
+        cells = area_cells(((8.0, 47.0), (8.0, 47.0)), "bike", Limits(meters=40_000))
+        lats = sorted({c[0] for c in cells})
+        self.assertIn((47.0, 8.0), cells)
+        self.assertAlmostEqual(lats[-1] - 47.0, 0.1, delta=0.03, msg="10 km north is ~0.09°")
+        self.assertEqual(len(cells), len(set(cells)))

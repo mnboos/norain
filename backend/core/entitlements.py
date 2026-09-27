@@ -13,8 +13,10 @@ Enforced at these places — miss any one and the limit is not real:
   * plan_forecast_job (core/tasks.py) — the station task, which spends the Weather
     Underground budget. The pre-warm scan never fetches stations at all.
   * create_journey (core/api/journey.py) — the journey count, and the random-ride count.
+  * _values (core/api/journey.py) — the choice to ride around weather is stored off without it.
   * plan_journey (core/tasks.py) — alternatives per day and weather-aware routing, which
-    spends the corridor cells, and the candidates of a random ride (as many as alternatives).
+    spends the corridor cells, and the candidates of a random ride (as many as alternatives)
+    and their weather routing, which spends the ride's area cells.
     Read at planning time, so a downgrade applies to the next plan.
 """
 

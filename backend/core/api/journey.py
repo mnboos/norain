@@ -53,8 +53,11 @@ def check_lodging_kinds(values: list[str]) -> list[str]:
 
 
 class WeatherPrefsIn(CamelSchema):
-    avoid_rain: bool = True
-    avoid_headwind: bool = True
+    """Whether to ride around bad weather: the rider's choice, off unless they make it, and only
+    kept for accounts with ``weather_routing`` (Plus). See ``_values``."""
+
+    avoid_rain: bool = False
+    avoid_headwind: bool = False
     # How far after the earliest start the departure may move, for the comparison (Plus).
     departure_window_minutes: int = Field(default=60, ge=0, le=120, multiple_of=15)
 
@@ -257,7 +260,7 @@ def _journey_out(journey: Journey, days: list[JourneyDayOut] | None = None, day_
     )
 
 
-def _values(data: JourneyIn) -> dict:
+def _values(data: JourneyIn, limits) -> dict:
     values = data.model_dump(
         exclude={
             "start_lat",
@@ -274,6 +277,10 @@ def _values(data: JourneyIn) -> dict:
     values["destination_point"] = route_point(data.dest_lat, data.dest_lon)
     values["road_prefs"] = data.road_prefs.prefs().as_json()
     values["weather_prefs"] = data.weather_prefs.model_dump()
+    if not limits.weather_routing:
+        # Stored off, not just ignored: after an upgrade nothing routes around weather that the
+        # rider did not switch on with Plus.
+        values["weather_prefs"] |= {"avoid_rain": False, "avoid_headwind": False}
     return values
 
 
@@ -336,7 +343,7 @@ async def create_journey(request: HttpRequest, data: JourneyIn):
             402, f"Der {limits.plan}-Tarif erlaubt {limits.max_journeys} Reisen. Lösche eine oder wechsle zu Plus."
         )
     extra = {"kind": data.kind, "random_prefs": _random_prefs(data, new_seed())} if data.kind == "random" else {}
-    journey = await Journey.objects.acreate(owner=user, **_values(data), **extra)
+    journey = await Journey.objects.acreate(owner=user, **_values(data, limits), **extra)
     await plan_journey.aenqueue(str(journey.id), journey.plan_revision)
     return 201, _journey_out(journey)
 
@@ -349,7 +356,8 @@ async def update_journey(request: HttpRequest, journey_id: UUID, data: JourneyIn
     journey = await _owned_journey(request, journey_id)
     if data.kind != journey.kind:
         raise HttpError(422, "A journey cannot change its kind.")
-    for field, value in _values(data).items():
+    limits = await entitlements_for(await _current_user(request))
+    for field, value in _values(data, limits).items():
         setattr(journey, field, value)
     if journey.kind == Journey.Kind.RANDOM:
         journey.random_prefs = _random_prefs(data, RandomPrefs.from_json(journey.random_prefs).seed)
