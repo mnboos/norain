@@ -28,7 +28,7 @@ import RouteFormDialog from "@/components/RouteFormDialog.vue";
 import { gpxApi, gpxError, exportDraft, routePlace, savedRoutePlan, routingProfile, parseDraft, type RouteDraft } from "@/services/gpx";
 import type { RoutePlanIn, RecurringRouteIn } from "@norain/api/models";
 import { computed, ref, watchEffect, watch } from "vue";
-import { symSharpElectricBike, symSharpElectricMoped, symSharpPedalBike } from "@quasar/extras/material-symbols-sharp";
+import { symSharpElectricBike, symSharpElectricMoped, symSharpPedalBike, symSharpShare } from "@quasar/extras/material-symbols-sharp";
 import type { PlacesSearchResult } from "@norain/api/models";
 import { useRoute, useRouter } from "vue-router";
 import { usePlaceSearch } from "@/queries/places";
@@ -259,7 +259,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                     <q-card class="q-pa-md q-mt-md q-gutter-y-sm">
                         <div class="row q-gutter-xs">
                             <q-btn flat no-caps label="GPX importieren" @click="importing = true" />
-                            <q-btn flat no-caps label="GPX exportieren" :disable="!currentDraft" :loading="exporting" @click="exportRoute" />
+                            <q-btn flat no-caps :icon="symSharpShare" label="GPX teilen" :disable="!currentDraft" :loading="exporting" @click="exportRoute" />
                             <q-btn flat no-caps label="Route speichern" :disable="!currentDraft" @click="saveDraft" />
                         </div>
                         <template v-if="draft">

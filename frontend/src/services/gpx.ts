@@ -2,6 +2,7 @@ import { GeometrySource, RoutingProfile } from "@norain/api/models";
 import { GPXApi } from "@norain/api/apis";
 import type { PlacesSearchResult, RecurringRouteOut, RoutePlanIn, RoutePlanOut } from "@norain/api/models";
 import { ResponseError } from "@norain/api/runtime";
+import { Notify } from "quasar";
 import { isRecord } from "@/services/http";
 
 export const gpxApi = new GPXApi();
@@ -64,20 +65,60 @@ export async function gpxError(error: unknown): Promise<string> {
     return error instanceof Error && !(error instanceof ResponseError) ? error.message : "Die GPX-Anfrage ist fehlgeschlagen.";
 }
 
-export async function downloadGpx(response: Response, name = "route"): Promise<void> {
-    const url = URL.createObjectURL(await response.blob());
+function gpxFileName(name: string): string {
+    return (Array.from(name).filter(c => c.charCodeAt(0) >= 32).join("").replace(/[<>:"/\\|?*]/g, "-").slice(0, 100) || "route") + ".gpx";
+}
+
+function downloadFile(file: File): void {
+    const url = URL.createObjectURL(file);
     const link = document.createElement("a");
     link.href = url;
-    link.download = (Array.from(name).filter(c => c.charCodeAt(0) >= 32).join("").replace(/[<>:"/\\|?*]/g, "-").slice(0, 100) || "route") + ".gpx";
+    link.download = file.name;
     document.body.append(link);
     link.click();
     link.remove();
     setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
 }
 
+export type ShareOutcome = "shared" | "cancelled" | "downloaded" | "blocked";
+
+/** Hands the file to the system share sheet (Garmin Connect, Komoot, mail, …), else downloads it. */
+export async function shareFile(file: File): Promise<ShareOutcome> {
+    const data: ShareData = { files: [file], title: file.name.replace(/\.gpx$/, "") };
+    // Firefox on the desktop has no canShare at all.
+    if (!("canShare" in navigator) || !navigator.canShare(data)) {
+        downloadFile(file);
+        return "downloaded";
+    }
+    try {
+        await navigator.share(data);
+        return "shared";
+    } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return "cancelled";
+        // Safari lets the user gesture expire while the file is being fetched; a fresh tap is needed.
+        if (e instanceof DOMException && e.name === "NotAllowedError") return "blocked";
+        downloadFile(file);
+        return "downloaded";
+    }
+}
+
+export async function shareGpx(response: Response, name = "route"): Promise<void> {
+    const blob = await response.blob();
+    const file = new File([blob], gpxFileName(name), { type: "application/gpx+xml" });
+    if (await shareFile(file) !== "blocked") return;
+    Notify.create({
+        message: "GPX ist bereit.",
+        timeout: 10000,
+        actions: [
+            { label: "Teilen", color: "white", handler: () => { void shareFile(file); } },
+            { label: "Herunterladen", color: "white", handler: () => { downloadFile(file); } },
+        ],
+    });
+}
+
 export async function exportDraft(draft: RouteDraft): Promise<void> {
     const response = await gpxApi.coreApiGpxExportGpxRaw({ gpxExportIn: {
         name: draft.plan.name, coordinates: draft.preview.coordinates,
     } });
-    await downloadGpx(response.raw, draft.plan.name);
+    await shareGpx(response.raw, draft.plan.name);
 }
