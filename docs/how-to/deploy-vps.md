@@ -53,6 +53,7 @@ all persistent bind mounts:
 APP_STORAGE_PATH/
   caddy/{data,config}/
   django/static/
+  django/media/
   postgres/
   graphhopper/{osm,cache}/
   photon/
@@ -63,7 +64,7 @@ Create the directory tree before the first release, owned by the deployment user
 ```bash
 sudo install -d -o norain -g norain -m 0750 \
   /srv/norain-data/caddy/data /srv/norain-data/caddy/config \
-  /srv/norain-data/django/static /srv/norain-data/postgres \
+  /srv/norain-data/django/static /srv/norain-data/django/media /srv/norain-data/postgres \
   /srv/norain-data/graphhopper/osm /srv/norain-data/graphhopper/cache \
   /srv/norain-data/photon
 ```

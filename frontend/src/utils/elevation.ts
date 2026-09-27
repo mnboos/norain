@@ -40,6 +40,8 @@ export function smoothElevation(points: ElevationPoint[], radiusM = ELEVATION_SM
     });
 }
 
+export const ELEVATION_PRIMARY_GROUP = "primary";
+
 export function elevationFigure(
     series: ElevationSeries[],
     axis: "distance" | "time",
@@ -50,6 +52,8 @@ export function elevationFigure(
             type: "scatter",
             mode: "lines",
             name: s.label,
+            // The selected position is marked on the route itself, not at the same km of another.
+            legendgroup: s.primary ? ELEVATION_PRIMARY_GROUP : undefined,
             x: s.points.map(p => (axis === "distance" ? p.distanceM / 1000 : p.elapsedS / 60)),
             y: smoothElevation(s.points),
             connectgaps: false,

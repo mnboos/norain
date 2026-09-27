@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import { symSharpList, symSharpChevronLeft, symSharpChevronRight } from "@quasar/extras/material-symbols-sharp";
+import {
+    symSharpList,
+    symSharpChevronLeft,
+    symSharpChevronRight,
+    symSharpExplore,
+} from "@quasar/extras/material-symbols-sharp";
 
 // compact: the phone row under the toolbar (arrows, icons, no caps) instead of the toolbar tabs.
 defineProps<{ compact?: boolean }>();
@@ -7,6 +12,7 @@ defineProps<{ compact?: boolean }>();
 const tabs = [
     { to: "/", label: "Dashboard", icon: symSharpList },
     { to: "/map", label: "Karte" },
+    { to: "/explore", label: "Entdecken", icon: symSharpExplore },
 ];
 </script>
 

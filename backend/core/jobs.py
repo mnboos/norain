@@ -24,6 +24,7 @@ from .grid import MAX_CELL_AGE
 from .models import ForecastJob
 from .ride_quality import score_sample, wind_effort, wind_effort_level, worst_frost_level
 from .stations import api_key, ride_in_window
+from .system_events import notify_system
 from .uncertainty import METRICS
 
 # A job that has not been touched for this long is assumed dead -- its worker was killed
@@ -274,6 +275,7 @@ async def publish(job: ForecastJob) -> None:
     Never raises: a forecast that completed but could not be announced is still a
     completed forecast, and the frontend falls back to polling the job endpoint.
     """
+    await notify_system("jobs")
     layer = get_channel_layer()
     if layer is None:
         return
@@ -308,7 +310,7 @@ async def _uses_stations(job: ForecastJob, owner, now: datetime) -> bool:
     """Whether this job's result would be corrected with station readings if planned now."""
 
     departure = job.params.get("departure_time")
-    if job.kind == ForecastJob.Kind.JOURNEY_STAGE or not api_key() or not departure:
+    if job.kind in {ForecastJob.Kind.JOURNEY_STAGE, ForecastJob.Kind.PUBLIC_ROUTE} or not api_key() or not departure:
         return False
     total_seconds = (job.geometry or {}).get("total_seconds")
     if not any(ride_in_window(t, total_seconds, now) for t in candidate_times(job.params)):
@@ -373,6 +375,7 @@ async def get_or_start_job(
     context["trigger"] = "prewarm" if min_remaining > timedelta(0) else "request"
     if created:
         telemetry.event("forecast.request", outcome="new", **context)
+        await notify_system("jobs")
         return job, True
 
     # A finished forecast stays valid exactly as long as the cells behind it would have --
@@ -428,6 +431,7 @@ async def get_or_start_job(
             "updated_at",
         ]
     )
+    await notify_system("jobs")
     return job, True
 
 

@@ -15,6 +15,8 @@ Enforced at these places — miss any one and the limit is not real:
   * create_journey (core/api/journey.py) — the journey count.
   * plan_journey (core/tasks.py) — alternatives per day and weather-aware routing, which
     spends the corridor cells. Read at planning time, so a downgrade applies to the next plan.
+  * upload_photo (core/api/community.py) — photos per route. A downgrade keeps the photos
+    already there and only refuses new ones.
 """
 
 from collections import defaultdict
@@ -43,6 +45,7 @@ class Entitlements:
     max_journeys: int = 1
     max_journey_alternatives: int = 1
     weather_routing: bool = False
+    max_route_photos: int = 10
 
     @property
     def is_pro(self) -> bool:
@@ -71,6 +74,7 @@ PRO = Entitlements(
     max_journeys=10,
     max_journey_alternatives=3,
     weather_routing=True,
+    max_route_photos=50,
 )
 
 BY_PLAN = {Plan.FREE: FREE, Plan.PRO: PRO}

@@ -40,6 +40,10 @@ export interface SystemJobsPage {
      * 
      */
     nextOffset: number | null;
+    /**
+     * 
+     */
+    stallTimeoutSeconds: number;
 }
 
 /**
@@ -49,6 +53,7 @@ export function instanceOfSystemJobsPage(value: object): value is SystemJobsPage
     if (!('items' in value) || value['items'] === undefined) return false;
     if (!('total' in value) || value['total'] === undefined) return false;
     if ((!('nextOffset' in (value as Record<string, any>)) && !('next_offset' in (value as Record<string, any>))) || ((value as Record<string, any>)['nextOffset'] === undefined && (value as Record<string, any>)['next_offset'] === undefined)) return false;
+    if ((!('stallTimeoutSeconds' in (value as Record<string, any>)) && !('stall_timeout_seconds' in (value as Record<string, any>))) || ((value as Record<string, any>)['stallTimeoutSeconds'] === undefined && (value as Record<string, any>)['stall_timeout_seconds'] === undefined)) return false;
     return true;
 }
 
@@ -65,6 +70,7 @@ export function SystemJobsPageFromJSONTyped(json: any, ignoreDiscriminator: bool
         'items': ((json['items'] as Array<any>).map(SystemJobFromJSON)),
         'total': json['total'],
         'nextOffset': json['next_offset'],
+        'stallTimeoutSeconds': json['stall_timeout_seconds'],
     };
 }
 
@@ -82,6 +88,7 @@ export function SystemJobsPageToJSONTyped(value?: SystemJobsPage | null, ignoreD
         'items': ((value['items'] as Array<any>).map(SystemJobToJSON)),
         'total': value['total'],
         'next_offset': value['nextOffset'],
+        'stall_timeout_seconds': value['stallTimeoutSeconds'],
     };
 }
 

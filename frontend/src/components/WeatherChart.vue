@@ -3,7 +3,7 @@ import { computed, defineAsyncComponent, defineComponent, h, toRefs } from "vue"
 import { QSkeleton } from "quasar";
 import { forecastChart, type ChartKind, type ChartSample } from "@/utils/forecastCharts";
 
-defineEmits<{ selectSample: [index: number] }>();
+defineEmits<{ selectMinutes: [minutes: number] }>();
 
 /** Holds a chart's place while the Plotly chunk downloads. Takes only the tile's class, not the chart props. */
 const ChartSkeleton = defineComponent({
@@ -29,11 +29,12 @@ const NiceChart = defineAsyncComponent({
 const props = defineProps<{
     kind: ChartKind;
     version: string;
-    selectedSample: number;
+    /** The selected route position as ride time (min). */
+    cursorMinutes?: number;
     samples: ChartSample[];
 }>();
 
-const { kind, version, selectedSample, samples } = toRefs(props);
+const { kind, version, cursorMinutes, samples } = toRefs(props);
 
 const figure = computed(() => forecastChart(kind.value, samples.value));
 </script>
@@ -45,10 +46,9 @@ const figure = computed(() => forecastChart(kind.value, samples.value));
         :key="`${version}:${kind}`"
         class="fit"
         :figure="figure"
-        :selected-sample="selectedSample"
-        :samples="samples"
+        :cursor-x="cursorMinutes"
         :temperature="kind === 'temperature'"
-        @select-sample="$emit('selectSample', $event)"
+        @cursor="$emit('selectMinutes', $event)"
     />
     <div v-else class="text-muted">Keine Diagrammdaten verfügbar.</div>
 </template>

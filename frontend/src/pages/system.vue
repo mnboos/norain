@@ -9,7 +9,7 @@ import {
     CoreApiSystemMapFeaturesSourceEnum as Source,
     CoreApiSystemMapFeaturesProfileEnum as Profile,
 } from "@norain/api/apis";
-import type { SystemFeature } from "@norain/api/models";
+import type { SystemFeature, SystemJob } from "@norain/api/models";
 import SystemMap from "@/components/SystemMap.vue";
 import { useSession } from "@/composables/useSession";
 import { useBackendHost } from "@/utils";
@@ -21,6 +21,7 @@ import {
     useSystemCoverage,
     useSystemCellHistory,
     useSystemJobs,
+    useSystemEvents,
 } from "@/queries/system";
 
 definePage({ meta: { requiresAuth: true, requiresSystem: true } });
@@ -69,6 +70,7 @@ const cells = useSystemLayer(
 const coverage = useSystemCoverage(selected, allowed);
 const history = useSystemCellHistory(selected, historyOffset, allowed);
 const jobs = useSystemJobs(jobsOffset, allowed);
+const { live } = useSystemEvents(allowed);
 const allFeatures = computed(() => [...routes.items.value, ...journeys.items.value, ...cells.items.value]);
 const queries = [summary, routes.query, journeys.query, cells.query, coverage, history, jobs];
 const failed = computed(() => queries.some(query => query.isError.value));
@@ -131,6 +133,13 @@ function age(value?: Date | null) {
     if (!value) return "–";
     const minutes = Math.max(0, Math.floor((now.value.getTime() - value.getTime()) / 60000));
     return minutes < 60 ? `${minutes} Min.` : `${Math.floor(minutes / 60)} Std. ${minutes % 60} Min.`;
+}
+// A stalled job writes nothing, so no change notice reports it: re-derive the flag on the page clock.
+function stalled(job: SystemJob) {
+    const timeout = jobs.data.value?.stallTimeoutSeconds;
+    if (job.possiblyStalled) return true;
+    if (timeout === undefined || ["done", "failed"].includes(job.status)) return false;
+    return now.value.getTime() - job.updatedAt.getTime() > timeout * 1000;
 }
 function choose(feature: SystemFeature) {
     selected.value = feature;
@@ -203,7 +212,8 @@ onBeforeUnmount(() => {
                 <template #action><q-btn flat no-caps label="Erneut versuchen" @click="refresh" /></template>
             </q-banner>
             <div class="text-caption q-mb-sm">
-                Automatische Aktualisierung jede Minute bei sichtbarer Seite.
+                <span v-if="live">Live: Änderungen erscheinen nach wenigen Sekunden.</span>
+                <span v-else>Keine Live-Verbindung. «Aktualisieren» lädt die Daten neu.</span>
                 <span v-if="summary.dataUpdatedAt.value">
                     Übersicht zuletzt geladen: {{ dateTime(new Date(summary.dataUpdatedAt.value)) }} (Zürich).
                 </span>
@@ -489,7 +499,7 @@ onBeforeUnmount(() => {
                             <q-item v-for="job in jobs.data.value?.items" :key="job.id">
                                 <q-item-section>
                                     <q-item-label>{{ job.kind }} · {{ job.status }}</q-item-label>
-                                    <q-item-label v-if="job.possiblyStalled" class="text-negative">
+                                    <q-item-label v-if="stalled(job)" class="text-negative">
                                         Möglicherweise stehen geblieben
                                     </q-item-label>
                                     <q-item-label caption>
