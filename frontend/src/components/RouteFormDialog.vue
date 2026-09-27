@@ -315,7 +315,7 @@ function onClose() {
                     <q-input
 v-model="returnTime" label="Abfahrtszeit der Rückfahrt" outlined dense mask="##:##" fill-mask
                         :rules="[() => returnValid || 'Gültige Uhrzeit angeben']" />
-                    <p class="text-caption">Die Rückfahrt fährt an denselben Tagen wie die Hinfahrt und wird vom Ziel zum Start separat berechnet. Beide Fahrten zählen zusammen als eine Route.</p>
+                    <q-item-label caption>Die Rückfahrt fährt an denselben Tagen wie die Hinfahrt und wird vom Ziel zum Start separat berechnet. Beide Fahrten zählen zusammen als eine Route.</q-item-label>
                 </div>
 
                 <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
