@@ -456,6 +456,9 @@ class PushSubscription(models.Model):
     keys = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"PushSubscription({self.user_id}, {self.endpoint[:40]})"
+
 
 class RideBriefing(models.Model):
     """One scheduled briefing per route/departure, including its delivery claim.
@@ -479,6 +482,9 @@ class RideBriefing(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["route", "departure"], name="unique_ride_briefing")]
 
+    def __str__(self):
+        return f"RideBriefing({self.route_id}, {self.departure:%Y-%m-%d %H:%M}, {self.status})"
+
 
 class Poi(models.Model):
     """A point of interest near bike routes, extracted from OSM (see core/pois.py).
@@ -488,8 +494,8 @@ class Poi(models.Model):
     one row per category it belongs to: a machine selling drinks and sweets is two rows.
     """
 
-    osm_ref = models.CharField(max_length=32, db_index=True, help_text="n123 / w456 / r789")
-    category = models.CharField(max_length=32, db_index=True)
+    osm_ref = models.CharField(max_length=32, help_text="n123 / w456 / r789")
+    category = models.CharField(max_length=32)
     name = models.CharField(max_length=300, blank=True, default="")
     tags = models.JSONField(default=dict, blank=True, help_text="A whitelist of OSM tags, see core.pois.KEPT_TAGS")
     location = models.PointField(srid=4326, geography=True)
@@ -590,6 +596,9 @@ class JourneyDay(models.Model):
         ordering: ClassVar[list[str]] = ["index"]
         constraints = (models.UniqueConstraint(fields=["journey", "index"], name="unique_journey_day"),)
 
+    def __str__(self):
+        return f"JourneyDay({self.journey_id}, day {self.index + 1}, {self.date})"
+
 
 class JourneyStage(models.Model):
     """One way to ride one day: a route alternative, gap-filled and with its breaks."""
@@ -621,6 +630,9 @@ class JourneyStage(models.Model):
     class Meta:
         ordering: ClassVar[list[str]] = ["rank"]
 
+    def __str__(self):
+        return f"JourneyStage({self.day_id}, rank {self.rank})"
+
     @property
     def polyline_coordinates(self) -> list[list[float]]:
         return [[float(lon), float(lat)] for lon, lat in self.polyline.coords]
@@ -630,3 +642,6 @@ class ElevationProfile(models.Model):
     key = models.CharField(max_length=64, primary_key=True)
     data = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"ElevationProfile({self.key})"

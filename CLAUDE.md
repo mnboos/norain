@@ -19,7 +19,8 @@ backend/          Django 6 + Channels (async ASGI via daphne)
                      StationObservation, ForecastJob
     jobs.py          forecast-job identity, lifecycle and channel-layer publishing
     claims.py        cache-backed in-flight claim for grid-cell fetches
-    consumers.py     ForecastJobConsumer (websocket), routing.py maps it to a URL
+    consumers.py     ForecastJobConsumer, SystemEventsConsumer (websocket); routing.py maps URLs
+    system_events.py notify_system: change notices for the admin system dashboard
     forecast_schemas.py  the forecast payload (RouteWeatherOut, WeatherSample, ForecastJobOut, …)
     api/             ninja routers: route_weather.py, recurring_route.py (route CRUD),
                      billing.py, places.py
@@ -596,6 +597,9 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   `docker/osm-extract-pois.sh` (`just poi-extract-from-unfiltered-osm-pbf`) extracts them from the *raw* extract and
   `manage.py import_pois` (`just poi-import-into-db`, which runs in `worker-default` under a prod
   `COMPOSE_FILE` because the VPS host has no GDAL) replaces the `Poi` table in one transaction.
+  It is a bulk load: drop the secondary indexes (read from the catalog, so their names survive),
+  `TRUNCATE`, `COPY`, rebuild. POI readers wait on its lock until it commits. Don't add
+  `db_index` to `Poi` fields: the unique (osm_ref, category) and the location GIST cover every query.
   `POI_RULES` in `core/pois.py` is the one tag map; a test checks the script filters every tag
   in it. Journeys store the POIs they use as JSON, never as FKs, so a re-import is free.
   An object gets one `Poi` row per matching category (unique on `osm_ref` + `category`): a
@@ -683,6 +687,31 @@ departure is within 48 h. Rules that hold this together:
 - **Staggered 30 s apart**, because `compute` and `forecasts` each have one worker and a user's
   own forecast would otherwise queue behind every build.
 - The dashboard's own prefetch sends `X-NoRain-Prefetch: 1`, which does not count as a view.
+
+### System dashboard (admin)
+
+`/system` (`pages/system.vue`, `core/api/system.py`) reads everything over REST and does not
+poll. `ws/system/` (`SystemEventsConsumer`) sends change notices only, never data:
+`{"type": "hello" | "changed", "topics": [...]}`, and the page invalidates the queries that read
+those topics (`systemQueryAffected` in `utils/systemOverview.ts`). Rules that hold this together:
+
+- **Every write the dashboard shows calls `core.system_events.notify_system`** with its topic
+  (`cells`, `jobs`, `routes`, `journeys`), after the write is committed. Today that is the grid
+  cell stores, `jobs.publish` plus job creation, restart and purge, route geometry and route
+  CRUD, and journey CRUD plus the stored plan. A new writer that skips it leaves the dashboard
+  stale without any error.
+- **The consumer throttles per topic** (`THROTTLE`: jobs 1 s, the rest 5 s, and the last change
+  is always delivered). A job's fan-out stores a cell on every settle, and the cell layer
+  refetches every page. The client invalidates with `cancelRefetch: false` for the same reason.
+- **Access is `core.auth.admin_access.has_system_access`**, for the REST auth, the socket and
+  the session's `system.allowed` alike. It applies `ADMIN_OTP` itself and never goes through
+  `admin.site.has_permission`: the `OTPAdminSite` swap happens when `backend/urls.py` is first
+  imported, and a socket can reach a fresh daphne process before any HTTP request does.
+  A refused socket is accepted and then closed with 4003: if it were closed before `accept()`,
+  the browser would see only 1006 and could not tell a refusal from a dropped connection.
+- **Values that change only with time get no notice.** A stalled job writes nothing, so the page
+  works out "possibly stalled" from `updatedAt` and the jobs page's `stall_timeout_seconds`.
+  Cache freshness in the summary and coverage updates on the next notice or on "Aktualisieren".
 
 ## Testing
 

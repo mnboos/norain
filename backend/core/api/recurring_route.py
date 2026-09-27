@@ -27,6 +27,7 @@ from ..road_prefs import RoadPrefs, road_prefs_model
 from ..route_input import GeometrySource
 from ..schedule import check_schedule_cron, forecast_available_at, next_departure
 from ..schemas import CamelSchema
+from ..system_events import notify_system
 from ..tasks import refresh_route_geometry, start_forecast_job
 from ..weather import ROUTING_ERRORS, preview_route
 from .route_weather import check_routing_profile, flexibility_params, job_out
@@ -313,6 +314,7 @@ async def create_route(request: HttpRequest, data: RecurringRouteIn):
         destination_point=route_point(data.dest_lat, data.dest_lon),
         **values,
     )
+    await notify_system("routes")
     telemetry.event(
         "route.action",
         action="created",
@@ -470,6 +472,7 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
         route.thumbnail = None
         route.thumbnail_computed_at = None
     await sync_to_async(_save_with_quota)(user, route, data.return_schedule_cron, data.return_schedule_description)
+    await notify_system("routes")
     await RideBriefing.objects.filter(route=route, status="pending").aupdate(status="canceled")
 
     telemetry.event(
@@ -498,6 +501,7 @@ async def delete_route(request: HttpRequest, route_id: UUID):
         **await sync_to_async(telemetry.user_context)(await _current_user(request)),
     }
     await route.adelete()
+    await notify_system("routes")
     telemetry.event("route.action", action="deleted", outcome="success", **context)
     return 204, None
 
