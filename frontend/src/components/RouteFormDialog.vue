@@ -12,6 +12,7 @@ import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import RouteEditorDialog from "@/components/RouteEditorDialog.vue";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
+import CurrentLocationButton from "@/components/CurrentLocationButton.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import type { PlacesSearchResult, RecurringRouteIn } from "@norain/api/models";
 import { usePlaceSearch } from "@/queries/places";
@@ -220,6 +221,9 @@ function onClose() {
                     @filter="onFilterStart"
                     @focus="selectInputText"
                 >
+                    <template #append>
+                        <CurrentLocationButton :disable="exact" @select="start = $event" />
+                    </template>
                     <template #option="scope">
                         <PlaceSearchItem
                             :feature="scope.opt"
@@ -247,6 +251,9 @@ function onClose() {
                     @filter="onFilterDest"
                     @focus="selectInputText"
                 >
+                    <template #append>
+                        <CurrentLocationButton :disable="exact" @select="dest = $event" />
+                    </template>
                     <template #option="scope">
                         <PlaceSearchItem
                             :feature="scope.opt"

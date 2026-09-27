@@ -775,6 +775,48 @@
                 ]
             }
         },
+        "/api/reverse": {
+            "get": {
+                "operationId": "core_api_places_reverse",
+                "summary": "Reverse",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "lat",
+                        "schema": {
+                            "title": "Lat",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "lon",
+                        "schema": {
+                            "title": "Lon",
+                            "type": "number"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PlacesSearchResult"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "The place at a point, for \"current location\": a name to show and save instead of coordinates.",
+                "tags": [
+                    "Places"
+                ]
+            }
+        },
         "/api/gpx/import": {
             "post": {
                 "operationId": "core_api_gpx_import_gpx",
