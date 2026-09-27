@@ -5,9 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        # Also joins main's two 0025 branches, which both start from 0024.
-        ("core", "0025_poi_drop_redundant_indexes"),
-        ("core", "0025_public_routes"),
+        ("core", "0024_journey_routed_limits"),
     ]
 
     operations = [
