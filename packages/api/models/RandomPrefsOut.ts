@@ -29,6 +29,10 @@ export interface RandomPrefsOut {
      */
     heading?: number | null;
     /**
+     * Plus: forecast and rank the candidates (and route around the weather if chosen). Off: variants to pick from and save as routes, no forecast.
+     */
+    considerWeather?: boolean;
+    /**
      * 
      */
     seed?: number;
@@ -53,6 +57,7 @@ export function RandomPrefsOutFromJSONTyped(json: any, ignoreDiscriminator: bool
         
         'roundTrip': json['round_trip'] == null ? undefined : json['round_trip'],
         'heading': json['heading'] === undefined ? undefined : json['heading'] === null ? null : json['heading'],
+        'considerWeather': json['consider_weather'] == null ? undefined : json['consider_weather'],
         'seed': json['seed'] == null ? undefined : json['seed'],
     };
 }
@@ -70,6 +75,7 @@ export function RandomPrefsOutToJSONTyped(value?: RandomPrefsOut | null, ignoreD
         
         'round_trip': value['roundTrip'],
         'heading': value['heading'],
+        'consider_weather': value['considerWeather'],
         'seed': value['seed'],
     };
 }

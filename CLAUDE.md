@@ -722,10 +722,24 @@ interpolated in space and time. Rules that hold this together:
 The third mode, next to commute routes and journeys: the user gives a start, loop or not (then a
 destination), a length (riding time or distance), a profile, an optional direction and a date,
 and NoRain generates the ride (`core/random_rides.py`). A random ride is a `Journey` with
-`kind="random"` and `random_prefs` (`round_trip`, `heading`, `seed`): one day whose stages are
-the generated candidates, so their forecasts, POI stops and ranking are the journey's own
-(`JOURNEY_STAGE` jobs, `rank_day` on read); the weather picks the recommended one. The SPA
-lists them at `/random` and opens them on the journey page. Rules that hold this together:
+`kind="random"` and `random_prefs` (`round_trip`, `heading`, `seed`, `consider_weather`): one
+day whose stages are the generated candidates. The SPA lists them at `/random` and opens them on
+the journey page. It has two modes:
+
+- **Picking (every tier, the default).** `PICK_VARIANTS` (3) variants, no forecast at all:
+  `get_journey` starts no stage job and the stage forecast endpoint answers 409. The page shows
+  `RandomVariantPicker`; each variant the rider ticks is saved with
+  `POST /journeys/{id}/stages/{stage_id}/route` as an imported route on the variant's exact line
+  (heights included, the stage's riding time as its duration) with a weekly schedule prefilled
+  from the ride's day and departure. That goes through `create_route`, so the route quota (402)
+  and the geometry task apply, and the forecast is the route's own from then on.
+- **Considering the weather (Plus, `weather_routing`).** The tier's alternatives, each forecast
+  (`JOURNEY_STAGE` jobs) and ranked on read (`rank_day`), optionally routed around the weather
+  (`weather_prefs`). `_random_prefs` stores `consider_weather` off without Plus, and
+  `RandomPrefs.weather_mode(limits)` checks it again when planning and reading, so a downgraded
+  ride falls back to picking.
+
+Rules that hold this together:
 
 - **Planned in `plan_journey`.** `_plan_random_ride` branches off before the day cutting, with
   no `plan_journey_routes`. When the rider chose weather routing (Plus, within
@@ -744,8 +758,9 @@ lists them at `/random` and opens them on the journey page. Rules that hold this
 - **Candidates differ by seed and heading** (`headings`, `candidate_seed`), deterministic in the
   seed: an edit re-plans with the same dice, `POST /journeys/{id}/plan` throws new ones. The seed
   is the server's; the client never sends it.
-- **Tiers:** as many candidates as `max_journey_alternatives` (free 1, Pro 3), and a count of
-  their own, `max_random_rides`, separate from `max_journeys`. The kind is fixed at creation.
+- **Tiers:** picking gives everyone `PICK_VARIANTS`; the weather mode gives as many candidates
+  as `max_journey_alternatives`. Random rides have a count of their own, `max_random_rides`,
+  separate from `max_journeys`. The kind is fixed at creation.
 
 ### Public routes, photos and comments
 

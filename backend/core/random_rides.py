@@ -30,6 +30,8 @@ from .weather_routing import LATTICE_STEP, CellKey
 # The pace a profile's GraphHopper model gives on mixed roads (see "Ride speed" in CLAUDE.md),
 # only for the first guess at how far a time target reaches. Sizing corrects it.
 NOMINAL_SPEED_KMH = {"bike": 18.0, "ebike": 22.0, "fast_ebike": 32.0}
+# The variants a rider picks from when the ride does not consider the weather (every tier).
+PICK_VARIANTS = 3
 # A candidate within this share of its target is long enough.
 LENGTH_TOLERANCE = 0.12
 MAX_SIZING_ATTEMPTS = 3
@@ -49,11 +51,17 @@ AREA_REACH_SHARE = 0.25
 
 @dataclass(frozen=True)
 class RandomPrefs:
-    """``Journey.random_prefs``: loop or not, the preferred direction and the dice."""
+    """``Journey.random_prefs``: loop or not, the preferred direction, the dice, and the mode.
+
+    ``consider_weather`` off (every tier): ``PICK_VARIANTS`` variants and no forecast, the rider
+    picks which to save as routes. On (Plus, ``weather_routing``): as many candidates as the
+    tier's alternatives, each forecast and ranked, optionally routed around the weather.
+    """
 
     round_trip: bool = True
     heading: int | None = None
     seed: int = 0
+    consider_weather: bool = False
 
     @classmethod
     def from_json(cls, value: dict | None) -> RandomPrefs:
@@ -63,10 +71,20 @@ class RandomPrefs:
             round_trip=bool(value.get("round_trip", True)),
             heading=None if heading is None else int(heading) % 360,
             seed=int(value.get("seed", 0)),
+            consider_weather=bool(value.get("consider_weather", False)),
         )
 
     def as_json(self) -> dict:
-        return {"round_trip": self.round_trip, "heading": self.heading, "seed": self.seed}
+        return {
+            "round_trip": self.round_trip,
+            "heading": self.heading,
+            "seed": self.seed,
+            "consider_weather": self.consider_weather,
+        }
+
+    def weather_mode(self, limits) -> bool:
+        """The weather mode as it applies now: chosen, and still on a tier that has it."""
+        return self.consider_weather and limits.weather_routing
 
 
 def new_seed() -> int:

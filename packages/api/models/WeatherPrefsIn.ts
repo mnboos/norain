@@ -15,7 +15,8 @@
 
 import { mapValues } from '../runtime';
 /**
- * 
+ * Whether to ride around bad weather: the rider's choice, off unless they make it, and only
+ * kept for accounts with ``weather_routing`` (Plus). See ``_values``.
  * @export
  * @interface WeatherPrefsIn
  */

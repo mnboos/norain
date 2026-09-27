@@ -47,7 +47,7 @@ from core.models import (
 )
 from core.pois import pois_along_sync
 from core.public_routes import public_geometry
-from core.random_rides import RandomPrefs, area_cells, generate_candidate
+from core.random_rides import PICK_VARIANTS, RandomPrefs, area_cells, generate_candidate
 from core.random_rides import headings as random_headings
 from core.random_rides import ride_seconds as random_ride_seconds
 from core.ratelimit import ProviderThrottled
@@ -1445,6 +1445,9 @@ async def _plan_day(journey: Journey, day: dict, limits, road_model: dict | None
 async def _plan_random_ride(journey: Journey, limits, road_model: dict | None) -> None:
     """A random ride: generate the candidates, stage each, store them as one day.
 
+    Without the weather mode these are ``PICK_VARIANTS`` variants for the rider to pick from and
+    save as routes; nothing about them is forecast until then.
+
     The candidates' own forecasts, ranked on read like any day's alternatives, pick the ride.
     When the rider chose to ride around bad weather (Plus), the candidates are routed around it
     too: the area's cells are warmed first, the task deferring itself like
@@ -1452,7 +1455,8 @@ async def _plan_random_ride(journey: Journey, limits, road_model: dict | None) -
     """
     revision = journey.plan_revision
     weather = None
-    if _wants_weather_routing(journey, limits, journey.start_date):
+    weather_mode = RandomPrefs.from_json(journey.random_prefs).weather_mode(limits)
+    if weather_mode and _wants_weather_routing(journey, limits, journey.start_date):
         weather, deferred = await _random_ride_weather(journey)
         if deferred:
             return
@@ -1516,7 +1520,8 @@ async def _random_ride_day(
     prefs = RandomPrefs.from_json(journey.random_prefs)
     target = Limits(journey.max_day_seconds, journey.max_day_distance_m)
     points = journey.routing_points
-    count = max(1, limits.max_journey_alternatives)
+    # Picking is for every tier and costs routing only; weighing by the weather costs forecasts.
+    count = max(1, limits.max_journey_alternatives) if prefs.weather_mode(limits) else PICK_VARIANTS
     paths = []
     for index, heading in enumerate(random_headings(prefs, count)):
         if not await _journey_is_current(journey.id, journey.plan_revision).aexists():

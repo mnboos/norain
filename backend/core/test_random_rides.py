@@ -12,9 +12,10 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 from . import tests as fixtures
 from .geo import haversine_m
 from .journey_geometry import Limits, measured_geometry
-from .models import Journey, Plan, Subscription, User, route_point
+from .models import Journey, JourneyDay, JourneyStage, Plan, RecurringRoute, Subscription, User, route_line, route_point
 from .random_rides import (
     LENGTH_TOLERANCE,
+    PICK_VARIANTS,
     RandomPrefs,
     detour_via,
     generate_candidate,
@@ -197,14 +198,35 @@ class RandomRideTaskTests(TestCase):
         self.ride.refresh_from_db()
         return loops, geometry
 
-    def test_a_free_account_gets_one_loop_as_one_day(self):
-        self._plan()
+    def test_every_account_gets_three_variants_to_pick_from(self):
+        loops, _ = self._plan()
         self.assertEqual(self.ride.plan_status, Journey.PlanStatus.DONE, self.ride.plan_error)
         day = self.ride.days.get()
         self.assertEqual(day.start, day.end)
-        stage = day.stages.get()
-        self.assertAlmostEqual(stage.total_distance_m / 40_000, 1, delta=LENGTH_TOLERANCE)
-        self.assertFalse(stage.limit_overruns.get("day"))
+        stages = list(day.stages.all())
+        self.assertEqual(len(stages), PICK_VARIANTS, "picking costs routing only, so free gets three too")
+        self.assertEqual(len({call.args[2].seed for call in loops.await_args_list[::1]}), PICK_VARIANTS)
+        for stage in stages:
+            self.assertAlmostEqual(stage.total_distance_m / 40_000, 1, delta=LENGTH_TOLERANCE)
+            self.assertFalse(stage.limit_overruns.get("day"))
+
+    def test_the_weather_mode_gets_the_tiers_candidates_and_only_with_plus(self):
+        from .journey_planner import RoutingBudget
+        from .tasks import _random_ride_day
+
+        self.ride.random_prefs = {**self.ride.random_prefs, "consider_weather": True}
+        self.ride.save()
+
+        def plan(weather_routing):
+            limits = SimpleNamespace(max_journey_alternatives=2, weather_routing=weather_routing)
+            with (
+                patch("core.tasks.build_round_trip", AsyncMock(side_effect=fake_round_trip)),
+                patch("core.tasks._pois_along", AsyncMock(return_value=[])),
+            ):
+                return async_to_sync(_random_ride_day)(self.ride, limits, None, RoutingBudget())
+
+        self.assertEqual(len(plan(True)["stages"]), 2, "weighed by the weather: the tier's alternatives")
+        self.assertEqual(len(plan(False)["stages"]), PICK_VARIANTS, "no longer Plus: back to picking")
 
     def test_pro_compares_three_different_loops(self):
         Subscription.objects.create(
@@ -389,6 +411,8 @@ class RandomRideWeatherTests(TestCase):
             max_day_distance_m=40_000,
             weather_prefs={"avoid_rain": True, "avoid_headwind": True},
         )
+        self.ride.random_prefs["consider_weather"] = True
+        self.ride.save()
 
     def _plan(self, *, warm: bool):
         field = {"rows": 1}
@@ -450,3 +474,112 @@ class RandomRideWeatherTests(TestCase):
         self.assertIn((47.0, 8.0), cells)
         self.assertAlmostEqual(lats[-1] - 47.0, 0.1, delta=0.03, msg="10 km north is ~0.09°")
         self.assertEqual(len(cells), len(set(cells)))
+
+
+@override_settings(CACHES=fixtures.LOCMEM_CACHE, CHANNEL_LAYERS=fixtures.INMEM_CHANNELS)
+class PickVariantsApiTests(TestCase):
+    """Without the weather mode the rider picks variants and saves them as routes."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="rider", email="r@example.com", password="pw")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.ride = Journey.objects.create(
+            owner=self.user,
+            name="Runde",
+            kind=Journey.Kind.RANDOM,
+            random_prefs={"round_trip": True, "seed": 11},
+            start_point=route_point(47.0, 8.0),
+            start_name="Zuhause",
+            destination_point=route_point(47.0, 8.0),
+            dest_name="Zuhause",
+            start_date=local_today() + timedelta(days=1),
+            earliest_start=time(9),
+            latest_arrival=time(23, 59),
+            max_day_distance_m=40_000,
+            plan_status=Journey.PlanStatus.DONE,
+        )
+        day = JourneyDay.objects.create(
+            journey=self.ride, index=0, date=self.ride.start_date, start=[8.0, 47.0], end=[8.0, 47.0]
+        )
+        self.stages = []
+        for rank in range(3):
+            geometry = async_to_sync(fake_round_trip)(
+                "bike", (8.0, 47.0), RoundTrip(20_000 + rank * 1000, rank, 90 * rank)
+            )
+            self.stages.append(
+                JourneyStage.objects.create(
+                    day=day,
+                    rank=rank,
+                    polyline=route_line(geometry["polyline"]),
+                    total_seconds=geometry["total_seconds"],
+                    total_distance_m=geometry["total_distance_m"],
+                    sample_points=geometry["sample_points"],
+                    vertex_times=geometry["vertex_times"],
+                    vertex_elevations=[400.0] * len(geometry["polyline"]),
+                    geometry_fetched_at=datetime.now(UTC),
+                )
+            )
+
+    def _save(self, stage, **body):
+        with patch("core.api.recurring_route.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())) as geo:
+            response = self.client.post(
+                f"/api/journeys/{self.ride.id}/stages/{stage.id}/route",
+                {"scheduleCron": "0 9 * * 6", "scheduleDescription": "Sa um 09:00", **body},
+                content_type="application/json",
+            )
+        return response, geo.aenqueue
+
+    def test_reading_the_variants_starts_no_forecast(self):
+        with patch("core.api.journey.start_forecast_job", AsyncMock(side_effect=AssertionError("forecast"))):
+            response = self.client.get(f"/api/journeys/{self.ride.id}")
+        self.assertEqual(response.status_code, 200, response.content)
+        day = response.json()["days"][0]
+        self.assertFalse(day["forecast_available"])
+        self.assertEqual(len(day["stages"]), 3)
+        with patch("core.api.journey.start_forecast_job", AsyncMock(side_effect=AssertionError("forecast"))):
+            response = self.client.get(f"/api/journeys/{self.ride.id}/stages/{self.stages[0].id}/forecast")
+        self.assertEqual(response.status_code, 409)
+
+    def test_a_picked_variant_becomes_a_route_on_its_line(self):
+        response, geometry = self._save(self.stages[1], name="Samstagsrunde")
+        self.assertEqual(response.status_code, 200, response.content)
+        route = RecurringRoute.objects.get()
+        self.assertEqual(route.name, "Samstagsrunde")
+        self.assertEqual(route.geometry_source, "imported")
+        self.assertEqual([p[:2] for p in route.imported_coordinates], self.stages[1].polyline_coordinates)
+        self.assertEqual(route.imported_coordinates[0][2], 400.0, "heights come along")
+        self.assertEqual(route.duration_seconds, self.stages[1].total_seconds)
+        self.assertEqual((route.start_name, route.schedule_cron), ("Zuhause", "0 9 * * 6"))
+        geometry.assert_awaited_once_with(str(route.id))
+
+    def test_picking_several_counts_against_the_route_quota(self):
+        names = []
+        for stage in self.stages:
+            response, _ = self._save(stage)
+            names.append(response.status_code)
+        self.assertEqual(names, [200, 200, 402], "free: two active routes")
+        self.assertEqual(
+            sorted(RecurringRoute.objects.values_list("name", flat=True)),
+            ["Runde – Variante 1", "Runde – Variante 2"],
+        )
+
+    def test_only_the_owner_and_only_random_rides(self):
+        other = User.objects.create_user(username="other", email="o@example.com", password="pw")
+        self.client.force_login(other)
+        self.assertEqual(self._save(self.stages[0])[0].status_code, 404)
+        self.client.force_login(self.user)
+        Journey.objects.filter(id=self.ride.id).update(kind=Journey.Kind.TOUR)
+        self.assertEqual(self._save(self.stages[0])[0].status_code, 422)
+
+    def test_the_weather_mode_is_stored_only_with_plus(self):
+        body = {**RandomRideApiTests.BODY, "randomPrefs": {"roundTrip": True, "considerWeather": True}}
+        with patch("core.api.journey.plan_journey", SimpleNamespace(aenqueue=AsyncMock())):
+            free = self.client.post("/api/journeys", body, content_type="application/json").json()
+        self.assertFalse(free["random_prefs"]["consider_weather"])
+        Subscription.objects.create(
+            user=self.user, plan=Plan.PRO, complimentary_until=datetime.now(UTC) + timedelta(days=1)
+        )
+        with patch("core.api.journey.plan_journey", SimpleNamespace(aenqueue=AsyncMock())):
+            plus = self.client.post("/api/journeys", body, content_type="application/json").json()
+        self.assertTrue(plus["random_prefs"]["consider_weather"])

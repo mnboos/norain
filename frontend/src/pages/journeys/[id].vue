@@ -19,6 +19,8 @@ import type { JourneyIn } from "@norain/api/models";
 import JourneyDayPanel from "@/components/journey/JourneyDayPanel.vue";
 import JourneyFormDialog from "@/components/journey/JourneyFormDialog.vue";
 import RandomRideFormDialog from "@/components/random/RandomRideFormDialog.vue";
+import RandomVariantPicker from "@/components/random/RandomVariantPicker.vue";
+import { useEntitlements } from "@/composables/useEntitlements";
 import { useJourney, useReplanJourney, useUpdateJourney } from "@/queries/journeys";
 import { dayLabel, duration, km, planStatusLabel } from "@/utils/journeys";
 import { headingLabel } from "@/utils/randomRides";
@@ -31,6 +33,11 @@ const { data: journey, isLoading, error } = useJourney(journeyId);
 const days = computed(() => journey.value?.days ?? []);
 // A random ride is one day of generated candidates; it shares this page with tours.
 const isRandom = computed(() => journey.value?.kind === "random");
+// Without the weather mode (Plus) a random ride's variants are picked and saved as routes.
+const { weatherRouting } = useEntitlements();
+const picking = computed(
+    () => isRandom.value && !(weatherRouting.value && journey.value?.randomPrefs?.considerWeather === true),
+);
 const subtitle = computed(() => {
     const j = journey.value;
     if (!j) return "";
@@ -130,7 +137,8 @@ function onSave(data: JourneyIn) {
                         <div class="text-caption text-muted">{{ dayStats(i) }}</div>
                     </q-tab>
                 </q-tabs>
-                <JourneyDayPanel v-if="day" :key="day.id" :journey="journey" :day="day" class="col" />
+                <RandomVariantPicker v-if="picking" :key="day?.id" :ride="journey" />
+                <JourneyDayPanel v-else-if="day" :key="day.id" :journey="journey" :day="day" class="col" />
             </template>
         </template>
 

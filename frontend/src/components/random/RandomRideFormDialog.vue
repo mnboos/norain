@@ -33,7 +33,7 @@ const emit = defineEmits<{
     save: [data: JourneyIn];
 }>();
 
-const { isPro, weatherRouting } = useEntitlements();
+const { weatherRouting } = useEntitlements();
 
 type Length = "time" | "distance";
 
@@ -72,6 +72,8 @@ const surface = ref(Surface.Any);
 const climbing = ref(Climbing.Neutral);
 const traffic = ref(Traffic.Neutral);
 const towns = ref(Towns.Neutral);
+// Every tier: three variants to pick from and save as routes. Plus: weigh them by the weather.
+const considerWeather = ref(false);
 // Off until the rider chooses it; see WeatherRoutingChoice.
 const avoidRain = ref(false);
 const avoidHeadwind = ref(false);
@@ -85,6 +87,7 @@ function load(ride: JourneyOut | undefined) {
     name.value = ride.name;
     roundTrip.value = ride.randomPrefs?.roundTrip ?? true;
     heading.value = ride.randomPrefs?.heading ?? null;
+    considerWeather.value = ride.randomPrefs?.considerWeather ?? false;
     start.value = place(ride.startName, ride.startLat, ride.startLon);
     dest.value = roundTrip.value ? null : place(ride.destName, ride.destLat, ride.destLon);
     profile.value = ride.profile;
@@ -169,6 +172,9 @@ const townOptions = [
     { label: "Ortschaften meiden", value: Towns.Avoid },
 ];
 
+// The weather mode is Plus; without it the ride is always the picker.
+const weatherMode = computed(() => weatherRouting.value && considerWeather.value);
+
 const hint = computed(() =>
     length.value === "time"
         ? paceHint(profile.value, { hours: hours.value })
@@ -213,10 +219,14 @@ function onSave() {
         poiCategories: poiCategories.value,
         lodgingKinds: [],
         roadPrefs: { surface: surface.value, climbing: climbing.value, traffic: traffic.value, towns: towns.value },
-        randomPrefs: { roundTrip: roundTrip.value, heading: heading.value },
+        randomPrefs: {
+            roundTrip: roundTrip.value,
+            heading: heading.value,
+            considerWeather: weatherMode.value,
+        },
         weatherPrefs: {
-            avoidRain: weatherRouting.value && avoidRain.value,
-            avoidHeadwind: weatherRouting.value && avoidHeadwind.value,
+            avoidRain: weatherMode.value && avoidRain.value,
+            avoidHeadwind: weatherMode.value && avoidHeadwind.value,
         },
     };
     emit("save", data);
@@ -384,7 +394,33 @@ function onClose() {
                     :options="POI_CATEGORIES.filter(c => c.value !== 'lodging')"
                 />
 
-                <WeatherRoutingChoice v-model:avoid-rain="avoidRain" v-model:avoid-headwind="avoidHeadwind" />
+                <div data-testid="random-mode">
+                    <div class="row items-center q-gutter-x-sm">
+                        <span class="text-caption">Wetter</span>
+                        <q-badge v-if="!weatherRouting" color="accent" label="Plus" />
+                    </div>
+                    <q-toggle
+                        :model-value="weatherMode"
+                        :disable="!weatherRouting"
+                        label="Wetter berücksichtigen"
+                        @update:model-value="considerWeather = $event"
+                    />
+                    <div class="text-caption text-muted">
+                        <template v-if="weatherMode">
+                            NoRain berechnet die Vorhersage für jede Variante und empfiehlt die mit dem besten Wetter.
+                        </template>
+                        <template v-else>
+                            Du bekommst drei Varianten ohne Wetter und wählst, welche du als Routen speichern willst.
+                            Die Vorhersage gibt es dann für jede gespeicherte Route.
+                        </template>
+                    </div>
+                    <WeatherRoutingChoice
+                        v-if="weatherMode"
+                        v-model:avoid-rain="avoidRain"
+                        v-model:avoid-headwind="avoidHeadwind"
+                        class="q-mt-sm"
+                    />
+                </div>
 
                 <q-expansion-item dense label="Strasse" header-class="text-caption q-px-none">
                     <div class="row q-col-gutter-sm q-pt-sm">
@@ -430,17 +466,13 @@ function onClose() {
                         />
                     </div>
                 </q-expansion-item>
-
-                <div v-if="!isPro" class="text-caption text-muted">
-                    Mit Plus würfelt NoRain drei Runden und empfiehlt die mit dem besten Wetter.
-                </div>
             </q-card-section>
 
             <q-card-actions align="right">
                 <q-btn flat label="Abbrechen" no-caps @click="onClose" />
                 <q-btn
                     color="primary"
-                    :label="ride ? 'Speichern und neu planen' : 'Runde würfeln'"
+                    :label="ride ? 'Speichern und neu planen' : 'Varianten würfeln'"
                     :disable="!isValid"
                     no-caps
                     @click="onSave"

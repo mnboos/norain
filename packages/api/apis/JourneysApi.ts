@@ -33,6 +33,16 @@ import {
     PoiOutFromJSON,
     PoiOutToJSON,
 } from '../models/PoiOut';
+import {
+    type RecurringRouteOut,
+    RecurringRouteOutFromJSON,
+    RecurringRouteOutToJSON,
+} from '../models/RecurringRouteOut';
+import {
+    type SaveVariantIn,
+    SaveVariantInFromJSON,
+    SaveVariantInToJSON,
+} from '../models/SaveVariantIn';
 
 export interface JourneysApiCoreApiJourneyCreateJourneyRequest {
     /**
@@ -97,6 +107,21 @@ export interface JourneysApiCoreApiJourneyReplanJourneyRequest {
      * 
      */
     journeyId: string;
+}
+
+export interface JourneysApiCoreApiJourneySaveVariantAsRouteRequest {
+    /**
+     * 
+     */
+    journeyId: string;
+    /**
+     * 
+     */
+    stageId: string;
+    /**
+     * 
+     */
+    saveVariantIn: SaveVariantIn;
 }
 
 export interface JourneysApiCoreApiJourneyUpdateJourneyRequest {
@@ -458,6 +483,71 @@ export class JourneysApi extends runtime.BaseAPI {
      */
     async coreApiJourneyReplanJourney(requestParameters: JourneysApiCoreApiJourneyReplanJourneyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<JourneyOut> {
         const response = await this.coreApiJourneyReplanJourneyRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for coreApiJourneySaveVariantAsRoute without sending the request
+     */
+    async coreApiJourneySaveVariantAsRouteRequestOpts(requestParameters: JourneysApiCoreApiJourneySaveVariantAsRouteRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['journeyId'] == null) {
+            throw new runtime.RequiredError(
+                'journeyId',
+                'Required parameter "journeyId" was null or undefined when calling coreApiJourneySaveVariantAsRoute().'
+            );
+        }
+
+        if (requestParameters['stageId'] == null) {
+            throw new runtime.RequiredError(
+                'stageId',
+                'Required parameter "stageId" was null or undefined when calling coreApiJourneySaveVariantAsRoute().'
+            );
+        }
+
+        if (requestParameters['saveVariantIn'] == null) {
+            throw new runtime.RequiredError(
+                'saveVariantIn',
+                'Required parameter "saveVariantIn" was null or undefined when calling coreApiJourneySaveVariantAsRoute().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/api/journeys/{journey_id}/stages/{stage_id}/route`;
+        urlPath = urlPath.replace('{journey_id}', encodeURIComponent(String(requestParameters['journeyId'])));
+        urlPath = urlPath.replace('{stage_id}', encodeURIComponent(String(requestParameters['stageId'])));
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: SaveVariantInToJSON(requestParameters['saveVariantIn']),
+        };
+    }
+
+    /**
+     * Save one variant of a random ride as a route of the rider\'s, with their own schedule.  It is an imported path, so the route rides exactly the variant\'s line, and it goes through ``create_route``: the route quota (402), the geometry task and, from then on, the route\'s own forecast. Call it once per variant the rider picked.
+     * Save Variant As Route
+     */
+    async coreApiJourneySaveVariantAsRouteRaw(requestParameters: JourneysApiCoreApiJourneySaveVariantAsRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<RecurringRouteOut>> {
+        const requestOptions = await this.coreApiJourneySaveVariantAsRouteRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => RecurringRouteOutFromJSON(jsonValue));
+    }
+
+    /**
+     * Save one variant of a random ride as a route of the rider\'s, with their own schedule.  It is an imported path, so the route rides exactly the variant\'s line, and it goes through ``create_route``: the route quota (402), the geometry task and, from then on, the route\'s own forecast. Call it once per variant the rider picked.
+     * Save Variant As Route
+     */
+    async coreApiJourneySaveVariantAsRoute(requestParameters: JourneysApiCoreApiJourneySaveVariantAsRouteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<RecurringRouteOut> {
+        const response = await this.coreApiJourneySaveVariantAsRouteRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

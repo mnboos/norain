@@ -28,6 +28,10 @@ export interface RandomPrefsIn {
      * Preferred direction, degrees from north
      */
     heading?: number | null;
+    /**
+     * Plus: forecast and rank the candidates (and route around the weather if chosen). Off: variants to pick from and save as routes, no forecast.
+     */
+    considerWeather?: boolean;
 }
 
 /**
@@ -49,6 +53,7 @@ export function RandomPrefsInFromJSONTyped(json: any, ignoreDiscriminator: boole
         
         'roundTrip': json['roundTrip'] == null ? undefined : json['roundTrip'],
         'heading': json['heading'] === undefined ? undefined : json['heading'] === null ? null : json['heading'],
+        'considerWeather': json['considerWeather'] == null ? undefined : json['considerWeather'],
     };
 }
 
@@ -65,6 +70,7 @@ export function RandomPrefsInToJSONTyped(value?: RandomPrefsIn | null, ignoreDis
         
         'roundTrip': value['roundTrip'],
         'heading': value['heading'],
+        'considerWeather': value['considerWeather'],
     };
 }
 

@@ -6,6 +6,7 @@ import type { JourneyIn } from "@norain/api/models";
 /** A multi-day tour, or a random ride: one day of generated candidates. */
 export { JourneyKind };
 
+import { invalidateRouteLists } from "@/queries/recurringRoutes";
 import { reportForecastProgress, reportStaleForecast, useForecastProgress } from "@/queries/forecastProgress";
 import { awaitForecastJob } from "@/services/forecastJob";
 
@@ -178,5 +179,40 @@ export function useDeleteJourney() {
     return useMutation({
         mutationFn: (id: string) => api.coreApiJourneyDeleteJourney({ journeyId: id }),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: journeyKeys.lists() }),
+    });
+}
+
+/**
+ * Save the picked variants of a random ride as routes, one request each and in order, so a
+ * full route quota (402) stops the rest and the error says so. Resolves to the saved routes.
+ */
+export function useSaveVariantsAsRoutes() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (input: {
+            journeyId: string;
+            stageIds: string[];
+            name: (index: number) => string;
+            scheduleCron: string;
+            scheduleDescription: string;
+        }) => {
+            const saved = [];
+            for (const [index, stageId] of input.stageIds.entries()) {
+                saved.push(
+                    await api.coreApiJourneySaveVariantAsRoute({
+                        journeyId: input.journeyId,
+                        stageId,
+                        saveVariantIn: {
+                            name: input.name(index),
+                            scheduleCron: input.scheduleCron,
+                            scheduleDescription: input.scheduleDescription,
+                        },
+                    }),
+                );
+            }
+            return saved;
+        },
+        // Also after a partial failure: whatever was saved is in the route list now.
+        onSettled: () => invalidateRouteLists(queryClient),
     });
 }

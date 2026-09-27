@@ -6,6 +6,7 @@ those jobs, like opening a saved route does, and ranks each day's alternatives f
 has finished. The ranking is computed on read (``core.journeys.rank_day``), never stored.
 """
 
+from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 from uuid import UUID
@@ -29,7 +30,14 @@ from ..schedule import LOCAL_TZ, forecast_available_at
 from ..schemas import CamelSchema
 from ..system_events import notify_system
 from ..tasks import plan_journey, start_forecast_job
-from .recurring_route import RoadPrefsIn, _current_user, check_via_points
+from .recurring_route import (
+    RecurringRouteIn,
+    RecurringRouteOut,
+    RoadPrefsIn,
+    _current_user,
+    check_via_points,
+    create_route,
+)
 from .route_weather import check_routing_profile, job_out
 
 router = Router(tags=["Journeys"])
@@ -68,6 +76,11 @@ class RandomPrefsIn(CamelSchema):
 
     round_trip: bool = True
     heading: int | None = Field(default=None, ge=0, lt=360, description="Preferred direction, degrees from north")
+    consider_weather: bool = Field(
+        default=False,
+        description="Plus: forecast and rank the candidates (and route around the weather if chosen). "
+        "Off: variants to pick from and save as routes, no forecast.",
+    )
 
 
 class RandomPrefsOut(RandomPrefsIn):
@@ -293,8 +306,15 @@ async def _owned_journey(request: HttpRequest, journey_id: UUID) -> Journey:
         raise HttpError(404, "Journey not found.") from None
 
 
-def _random_prefs(data: JourneyIn, seed: int) -> dict:
-    return RandomPrefs(data.random_prefs.round_trip, data.random_prefs.heading, seed).as_json()
+def _random_prefs(data: JourneyIn, seed: int, limits) -> dict:
+    """A random ride's prefs as stored. The weather mode is Plus: stored off without it, like the
+    weather routing choice (``_values``)."""
+    return RandomPrefs(
+        round_trip=data.random_prefs.round_trip,
+        heading=data.random_prefs.heading,
+        seed=seed,
+        consider_weather=data.random_prefs.consider_weather and limits.weather_routing,
+    ).as_json()
 
 
 async def _replan(journey: Journey, *, reroll: bool = False) -> Journey:
@@ -304,9 +324,7 @@ async def _replan(journey: Journey, *, reroll: bool = False) -> Journey:
     """
     if reroll and journey.kind == Journey.Kind.RANDOM:
         prefs = RandomPrefs.from_json(journey.random_prefs)
-        await Journey.objects.filter(id=journey.id).aupdate(
-            random_prefs=RandomPrefs(prefs.round_trip, prefs.heading, new_seed()).as_json()
-        )
+        await Journey.objects.filter(id=journey.id).aupdate(random_prefs=replace(prefs, seed=new_seed()).as_json())
     await Journey.objects.filter(id=journey.id).aupdate(
         plan_revision=F("plan_revision") + 1,
         plan_status=Journey.PlanStatus.PENDING,
@@ -343,7 +361,9 @@ async def create_journey(request: HttpRequest, data: JourneyIn):
         raise HttpError(
             402, f"Der {limits.plan}-Tarif erlaubt {limits.max_journeys} Reisen. Lösche eine oder wechsle zu Plus."
         )
-    extra = {"kind": data.kind, "random_prefs": _random_prefs(data, new_seed())} if data.kind == "random" else {}
+    extra = (
+        {"kind": data.kind, "random_prefs": _random_prefs(data, new_seed(), limits)} if data.kind == "random" else {}
+    )
     journey = await Journey.objects.acreate(owner=user, **_values(data, limits), **extra)
     await notify_system("journeys")
     await plan_journey.aenqueue(str(journey.id), journey.plan_revision)
@@ -362,7 +382,7 @@ async def update_journey(request: HttpRequest, journey_id: UUID, data: JourneyIn
     for field, value in _values(data, limits).items():
         setattr(journey, field, value)
     if journey.kind == Journey.Kind.RANDOM:
-        journey.random_prefs = _random_prefs(data, RandomPrefs.from_json(journey.random_prefs).seed)
+        journey.random_prefs = _random_prefs(data, RandomPrefs.from_json(journey.random_prefs).seed, limits)
     await journey.asave()
     await notify_system("journeys")
     return _journey_out(await _replan(journey))
@@ -418,10 +438,14 @@ async def get_journey(request: HttpRequest, journey_id: UUID):
     user = await _current_user(request)
     limits = await entitlements_for(user)
 
+    # Variants to pick from are not forecast: the rider saves the ones they want as routes.
+    picking = journey.kind == Journey.Kind.RANDOM and not RandomPrefs.from_json(journey.random_prefs).weather_mode(
+        limits
+    )
     days_out = []
     async for day in journey.days.prefetch_related("stages"):
         stages = list(day.stages.all())
-        available = any(_in_forecast_window(journey, day, stage) for stage in stages)
+        available = not picking and any(_in_forecast_window(journey, day, stage) for stage in stages)
         rows, jobs = [], {}
         for stage in stages:
             if available and _in_forecast_window(journey, day, stage):
@@ -509,10 +533,52 @@ async def journey_stage_forecast(request: HttpRequest, journey_id: UUID, stage_i
         raise HttpError(409, "Diese Etappe liegt ausserhalb des Vorhersagezeitraums.")
     user = await _current_user(request)
     limits = await entitlements_for(user)
+    if journey.kind == Journey.Kind.RANDOM and not RandomPrefs.from_json(journey.random_prefs).weather_mode(limits):
+        raise HttpError(409, "Speichere die Variante als Route, dann gibt es ihre Vorhersage.")
     job = await start_forecast_job(
         ForecastJob.Kind.JOURNEY_STAGE, user, _stage_params(journey, stage.day, stage, limits)
     )
     return (200 if job.status == ForecastJob.Status.DONE else 202), job_out(job)
+
+
+class SaveVariantIn(CamelSchema):
+    name: str = Field(default="", max_length=200)
+    schedule_cron: str
+    schedule_description: str
+
+
+@router.post("/journeys/{journey_id}/stages/{stage_id}/route", response=RecurringRouteOut)
+async def save_variant_as_route(request: HttpRequest, journey_id: UUID, stage_id: UUID, data: SaveVariantIn):
+    """Save one variant of a random ride as a route of the rider's, with their own schedule.
+
+    It is an imported path, so the route rides exactly the variant's line, and it goes through
+    ``create_route``: the route quota (402), the geometry task and, from then on, the route's
+    own forecast. Call it once per variant the rider picked.
+    """
+    journey, stage = await _owned_stage(request, journey_id, stage_id)
+    if journey.kind != Journey.Kind.RANDOM:
+        raise HttpError(422, "Nur Varianten einer Zufallsrunde lassen sich als Route speichern.")
+    line = stage.polyline_coordinates
+    heights = stage.vertex_elevations or []
+    if len(heights) == len(line):
+        line = [[lon, lat, h] if h is not None else [lon, lat] for (lon, lat), h in zip(line, heights, strict=True)]
+    route_in = RecurringRouteIn(
+        name=data.name.strip() or f"{journey.name} – Variante {stage.rank + 1}",
+        description="Aus einer Zufallsrunde",
+        start_lat=line[0][1],
+        start_lon=line[0][0],
+        start_name=journey.start_name,
+        dest_lat=line[-1][1],
+        dest_lon=line[-1][0],
+        dest_name=journey.dest_name,
+        geometry_source="imported",
+        imported_coordinates=line,
+        duration_seconds=max(1, stage.total_seconds),
+        profile=journey.profile,
+        schedule_cron=data.schedule_cron,
+        schedule_description=data.schedule_description,
+    )
+    return await create_route(request, route_in)
 
 
 @router.get("/journeys/{journey_id}/stages/{stage_id}/pois", response=list[PoiOut])

@@ -52,6 +52,7 @@ export * from './RouteSection';
 export * from './RouteThumbnail';
 export * from './RouteWeatherSummary';
 export * from './RoutingProfile';
+export * from './SaveVariantIn';
 export * from './SharingIn';
 export * from './SharingOut';
 export * from './SystemCacheCount';
