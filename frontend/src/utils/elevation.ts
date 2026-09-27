@@ -67,7 +67,6 @@ export function elevationFigure(
             xaxis: {
                 title: { text: axis === "distance" ? "Strecke (km)" : "Fahrzeit (min)" },
                 rangemode: "tozero",
-                showgrid: false,
             },
             yaxis: { title: { text: "Höhe (m ü. M.)" }, autorange: true },
         },

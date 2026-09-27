@@ -213,8 +213,8 @@ function buildLayout(): Partial<Layout> {
             yanchor: "bottom",
             font: { ...incoming.legend?.font, family: FONT_FAMILY, color: ink, size: 10 },
         },
-        // A figure may turn the vertical gridlines off (the elevation profile does).
-        xaxis: { ...incoming.xaxis, ...axisTheme, showgrid: incoming.xaxis?.showgrid ?? true },
+        // Horizontal gridlines only: the x axis draws none.
+        xaxis: { ...incoming.xaxis, ...axisTheme, showgrid: false },
         yaxis: {
             ...incoming.yaxis,
             ...axisTheme,
