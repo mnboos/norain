@@ -333,10 +333,12 @@ class PublicRouteApiTests(TestCase):
         for sample in geometry["sample_points"]:
             self.assertGreaterEqual(haversine_m(sample["lon"], sample["lat"], 9.0, 47.0), 500)
 
-        # An anonymous visitor gets a job of their own too.
-        response, _ = self._forecast(self.anonymous, slug)
-        self.assertEqual(response.status_code, 202)
-        self.assertEqual(ForecastJob.objects.filter(owner=None).count(), 1)
+        # Anyone may read the page, but planning a ride needs an account.
+        response, enqueue = self._forecast(self.anonymous, slug)
+        self.assertEqual(response.status_code, 401)
+        enqueue.assert_not_awaited()
+        self.assertEqual(ForecastJob.objects.count(), 1)
+        self.assertEqual(self.anonymous.get(f"/api/public/routes/{slug}").status_code, 200)
 
     def test_a_forecast_for_a_route_made_private_fails(self):
         slug = self._publish()["public_slug"]

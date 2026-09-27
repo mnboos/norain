@@ -16,7 +16,7 @@ from pydantic import Field, field_validator, model_validator
 from redis.exceptions import RedisError
 
 from .. import telemetry
-from ..auth.backend import optional_session_auth, session_auth
+from ..auth.backend import session_auth
 from ..departures import route_job_params
 from ..entitlements import allowed_route_ids, entitlements_for, entitlements_for_sync
 from ..forecast_schemas import ForecastJobOut
@@ -378,7 +378,7 @@ def _preview_allowed(user_id: int) -> bool:
         return True
 
 
-@router.post("/routes/preview", response=RoutePreviewOut, auth=optional_session_auth)
+@router.post("/routes/preview", response=RoutePreviewOut)
 async def route_preview(request: HttpRequest, data: RoutePreviewIn):
     """The line through the given points, for the route editor.
 
@@ -386,9 +386,7 @@ async def route_preview(request: HttpRequest, data: RoutePreviewIn):
     returns only the line — no sampling, no weather — and a saved route's geometry still
     comes from ``refresh_route_geometry``.
     """
-    user = request.auth
-    identity = user.pk if user.is_authenticated else request.META.get("REMOTE_ADDR", "anonymous")
-    if not _preview_allowed(identity):
+    if not _preview_allowed(request.auth.pk):
         raise HttpError(429, "Zu viele Routenberechnungen. Bitte kurz warten.")
     try:
         model = road_prefs_model(data.road_prefs.prefs()) if data.road_prefs else None

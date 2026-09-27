@@ -736,7 +736,7 @@ export class PublicRoutesApi extends runtime.BaseAPI {
     }
 
     /**
-     * The weather on this route for the visitor\'s own departure: a forecast job like any other.  The job is the visitor\'s (owner = the session user, or none), so the result is shaped for the visitor\'s tier, and it runs on the public line only.
+     * The weather on this route for the visitor\'s own departure: a forecast job like any other.  Signed-in visitors only, like all planning. The job is the visitor\'s, so the result is shaped for the visitor\'s tier, and it runs on the public line only.
      * Public Route Forecast
      */
     async coreApiCommunityPublicRouteForecastRaw(requestParameters: PublicRoutesApiCoreApiCommunityPublicRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<ForecastJobOut>> {
@@ -747,7 +747,7 @@ export class PublicRoutesApi extends runtime.BaseAPI {
     }
 
     /**
-     * The weather on this route for the visitor\'s own departure: a forecast job like any other.  The job is the visitor\'s (owner = the session user, or none), so the result is shaped for the visitor\'s tier, and it runs on the public line only.
+     * The weather on this route for the visitor\'s own departure: a forecast job like any other.  Signed-in visitors only, like all planning. The job is the visitor\'s, so the result is shaped for the visitor\'s tier, and it runs on the public line only.
      * Public Route Forecast
      */
     async coreApiCommunityPublicRouteForecast(requestParameters: PublicRoutesApiCoreApiCommunityPublicRouteForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {

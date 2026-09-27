@@ -106,6 +106,11 @@ function requireSignIn(): boolean {
     return false;
 }
 
+/** Planning a ride spends forecast budget, so it needs an account; reading the page does not. */
+function planWeather() {
+    if (requireSignIn()) wantsForecast.value = true;
+}
+
 function toggleLike() {
     if (!route.value || !requireSignIn()) return;
     like.mutate(!route.value.liked);
@@ -237,7 +242,7 @@ const duration = (s: number) => {
                                     color="primary"
                                     label="Los"
                                     :loading="forecastQuery.isFetching.value"
-                                    @click="wantsForecast = true"
+                                    @click="planWeather"
                                 />
                             </div>
                         </div>

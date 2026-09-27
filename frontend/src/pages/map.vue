@@ -1,7 +1,7 @@
 <route lang="json5">
 {
     name: "map",
-    meta: { title: "Karte" },
+    meta: { title: "Karte", requiresAuth: true },
 }
 </route>
 
@@ -21,11 +21,10 @@ import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import { QSelect, useQuasar } from "quasar";
 import { useQuery } from "@tanstack/vue-query";
-import { useSession } from "@/composables/useSession";
 import GpxImportDialog from "@/components/GpxImportDialog.vue";
 import RouteTimingFields from "@/components/RouteTimingFields.vue";
 import RouteFormDialog from "@/components/RouteFormDialog.vue";
-import { gpxApi, gpxError, exportDraft, routePlace, savedRoutePlan, routingProfile, parseDraft, type RouteDraft } from "@/services/gpx";
+import { gpxApi, gpxError, exportDraft, routePlace, savedRoutePlan, routingProfile, type RouteDraft } from "@/services/gpx";
 import type { RoutePlanIn, RecurringRouteIn } from "@norain/api/models";
 import { computed, ref, watchEffect, watch } from "vue";
 import { symSharpElectricBike, symSharpElectricMoped, symSharpPedalBike } from "@quasar/extras/material-symbols-sharp";
@@ -38,7 +37,6 @@ import { useRouteWeather } from "@/queries/routeWeather";
 const route = useRoute();
 const router = useRouter();
 const $q = useQuasar();
-const { isAuthenticated } = useSession();
 const importing = ref(false);
 const showSave = ref(false);
 const draft = ref<RouteDraft | null>(null);
@@ -151,19 +149,9 @@ function applyImport(value: RouteDraft) {
     profile.value = value.plan.profile ?? "bike";
 }
 function clearImport() { draft.value = null; viaPoints.value = []; }
-async function saveDraft() {
-    if (!currentDraft.value) return;
-    if (!isAuthenticated.value) {
-        sessionStorage.setItem("norain.plannerDraft", JSON.stringify(currentDraft.value));
-        await router.push({ path: "/account", query: { next: "/map?restoreDraft=1" } });
-    } else showSave.value = true;
-}
-if (route.query.restoreDraft === "1") {
-    try {
-        const value = parseDraft(sessionStorage.getItem("norain.plannerDraft"));
-        if (value) { applyImport(value); showSave.value = isAuthenticated.value; }
-    } catch { /* A stale browser draft can be discarded. */ }
-    sessionStorage.removeItem("norain.plannerDraft");
+// The planner is for signed-in accounts only (the router guard), so a draft saves at once.
+function saveDraft() {
+    if (currentDraft.value) showSave.value = true;
 }
 async function saveRoute(data: RecurringRouteIn) {
     try {

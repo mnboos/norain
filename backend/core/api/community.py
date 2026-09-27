@@ -522,12 +522,14 @@ async def public_route_elevation(request: HttpRequest, slug: str):
     return await profile(coordinates, geometry["total_seconds"], geometry["vertex_times"])
 
 
-@public_router.get("/public/routes/{slug}/forecast", response={200: ForecastJobOut, 202: ForecastJobOut})
+@public_router.get(
+    "/public/routes/{slug}/forecast", response={200: ForecastJobOut, 202: ForecastJobOut}, auth=session_auth
+)
 async def public_route_forecast(request: HttpRequest, slug: str, date: str, time: str):
     """The weather on this route for the visitor's own departure: a forecast job like any other.
 
-    The job is the visitor's (owner = the session user, or none), so the result is shaped for
-    the visitor's tier, and it runs on the public line only.
+    Signed-in visitors only, like all planning. The job is the visitor's, so the result is
+    shaped for the visitor's tier, and it runs on the public line only.
     """
     route = await _public_route(slug)
     departure = f"{date}T{time}"

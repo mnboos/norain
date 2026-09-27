@@ -185,6 +185,14 @@ the accessors without `v1` are deprecated. `stripe.Webhook.construct_event` is d
 *not* the client method — the webhook needs only `STRIPE_WEBHOOK_SECRET`, and
 `client.construct_event` would make it need a secret key too.
 
+### Planning needs an account
+
+Every endpoint that plans a ride is `session_auth` (401 without a session): the ad-hoc forecast
+(`GET`/`POST /api/route_weather`), a public route's forecast, `POST /api/routes/preview`,
+`POST /api/elevation`, place search and the whole GPX router. Each spends provider or
+GraphHopper budget. The SPA's `/map` planner is `requiresAuth`. What stays open to anyone is
+reading: a public route, its photos and comments, and a forecast job by its unguessable id.
+
 ### Every heavy operation is a task
 
 No HTTP request performs a provider fetch or a GraphHopper call — with one deliberate
@@ -662,8 +670,8 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
 A route can be published (`RecurringRoute.visibility`, `public_slug`, `privacy_zone_m`) and is
 then readable by anyone at `/r/<slug>` and listed under "Entdecken" (`pages/explore.vue`). The
 owner's side is `core/api/community.py` `owner_router` (session auth), the visitor's side is
-`public_router` (optional session auth; commenting, liking and copying need a session). Rules
-that hold this together:
+`public_router` (optional session auth for reading; commenting, liking, copying and the
+weather need a session). Rules that hold this together:
 
 - **Nothing public reads `polyline`.** A commute starts at someone's door and its schedule says
   when they leave. Every public answer (detail, list, card path, elevation, a visitor's
@@ -674,7 +682,7 @@ that hold this together:
   public reply; a test greps for each. Less than `MIN_PUBLIC_DISTANCE_M` left is a 422 on publish
   and a 404 on read. The list's `bbox` filter is checked against the public line too.
 - **A visitor's weather is an ordinary forecast job** (`ForecastJob.Kind.PUBLIC_ROUTE`): owner =
-  the visitor (or none), so it is shaped for the visitor's tier; geometry from `public_geometry`,
+  the signed-in visitor, so it is shaped for the visitor's tier; geometry from `public_geometry`,
   with `privacy_zone_m` and the geometry revision in the params; planning fails once the route is
   private again. Never station calls: any number of visitors can open one route.
 - **Photos are re-encoded from pixels** (`core/photos.py`): no EXIF, no GPS, at most 2048 px, and
