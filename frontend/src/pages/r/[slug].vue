@@ -27,6 +27,7 @@ import KeyRideDataCard from "@/components/KeyRideDataCard.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import PhotoGallery from "@/components/sharing/PhotoGallery.vue";
 import RouteComments from "@/components/sharing/RouteComments.vue";
+import { useRoutePosition } from "@/composables/useRoutePosition";
 import { useSession } from "@/composables/useSession";
 import {
     publicRouteLink,
@@ -73,7 +74,7 @@ const time = ref(format(initial, "HH:mm"));
 const wantsForecast = ref(false);
 const forecastQuery = usePublicRouteForecast(slug, date, time, wantsForecast);
 const forecast = computed(() => forecastQuery.data.value);
-const selectedSample = ref(0);
+const { position, selectedSample, selectSample, selectPosition } = useRoutePosition(() => forecast.value);
 const forecastError = ref("");
 watch(forecastQuery.error, async value => {
     forecastError.value = value ? await apiErrorMessage(value, "Das Wetter konnte nicht berechnet werden.") : "";
@@ -212,16 +213,21 @@ const duration = (s: number) => {
                 <NiceMap
                     :route-weather="forecast"
                     :preview-line="forecast ? undefined : route.line"
-                    :selected-sample="selectedSample"
+                    :position="position"
                     :pois="photoPois"
                     height="55vh"
-                    @select-sample="selectedSample = $event"
+                    @select-position="selectPosition"
                 />
                 <div v-if="route.photos.length" class="q-mt-md">
                     <h2 class="text-subtitle1 text-weight-bold q-my-sm">Fotos</h2>
                     <PhotoGallery :photos="route.photos" />
                 </div>
-                <ElevationChart :public-slug="slug" class="q-mt-md" />
+                <ElevationChart
+                    :public-slug="slug"
+                    :position="position"
+                    class="q-mt-md"
+                    @select-position="selectPosition"
+                />
             </div>
 
             <div class="col-12 col-md-5">
@@ -256,7 +262,11 @@ const duration = (s: number) => {
                     <template v-if="forecast">
                         <ForecastSummaryCard flat :forecast="forecast" />
                         <KeyRideDataCard flat :forecast="forecast" :columns="2" />
-                        <ForecastDetails v-model:selected-sample="selectedSample" :forecast="forecast" />
+                        <ForecastDetails
+                            :selected-sample="selectedSample"
+                            :forecast="forecast"
+                            @update:selected-sample="selectSample"
+                        />
                     </template>
                 </q-card>
 
