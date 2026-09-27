@@ -31,11 +31,10 @@ for (const width of [1280, 390]) {
         await page.getByRole("button", { name: "Übernehmen", exact: true }).click();
         expect(uploaded).toBe(true);
         await expect(page.getByText("Testfahrt", { exact: true })).toBeVisible();
-        await expect(page.getByRole("button", { name: "GPX teilen", exact: true })).toBeEnabled();
-        // Without a share sheet (desktop Firefox, Linux Chromium) the button falls back to a download.
-        await page.evaluate(() => { Object.defineProperty(navigator, "canShare", { value: () => false }); });
+        // No touch screen here, so the button downloads instead of opening a share sheet.
+        await expect(page.getByRole("button", { name: "GPX herunterladen", exact: true })).toBeEnabled();
         const download = page.waitForEvent("download");
-        await page.getByRole("button", { name: "GPX teilen", exact: true }).click();
+        await page.getByRole("button", { name: "GPX herunterladen", exact: true }).click();
         expect((await download).suggestedFilename()).toBe("Testfahrt.gpx");
         await page.getByRole("button", { name: "GPX importieren", exact: true }).click();
         await page.getByRole("button", { name: "Abbrechen", exact: true }).click();

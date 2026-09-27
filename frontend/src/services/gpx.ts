@@ -82,11 +82,18 @@ function downloadFile(file: File): void {
 
 export type ShareOutcome = "shared" | "cancelled" | "downloaded" | "blocked";
 
-/** Hands the file to the system share sheet (Garmin Connect, Komoot, mail, …), else downloads it. */
+/** A phone or tablet whose browser can hand files to other apps (Garmin Connect, Komoot, mail, …). */
+export function canShareFiles(): boolean {
+    if (typeof matchMedia !== "function" || !matchMedia("(pointer: coarse)").matches) return false;
+    // Firefox on the desktop has no canShare at all.
+    if (!("canShare" in navigator)) return false;
+    return navigator.canShare({ files: [new File([""], "route.gpx", { type: "application/gpx+xml" })] });
+}
+
+/** Opens the share sheet on a mobile device, downloads the file everywhere else. */
 export async function shareFile(file: File): Promise<ShareOutcome> {
     const data: ShareData = { files: [file], title: file.name.replace(/\.gpx$/, "") };
-    // Firefox on the desktop has no canShare at all.
-    if (!("canShare" in navigator) || !navigator.canShare(data)) {
+    if (!canShareFiles() || !navigator.canShare(data)) {
         downloadFile(file);
         return "downloaded";
     }

@@ -8,6 +8,7 @@ import {
     symSharpPedalBike,
     symSharpEditRoad,
     symSharpShare,
+    symSharpDownload,
 } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
@@ -21,7 +22,7 @@ import WeatherChart from "@/components/WeatherChart.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import RouteEditorDialog from "@/components/RouteEditorDialog.vue";
 import RouteTimingFields from "@/components/RouteTimingFields.vue";
-import { gpxApi, shareGpx, gpxError } from "@/services/gpx";
+import { gpxApi, shareGpx, gpxError, canShareFiles } from "@/services/gpx";
 import { toLonLat, type LonLat } from "@/utils/routeEditing";
 import { useRecurringRoute, useRecurringRouteForecast, useUpdateRecurringRoute } from "@/queries/recurringRoutes";
 
@@ -112,6 +113,7 @@ function saveFlexibility() {
 // Reshaping is done on the outbound route; the server mirrors its via points onto the return.
 const editing = ref(false);
 const exporting = ref(false);
+const sharing = canShareFiles();
 const duration = ref(route.value.durationSeconds ?? 0);
 watch(
     () => route.value.durationSeconds,
@@ -225,8 +227,8 @@ watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () =>
                             flat
                             dense
                             no-caps
-                            :icon="symSharpShare"
-                            label="GPX teilen"
+                            :icon="sharing ? symSharpShare : symSharpDownload"
+                            :label="sharing ? 'GPX teilen' : 'GPX herunterladen'"
                             :disable="!hasGeometry && route.geometrySource !== 'imported'"
                             :loading="exporting"
                             @click="exportRoute"

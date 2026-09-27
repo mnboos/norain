@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { shareFile } from "@/services/gpx";
+import { canShareFiles, shareFile } from "@/services/gpx";
 
 const file = new File(["<gpx/>"], "Ride.gpx", { type: "application/gpx+xml" });
 
-function stubShare(canShare: boolean, share: () => Promise<void>) {
+function stubShare(canShare: boolean, share: () => Promise<void>, touch = true) {
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: touch && query === "(pointer: coarse)" }));
     const shareMock = vi.fn(share);
     Object.assign(navigator, { canShare: vi.fn(() => canShare), share: shareMock });
     return shareMock;
@@ -15,8 +16,9 @@ describe("shareFile", () => {
     URL.revokeObjectURL = vi.fn();
     afterEach(() => { click.mockClear(); });
 
-    it("opens the share sheet with the file", async () => {
+    it("opens the share sheet with the file on a touch device", async () => {
         const share = stubShare(true, () => Promise.resolve());
+        expect(canShareFiles()).toBe(true);
         expect(await shareFile(file)).toBe("shared");
         expect(share).toHaveBeenCalledWith({ files: [file], title: "Ride" });
         expect(click).not.toHaveBeenCalled();
@@ -24,7 +26,16 @@ describe("shareFile", () => {
 
     it("downloads where files cannot be shared", async () => {
         stubShare(false, () => Promise.resolve());
+        expect(canShareFiles()).toBe(false);
         expect(await shareFile(file)).toBe("downloaded");
+        expect(click).toHaveBeenCalledOnce();
+    });
+
+    it("downloads on a desktop even where it could share", async () => {
+        const share = stubShare(true, () => Promise.resolve(), false);
+        expect(canShareFiles()).toBe(false);
+        expect(await shareFile(file)).toBe("downloaded");
+        expect(share).not.toHaveBeenCalled();
         expect(click).toHaveBeenCalledOnce();
     });
 
