@@ -44,6 +44,8 @@ from core.models import (
     route_line,
 )
 from core.pois import pois_along_sync
+from core.random_rides import RandomPrefs, generate_candidate
+from core.random_rides import headings as random_headings
 from core.ratelimit import ProviderThrottled
 from core.road_prefs import RoadPrefs, merge_models, road_prefs_model
 from core.schedule import LOCAL_TZ, forecast_available_at, local_today, next_departure, upcoming_departures
@@ -57,6 +59,7 @@ from core.weather import (  # reuse existing functions
     WeatherSnapshot,
     build_geometries,
     build_geometry,
+    build_round_trip,
     compute_route_weather,
     forecast_days_for,
     route_legs,
@@ -1075,6 +1078,9 @@ async def _plan_journey_async(journey_id: str, revision: int) -> None:
         return
     limits = await entitlements_for(journey.owner)
     road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs)) or None
+    if journey.kind == Journey.Kind.RANDOM:
+        await _plan_random_ride(journey, limits, road_model)
+        return
     budget = RoutingBudget()
     began = monotonic()
     try:
@@ -1376,6 +1382,90 @@ async def _plan_day(journey: Journey, day: dict, limits, road_model: dict | None
             stages.append({**stage, "rank": rank})
     compliant = [s for s in stages if not s["limit_overruns"].get("day")]
     return {**day, "stages": compliant or stages}
+
+
+async def _plan_random_ride(journey: Journey, limits, road_model: dict | None) -> None:
+    """A random ride in one task: generate the candidates, stage each, store them as one day.
+
+    No corridor weather and no weather-aware routing: the candidates' own forecasts, ranked
+    on read like any day's alternatives, are what picks the ride.
+    """
+    revision = journey.plan_revision
+    budget = RoutingBudget()
+    began = monotonic()
+    try:
+        day = await _random_ride_day(journey, limits, road_model, budget)
+    except JourneyPlanningError as exc:
+        await _set_plan_status(journey.id, revision, Journey.PlanStatus.FAILED, str(exc))
+        return
+    except Exception:
+        await _set_plan_status(
+            journey.id, revision, Journey.PlanStatus.FAILED, "Die Runde konnte nicht geplant werden."
+        )
+        raise
+    finally:
+        _log_journey_routing(journey.id, budget, began)
+    if day is not None:
+        await sync_to_async(_store_journey_plan)(str(journey.id), revision, [day])
+
+
+async def _random_ride_day(journey: Journey, limits, road_model: dict | None, budget: RoutingBudget) -> dict | None:
+    prefs = RandomPrefs.from_json(journey.random_prefs)
+    target = Limits(journey.max_day_seconds, journey.max_day_distance_m)
+    points = journey.routing_points
+    count = max(1, limits.max_journey_alternatives)
+    paths = []
+    for index, heading in enumerate(random_headings(prefs, count)):
+        if not await _journey_is_current(journey.id, journey.plan_revision).aexists():
+            return None
+        try:
+            paths.append(
+                await generate_candidate(
+                    profile=journey.profile,
+                    points=points,
+                    prefs=prefs,
+                    target=target,
+                    index=index,
+                    heading=heading,
+                    build_round_trip=build_round_trip,
+                    build_geometry=build_geometry,
+                    model=road_model,
+                    interval_seconds=SAMPLE_INTERVAL_DEFAULT_S,
+                )
+            )
+        except ROUTING_ERRORS as exc:
+            logger.info(f"Random ride {journey.id}: candidate {index} not routed: {exc}")
+            budget.failures += 1
+    if not paths:
+        raise JourneyPlanningError("Von diesem Start aus wurde keine passende Runde gefunden.")
+
+    planner = _planner(journey, road_model, budget)
+    stages, seen = [], set()
+    for path in paths:
+        if not await _journey_is_current(journey.id, journey.plan_revision).aexists():
+            return None
+        stage = await planner.stage(
+            path,
+            [],
+            list(journey.poi_categories or []),
+            Limits(journey.max_leg_seconds, journey.max_leg_distance_m),
+            target,
+            last_day=True,
+        )
+        signature = tuple(tuple(p) for p in stage["geometry"]["polyline"])
+        if signature not in seen:
+            seen.add(signature)
+            stages.append({**stage, "rank": len(stages)})
+    return {
+        "index": 0,
+        "date": journey.start_date.isoformat(),
+        "start": list(points[0]),
+        "end": list(points[-1]),
+        "lodging": None,
+        "lodging_missing": False,
+        "weather": False,
+        "stages": stages,
+    }
 
 
 def _store_journey_plan(journey_id: str, revision: int, planned: list[dict]) -> None:

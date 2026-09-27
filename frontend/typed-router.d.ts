@@ -73,6 +73,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    'random-rides': RouteRecordInfo<
+      'random-rides',
+      '/random',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     'route-detail': RouteRecordInfo<
       'route-detail',
       '/routes/:id',
@@ -143,6 +150,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/map.vue': {
       routes:
         | 'map'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/random/index.vue': {
+      routes:
+        | 'random-rides'
       views:
         | never
       pathParamNames:

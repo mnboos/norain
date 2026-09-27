@@ -85,6 +85,13 @@ export interface JourneysApiCoreApiJourneyJourneyStagePoisRequest {
     lodging?: boolean;
 }
 
+export interface JourneysApiCoreApiJourneyListJourneysRequest {
+    /**
+     * 
+     */
+    kind?: CoreApiJourneyListJourneysKindEnum;
+}
+
 export interface JourneysApiCoreApiJourneyReplanJourneyRequest {
     /**
      * 
@@ -369,8 +376,12 @@ export class JourneysApi extends runtime.BaseAPI {
     /**
      * Creates request options for coreApiJourneyListJourneys without sending the request
      */
-    async coreApiJourneyListJourneysRequestOpts(): Promise<runtime.RequestOpts> {
+    async coreApiJourneyListJourneysRequestOpts(requestParameters: JourneysApiCoreApiJourneyListJourneysRequest): Promise<runtime.RequestOpts> {
         const queryParameters: any = {};
+
+        if (requestParameters['kind'] != null) {
+            queryParameters['kind'] = requestParameters['kind'];
+        }
 
         const headerParameters: runtime.HTTPHeaders = {};
 
@@ -388,8 +399,8 @@ export class JourneysApi extends runtime.BaseAPI {
     /**
      * List Journeys
      */
-    async coreApiJourneyListJourneysRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<JourneyOut>>> {
-        const requestOptions = await this.coreApiJourneyListJourneysRequestOpts();
+    async coreApiJourneyListJourneysRaw(requestParameters: JourneysApiCoreApiJourneyListJourneysRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Array<JourneyOut>>> {
+        const requestOptions = await this.coreApiJourneyListJourneysRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
         return new runtime.JSONApiResponse(response, (jsonValue) => jsonValue.map(JourneyOutFromJSON));
@@ -398,8 +409,8 @@ export class JourneysApi extends runtime.BaseAPI {
     /**
      * List Journeys
      */
-    async coreApiJourneyListJourneys(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<JourneyOut>> {
-        const response = await this.coreApiJourneyListJourneysRaw(initOverrides);
+    async coreApiJourneyListJourneys(requestParameters: JourneysApiCoreApiJourneyListJourneysRequest = {}, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Array<JourneyOut>> {
+        const response = await this.coreApiJourneyListJourneysRaw(requestParameters, initOverrides);
         return await response.value();
     }
 
@@ -431,7 +442,7 @@ export class JourneysApi extends runtime.BaseAPI {
     }
 
     /**
-     * Plan again with the same inputs: newer weather, POIs or graph.
+     * Plan again with the same inputs: newer weather, POIs or graph. A random ride gets new candidates: its dice are thrown again.
      * Replan Journey
      */
     async coreApiJourneyReplanJourneyRaw(requestParameters: JourneysApiCoreApiJourneyReplanJourneyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<JourneyOut>> {
@@ -442,7 +453,7 @@ export class JourneysApi extends runtime.BaseAPI {
     }
 
     /**
-     * Plan again with the same inputs: newer weather, POIs or graph.
+     * Plan again with the same inputs: newer weather, POIs or graph. A random ride gets new candidates: its dice are thrown again.
      * Replan Journey
      */
     async coreApiJourneyReplanJourney(requestParameters: JourneysApiCoreApiJourneyReplanJourneyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<JourneyOut> {
@@ -488,7 +499,7 @@ export class JourneysApi extends runtime.BaseAPI {
     }
 
     /**
-     * Change a journey. Every change re-plans it: the days depend on all of the inputs.
+     * Change a journey. Every change re-plans it: the days depend on all of the inputs.  The kind stays what it was created as; a random ride keeps its dice.
      * Update Journey
      */
     async coreApiJourneyUpdateJourneyRaw(requestParameters: JourneysApiCoreApiJourneyUpdateJourneyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<JourneyOut>> {
@@ -499,7 +510,7 @@ export class JourneysApi extends runtime.BaseAPI {
     }
 
     /**
-     * Change a journey. Every change re-plans it: the days depend on all of the inputs.
+     * Change a journey. Every change re-plans it: the days depend on all of the inputs.  The kind stays what it was created as; a random ride keeps its dice.
      * Update Journey
      */
     async coreApiJourneyUpdateJourney(requestParameters: JourneysApiCoreApiJourneyUpdateJourneyRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<JourneyOut> {
@@ -507,4 +518,13 @@ export class JourneysApi extends runtime.BaseAPI {
         return await response.value();
     }
 
+}
+
+/**
+  * @export
+  * @enum {string}
+  */
+export enum CoreApiJourneyListJourneysKindEnum {
+    Tour = 'tour',
+    Random = 'random',
 }

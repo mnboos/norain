@@ -168,6 +168,7 @@ def _route_body(
     alternatives: int = 0,
     *,
     include_geometry: bool = True,
+    round_trip: RoundTrip | None = None,
 ) -> dict:
     """The one GraphHopper request, so the editor's preview and the saved geometry agree.
 
@@ -175,6 +176,9 @@ def _route_body(
     weather zones, see ``core.road_prefs``); it must only add penalties, or LM gives wrong
     routes. ``alternatives`` > 1 asks for that many paths, which GraphHopper only does between
     two points and, on this graph, for up to about a day's ride (the node cap).
+    ``round_trip`` asks for a loop from the one point in ``points`` (random rides): GraphHopper
+    picks the waypoints from the seed and avoids riding the same road twice. It needs LM or
+    flexible mode, which is all this graph has.
     """
     body = {
         "profile": profile,
@@ -193,7 +197,23 @@ def _route_body(
     if alternatives > 1:
         body["algorithm"] = "alternative_route"
         body["alternative_route.max_paths"] = alternatives
+    if round_trip is not None:
+        body["algorithm"] = "round_trip"
+        body["round_trip.distance"] = round(round_trip.distance_m)
+        body["round_trip.seed"] = round_trip.seed
+        if round_trip.heading is not None:
+            body["headings"] = [round(round_trip.heading) % 360]
     return body
+
+
+@dataclass(frozen=True)
+class RoundTrip:
+    """A loop request: roughly ``distance_m`` long, its shape drawn from ``seed``, leaving
+    towards ``heading`` (degrees clockwise from north) when given."""
+
+    distance_m: float
+    seed: int
+    heading: float | None = None
 
 
 @alru_cache(maxsize=64)
@@ -229,6 +249,19 @@ async def route_legs(profile, legs, custom_model=None, *, limiter, memo):
             return memo[key]
 
     return await asyncio.gather(*(one(points) for points in legs))
+
+
+async def build_round_trip(
+    profile: str,
+    start: tuple[float, float],
+    round_trip: RoundTrip,
+    interval_seconds: int = SAMPLE_INTERVAL_DEFAULT_S,
+    custom_model: dict | None = None,
+) -> dict:
+    """A sampled loop from ``start``, like ``build_geometry``. Uncached: every seed is a new
+    loop, asked for once while a random ride is planned."""
+    body = _route_body(profile, (tuple(start),), custom_model, round_trip=round_trip)
+    return _path_geometry((await _post_route(body))["paths"][0], interval_seconds)
 
 
 async def _route(profile: str, points: RoutingPoints, custom_model: dict | None = None, alternatives: int = 0) -> dict:

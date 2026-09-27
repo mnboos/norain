@@ -1,7 +1,10 @@
 import { computed, toValue, type MaybeRefOrGetter } from "vue";
 import { useMutation, useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/vue-query";
-import { JourneysApi } from "@norain/api/apis";
+import { CoreApiJourneyListJourneysKindEnum as JourneyKind, JourneysApi } from "@norain/api/apis";
 import type { JourneyIn } from "@norain/api/models";
+
+/** A multi-day tour, or a random ride: one day of generated candidates. */
+export { JourneyKind };
 
 import { reportForecastProgress, reportStaleForecast, useForecastProgress } from "@/queries/forecastProgress";
 import { awaitForecastJob } from "@/services/forecastJob";
@@ -11,6 +14,7 @@ const api = new JourneysApi();
 export const journeyKeys = {
     all: ["journeys"] as const,
     lists: () => [...journeyKeys.all, "list"] as const,
+    list: (kind: JourneyKind) => [...journeyKeys.lists(), kind] as const,
     detail: (id: string | null | undefined) => [...journeyKeys.all, "detail", id] as const,
     stageForecast: (id: string | null | undefined, stageId: string | null | undefined) =>
         [...journeyKeys.detail(id), "stage", stageId, "forecast"] as const,
@@ -31,10 +35,10 @@ export function journeyIsBusy(
     );
 }
 
-export function useJourneys() {
+export function useJourneys(kind: JourneyKind) {
     return useQuery({
-        queryKey: journeyKeys.lists(),
-        queryFn: () => api.coreApiJourneyListJourneys(),
+        queryKey: journeyKeys.list(kind),
+        queryFn: () => api.coreApiJourneyListJourneys({ kind }),
         staleTime: 30_000,
     });
 }

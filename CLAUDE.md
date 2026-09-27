@@ -31,6 +31,7 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     journeys.py      journey constants, lodging filter, ranking on read
     journey_planner.py  routed insertions: gap fixes, breaks, lodging (RoutingBudget)
     journey_geometry.py measured lines: Limits, LineMeasure, check_limits, gaps
+    random_rides.py  random rides: candidate generation (loop / long way round) and sizing
     pois.py          POI categories (POI_RULES) + corridor query pois_along_sync
     road_prefs.py    road preferences -> penalty-only GraphHopper custom model
     weather_routing.py  rain/headwind zones -> custom-model areas
@@ -654,6 +655,32 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   and reasons only, never the weights.
 - **Revisions.** Every edit or re-plan bumps `plan_revision`; a planning task writes only
   while its revision is current, and replaces the days in one transaction.
+
+### Random rides
+
+The third mode, next to commute routes and journeys: the user gives a start, loop or not (then a
+destination), a length (riding time or distance), a profile, an optional direction and a date,
+and NoRain generates the ride (`core/random_rides.py`). A random ride is a `Journey` with
+`kind="random"` and `random_prefs` (`round_trip`, `heading`, `seed`): one day whose stages are
+the generated candidates, so their forecasts, POI stops and ranking are the journey's own
+(`JOURNEY_STAGE` jobs, `rank_day` on read); the weather picks the recommended one. The SPA
+lists them at `/random` and opens them on the journey page. Rules that hold this together:
+
+- **Planned in `plan_journey`, one task.** `_plan_random_ride` branches off before the day
+  cutting: no corridor cells, no weather-aware routing, no `plan_journey_routes`.
+- **A loop is a GraphHopper round trip** (`weather.build_round_trip`, through `_route_body`,
+  uncached): GraphHopper picks the waypoints and avoids riding a road twice. It needs LM or
+  flexible mode, never CH. **Point to point** routes start → one via → destination, the via on an
+  ellipse around both ends sized to the missing length (`detour_via`).
+- **Time means the profile's pace.** The length is the day limit (`max_day_seconds` /
+  `max_day_distance_m`), and a time target is compared with GraphHopper's riding time, the same
+  one every eta uses. `NOMINAL_SPEED_KMH` is only the first guess (and the form's "≈" hint);
+  `size` routes, measures and rescales, at most `MAX_SIZING_ATTEMPTS` times.
+- **Candidates differ by seed and heading** (`headings`, `candidate_seed`), deterministic in the
+  seed: an edit re-plans with the same dice, `POST /journeys/{id}/plan` throws new ones. The seed
+  is the server's; the client never sends it.
+- **Tiers:** as many candidates as `max_journey_alternatives` (free 1, Pro 3), and a count of
+  their own, `max_random_rides`, separate from `max_journeys`. The kind is fixed at creation.
 
 ### Recurring routes
 

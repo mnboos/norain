@@ -29,6 +29,8 @@ export * from './OverrunOut';
 export * from './PlacesSearchResult';
 export * from './PoiOut';
 export * from './PropertiesSchema';
+export * from './RandomPrefsIn';
+export * from './RandomPrefsOut';
 export * from './RecurringRouteIn';
 export * from './RecurringRouteOut';
 export * from './RoadPrefsIn';

@@ -7,6 +7,7 @@ has finished. The ranking is computed on read (``core.journeys.rank_day``), neve
 """
 
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Literal
 from uuid import UUID
 
 from asgiref.sync import sync_to_async
@@ -23,6 +24,7 @@ from ..geo import simplify_line, vertex_distances
 from ..journeys import FILL_CORRIDOR_M, LODGING_CORRIDOR_M, LODGING_WINDOW, lodging_candidates, rank_day
 from ..models import ForecastJob, Journey, JourneyDay, JourneyStage, route_point
 from ..pois import LODGING_KINDS, POI_CATEGORIES, pois_along_sync
+from ..random_rides import RandomPrefs, new_seed
 from ..schedule import LOCAL_TZ, forecast_available_at
 from ..schemas import CamelSchema
 from ..tasks import plan_journey, start_forecast_job
@@ -57,8 +59,22 @@ class WeatherPrefsIn(CamelSchema):
     departure_window_minutes: int = Field(default=60, ge=0, le=120, multiple_of=15)
 
 
+class RandomPrefsIn(CamelSchema):
+    """A random ride's shape. The dice (``seed``) are the server's: a re-plan throws them again."""
+
+    round_trip: bool = True
+    heading: int | None = Field(default=None, ge=0, lt=360, description="Preferred direction, degrees from north")
+
+
+class RandomPrefsOut(RandomPrefsIn):
+    seed: int = 0
+
+
 class JourneyIn(CamelSchema):
     name: str = Field(min_length=1, max_length=200)
+    kind: Literal["tour", "random"] = Field(
+        default="tour", description="A random ride is one day of generated candidates; fixed at creation"
+    )
     start_lat: float = Field(ge=-90, le=90)
     start_lon: float = Field(ge=-180, le=180)
     start_name: str
@@ -78,6 +94,7 @@ class JourneyIn(CamelSchema):
     lodging_kinds: list[str] = Field(default_factory=list)
     road_prefs: RoadPrefsIn = Field(default_factory=RoadPrefsIn)
     weather_prefs: WeatherPrefsIn = Field(default_factory=WeatherPrefsIn)
+    random_prefs: RandomPrefsIn = Field(default_factory=RandomPrefsIn)
 
     _profile = field_validator("profile")(check_routing_profile)
     _via_points = field_validator("via_points")(check_via_points)
@@ -90,6 +107,11 @@ class JourneyIn(CamelSchema):
             raise ValueError("a day needs a time or distance limit")
         if self.latest_arrival <= self.earliest_start:
             raise ValueError("the latest arrival must be after the earliest start")
+        if self.kind == "random":
+            # One day of candidates: no lodging, no vias, and a loop ends where it starts.
+            self.via_points, self.lodging_kinds = [], []
+            if self.random_prefs.round_trip:
+                self.dest_lat, self.dest_lon, self.dest_name = self.start_lat, self.start_lon, self.start_name
         return self
 
 
@@ -174,6 +196,8 @@ class JourneyDayOut(CamelSchema):
 class JourneyOut(CamelSchema):
     id: UUID
     name: str
+    kind: str = "tour"
+    random_prefs: RandomPrefsOut = Field(default_factory=RandomPrefsOut)
     start_lat: float
     start_lon: float
     start_name: str
@@ -204,6 +228,8 @@ def _journey_out(journey: Journey, days: list[JourneyDayOut] | None = None, day_
     return JourneyOut(
         id=journey.id,
         name=journey.name,
+        kind=journey.kind,
+        random_prefs=RandomPrefsOut(**RandomPrefs.from_json(journey.random_prefs).as_json()),
         start_lat=journey.start_point.y,
         start_lon=journey.start_point.x,
         start_name=journey.start_name,
@@ -232,7 +258,18 @@ def _journey_out(journey: Journey, days: list[JourneyDayOut] | None = None, day_
 
 
 def _values(data: JourneyIn) -> dict:
-    values = data.model_dump(exclude={"start_lat", "start_lon", "dest_lat", "dest_lon", "road_prefs", "weather_prefs"})
+    values = data.model_dump(
+        exclude={
+            "start_lat",
+            "start_lon",
+            "dest_lat",
+            "dest_lon",
+            "road_prefs",
+            "weather_prefs",
+            "random_prefs",
+            "kind",
+        }
+    )
     values["start_point"] = route_point(data.start_lat, data.start_lon)
     values["destination_point"] = route_point(data.dest_lat, data.dest_lon)
     values["road_prefs"] = data.road_prefs.prefs().as_json()
@@ -248,8 +285,20 @@ async def _owned_journey(request: HttpRequest, journey_id: UUID) -> Journey:
         raise HttpError(404, "Journey not found.") from None
 
 
-async def _replan(journey: Journey) -> Journey:
-    """Start a new plan. Any running one sees the new revision and stops writing."""
+def _random_prefs(data: JourneyIn, seed: int) -> dict:
+    return RandomPrefs(data.random_prefs.round_trip, data.random_prefs.heading, seed).as_json()
+
+
+async def _replan(journey: Journey, *, reroll: bool = False) -> Journey:
+    """Start a new plan. Any running one sees the new revision and stops writing.
+
+    ``reroll`` throws a random ride's dice again, so the plan brings new candidates.
+    """
+    if reroll and journey.kind == Journey.Kind.RANDOM:
+        prefs = RandomPrefs.from_json(journey.random_prefs)
+        await Journey.objects.filter(id=journey.id).aupdate(
+            random_prefs=RandomPrefs(prefs.round_trip, prefs.heading, new_seed()).as_json()
+        )
     await Journey.objects.filter(id=journey.id).aupdate(
         plan_revision=F("plan_revision") + 1,
         plan_status=Journey.PlanStatus.PENDING,
@@ -263,9 +312,12 @@ async def _replan(journey: Journey) -> Journey:
 
 
 @router.get("/journeys", response=list[JourneyOut])
-async def list_journeys(request: HttpRequest):
+async def list_journeys(request: HttpRequest, kind: Literal["tour", "random"] | None = None):
     user = await _current_user(request)
-    query = Journey.objects.filter(owner=user).annotate(day_total=Count("days")).defer("plan_state")
+    query = Journey.objects.filter(owner=user)
+    if kind:
+        query = query.filter(kind=kind)
+    query = query.annotate(day_total=Count("days")).defer("plan_state")
     return [_journey_out(journey, day_count=journey.day_total) async for journey in query]
 
 
@@ -274,30 +326,43 @@ async def create_journey(request: HttpRequest, data: JourneyIn):
     """Create a journey and start planning it. The plan arrives on ``GET /journeys/{id}``."""
     user = await _current_user(request)
     limits = await entitlements_for(user)
-    if await Journey.objects.filter(owner=user).acount() >= limits.max_journeys:
+    count = await Journey.objects.filter(owner=user, kind=data.kind).acount()
+    if data.kind == Journey.Kind.RANDOM and count >= limits.max_random_rides:
+        raise HttpError(
+            402, f"Der {limits.plan}-Tarif erlaubt {limits.max_random_rides} Runden. Lösche eine oder wechsle zu Plus."
+        )
+    if data.kind == Journey.Kind.TOUR and count >= limits.max_journeys:
         raise HttpError(
             402, f"Der {limits.plan}-Tarif erlaubt {limits.max_journeys} Reisen. Lösche eine oder wechsle zu Plus."
         )
-    journey = await Journey.objects.acreate(owner=user, **_values(data))
+    extra = {"kind": data.kind, "random_prefs": _random_prefs(data, new_seed())} if data.kind == "random" else {}
+    journey = await Journey.objects.acreate(owner=user, **_values(data), **extra)
     await plan_journey.aenqueue(str(journey.id), journey.plan_revision)
     return 201, _journey_out(journey)
 
 
 @router.put("/journeys/{journey_id}", response=JourneyOut)
 async def update_journey(request: HttpRequest, journey_id: UUID, data: JourneyIn):
-    """Change a journey. Every change re-plans it: the days depend on all of the inputs."""
+    """Change a journey. Every change re-plans it: the days depend on all of the inputs.
+
+    The kind stays what it was created as; a random ride keeps its dice."""
     journey = await _owned_journey(request, journey_id)
+    if data.kind != journey.kind:
+        raise HttpError(422, "A journey cannot change its kind.")
     for field, value in _values(data).items():
         setattr(journey, field, value)
+    if journey.kind == Journey.Kind.RANDOM:
+        journey.random_prefs = _random_prefs(data, RandomPrefs.from_json(journey.random_prefs).seed)
     await journey.asave()
     return _journey_out(await _replan(journey))
 
 
 @router.post("/journeys/{journey_id}/plan", response={202: JourneyOut})
 async def replan_journey(request: HttpRequest, journey_id: UUID):
-    """Plan again with the same inputs: newer weather, POIs or graph."""
+    """Plan again with the same inputs: newer weather, POIs or graph. A random ride gets new
+    candidates: its dice are thrown again."""
     journey = await _owned_journey(request, journey_id)
-    return 202, _journey_out(await _replan(journey))
+    return 202, _journey_out(await _replan(journey, reroll=True))
 
 
 @router.delete("/journeys/{journey_id}", response={204: None})
