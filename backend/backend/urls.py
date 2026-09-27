@@ -24,7 +24,7 @@ from django_otp.admin import OTPAdminSite
 from core.api import api
 from core.api.billing import checkout_view, entitlements_view, free_routes_view, portal_view, trial_view, webhook_view
 from core.api.briefings import preferences_view, push_view
-from core.auth.views import complete_signup_view, session_view
+from core.auth.views import complete_signup_view, profile_view, session_view, username_available_view
 
 
 def healthz(request):
@@ -41,6 +41,8 @@ urlpatterns = [
     path(f"{settings.ADMIN_PATH}/", admin.site.urls),
     path("api/auth/session", session_view),
     path("api/auth/complete-signup", complete_signup_view),
+    path("api/auth/username-available", username_available_view),
+    path("api/auth/profile", profile_view),
     # Sign-up, sign-in, verification and password reset: allauth's JSON API. Before
     # api.urls, which would otherwise claim every path under /api/.
     path("api/allauth/", include("allauth.headless.urls")),

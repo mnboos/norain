@@ -1,5 +1,6 @@
 """django-allauth adapters: NoRain's rules on top of allauth's defaults."""
 
+import secrets
 from types import SimpleNamespace
 from urllib.parse import quote, urlparse
 
@@ -38,7 +39,23 @@ class AccountAdapter(DefaultAccountAdapter):
         # Without django.contrib.sites allauth names the site after the request host, which
         # is the backend's; the mails should say NoRain and point at the app.
         site = SimpleNamespace(name="NoRain", domain=urlparse(settings.FRONTEND_URL).netloc)
-        super().send_mail(template_prefix, email, {**context, "current_site": site})
+        frontend_url = settings.FRONTEND_URL.rstrip("/")
+        super().send_mail(template_prefix, email, {**context, "current_site": site, "frontend_url": frontend_url})
+
+    def populate_username(self, request: HttpRequest, user: User) -> None:
+        """A neutral placeholder until step 2, never one made from the email.
+
+        allauth's default takes the email's local part, and usernames are public: an
+        abandoned sign-up would show part of someone's address. The SPA suggests the local
+        part in step 2 instead, where only the owner sees it.
+        """
+        if user.username:
+            return
+        while True:
+            username = f"fahrer-{secrets.token_hex(4)}"
+            if not User.objects.filter(username__iexact=username).exists():
+                user.username = username
+                return
 
     def clean_username(self, username: str, shallow: bool = False) -> str:
         username = super().clean_username(username, shallow=shallow)

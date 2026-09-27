@@ -2,11 +2,6 @@
 import { computed, ref, watch, type Ref } from "vue";
 import { QSelect } from "quasar";
 import {
-    symSharpElectricBike,
-    symSharpElectricMoped,
-    symSharpPedalBike,
-} from "@quasar/extras/material-symbols-sharp";
-import {
     RoadPrefsInClimbingEnum as Climbing,
     RoadPrefsInSurfaceEnum as Surface,
     RoadPrefsInTownsEnum as Towns,
@@ -16,9 +11,12 @@ import {
     type PlacesSearchResult,
 } from "@norain/api/models";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
+import CurrentLocationButton from "@/components/CurrentLocationButton.vue";
 import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import { useEntitlements } from "@/composables/useEntitlements";
+import { useSession } from "@/composables/useSession";
 import { usePlaceSearch } from "@/queries/places";
+import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
 import { placeLabel } from "@/utils/placeLabel";
 import { LODGING_KINDS, POI_CATEGORIES } from "@/utils/poiCategories";
 import ChipMultiSelect from "@/components/ChipMultiSelect.vue";
@@ -56,7 +54,8 @@ function tomorrow(): string {
 const name = ref("");
 const start = ref<PlacesSearchResult | null>(null);
 const dest = ref<PlacesSearchResult | null>(null);
-const profile = ref("bike");
+const { defaultProfile } = useSession();
+const profile = ref<string>(defaultProfile.value);
 const startDate = ref(tomorrow());
 const earliestStart = ref("08:00");
 const latestArrival = ref("18:00");
@@ -143,11 +142,7 @@ const timesValid = computed(
     () => TIME.test(earliestStart.value) && TIME.test(latestArrival.value) && latestArrival.value > earliestStart.value,
 );
 
-const profileOptions = [
-    { label: "Velo", value: "bike", icon: symSharpPedalBike },
-    { label: "E-Bike", value: "ebike", icon: symSharpElectricBike },
-    { label: "S-Pedelec", value: "fast_ebike", icon: symSharpElectricMoped },
-];
+const profileOptions = BIKE_PROFILE_OPTIONS;
 const limitOptions = [
     { label: "km", value: "distance" },
     { label: "Stunden", value: "time" },
@@ -253,6 +248,9 @@ function onClose() {
                     @filter="onFilterStart"
                     @focus="selectInputText"
                 >
+                    <template #append>
+                        <CurrentLocationButton @select="start = $event" />
+                    </template>
                     <template #option="scope">
                         <PlaceSearchItem
                             :feature="scope.opt"
@@ -278,6 +276,9 @@ function onClose() {
                     @filter="onFilterDest"
                     @focus="selectInputText"
                 >
+                    <template #append>
+                        <CurrentLocationButton @select="dest = $event" />
+                    </template>
                     <template #option="scope">
                         <PlaceSearchItem
                             :feature="scope.opt"

@@ -1,0 +1,12 @@
+{% autoescape off %}Hallo
+
+Dein Anmeldecode für {{ current_site.name }}:
+
+{{ code }}
+
+Gib ihn im Fenster ein, in dem du ihn angefordert hast.
+
+Warst du das nicht? Dann kannst du diese E-Mail ignorieren.
+
+{{ current_site.name }} · {{ current_site.domain }}
+{% endautoescape %}

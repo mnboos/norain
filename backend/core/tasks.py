@@ -11,6 +11,7 @@ from functools import partial
 from time import monotonic
 
 from asgiref.sync import async_to_sync, sync_to_async
+from django.contrib.auth.hashers import UNUSABLE_PASSWORD_PREFIX
 from django.db import transaction
 from django.db.models import F
 from loguru import logger
@@ -43,6 +44,7 @@ from core.models import (
     JourneyStage,
     ProcessedStripeEvent,
     RecurringRoute,
+    User,
     route_line,
 )
 from core.pois import pois_along_sync
@@ -836,6 +838,34 @@ def _purge_expired_jobs() -> int:
     return ForecastJob.objects.filter(updated_at__lt=cutoff).delete()[0]
 
 
+# An unverified sign-up is kept this long: well past the code's 15 minutes, so a user who
+# comes back the next day can still get in by emailed code.
+ABANDONED_SIGNUP_RETENTION = timedelta(days=7)
+
+
+def _purge_abandoned_signups() -> int:
+    """Drop step-1 accounts whose address was never verified.
+
+    Every sign-up creates a user before the mailbox is proven, so without this the table
+    fills with typos and strangers' addresses. Only accounts exactly as step 1 left them:
+    no verified address, no usable password (an account made by hand in the admin has
+    one), sign-up not completed, not staff.
+    """
+    cutoff = datetime.now(tz=UTC) - ABANDONED_SIGNUP_RETENTION
+    abandoned = (
+        User.objects.filter(
+            created_at__lt=cutoff,
+            signup_completed=False,
+            is_staff=False,
+            is_superuser=False,
+            password__startswith=UNUSABLE_PASSWORD_PREFIX,
+        )
+        .exclude(emailaddress__verified=True)
+        .values_list("pk", flat=True)
+    )
+    return User.objects.filter(pk__in=list(abandoned)).delete()[1].get(User._meta.label, 0)
+
+
 @task()
 def refresh_upcoming_forecasts() -> dict:
     """Fan the pre-warm pass out to one scan task per eligible route, then run maintenance.
@@ -973,11 +1003,12 @@ async def _refresh_upcoming_forecasts_async() -> dict:
     if jobs_purged:
         await notify_system("jobs")
     stations_purged = await sync_to_async(purge_station_data)()
+    signups_purged = await sync_to_async(_purge_abandoned_signups)()
 
     logger.info(
         f"refresh_upcoming_forecasts: {scanned} route scans enqueued, {prebuilds} pre-builds enqueued, "
         f"{purged} stripe events purged, {jobs_purged} forecast jobs purged, "
-        f"{stations_purged} station rows purged"
+        f"{stations_purged} station rows purged, {signups_purged} abandoned sign-ups purged"
     )
     return {
         "routes": scanned,
@@ -985,6 +1016,7 @@ async def _refresh_upcoming_forecasts_async() -> dict:
         "stripe_events_purged": purged,
         "forecast_jobs_purged": jobs_purged,
         "station_rows_purged": stations_purged,
+        "signups_purged": signups_purged,
     }
 
 

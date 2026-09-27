@@ -9,13 +9,34 @@ describe("session identity compatibility", () => {
 
     it.each([
         {
-            payload: { id: "42", email: "rider@example.test", username: "rider", signup_complete: false },
-            user: { id: "42", email: "rider@example.test", username: "rider", signupComplete: false },
+            payload: {
+                id: "42",
+                email: "rider@example.test",
+                username: "rider",
+                signup_complete: false,
+                has_password: false,
+                default_profile: "ebike",
+            },
+            user: {
+                id: "42",
+                email: "rider@example.test",
+                username: "rider",
+                signupComplete: false,
+                hasPassword: false,
+                defaultProfile: "ebike",
+            },
         },
-        // An older backend has no second sign-up step, so its accounts count as complete.
+        // An older backend has no second sign-up step, so its accounts count as complete;
+        // they all have a password and ride the plain bike profile.
         {
             payload: { email: "rider@example.test", username: "rider" },
-            user: { email: "rider@example.test", username: "rider", signupComplete: true },
+            user: {
+                email: "rider@example.test",
+                username: "rider",
+                signupComplete: true,
+                hasPassword: true,
+                defaultProfile: "bike",
+            },
         },
     ])("accepts current and older user payloads: %j", async ({ payload, user }) => {
         vi.stubGlobal(

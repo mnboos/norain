@@ -27,7 +27,7 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     public_routes.py the public view of a route: privacy zones, public_geometry
     photos.py        upload re-encoding (no EXIF/GPS); signals.py deletes the files with the row
     auth/            backend.py (session_auth), adapter.py (allauth rules), signals.py,
-                     views.py (session + sign-up step 2), lockout.py
+                     views.py (session, sign-up step 2, profile), lockout.py
     entitlements.py  every tier limit, in one place
     thumbnails.py    route-list glyph: path simplification + cache-only weather
     ride_quality.py  ride-quality curves + RIDE_QUALITY config (secret; scored on read)
@@ -73,26 +73,47 @@ user permits duplicate and blank emails (`unique=False, blank=True`) and its `us
 index is case-sensitive, so "one account per email address, however capitalised" cannot be
 expressed there — and you cannot add constraints to a model the project does not own. The
 model also overrides `email` to `blank=False` (an account with no email could never verify
-itself or reset its password) and adds `signup_completed`.
+itself or reset its password) and adds `signup_completed` and `default_profile` (the bike
+profile the route, journey and map forms start with; `useSession().defaultProfile`).
 
 **Sign-up, sign-in, verification and password reset are django-allauth, headless.** allauth
 serves JSON under `/api/allauth/browser/v1/`; the Vue app draws every form
 (`components/account/SignInForms.vue`). Our own endpoints are only `/api/auth/session`
-(the session as the app needs it, plus the CSRF cookie) and `/api/auth/complete-signup`.
-Sign-up has two steps:
+(the session as the app needs it, plus the CSRF cookie), `/api/auth/complete-signup`,
+`/api/auth/username-available` (step 2's live check, signed-in only, limited per account)
+and `/api/auth/profile` (changes `default_profile`). Sign-up has two steps:
 
-1. The form takes only the email. allauth creates the user with a generated username and
-   no usable password, and mails `/account?verify_key=…`. A known address gets the same
-   reply (allauth mails its owner instead), so the form reveals nothing.
-2. Opened in the same browser, the link signs the user in. Opened anywhere else, allauth
-   only verifies the address and does **not** sign in (on purpose, see
-   `login_on_verification`), so sign-in by emailed code (`ACCOUNT_LOGIN_BY_CODE_ENABLED`)
-   is the way back in. The signed-in user then picks username and password in
-   `complete_signup_view`. `User.signup_completed` marks that, and the router keeps the
-   user on `/account` until it is true. That guard is the UI's only: the API does not
-   check `signup_completed` (the email is verified and every tier limit applies, so there is
-   nothing to protect), so don't describe it as a server-side rule. It is a separate flag, not "has a usable password":
-   a password reset sets a password without the user ever picking a username.
+1. The form takes only the email. allauth creates the user with a placeholder username
+   (`fahrer-<hex>`, `AccountAdapter.populate_username`: never the email's local part,
+   because usernames are public) and no usable password, and mails a **code**
+   (`ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED`), never a link. The user types it into the
+   same tab, which verifies the address and signs in, whichever device read the mail. The
+   pending verification lives in the session: the code is useless in another browser
+   (409), 3 wrong codes end it, and two resends are allowed at least 10 s apart (allauth
+   answers 429 before that, and to a second sign-up of one address within 10 s). A known
+   address gets the same reply (allauth mails its owner a pointer to sign-in by code
+   instead), so the form reveals nothing. When the pending verification is gone, sign-in
+   by emailed code (`ACCOUNT_LOGIN_BY_CODE_ENABLED`) is the way in; it verifies the address too.
+2. The signed-in user picks a username (the form suggests the email's local part, which
+   only the owner sees there), the default bike profile and, **optionally**, a password in
+   `complete_signup_view`. Without a password the account signs in by emailed code, and
+   "Passwort vergessen?" sets one later. `User.signup_completed` marks step 2 done, and
+   the router keeps the user on `/account` until it is true. That guard is the UI's only:
+   the API does not check `signup_completed` (the email is verified and every tier limit
+   applies, so there is nothing to protect), so don't describe it as a server-side rule. It
+   is a separate flag, not "has a usable password": a password is optional, and a password
+   reset sets one without the user ever picking a username.
+
+The mails of this flow (sign-up code, "account exists", sign-in code) are German templates
+in `core/templates/account/email/`, which win over allauth's because `core` comes first in
+`INSTALLED_APPS`; the others are still allauth's English ones. Mails get `frontend_url` in
+their context (`AccountAdapter.send_mail`).
+
+Every step 1 makes a `User` before the mailbox is proven, so the hourly pass
+(`refresh_upcoming_forecasts`) runs `_purge_abandoned_signups`: accounts older than
+`ABANDONED_SIGNUP_RETENTION` (7 days) with no verified address, no usable password, sign-up
+not completed and not staff. The password condition is what spares an account made by hand
+in the admin before `verify_user` ran — keep it.
 
 Whether an email is verified lives only in allauth's `EmailAddress`. `create_superuser`
 adds a verified one, so a superuser can sign in to the app at once; an account made by hand
@@ -130,6 +151,16 @@ purpose: a code proves the mailbox, and guessing one is capped by allauth (3 tri
 code, `request_login_code` 3 a minute per address). A test pins this. The IP comes only from `X-Real-IP`, which Caddy sets from `{client_ip}`
 (`core/auth/lockout.py`); daphne has no proxy headers and `X-Forwarded-For` differs between
 the two Caddyfiles. The lockout reply is JSON because the SPA's `request()` parses every body.
+
+**Caddy rate-limits the auth endpoints in front of all that** (`deploy/auth-ratelimit.caddy`,
+imported by both Caddyfiles; the image builds Caddy with the `caddy-ratelimit` plugin, which
+needs `order rate_limit before basic_auth`). Per `{client_ip}`: password sign-in (app and
+admin), sign-up, the mail-sending calls and code/key checks. Per user (the `sessionid` cookie)
+*and* per IP: the username check and the step-2/profile saves. These are floods stopped before
+Django, not a replacement for axes or allauth's per-address limits, which still decide the
+normal cases; counters live in Caddy's memory. A 429 is answered as JSON with `detail`, like
+the axes lockout. A new auth endpoint that sends mail, checks a secret or answers "is this
+taken" belongs in that file. The development server has no Caddy, so none of this applies there.
 
 **Migration ordering.** `core.User` is created in `0002`, not `0001`, because `0001` was
 already released. Django resolves `swappable_dependency(AUTH_USER_MODEL)` to

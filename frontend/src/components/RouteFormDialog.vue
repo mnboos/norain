@@ -2,22 +2,20 @@
 import { GeometrySource } from "@norain/api/models";
 import { computed, ref, watch, type Ref } from "vue";
 import { QSelect } from "quasar";
-import {
-    symSharpElectricBike,
-    symSharpElectricMoped,
-    symSharpPedalBike,
-    symSharpSchedule,
-} from "@quasar/extras/material-symbols-sharp";
+import { symSharpSchedule } from "@quasar/extras/material-symbols-sharp";
 import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import RouteEditorDialog from "@/components/RouteEditorDialog.vue";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
+import CurrentLocationButton from "@/components/CurrentLocationButton.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import type { PlacesSearchResult, RecurringRouteIn } from "@norain/api/models";
 import { usePlaceSearch } from "@/queries/places";
 import GpxImportDialog from "./GpxImportDialog.vue";
 import RouteTimingFields from "./RouteTimingFields.vue";
 import { routePlace, type RouteDraft } from "@/services/gpx";
+import { useSession } from "@/composables/useSession";
+import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
 import type { LonLat } from "@/utils/routeEditing";
 
 const props = defineProps<{
@@ -30,11 +28,12 @@ const emit = defineEmits<{
     save: [data: RecurringRouteIn];
 }>();
 
+const { defaultProfile } = useSession();
 const name = ref("");
 const description = ref("");
 const start = ref<PlacesSearchResult | null>(null);
 const dest = ref<PlacesSearchResult | null>(null);
-const profile = ref("bike");
+const profile = ref<string>(defaultProfile.value);
 // Kept when start or destination changes: the user resets them in the editor if they no longer fit.
 const viaPoints = ref<LonLat[]>([]);
 const editing = ref(false);
@@ -50,7 +49,7 @@ function applyImport(draft: RouteDraft) {
     name.value = draft.plan.name ?? "Importierte Strecke";
     start.value = routePlace(first, "Start");
     dest.value = routePlace(last, "Ziel");
-    profile.value = draft.plan.profile ?? "bike";
+    profile.value = draft.plan.profile ?? defaultProfile.value;
     viaPoints.value = draft.plan.geometrySource === GeometrySource.Graphhopper ? points.slice(1, -1).map(p => [p[0] ?? 0, p[1] ?? 0]) : [];
     importedDuration.value = draft.plan.durationSeconds ?? draft.preview.timeS;
 }
@@ -136,11 +135,7 @@ const scheduleCron = computed(() => {
     return `${m} ${h} * * ${days.value.join(",")}`;
 });
 
-const profileOptions = [
-    { label: "Velo", value: "bike", icon: symSharpPedalBike },
-    { label: "E-Bike", value: "ebike", icon: symSharpElectricBike },
-    { label: "S-Pedelec", value: "fast_ebike", icon: symSharpElectricMoped },
-];
+const profileOptions = BIKE_PROFILE_OPTIONS;
 
 const isValid = computed(
     () => (!exact.value || (importedDuration.value > 0 && importedDuration.value <= 1382400)) && !!name.value.length && !!start.value && !!dest.value && !!days.value.length && !!parsedTime.value && (!twoWay.value || returnValid.value),
@@ -220,6 +215,9 @@ function onClose() {
                     @filter="onFilterStart"
                     @focus="selectInputText"
                 >
+                    <template #append>
+                        <CurrentLocationButton :disable="exact" @select="start = $event" />
+                    </template>
                     <template #option="scope">
                         <PlaceSearchItem
                             :feature="scope.opt"
@@ -247,6 +245,9 @@ function onClose() {
                     @filter="onFilterDest"
                     @focus="selectInputText"
                 >
+                    <template #append>
+                        <CurrentLocationButton :disable="exact" @select="dest = $event" />
+                    </template>
                     <template #option="scope">
                         <PlaceSearchItem
                             :feature="scope.opt"

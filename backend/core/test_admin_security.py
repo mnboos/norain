@@ -17,7 +17,7 @@ from django_otp.plugins.otp_static.models import StaticToken
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from core.models import User
-from core.test_signup import TEST_SETTINGS, login_code, verified_user
+from core.test_signup import TEST_SETTINGS, mailed_code, verified_user
 
 PASSWORD = "Correct horse battery staple 2026!"
 ADMIN = f"/{settings.ADMIN_PATH}/"
@@ -95,7 +95,7 @@ class LoginLockoutTests(TestCase):
             self.post("/api/allauth/browser/v1/auth/code/request", {"email": "rider@example.test"}).status_code, 401
         )
         self.assertEqual(
-            self.post("/api/allauth/browser/v1/auth/code/confirm", {"code": login_code()}).status_code, 200
+            self.post("/api/allauth/browser/v1/auth/code/confirm", {"code": mailed_code()}).status_code, 200
         )
 
     def test_allauth_does_not_lock_one_identity_out_before_axes(self):

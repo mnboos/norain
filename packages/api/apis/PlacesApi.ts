@@ -19,6 +19,17 @@ import {
     PlacesSearchResultToJSON,
 } from '../models/PlacesSearchResult';
 
+export interface PlacesApiCoreApiPlacesReverseRequest {
+    /**
+     * 
+     */
+    lat: number;
+    /**
+     * 
+     */
+    lon: number;
+}
+
 export interface PlacesApiCoreApiPlacesSearchRequest {
     /**
      * 
@@ -42,6 +53,67 @@ export interface PlacesApiCoreApiPlacesSearchRequest {
  * 
  */
 export class PlacesApi extends runtime.BaseAPI {
+
+    /**
+     * Creates request options for coreApiPlacesReverse without sending the request
+     */
+    async coreApiPlacesReverseRequestOpts(requestParameters: PlacesApiCoreApiPlacesReverseRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['lat'] == null) {
+            throw new runtime.RequiredError(
+                'lat',
+                'Required parameter "lat" was null or undefined when calling coreApiPlacesReverse().'
+            );
+        }
+
+        if (requestParameters['lon'] == null) {
+            throw new runtime.RequiredError(
+                'lon',
+                'Required parameter "lon" was null or undefined when calling coreApiPlacesReverse().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        if (requestParameters['lat'] != null) {
+            queryParameters['lat'] = requestParameters['lat'];
+        }
+
+        if (requestParameters['lon'] != null) {
+            queryParameters['lon'] = requestParameters['lon'];
+        }
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/api/reverse`;
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * The place at a point, for \"current location\": a name to show and save instead of coordinates.
+     * Reverse
+     */
+    async coreApiPlacesReverseRaw(requestParameters: PlacesApiCoreApiPlacesReverseRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<PlacesSearchResult>> {
+        const requestOptions = await this.coreApiPlacesReverseRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => PlacesSearchResultFromJSON(jsonValue));
+    }
+
+    /**
+     * The place at a point, for \"current location\": a name to show and save instead of coordinates.
+     * Reverse
+     */
+    async coreApiPlacesReverse(requestParameters: PlacesApiCoreApiPlacesReverseRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<PlacesSearchResult> {
+        const response = await this.coreApiPlacesReverseRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
 
     /**
      * Creates request options for coreApiPlacesSearch without sending the request
