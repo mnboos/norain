@@ -148,6 +148,16 @@ code, `request_login_code` 3 a minute per address). A test pins this. The IP com
 (`core/auth/lockout.py`); daphne has no proxy headers and `X-Forwarded-For` differs between
 the two Caddyfiles. The lockout reply is JSON because the SPA's `request()` parses every body.
 
+**Caddy rate-limits the auth endpoints in front of all that** (`deploy/auth-ratelimit.caddy`,
+imported by both Caddyfiles; the image builds Caddy with the `caddy-ratelimit` plugin, which
+needs `order rate_limit before basic_auth`). Per `{client_ip}`: password sign-in (app and
+admin), sign-up, the mail-sending calls and code/key checks. Per user (the `sessionid` cookie)
+*and* per IP: the username check and the step-2/profile saves. These are floods stopped before
+Django, not a replacement for axes or allauth's per-address limits, which still decide the
+normal cases; counters live in Caddy's memory. A 429 is answered as JSON with `detail`, like
+the axes lockout. A new auth endpoint that sends mail, checks a secret or answers "is this
+taken" belongs in that file. The development server has no Caddy, so none of this applies there.
+
 **Migration ordering.** `core.User` is created in `0002`, not `0001`, because `0001` was
 already released. Django resolves `swappable_dependency(AUTH_USER_MODEL)` to
 `("core", "__first__")`, which would schedule `admin.0001_initial` before the user model

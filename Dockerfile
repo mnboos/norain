@@ -31,9 +31,17 @@ RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN npm run build
 RUN find dist -name '*.map' -print -delete
 
 
+# Caddy with the rate-limit plugin (deploy/auth-ratelimit.caddy). The plugin's last tag
+# (v0.1.0) is from 2024, so a master commit is pinned.
+FROM docker.io/library/caddy:2.10-builder-alpine AS caddy-build
+RUN xcaddy build --with github.com/mholt/caddy-ratelimit@5625512f24f6
+
+
 FROM docker.io/library/caddy:2.10-alpine AS frontend
 
+COPY --from=caddy-build /usr/bin/caddy /usr/bin/caddy
 COPY deploy/Caddyfile /etc/caddy/Caddyfile
+COPY deploy/auth-ratelimit.caddy /etc/caddy/auth-ratelimit.caddy
 COPY --from=frontend-build /app/frontend/dist /srv
 
 

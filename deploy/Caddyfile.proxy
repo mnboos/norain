@@ -4,7 +4,11 @@
         trusted_proxies static private_ranges
         trusted_proxies_strict
     }
+    # rate_limit is a plugin directive (caddy-ratelimit); Caddy needs to know where it runs.
+    order rate_limit before basic_auth
 }
+
+import /etc/caddy/auth-ratelimit.caddy
 
 :80 {
     encode zstd gzip
@@ -22,6 +26,9 @@
         root * /app/static
         file_server
     }
+
+    # Per-IP and per-user limits on the sign-in and account endpoints (auth-ratelimit.caddy).
+    import auth_rate_limits
 
     @backend path /healthz /api/* /{$DJANGO_ADMIN_PATH}/* /accounts/* /ws/*
     handle @backend {
