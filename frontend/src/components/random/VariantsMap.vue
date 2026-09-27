@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, useTemplateRef, watch } from "vue";
 import { useQuasar } from "quasar";
-import { GeoJSONSource, LngLatBounds, Map, config } from "maplibre-gl";
+import { GeoJSONSource, LngLatBounds, Map, Marker, Popup, config } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import styleUrl from "@/assets/map-styles/positron.json?url";
+import { type MapPoi, poiCategory, poiName } from "@/utils/poiCategories";
 import { alternativeColor } from "@/utils/rideQuality";
 
-/** A random ride's variants side by side, each in its own colour; the picked ones drawn bold. */
-const props = defineProps<{ paths: number[][][]; picked: boolean[] }>();
+/**
+ * A random ride's variants side by side, each in its own colour; the picked ones drawn bold.
+ * `pois` are the variants' stops: a `planned` one in its category colour, the others faded.
+ */
+const props = defineProps<{ paths: number[][][]; picked: boolean[]; pois?: MapPoi[] }>();
 const emit = defineEmits<{ toggle: [index: number] }>();
 
 const $q = useQuasar();
@@ -69,6 +73,7 @@ onMounted(() => {
     map.on("load", () => {
         loaded = true;
         draw(true);
+        drawPois();
     });
     // Tapping a line picks or unpicks its variant; the list beside the map does the same.
     map.on("click", event => {
@@ -90,7 +95,43 @@ watch(
     },
     { deep: true },
 );
-onBeforeUnmount(() => map?.remove());
+let poiMarkers: Marker[] = [];
+function poiLabel(poi: MapPoi): string {
+    return `${poiCategory(poi.category).emoji} ${poiName(poi)}${poi.note ? ` · ${poi.note}` : ""}`;
+}
+function drawPois() {
+    poiMarkers.forEach(marker => marker.remove());
+    poiMarkers = [];
+    if (!map) return;
+    for (const poi of props.pois ?? []) {
+        const element = document.createElement("div");
+        element.className = "wx-poi";
+        element.tabIndex = 0;
+        element.setAttribute("role", "img");
+        element.setAttribute("aria-label", poiLabel(poi));
+        element.style.background = poiCategory(poi.category).color;
+        element.style.opacity = poi.planned ? "1" : "0.45";
+        element.textContent = poiCategory(poi.category).emoji;
+        // The popup opens on the marker's own click; the map must not also toggle a variant.
+        element.addEventListener("click", event => {
+            event.stopPropagation();
+        });
+        const popup = new Popup({ offset: 16 }).setText(poiLabel(poi));
+        poiMarkers.push(new Marker({ element }).setLngLat([poi.lon, poi.lat]).setPopup(popup).addTo(map));
+    }
+}
+watch(
+    () => props.pois,
+    () => {
+        drawPois();
+    },
+    { deep: true },
+);
+
+onBeforeUnmount(() => {
+    poiMarkers.forEach(marker => marker.remove());
+    map?.remove();
+});
 </script>
 
 <template>

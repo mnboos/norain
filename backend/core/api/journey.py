@@ -25,6 +25,7 @@ from ..geo import simplify_line, vertex_distances
 from ..journeys import FILL_CORRIDOR_M, LODGING_CORRIDOR_M, LODGING_WINDOW, lodging_candidates, rank_day
 from ..models import ForecastJob, Journey, JourneyDay, JourneyStage, route_point
 from ..pois import LODGING_KINDS, POI_CATEGORIES, pois_along_sync
+from ..public_routes import ascent_m
 from ..random_rides import RandomPrefs, new_seed
 from ..schedule import LOCAL_TZ, forecast_available_at
 from ..schemas import CamelSchema
@@ -185,6 +186,7 @@ class JourneyStageOut(CamelSchema):
     limit_overruns: LimitOverrunsOut = Field(default_factory=LimitOverrunsOut)
     detours: list[PoiOut] = Field(default_factory=list)
     detour_m: float = 0
+    ascent_m: float | None = Field(default=None, description="Total climb of the line, metres")
     # The forecast, started or joined when the journey is read; None outside the forecast window.
     forecast_job_id: UUID | None = None
     forecast_status: str | None = None
@@ -489,6 +491,7 @@ async def get_journey(request: HttpRequest, journey_id: UUID):
                     limit_overruns=LimitOverrunsOut(**stage.limit_overruns),
                     detours=[PoiOut(**d) for d in stage.detours],
                     detour_m=stage.detour_m,
+                    ascent_m=ascent_m(stage.vertex_elevations),
                     forecast_job_id=job.id if job else None,
                     forecast_status=job.status if job else None,
                     departure_time=job.params.get("departure_time") if job else None,

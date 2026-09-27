@@ -583,3 +583,12 @@ class PickVariantsApiTests(TestCase):
         with patch("core.api.journey.plan_journey", SimpleNamespace(aenqueue=AsyncMock())):
             plus = self.client.post("/api/journeys", body, content_type="application/json").json()
         self.assertTrue(plus["random_prefs"]["consider_weather"])
+
+    def test_each_variant_says_how_much_it_climbs(self):
+        stage = self.stages[0]
+        heights = [400.0 + (i % 20) * 5 for i in range(len(stage.polyline_coordinates))]
+        JourneyStage.objects.filter(id=stage.id).update(vertex_elevations=heights)
+        with patch("core.api.journey.start_forecast_job", AsyncMock()):
+            stages = self.client.get(f"/api/journeys/{self.ride.id}").json()["days"][0]["stages"]
+        self.assertGreater(stages[0]["ascent_m"], 0)
+        self.assertEqual(stages[1]["ascent_m"], 0, "a flat line climbs nothing")

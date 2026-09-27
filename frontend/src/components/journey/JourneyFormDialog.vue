@@ -160,6 +160,7 @@ const surfaceOptions = [
 const climbingOptions = [
     { label: "Egal", value: Climbing.Neutral },
     { label: "Steigungen meiden", value: Climbing.Avoid },
+    { label: "Hügelig bevorzugen", value: Climbing.Hilly },
 ];
 const trafficOptions = [
     { label: "Egal", value: Traffic.Neutral },

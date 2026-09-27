@@ -241,11 +241,18 @@ class PoiImportTests(TestCase):
 class RoadPrefsTests(SimpleTestCase):
     def test_every_combination_is_penalty_only(self):
         for surface in ("any", "avoid_unpaved", "paved_only"):
-            for climbing in ("neutral", "avoid"):
+            for climbing in ("neutral", "avoid", "hilly"):
                 for traffic in ("neutral", "avoid_main", "avoid_off_network"):
                     for towns in ("neutral", "avoid"):
                         model = road_prefs_model(RoadPrefs(surface, climbing, traffic, towns))
                         self.assertTrue(is_penalty_only(model), model)
+
+    def test_flat_and_hilly_penalise_the_opposite(self):
+        flat = road_prefs_model(RoadPrefs(climbing="avoid"))["priority"]
+        hilly = road_prefs_model(RoadPrefs(climbing="hilly"))["priority"]
+        self.assertIn("average_slope > 6", flat[0]["if"], "flat: climbs cost more")
+        self.assertIn("average_slope < 2 && average_slope > -2", hilly[0]["if"], "hilly: the flat costs more")
+        self.assertLess(float(hilly[0]["multiply_by"]), float(hilly[1]["multiply_by"]), "the flatter, the dearer")
 
     def test_no_preferences_no_model(self):
         self.assertEqual(road_prefs_model(RoadPrefs()), {})

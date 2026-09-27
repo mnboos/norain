@@ -102,6 +102,10 @@ export interface JourneyStageOut {
      */
     detourM?: number;
     /**
+     * Total climb of the line, metres
+     */
+    ascentM?: number | null;
+    /**
      * 
      */
     forecastJobId?: string | null;
@@ -170,6 +174,7 @@ export function JourneyStageOutFromJSONTyped(json: any, ignoreDiscriminator: boo
         'limitOverruns': json['limit_overruns'] == null ? undefined : LimitOverrunsOutFromJSON(json['limit_overruns']),
         'detours': json['detours'] == null ? undefined : ((json['detours'] as Array<any>).map(PoiOutFromJSON)),
         'detourM': json['detour_m'] == null ? undefined : json['detour_m'],
+        'ascentM': json['ascent_m'] === undefined ? undefined : json['ascent_m'] === null ? null : json['ascent_m'],
         'forecastJobId': json['forecast_job_id'] === undefined ? undefined : json['forecast_job_id'] === null ? null : json['forecast_job_id'],
         'forecastStatus': json['forecast_status'] === undefined ? undefined : json['forecast_status'] === null ? null : json['forecast_status'],
         'departureTime': json['departure_time'] === undefined ? undefined : json['departure_time'] === null ? null : json['departure_time'],
@@ -205,6 +210,7 @@ export function JourneyStageOutToJSONTyped(value?: JourneyStageOut | null, ignor
         'limit_overruns': LimitOverrunsOutToJSON(value['limitOverruns']),
         'detours': value['detours'] == null ? undefined : ((value['detours'] as Array<any>).map(PoiOutToJSON)),
         'detour_m': value['detourM'],
+        'ascent_m': value['ascentM'],
         'forecast_job_id': value['forecastJobId'],
         'forecast_status': value['forecastStatus'],
         'departure_time': value['departureTime'],

@@ -3,11 +3,13 @@ import { computed, ref, watch } from "vue";
 import { useQuasar } from "quasar";
 import { useRouter } from "vue-router";
 import { symSharpSave } from "@quasar/extras/material-symbols-sharp";
-import type { JourneyOut } from "@norain/api/models";
+import type { JourneyOut, JourneyStageOut } from "@norain/api/models";
+import ElevationChart from "@/components/ElevationChart.vue";
 import VariantsMap from "@/components/random/VariantsMap.vue";
 import { useSaveVariantsAsRoutes } from "@/queries/journeys";
 import { isQuotaExceeded } from "@/services/http";
 import { duration, km } from "@/utils/journeys";
+import { type MapPoi, poiCategory } from "@/utils/poiCategories";
 import { alternativeColor } from "@/utils/rideQuality";
 import { WEEKDAY_LABELS, cronWeekday, weeklyCron, weeklyDescription } from "@/utils/weeklySchedule";
 
@@ -32,6 +34,59 @@ watch(
     { immediate: true },
 );
 const pickedIds = computed(() => stages.value.filter((_, i) => picked.value[i]).map(stage => stage.id));
+
+// All variants' profiles in one chart, in the map's colours: the first picked one (else the
+// first variant) drawn as the main line, the others beside it.
+const mainIndex = computed(() => Math.max(0, picked.value.indexOf(true)));
+const mainProfile = computed(() => {
+    const stage = stages.value[mainIndex.value];
+    return stage
+        ? {
+              stageId: stage.id,
+              color: alternativeColor(mainIndex.value, $q.dark.isActive),
+              label: `Variante ${mainIndex.value + 1}`,
+          }
+        : null;
+});
+const otherProfiles = computed(() =>
+    stages.value.flatMap((stage, index) =>
+        index === mainIndex.value
+            ? []
+            : [{ stageId: stage.id, color: alternativeColor(index, $q.dark.isActive), label: `Variante ${index + 1}` }],
+    ),
+);
+
+// The stops the planner routed each variant through, for the categories the rider asked for.
+function stops(stage: JourneyStageOut) {
+    return [...(stage.breaks ?? []).flatMap(b => b.pois ?? []), ...(stage.detours ?? [])];
+}
+const pois = computed<MapPoi[]>(() => {
+    const anyPicked = picked.value.includes(true);
+    const all = stages.value.flatMap((stage, index) =>
+        stops(stage).map(poi => ({
+            osmRef: poi.osmRef,
+            lon: poi.lon,
+            lat: poi.lat,
+            category: poi.category,
+            name: poi.name,
+            planned: !anyPicked || picked.value[index] === true,
+            note: `Variante ${index + 1}`,
+        })),
+    );
+    // One marker per OSM object, a picked variant's first.
+    const seen = new Set<string>();
+    return [...all.filter(p => p.planned), ...all.filter(p => !p.planned)].filter(
+        p => !seen.has(p.osmRef) && seen.add(p.osmRef),
+    );
+});
+const wanted = computed(() => props.ride.poiCategories);
+function stopSummary(stage: JourneyStageOut): { visited: string[]; missing: string[] } {
+    const visited = new Set(stops(stage).map(poi => poi.category));
+    return {
+        visited: wanted.value.filter(category => visited.has(category)),
+        missing: wanted.value.filter(category => !visited.has(category)),
+    };
+}
 
 function toggle(index: number) {
     picked.value = picked.value.map((value, i) => (i === index ? !value : value));
@@ -93,7 +148,17 @@ async function onSave() {
 <template>
     <div class="row q-col-gutter-md" data-testid="variant-picker">
         <div class="col-12 col-md-7">
-            <VariantsMap :paths="paths" :picked="picked" @toggle="toggle" />
+            <VariantsMap :paths="paths" :picked="picked" :pois="pois" @toggle="toggle" />
+            <ElevationChart
+                v-if="mainProfile"
+                class="q-mt-md"
+                :stage-id="mainProfile.stageId"
+                :color="mainProfile.color"
+                :label="mainProfile.label"
+                :alternatives="otherProfiles"
+                compact
+                data-testid="variant-elevation"
+            />
         </div>
         <div class="col-12 col-md-5 q-gutter-md">
             <div>
@@ -118,7 +183,28 @@ async function onSave() {
                         </q-item-label>
                         <q-item-label caption>
                             {{ km(stage.distanceM) }} · {{ duration(stage.totalSeconds) }}
+                            <template v-if="stage.ascentM != null">· {{ stage.ascentM }} m ↑</template>
                             <template v-if="stage.breaks?.length">· {{ stage.breaks.length }} Stopps</template>
+                        </q-item-label>
+                        <q-item-label v-if="wanted.length" caption data-testid="variant-stops">
+                            <span
+                                v-for="category in stopSummary(stage).visited"
+                                :key="category"
+                                :title="poiCategory(category).label"
+                                :aria-label="poiCategory(category).label"
+                                role="img"
+                                class="q-mr-xs"
+                            >
+                                {{ poiCategory(category).emoji }}
+                            </span>
+                            <span v-if="stopSummary(stage).missing.length" class="text-warning">
+                                fehlt:
+                                {{
+                                    stopSummary(stage)
+                                        .missing.map(c => poiCategory(c).label)
+                                        .join(", ")
+                                }}
+                            </span>
                         </q-item-label>
                     </q-item-section>
                 </q-item>

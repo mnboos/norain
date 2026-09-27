@@ -1161,22 +1161,7 @@ body.body--dark .maplibregl-popup-anchor-right .maplibregl-popup-tip {
     cursor: pointer;
 }
 
-/* A planned stop. Every marker is a sibling in maplibre's canvas container, so the z-index
-   lifts it over the weather chips; popups go above both. */
-.wx-poi {
-    z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    box-sizing: border-box;
-    border: 2.5px solid #fff;
-    border-radius: 50%;
-    box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
-    font: 16px/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-    cursor: pointer;
-}
+/* .wx-poi (a planned stop) is in assets/main.css: the random-ride variants map draws it too. */
 .maplibregl-popup {
     z-index: 2;
 }

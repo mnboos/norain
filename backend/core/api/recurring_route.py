@@ -338,7 +338,7 @@ class RoadPrefsIn(CamelSchema):
     """Journey road preferences (``core.road_prefs.RoadPrefs``); every one is a penalty."""
 
     surface: Literal["any", "avoid_unpaved", "paved_only"] = "any"
-    climbing: Literal["neutral", "avoid"] = "neutral"
+    climbing: Literal["neutral", "avoid", "hilly"] = "neutral"
     traffic: Literal["neutral", "avoid_main", "avoid_off_network"] = "neutral"
     towns: Literal["neutral", "avoid"] = "neutral"
 

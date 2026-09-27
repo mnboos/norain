@@ -158,9 +158,11 @@ const surfaceOptions = [
     { label: "Wenig Naturbelag", value: Surface.AvoidUnpaved },
     { label: "Nur asphaltiert", value: Surface.PavedOnly },
 ];
-const climbingOptions = [
+// The terrain is the first thing to know about a ride out; it sits beside the profile.
+const terrainOptions = [
+    { label: "Flach", value: Climbing.Avoid },
     { label: "Egal", value: Climbing.Neutral },
-    { label: "Steigungen meiden", value: Climbing.Avoid },
+    { label: "Hügelig", value: Climbing.Hilly },
 ];
 const trafficOptions = [
     { label: "Egal", value: Traffic.Neutral },
@@ -318,6 +320,26 @@ function onClose() {
                 </div>
 
                 <div>
+                    <div class="text-caption q-mb-sm">Gelände</div>
+                    <q-btn-toggle
+                        v-model="climbing"
+                        :options="terrainOptions"
+                        toggle-color="primary"
+                        spread
+                        no-caps
+                        size="sm"
+                        aria-label="Gelände"
+                    />
+                    <div class="text-caption text-muted q-mt-xs">
+                        <template v-if="climbing === Climbing.Avoid">Möglichst wenig Steigungen.</template>
+                        <template v-else-if="climbing === Climbing.Hilly">
+                            Lieber auf und ab, so hügelig die Gegend es hergibt.
+                        </template>
+                        <template v-else>Das Gelände spielt keine Rolle.</template>
+                    </div>
+                </div>
+
+                <div>
                     <div class="row items-center justify-between">
                         <div class="text-caption">Länge</div>
                         <q-btn-toggle
@@ -431,16 +453,6 @@ function onClose() {
                             emit-value
                             map-options
                             label="Belag"
-                            outlined
-                            dense
-                        />
-                        <q-select
-                            v-model="climbing"
-                            class="col-12 col-sm-6"
-                            :options="climbingOptions"
-                            emit-value
-                            map-options
-                            label="Steigungen"
                             outlined
                             dense
                         />

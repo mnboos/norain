@@ -27,3 +27,25 @@ a,
     margin-inline: auto;
     overflow: hidden;
 }
+
+/* A planned stop on a map (NiceMap, the random-ride VariantsMap). Every marker is a sibling in
+   maplibre's canvas container, so the z-index lifts it over the weather chips; popups go above
+   both. */
+.wx-poi {
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    box-sizing: border-box;
+    border: 2.5px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+    font:
+        16px/1 "Apple Color Emoji",
+        "Segoe UI Emoji",
+        "Noto Color Emoji",
+        sans-serif;
+    cursor: pointer;
+}

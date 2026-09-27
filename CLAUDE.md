@@ -638,7 +638,8 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   Postgres jsonb arrives as text on a raw cursor (Django's loader): parse it.
 - **Request custom models only penalise** (`multiply_by` ≤ 1). GraphHopper runs LM without CH,
   and LM is only correct for a model that makes edges more expensive. "Prefer the cycle
-  network" is therefore `avoid_off_network`. Every GraphHopper request still goes through
+  network" is therefore `avoid_off_network`, and "prefer it hilly" (`climbing="hilly"`, the
+  random-ride form's "Gelände") makes the flat dearer in both directions instead of climbs cheaper. Every GraphHopper request still goes through
   `weather._route_body`; `_route` keeps a request without a model at `(profile, points)`.
 - **POIs steer the route by via points, not by the custom model.** "Water once per leg" is a
   rule about the whole path and GraphHopper weighs edges. Every chosen POI (lodging, gap fix,
@@ -728,7 +729,10 @@ the journey page. It has two modes:
 
 - **Picking (every tier, the default).** `PICK_VARIANTS` (3) variants, no forecast at all:
   `get_journey` starts no stage job and the stage forecast endpoint answers 409. The page shows
-  `RandomVariantPicker`; each variant the rider ticks is saved with
+  `RandomVariantPicker`: the variants on a map (`VariantsMap`) with the stops the planner routed
+  them through for the wanted POI categories (and which each one misses), their elevation
+  profiles in one chart (`ElevationChart` with the stages as alternatives, stored heights, no
+  routing) and each one's climb (`JourneyStageOut.ascent_m`). Each variant the rider ticks is saved with
   `POST /journeys/{id}/stages/{stage_id}/route` as an imported route on the variant's exact line
   (heights included, the stage's riding time as its duration) with a weekly schedule prefilled
   from the ride's day and departure. That goes through `create_route`, so the route quota (402)
