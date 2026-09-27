@@ -568,7 +568,9 @@ and every eta still come from GraphHopper. Changing the via points in `update_ro
 geometry and enqueues `refresh_route_geometry`, like a changed start or profile. The new
 `geometry_fetched_at` is in the job params (`start_forecast_job`), so no old forecast is reused.
 The return journey gets the via points reversed, set in `_save_return` like its swapped
-endpoints. To edit it, the user reshapes the outbound route; the UI offers no editor on a
+endpoints. It always rides on the outbound days (a restriction on purpose): only minute and hour
+come from its own schedule (`_on_outbound_days`), in `_save_return` and in `update_route` on a
+return route alike, so a change to the outbound days carries over. To edit it, the user reshapes the outbound route; the UI offers no editor on a
 return route.
 
 The editor (`components/RouteEditorDialog.vue`) draws its line from `POST /api/routes/preview`,

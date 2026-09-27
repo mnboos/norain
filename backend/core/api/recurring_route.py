@@ -457,6 +457,10 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
     )
     for field, value in values.items():
         setattr(route, field, value)
+    if route.return_of_id:
+        outbound = await RecurringRoute.objects.aget(pk=route.return_of_id)
+        route.schedule_cron = _on_outbound_days(data.schedule_cron, outbound)
+        route.schedule_description = _return_description(route.schedule_cron, outbound, data.schedule_description)
     route.start_point = route_point(data.start_lat, data.start_lon)
     route.destination_point = route_point(data.dest_lat, data.dest_lon)
     if needs_geometry:
@@ -602,6 +606,23 @@ def _save_with_quota(user, route, return_schedule_cron=None, return_schedule_des
         _save_return(route, return_schedule_cron, return_schedule_description)
 
 
+def _on_outbound_days(cron, outbound):
+    """The return journey's cron: its own time, the outbound journey's days.
+
+    A return journey rides on the same days as its outbound journey -- a restriction on
+    purpose, so only minute and hour are ever taken from the return schedule.
+    """
+    return " ".join(cron.split()[:2] + outbound.schedule_cron.split()[2:])
+
+
+def _return_description(cron, outbound, fallback):
+    minute, hour = (int(field) if field.isdigit() else None for field in cron.split()[:2])
+    days, sep, _ = outbound.schedule_description.rpartition(" um ")
+    if not sep or minute is None or hour is None:
+        return fallback or cron
+    return f"{days} um {hour:02d}:{minute:02d}"
+
+
 def _save_return(route, cron, description):
     if route.return_of_id:
         if cron:
@@ -615,6 +636,8 @@ def _save_return(route, cron, description):
             returning.delete()
         route._state.fields_cache["return_journey"] = None
         return
+    cron = _on_outbound_days(cron or returning.schedule_cron, route)
+    description = _return_description(cron, route, description or (returning.schedule_description if returning else ""))
     values = {
         "owner": route.owner,
         "name": f"{route.name[:188]} – Rückfahrt",
@@ -628,8 +651,8 @@ def _save_return(route, cron, description):
         "imported_coordinates": list(reversed(route.imported_coordinates or [])),
         "duration_seconds": route.duration_seconds,
         "profile": route.profile,
-        "schedule_cron": cron or returning.schedule_cron,
-        "schedule_description": description or (returning.schedule_description if returning else cron),
+        "schedule_cron": cron,
+        "schedule_description": description,
         "active": route.active,
         "briefing_channel": route.briefing_channel,
         "departure_flex_before_minutes": route.departure_flex_before_minutes,
