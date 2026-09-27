@@ -8,7 +8,6 @@ import {
     symSharpCloudOff,
     symSharpPedalBike,
     symSharpEditRoad,
-    symSharpShare,
     symSharpDownload,
     symSharpPublic,
     symSharpShare,
