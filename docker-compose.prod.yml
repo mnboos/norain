@@ -66,6 +66,8 @@ services:
     volumes:
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/caddy/data:/data
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/caddy/config:/config
+      # Cloudflare Origin CA certificate: origin.pem + origin.key (deploy/Caddyfile).
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/caddy/certs:/etc/caddy/certs:ro
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/django/static:/app/static:ro
     networks:
       - edge

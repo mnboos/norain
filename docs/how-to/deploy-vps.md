@@ -6,10 +6,15 @@ for immutable images, and Restic for encrypted database backups.
 
 ## Requirements
 
-Use a domain whose A/AAAA records point to the VPS, and the same for its `www.` name:
-Caddy redirects `www.` to `DOMAIN` permanently (so `DJANGO_ALLOWED_HOSTS` and the other
-origin settings name `DOMAIN` only), and it needs the record to get that name's
-certificate. Open only SSH, HTTP (80), and
+The site sits behind Cloudflare. Point the domain's A/AAAA records and its `www.` name at
+the VPS, both **proxied**, with SSL/TLS mode **Full (strict)**. Caddy redirects `www.` to
+`DOMAIN` permanently (so `DJANGO_ALLOWED_HOSTS` and the other origin settings name `DOMAIN`
+only). It serves a Cloudflare Origin CA certificate for both names instead of getting its own:
+create one under SSL/TLS → Origin Server for `DOMAIN` and `*.DOMAIN`, and save it as
+`$APP_STORAGE_PATH/caddy/certs/origin.pem` and `origin.key` (mode 600). Caddy takes the
+rider's IP from `CF-Connecting-IP`, trusting only Cloudflare's published ranges, which are
+listed in `deploy/Caddyfile`: update them there when https://www.cloudflare.com/ips/ changes.
+Open only SSH, HTTP (80), and
 HTTPS (443) in the VPS firewall. Install Docker Engine, the Docker Compose plugin,
 Git, and Restic. Create a non-root `norain` deployment user in the `docker` group,
 then clone this repository at `/srv/norain`.
