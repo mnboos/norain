@@ -19,6 +19,7 @@ import WindDistributionBar from "@/components/WindDistributionBar.vue";
 import ForecastDetails from "@/components/ForecastDetails.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
+import CurrentLocationButton from "@/components/CurrentLocationButton.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import { QSelect, useQuasar } from "quasar";
 import { useQuery } from "@tanstack/vue-query";
@@ -273,6 +274,9 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             @filter="onFilterStart"
                             @focus="selectInputText"
                         >
+                            <template #append>
+                                <CurrentLocationButton :disable="exact" @select="abfahrtsort = $event" />
+                            </template>
                             <template #option="props">
                                 <PlaceSearchItem
                                     :feature="props.opt"
@@ -301,6 +305,9 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             @filter="onFilterDest"
                             @focus="selectInputText"
                         >
+                            <template #append>
+                                <CurrentLocationButton :disable="exact" @select="zielort = $event" />
+                            </template>
                             <template #option="props">
                                 <PlaceSearchItem
                                     :feature="props.opt"
