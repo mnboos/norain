@@ -2017,6 +2017,10 @@ class ForecastJobTests(TestCase):
         self.assertIsNone(job.computed_weather)
         # The frontend draws the charts from the samples; the result carries no figures.
         self.assertNotIn("figures", job.result)
+        # Only the winning assembly asks for the list glyph, now that the route's cells are warm.
+        thumbnails = DBTaskResult.objects.filter(task_path="core.tasks.refresh_route_thumbnail")
+        self.assertEqual(thumbnails.count(), 1)
+        self.assertEqual(thumbnails.get().args_kwargs["args"], [str(self.route.id)])
 
     def test_stale_computation_cannot_overwrite_or_fail_the_next_stage(self):
         from django_tasks_db.models import DBTaskResult

@@ -776,6 +776,15 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
         await publish(job)
         telemetry.completed(job, "success")
         logger.info(f"Forecast job {job.id} done ({len(forecast.samples)} samples)")
+        if job.kind == ForecastJob.Kind.ROUTE:
+            # The cells this job needed are warm now. The background scan only covers briefing
+            # routes departing within four hours, so for every other route this is the one
+            # moment the list's glyph can be scored; without it the list says "Noch keine
+            # Prognose" right after the forecast was shown. Cache-only, spends no provider call.
+            try:
+                await refresh_route_thumbnail.aenqueue(str(params["route_id"]))
+            except Exception:
+                logger.exception(f"Forecast job {job.id}: could not enqueue the route thumbnail refresh")
 
 
 async def start_forecast_job(kind: str, owner, params: dict, *, min_remaining: timedelta = timedelta(0)) -> ForecastJob:
