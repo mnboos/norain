@@ -3,7 +3,8 @@ import { computed, defineAsyncComponent, ref } from "vue";
 import { useQueries, useQuery } from "@tanstack/vue-query";
 import { ElevationApi, PublicRoutesApi } from "@norain/api/apis";
 import type { ElevationOut } from "@norain/api/models";
-import { elevationFigure, type ElevationSeries } from "@/utils/elevation";
+import { ELEVATION_PRIMARY_GROUP, elevationFigure, type ElevationSeries } from "@/utils/elevation";
+import { interpolate } from "@/utils/forecastSelection";
 
 const NiceChart = defineAsyncComponent(() => import("./chart/NiceChart.vue"));
 const props = defineProps<{
@@ -21,7 +22,10 @@ const props = defineProps<{
     alternatives?: { stageId: string; color: string; label: string }[];
     /** Compact card sizing for side-by-side journey charts. */
     compact?: boolean;
+    /** The selected route position, a share (0..1) of the route's distance. */
+    position?: number;
 }>();
+const emit = defineEmits<{ selectPosition: [position: number] }>();
 const api = new ElevationApi();
 const publicApi = new PublicRoutesApi();
 const axis = ref<"distance" | "time">("distance");
@@ -111,6 +115,33 @@ function retryFailed() {
 const sources = computed(() => [...new Set(profiles.value.map(p => p.data.source))].join(" · "));
 const approximateTiming = computed(() => profiles.value.some(p => p.data.approximateTiming));
 const partialHeights = computed(() => profiles.value.some(p => p.data.points.some(point => point.elevationM == null)));
+// The position is a share of the distance; the axis is km or minutes of this route's own profile.
+const primaryPoints = computed(() => (usable(query.data.value) ? (query.data.value?.points ?? []) : []));
+const distances = computed(() => primaryPoints.value.map(p => p.distanceM));
+const totalDistance = computed(() => distances.value[distances.value.length - 1] ?? 0);
+const cursorX = computed(() => {
+    if (props.position === undefined || !(totalDistance.value > 0)) return undefined;
+    const distance = props.position * totalDistance.value;
+    if (axis.value === "distance") return distance / 1000;
+    const elapsed = interpolate(
+        distance,
+        distances.value,
+        primaryPoints.value.map(p => p.elapsedS),
+    );
+    return elapsed === undefined ? undefined : elapsed / 60;
+});
+function selectX(x: number) {
+    if (!(totalDistance.value > 0)) return;
+    const distance =
+        axis.value === "distance"
+            ? x * 1000
+            : interpolate(
+                  x * 60,
+                  primaryPoints.value.map(p => p.elapsedS),
+                  distances.value,
+              );
+    if (distance !== undefined) emit("selectPosition", Math.max(0, Math.min(1, distance / totalDistance.value)));
+}
 const figure = computed(() => {
     const series: ElevationSeries[] = profiles.value.map(p => ({ ...p, points: p.data.points }));
     return elevationFigure(series, axis.value);
@@ -137,9 +168,12 @@ const figure = computed(() => {
             v-if="hasData"
             :figure="figure"
             keep-line-widths
+            :cursor-x="cursorX"
+            :cursor-group="ELEVATION_PRIMARY_GROUP"
             :x-unit="axis === 'distance' ? 'km' : 'min'"
             :class="{ 'compact-elevation-plot': compact }"
             :style="compact ? undefined : { height: '260px' }"
+            @cursor="selectX"
         />
         <q-skeleton
             v-else-if="pending"

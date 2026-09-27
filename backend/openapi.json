@@ -6644,12 +6644,17 @@
                             }
                         ],
                         "title": "Next Offset"
+                    },
+                    "stall_timeout_seconds": {
+                        "title": "Stall Timeout Seconds",
+                        "type": "integer"
                     }
                 },
                 "required": [
                     "items",
                     "total",
-                    "next_offset"
+                    "next_offset",
+                    "stall_timeout_seconds"
                 ],
                 "title": "SystemJobsPage",
                 "type": "object"

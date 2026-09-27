@@ -7,7 +7,6 @@ headless API under /api/allauth/. Only what allauth has no endpoint for lives he
 import json
 
 from allauth.account.adapter import get_adapter
-from django.contrib import admin
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser
@@ -20,6 +19,7 @@ from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
 from core import telemetry
+from core.auth.admin_access import has_system_access
 from core.models import User
 
 
@@ -52,7 +52,7 @@ def session_view(request: HttpRequest) -> HttpResponse:
     payload = _account_payload(request.user)
     if request.user.is_authenticated and request.user.is_active and request.user.is_staff:
         payload["system"] = {
-            "allowed": admin.site.has_permission(request),
+            "allowed": has_system_access(request.user, request.session),
             "login_url": reverse("admin:login") + "?next=/system",
         }
     return JsonResponse(payload)

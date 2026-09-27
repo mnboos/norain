@@ -50,6 +50,7 @@ from core.road_prefs import RoadPrefs, merge_models, road_prefs_model
 from core.schedule import LOCAL_TZ, forecast_available_at, local_today, next_departure, upcoming_departures
 from core.sections import compute_sections
 from core.stations import api_key, purge_station_data, refresh_stations_for_ride, ride_in_window
+from core.system_events import notify_system
 from core.thumbnails import compute_route_thumbnail
 from core.tracing import traced_task as task
 from core.weather import (  # reuse existing functions
@@ -112,6 +113,7 @@ async def _refresh_route_geometry_async(route_id: str, *, backfill_only: bool = 
         return
 
     logger.info(f"Route geometry stored for {route.name} ({len(sample_points)} sample points)")
+    await notify_system("routes")
 
     # Give the new shape a thumbnail straight away. Scores stay grey until the cells warm.
     await refresh_route_thumbnail.aenqueue(str(route.id))
@@ -962,6 +964,8 @@ async def _refresh_upcoming_forecasts_async() -> dict:
     # grow forever.
     purged = await sync_to_async(_purge_processed_events)()
     jobs_purged = await sync_to_async(_purge_expired_jobs)()
+    if jobs_purged:
+        await notify_system("jobs")
     stations_purged = await sync_to_async(purge_station_data)()
 
     logger.info(
@@ -1346,7 +1350,9 @@ async def _plan_journey_routes_async(journey_id: str, revision: int) -> None:
         raise
     finally:
         _log_journey_routing(journey_id, budget, began)
+    # Committed by the time it returns, so a dashboard refetching on the notice sees it.
     await sync_to_async(_store_journey_plan)(journey_id, revision, planned)
+    await notify_system("journeys")
 
 
 async def _weather_model(journey: Journey, day: dict, road_model: dict | None) -> dict | None:

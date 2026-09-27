@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cacheFreshness, systemGeoJson, coverageGeoJson } from "../systemOverview";
+import { cacheFreshness, systemGeoJson, coverageGeoJson, systemQueryAffected, SYSTEM_TOPICS } from "../systemOverview";
 import { SystemCoveragePointForecastEnum, SystemCoveragePointEnsembleEnum } from "@norain/api/models";
 
 describe("system overview", () => {
@@ -61,5 +61,21 @@ describe("system overview", () => {
         ];
         expect(coverageGeoJson(points, "forecast").features[0]?.properties?.status).toBe("usable");
         expect(coverageGeoJson(points, "ensemble").features[0]?.properties?.status).toBe("missing");
+    });
+});
+
+describe("system change notices", () => {
+    it("refetch only the panels that read what changed", () => {
+        const map = (layer: string) => ["system", "map", { layer, bbox: "7,46,9,48" }];
+        expect(systemQueryAffected(["jobs"], ["system", "jobs", 0])).toBe(true);
+        expect(systemQueryAffected(["jobs"], ["system", "summary"])).toBe(false);
+        expect(systemQueryAffected(["jobs"], map("cells"))).toBe(false);
+        expect(systemQueryAffected(["cells"], map("cells"))).toBe(true);
+        expect(systemQueryAffected(["cells"], map("routes"))).toBe(false);
+        expect(systemQueryAffected(["cells"], ["system", "history", 47, 8, 0])).toBe(true);
+        expect(systemQueryAffected(["routes"], ["system", "history", 47, 8, 0])).toBe(false);
+        expect(systemQueryAffected(["journeys"], ["system", "coverage", "stage", "x"])).toBe(true);
+        expect(systemQueryAffected(["routes", "journeys"], map("journeys"))).toBe(true);
+        expect(systemQueryAffected([...SYSTEM_TOPICS], ["routes", "list"])).toBe(false);
     });
 });

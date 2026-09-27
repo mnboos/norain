@@ -6,6 +6,7 @@
 </route>
 
 <script setup lang="ts">
+import { useRoutePosition } from "@/composables/useRoutePosition";
 import ElevationChart from "@/components/ElevationChart.vue";
 import { GeometrySource } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
@@ -193,10 +194,7 @@ watch(
     { deep: true, flush: "sync" },
 );
 
-const selectedSample = ref(0);
-watch(routeWeather, () => {
-    selectedSample.value = 0;
-});
+const { position, selectedSample, selectSample, selectPosition } = useRoutePosition(() => routeWeather.value);
 
 function makeOnFilter(filter: ReturnType<typeof ref<string>>) {
     return (val: string, doneFn: (cb: () => void, after?: (ref: QSelect) => void) => void) => {
@@ -235,8 +233,8 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
             :preview-line="previewQuery.data.value?.coordinates"
             :abfahrtsort="abfahrtsort"
             :zielort="zielort"
-            :selected-sample="selectedSample"
-            @select-sample="selectedSample = $event"
+            :position="position"
+            @select-position="selectPosition"
             @map-view="onMapView"
         >
             <template #search>
@@ -339,7 +337,10 @@ v-if="!exact"
 v-if="previewQuery.data.value"
                             :coordinates="previewQuery.data.value.coordinates"
                             :total-seconds="previewQuery.data.value.timeS"
-                            :vertex-times="previewQuery.data.value.vertexTimes" />
+                            :vertex-times="previewQuery.data.value.vertexTimes"
+                            :position="position"
+                            @select-position="selectPosition"
+                        />
                         <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
 
                         <q-btn-toggle
@@ -379,7 +380,11 @@ v-if="previewQuery.data.value"
                                 <div class="text-subtitle2">Wind entlang der Strecke</div>
                                 <WindDistributionBar :distribution="routeWeather.summary.windDistribution" />
                             </template>
-                            <ForecastDetails v-model:selected-sample="selectedSample" :forecast="routeWeather" />
+                            <ForecastDetails
+                                :selected-sample="selectedSample"
+                                :forecast="routeWeather"
+                                @update:selected-sample="selectSample"
+                            />
                         </template>
 
                         <div v-else-if="!ready" class="text-caption text-muted">
