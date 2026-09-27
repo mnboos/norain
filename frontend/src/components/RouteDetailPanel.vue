@@ -8,6 +8,7 @@ import {
     symSharpCloudOff,
     symSharpPedalBike,
     symSharpEditRoad,
+    symSharpShare,
     symSharpDownload,
     symSharpPublic,
     symSharpShare,
@@ -25,7 +26,7 @@ import NiceMap from "@/components/NiceMap.vue";
 import RouteEditorDialog from "@/components/RouteEditorDialog.vue";
 import RouteTimingFields from "@/components/RouteTimingFields.vue";
 import RouteShareDialog from "@/components/sharing/RouteShareDialog.vue";
-import { gpxApi, downloadGpx, gpxError } from "@/services/gpx";
+import { canShareFiles, gpxApi, shareGpx, gpxError } from "@/services/gpx";
 import { toLonLat, type LonLat } from "@/utils/routeEditing";
 import { useRecurringRoute, useRecurringRouteForecast, useUpdateRecurringRoute } from "@/queries/recurringRoutes";
 
@@ -117,6 +118,7 @@ function saveFlexibility() {
 // Reshaping is done on the outbound route; the server mirrors its via points onto the return.
 const editing = ref(false);
 const exporting = ref(false);
+const sharing = canShareFiles();
 const duration = ref(route.value.durationSeconds ?? 0);
 watch(
     () => route.value.durationSeconds,
@@ -128,7 +130,7 @@ async function exportRoute() {
     exporting.value = true;
     try {
         const response = await gpxApi.coreApiGpxExportSavedGpxRaw({ routeId: route.value.id });
-        await downloadGpx(response.raw, route.value.name);
+        await shareGpx(response.raw, route.value.name);
     } catch (e) {
         $q.notify({ type: "negative", message: await gpxError(e) });
     } finally {
@@ -225,8 +227,8 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                             flat
                             dense
                             no-caps
-                            :icon="symSharpDownload"
-                            label="GPX exportieren"
+                            :icon="sharing ? symSharpShare : symSharpDownload"
+                            :label="sharing ? 'GPX teilen' : 'GPX herunterladen'"
                             :disable="!hasGeometry && route.geometrySource !== 'imported'"
                             :loading="exporting"
                             @click="exportRoute"

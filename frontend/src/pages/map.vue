@@ -25,10 +25,10 @@ import { useQuery } from "@tanstack/vue-query";
 import GpxImportDialog from "@/components/GpxImportDialog.vue";
 import RouteTimingFields from "@/components/RouteTimingFields.vue";
 import RouteFormDialog from "@/components/RouteFormDialog.vue";
-import { gpxApi, gpxError, exportDraft, routePlace, savedRoutePlan, routingProfile, type RouteDraft } from "@/services/gpx";
+import { canShareFiles, gpxApi, gpxError, exportDraft, routePlace, savedRoutePlan, routingProfile, type RouteDraft } from "@/services/gpx";
 import type { RoutePlanIn, RecurringRouteIn } from "@norain/api/models";
 import { computed, ref, watchEffect, watch } from "vue";
-import { symSharpElectricBike, symSharpElectricMoped, symSharpPedalBike } from "@quasar/extras/material-symbols-sharp";
+import { symSharpElectricBike, symSharpElectricMoped, symSharpPedalBike, symSharpShare, symSharpDownload } from "@quasar/extras/material-symbols-sharp";
 import type { PlacesSearchResult } from "@norain/api/models";
 import { useRoute, useRouter } from "vue-router";
 import { usePlaceSearch } from "@/queries/places";
@@ -44,6 +44,7 @@ const draft = ref<RouteDraft | null>(null);
 const duration = ref(0);
 const viaPoints = ref<number[][]>([]);
 const exporting = ref(false);
+const sharing = canShareFiles();
 const createRoute = useCreateRecurringRoute();
 const exact = computed(() => draft.value?.plan.geometrySource === GeometrySource.Imported);
 const { isPro } = useEntitlements();
@@ -245,7 +246,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                     <q-card class="q-pa-md q-mt-md q-gutter-y-sm">
                         <div class="row q-gutter-xs">
                             <q-btn flat no-caps label="GPX importieren" @click="importing = true" />
-                            <q-btn flat no-caps label="GPX exportieren" :disable="!currentDraft" :loading="exporting" @click="exportRoute" />
+                            <q-btn flat no-caps :icon="sharing ? symSharpShare : symSharpDownload" :label="sharing ? 'GPX teilen' : 'GPX herunterladen'" :disable="!currentDraft" :loading="exporting" @click="exportRoute" />
                             <q-btn flat no-caps label="Route speichern" :disable="!currentDraft" @click="saveDraft" />
                         </div>
                         <template v-if="draft">
