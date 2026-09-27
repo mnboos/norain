@@ -537,7 +537,15 @@ class Journey(models.Model):
     how the road should be. ``plan_journey`` turns that into days (ending at lodging) and, per
     day, alternative stages. Their weather is ordinary forecast jobs (``JOURNEY_STAGE``), and
     the ranking is computed when the journey is read, never stored.
+
+    A ``RANDOM`` journey is a random ride (core/random_rides.py): one day whose stages are
+    generated candidates of a given length, a loop when ``random_prefs["round_trip"]`` (then
+    the destination is the start).
     """
+
+    class Kind(models.TextChoices):
+        TOUR = "tour", "Tour"
+        RANDOM = "random", "Random ride"
 
     class PlanStatus(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -549,6 +557,10 @@ class Journey(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="journeys")
     name = models.CharField(max_length=200)
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.TOUR)
+    random_prefs = models.JSONField(
+        default=dict, blank=True, help_text="Random rides only: round_trip, heading, seed (core.random_rides)"
+    )
 
     start_point = models.PointField(srid=4326, geography=True)
     start_name = models.CharField(max_length=300)

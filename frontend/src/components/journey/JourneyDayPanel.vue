@@ -182,7 +182,9 @@ function breakEta(elapsedS: number): string {
         <div class="journey-overview" :class="{ 'has-forecast': forecast }">
             <q-card class="q-pa-sm" data-testid="journey-selector">
                 <div class="row items-center q-gutter-x-sm q-mb-sm">
-                    <span class="text-subtitle2">Tag {{ day.index + 1 }} · {{ dayLabel(day.date) }}</span>
+                    <span class="text-subtitle2">
+                        {{ journey.kind === "random" ? "" : `Tag ${day.index + 1} · ` }}{{ dayLabel(day.date) }}
+                    </span>
                     <span v-if="day.weatherRouted" class="text-caption text-muted">Um Regen und Gegenwind geplant</span>
                 </div>
                 <div v-if="stages.length > 1" class="variant-grid" role="group" aria-label="Route wählen">
@@ -301,8 +303,14 @@ function breakEta(elapsedS: number): string {
             </q-card>
             <q-banner v-else-if="!day.forecastAvailable" rounded class="bg-tint-neutral">
                 <template #avatar><q-icon :name="symSharpCloudOff" class="text-muted" /></template>
-                Für diesen Tag gibt es noch keine Vorhersage. Plane die Reise näher am Termin neu, dann richtet NoRain
-                Strecke und Abfahrt nach dem Wetter.
+                <template v-if="journey.kind === 'random'">
+                    Für diesen Tag gibt es noch keine Vorhersage. Würfle die Runde näher am Termin neu, dann empfiehlt
+                    NoRain die Strecke mit dem besten Wetter.
+                </template>
+                <template v-else>
+                    Für diesen Tag gibt es noch keine Vorhersage. Plane die Reise näher am Termin neu, dann richtet
+                    NoRain Strecke und Abfahrt nach dem Wetter.
+                </template>
             </q-banner>
             <q-banner v-else-if="forecastQuery.error.value" rounded class="bg-tint-error">
                 Wetterdaten konnten nicht geladen werden.

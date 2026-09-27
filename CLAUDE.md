@@ -34,9 +34,10 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     journeys.py      journey constants, lodging filter, ranking on read
     journey_planner.py  routed insertions: gap fixes, breaks, lodging (RoutingBudget)
     journey_geometry.py measured lines: Limits, LineMeasure, check_limits, gaps
+    random_rides.py  random rides: candidate generation (loop / long way round) and sizing
     pois.py          POI categories (POI_RULES) + corridor query pois_along_sync
     road_prefs.py    road preferences -> penalty-only GraphHopper custom model
-    weather_routing.py  rain/headwind zones -> custom-model areas
+    weather_routing.py  corridor cells by the hour -> the `weather` field GraphHopper routes around
     schedule.py      croniter-based next_departure / forecast_available_at
     tasks.py         every heavy operation: geometry, cells, job planning/assembly, scans
     sections.py      route sectioning by weather condition
@@ -171,7 +172,16 @@ exists and fail with "Related model 'core.user' cannot be resolved" — so `0002
 
 Every limit lives in `core/entitlements.py`: free = 2 active routes, no ensemble
 spread and no station correction; journeys: free = 1 journey, 1 alternative per day and no
-weather-aware routing (enforced in `create_journey` and `plan_journey`). The route and forecast
+weather-aware routing (enforced in `create_journey` and `plan_journey`).
+
+**Riding around bad weather is the rider's choice and a Plus feature** (`weather_routing`), for
+journeys and random rides alike. `weather_prefs.avoid_rain` / `avoid_headwind` are off unless
+the rider switches them on (`WeatherPrefsIn` defaults, and `prefs.get(..., False)` for rows
+without them). `_values` in `api/journey.py` stores them off for an account without Plus, so an
+upgrade never starts routing around weather nobody chose. `_wants_weather_routing` checks the
+tier and the choice again at planning time, so a downgrade stops it on the next plan. The
+entitlements payload carries `weatherRouting`; the SPA's `WeatherRoutingChoice` shows the
+switches locked for free accounts. The route and forecast
 limits are enforced at **three** places, and a limit is only real if all three hold:
 
 1. `create_route` / `update_route` (`api/recurring_route.py`) — the route count, 402 when full.
@@ -659,7 +669,8 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   Postgres jsonb arrives as text on a raw cursor (Django's loader): parse it.
 - **Request custom models only penalise** (`multiply_by` ≤ 1). GraphHopper runs LM without CH,
   and LM is only correct for a model that makes edges more expensive. "Prefer the cycle
-  network" is therefore `avoid_off_network`. Every GraphHopper request still goes through
+  network" is therefore `avoid_off_network`, and "prefer it hilly" (`climbing="hilly"`, the
+  random-ride form's "Gelände") makes the flat dearer in both directions instead of climbs cheaper. Every GraphHopper request still goes through
   `weather._route_body`; `_route` keeps a request without a model at `(profile, points)`.
 - **POIs steer the route by via points, not by the custom model.** "Water once per leg" is a
   rule about the whole path and GraphHopper weighs edges. Every chosen POI (lodging, gap fix,
@@ -697,11 +708,13 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   vias still ahead. A day with a via gets one path: alternatives take two points only.
 - **Alternatives are per day.** `alternative_route` takes two points only and exceeds the
   2 M node cap beyond ~130 km, so a failure falls back to one path.
-- **Weather-aware routing** (Pro, days within `WEATHER_ROUTING_DAYS`): rain zones as request
-  `areas`, headwind as `in_<zone> && orientation …` (`urban_density` and `orientation` were
-  added to `graph.encoded_values`). Corridor cells are ordinary `ForecastCell`s on a 0.05°
-  lattice fetched by `refresh_forecast_cell`; `plan_journey_routes` re-defers until they are
-  warm (bounded), then reads `cache_only`. The multipliers are `ride_quality.ROUTING_*`.
+- **Weather-aware routing** (Pro, days within `WEATHER_ROUTING_DAYS`) is GraphHopper's own,
+  see "Weather routing in GraphHopper" below: the day's corridor cells by the hour go with the
+  request as a `weather` field (`weather_routing.weather_field`). Corridor cells are ordinary
+  `ForecastCell`s on a 0.05° lattice fetched by `refresh_forecast_cell`; `plan_journey_routes`
+  re-defers until they are warm (bounded), then reads `cache_only`. A weather day's first stage
+  is the way around the weather, then GraphHopper's plain alternatives to compare it with
+  (`alternative_route` cannot route by time); a refused weather request routes plainly.
 - **Stage weather is a normal forecast job** (`ForecastJob.Kind.JOURNEY_STAGE`, geometry from
   the stage row, ownership checked in `plan_forecast_job`, never station calls). Reading a
   journey starts or joins its stage jobs; the departure window reuses the departure
@@ -709,6 +722,80 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   and reasons only, never the weights.
 - **Revisions.** Every edit or re-plan bumps `plan_revision`; a planning task writes only
   while its revision is current, and replaces the days in one transaction.
+
+### Weather routing in GraphHopper
+
+The Dockerfile patches GraphHopper (`docker/graphhopper/weather/`, installed by a `grep`-guarded
+`sed` in `GraphHopper.doCreateRouter`, like the elevation patch): `WeatherRouter` solves a request
+that carries a `weather` hint with `WeatherAStar`, a time-dependent forward A*, and every other
+request exactly as before. An edge costs its weight times the weather where the rider is halfway
+along it, *when* they are there: rain by the cell and headwind along the edge's own bearing,
+interpolated in space and time. Rules that hold this together:
+
+- **GraphHopper never fetches weather.** The backend builds the field from the cache
+  (`weather_routing.weather_field`) and sends it with each request, so the provider budget and
+  the fetch lease stay in one place. A null is a cell without data and counts as no weather.
+- **The judgement stays in Python.** The field carries weight multipliers (`rain_curve`,
+  `headwind_table`, both from `ride_quality.ROUTING_*`), never the raw curves; Java only
+  interpolates. Every multiplier is ≥ 1, which keeps the landmark lower bound valid, so the A*
+  still uses LM. CH can never serve it: weather changes by the hour.
+- **Time runs forward, leg by leg.** A bidirectional search cannot know when it arrives, so a
+  weather request with `alternative_route` is refused (400). Via and round-trip legs start at the
+  departure plus the riding time of the legs before (`LegClockPathCalculator`). The riding times
+  in the reply stay the profile's: weather changes the choice of road, never the eta.
+- **Weather requests are uncached** (`weather._route`): the field is large and asked for once.
+  `JourneyPlanner.route` sends it only for a whole-day request; local POI insertions and the
+  separate-leg fallback route without it, because the field's clock starts at the departure.
+- `WeatherAStarTest` runs in the Docker build before packaging, and the smoke test checks that
+  a dry field changes nothing and that `alternative_route` is refused.
+
+### Random rides
+
+The third mode, next to commute routes and journeys: the user gives a start, loop or not (then a
+destination), a length (riding time or distance), a profile, an optional direction and a date,
+and NoRain generates the ride (`core/random_rides.py`). A random ride is a `Journey` with
+`kind="random"` and `random_prefs` (`round_trip`, `heading`, `seed`, `consider_weather`): one
+day whose stages are the generated candidates. The SPA lists them at `/random` and opens them on
+the journey page. It has two modes:
+
+- **Picking (every tier, the default).** `PICK_VARIANTS` (3) variants, no forecast at all:
+  `get_journey` starts no stage job and the stage forecast endpoint answers 409. The page shows
+  `RandomVariantPicker`: the variants on a map (`VariantsMap`) with the stops the planner routed
+  them through for the wanted POI categories (and which each one misses), their elevation
+  profiles in one chart (`ElevationChart` with the stages as alternatives, stored heights, no
+  routing) and each one's climb (`JourneyStageOut.ascent_m`). Each variant the rider ticks is saved with
+  `POST /journeys/{id}/stages/{stage_id}/route` as an imported route on the variant's exact line
+  (heights included, the stage's riding time as its duration) with a weekly schedule prefilled
+  from the ride's day and departure. That goes through `create_route`, so the route quota (402)
+  and the geometry task apply, and the forecast is the route's own from then on.
+- **Considering the weather (Plus, `weather_routing`).** The tier's alternatives, each forecast
+  (`JOURNEY_STAGE` jobs) and ranked on read (`rank_day`), optionally routed around the weather
+  (`weather_prefs`). `_random_prefs` stores `consider_weather` off without Plus, and
+  `RandomPrefs.weather_mode(limits)` checks it again when planning and reading, so a downgraded
+  ride falls back to picking.
+
+Rules that hold this together:
+
+- **Planned in `plan_journey`.** `_plan_random_ride` branches off before the day cutting, with
+  no `plan_journey_routes`. When the rider chose weather routing (Plus, within
+  `WEATHER_ROUTING_DAYS`), it first warms the ride's area (`random_rides.area_cells`: the box
+  around both ends widened by a quarter of the length) and re-enqueues `plan_journey` until the
+  cells are warm, bounded by `MAX_CORRIDOR_ATTEMPTS`; then every candidate routes through the
+  field, and one GraphHopper refuses is routed plainly instead.
+- **A loop is a GraphHopper round trip** (`weather.build_round_trip`, through `_route_body`,
+  uncached): GraphHopper picks the waypoints and avoids riding a road twice. It needs LM or
+  flexible mode, never CH. **Point to point** routes start → one via → destination, the via on an
+  ellipse around both ends sized to the missing length (`detour_via`).
+- **Time means the profile's pace.** The length is the day limit (`max_day_seconds` /
+  `max_day_distance_m`), and a time target is compared with GraphHopper's riding time, the same
+  one every eta uses. `NOMINAL_SPEED_KMH` is only the first guess (and the form's "≈" hint);
+  `size` routes, measures and rescales, at most `MAX_SIZING_ATTEMPTS` times.
+- **Candidates differ by seed and heading** (`headings`, `candidate_seed`), deterministic in the
+  seed: an edit re-plans with the same dice, `POST /journeys/{id}/plan` throws new ones. The seed
+  is the server's; the client never sends it.
+- **Tiers:** picking gives everyone `PICK_VARIANTS`; the weather mode gives as many candidates
+  as `max_journey_alternatives`. Random rides have a count of their own, `max_random_rides`,
+  separate from `max_journeys`. The kind is fixed at creation.
 
 ### Public routes, photos and comments
 

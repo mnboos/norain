@@ -42,7 +42,7 @@ from .tasks import (
     start_forecast_job,
 )
 from .weather import _route_body
-from .weather_routing import corridor_cells, headwind_condition, zone_model
+from .weather_routing import corridor_cells
 
 SCRIPT = Path(settings.BASE_DIR).parent / "docker" / "osm-extract-pois.sh"
 
@@ -241,11 +241,18 @@ class PoiImportTests(TestCase):
 class RoadPrefsTests(SimpleTestCase):
     def test_every_combination_is_penalty_only(self):
         for surface in ("any", "avoid_unpaved", "paved_only"):
-            for climbing in ("neutral", "avoid"):
+            for climbing in ("neutral", "avoid", "hilly"):
                 for traffic in ("neutral", "avoid_main", "avoid_off_network"):
                     for towns in ("neutral", "avoid"):
                         model = road_prefs_model(RoadPrefs(surface, climbing, traffic, towns))
                         self.assertTrue(is_penalty_only(model), model)
+
+    def test_flat_and_hilly_penalise_the_opposite(self):
+        flat = road_prefs_model(RoadPrefs(climbing="avoid"))["priority"]
+        hilly = road_prefs_model(RoadPrefs(climbing="hilly"))["priority"]
+        self.assertIn("average_slope > 6", flat[0]["if"], "flat: climbs cost more")
+        self.assertIn("average_slope < 2 && average_slope > -2", hilly[0]["if"], "hilly: the flat costs more")
+        self.assertLess(float(hilly[0]["multiply_by"]), float(hilly[1]["multiply_by"]), "the flatter, the dearer")
 
     def test_no_preferences_no_model(self):
         self.assertEqual(road_prefs_model(RoadPrefs()), {})
@@ -268,27 +275,111 @@ class RoadPrefsTests(SimpleTestCase):
         self.assertEqual(merged["areas"]["features"], [{"id": "a_0"}])
 
 
-class WeatherZoneTests(SimpleTestCase):
-    def test_headwind_condition_wraps_north(self):
-        self.assertEqual(headwind_condition(0), "(orientation >= 315 || orientation < 45)")
-        self.assertEqual(headwind_condition(2), "(orientation >= 45 && orientation < 135)")
+class WeatherFieldTests(SimpleTestCase):
+    DEPARTURE = datetime(2026, 6, 20, 8, 30, tzinfo=UTC)
 
-    def test_rain_and_wind_become_penalty_zones(self):
-        heavy = {"rain_mm": 2.0, "precipitation_interval_s": 900, "wind_speed": 5, "wind_dir": 0}
-        dry_windy = {"rain_mm": 0.0, "precipitation_interval_s": 900, "wind_speed": 40, "wind_dir": 270}
-        weather = [((47.0, 8.0), heavy), ((47.0, 8.05), heavy), ((47.5, 8.5), dry_windy)]
-        model = zone_model(weather, avoid_rain=True, avoid_headwind=True)
-        self.assertTrue(is_penalty_only(model))
-        conditions = [s.get("if") or s.get("else_if") for s in model["priority"]]
-        self.assertEqual(conditions[0], "in_rain0_0", "two adjacent wet cells are one polygon")
-        self.assertIn("orientation >= 225 && orientation < 315", conditions[1])
-        self.assertEqual(len(model["areas"]["features"]), 2)
+    def test_curves_are_the_routing_zones_and_never_below_one(self):
+        from .ride_quality import ROUTING_RAIN_ZONES, ROUTING_WIND_ZONES
+        from .weather_routing import headwind_table, rain_curve
 
-    def test_nothing_to_avoid(self):
-        calm = {"rain_mm": 0.0, "precipitation_interval_s": 900, "wind_speed": 5, "wind_dir": 0}
-        self.assertEqual(zone_model([((47.0, 8.0), calm)], avoid_rain=True, avoid_headwind=True), {})
+        for impact, priority in ROUTING_RAIN_ZONES:
+            self.assertIn((impact, 1 / priority), rain_curve())
+        for kmh, priority in ROUTING_WIND_ZONES:
+            self.assertIn([kmh, round(1 / priority, 4)], headwind_table())
+        for table in (rain_curve(), headwind_table()):
+            self.assertEqual(list(table[0]), [0.0, 1.0])
+            self.assertEqual([x for x, _ in table], sorted(x for x, _ in table))
+            self.assertTrue(all(y >= 1 for _, y in table), "weather only ever adds cost (LM)")
+
+    def test_rain_multiplier_grows_with_the_rain(self):
+        from .weather_routing import rain_multiplier
+
+        dry = {"rain_mm": 0.0, "precipitation_interval_s": 900}
         wet = {"rain_mm": 3.0, "precipitation_interval_s": 900}
-        self.assertEqual(zone_model([((47.0, 8.0), wet)], avoid_rain=False, avoid_headwind=True), {})
+        self.assertEqual(rain_multiplier(dry), 1.0)
+        self.assertGreater(rain_multiplier(wet), 1.0)
+        self.assertIsNone(rain_multiplier({}))
+
+    def test_wind_vector_points_where_the_wind_blows(self):
+        from .weather_routing import wind_vector
+
+        self.assertEqual(wind_vector({"wind_speed": 20, "wind_dir": 270}), (20.0, -0.0))
+        self.assertEqual(wind_vector({"wind_speed": 20, "wind_dir": 0}), (-0.0, -20.0))
+        self.assertIsNone(wind_vector({"wind_speed": 20}))
+
+    def test_hours_cover_a_slower_ride_and_are_capped(self):
+        from .weather_routing import MAX_HOURS, field_hours
+
+        t0, hours = field_hours(self.DEPARTURE, 2 * 3600)
+        self.assertEqual(t0, datetime(2026, 6, 20, 8, tzinfo=UTC))
+        self.assertEqual(hours, 6, "0.5 h into the hour + 3 h (2 h × 1.5) → 4 slices, + 2 spare")
+        self.assertEqual(field_hours(self.DEPARTURE, 40 * 3600)[1], MAX_HOURS)
+
+    def _field(self, cells, samples, **prefs):
+        from .weather_routing import weather_field
+
+        async def cached(lat, lon, day_key, days):
+            return SimpleNamespace(data=(lat, lon), source="open-meteo") if (lat, lon) in samples else None
+
+        def extract(data, at, source):
+            return samples[data](at)
+
+        with (
+            patch("core.weather_routing.get_cached_forecast_cell", cached),
+            patch("core.weather_routing.extract_sample", extract),
+        ):
+            return async_to_sync(weather_field)(
+                cells, self.DEPARTURE, 1800, "2026-06-20", 2, **{"avoid_rain": True, "avoid_headwind": True, **prefs}
+            )
+
+    def test_field_layout_by_hour_row_and_column(self):
+        wet_later = lambda at: {  # noqa: E731
+            "rain_mm": 3.0 if at.hour >= 9 else 0.0,
+            "precipitation_interval_s": 900,
+            "wind_speed": 20,
+            "wind_dir": 270,
+        }
+        cells = [(47.0, 8.0), (47.0, 8.1), (47.05, 8.0)]  # the third is cold
+        field = self._field(cells, {(47.0, 8.0): wet_later, (47.0, 8.1): wet_later})
+        self.assertEqual((field["rows"], field["cols"], field["hours"]), (2, 3, 4))
+        self.assertEqual((field["lat0"], field["lon0"], field["step"]), (47.0, 8.0, 0.05))
+        self.assertEqual(field["t0"], round(datetime(2026, 6, 20, 8, tzinfo=UTC).timestamp() * 1000))
+        self.assertEqual(field["departure"] - field["t0"], 30 * 60 * 1000)
+        self.assertEqual(field["dt"], 3_600_000)
+
+        def at(name, hour, row, col):
+            return field[name][(hour * 2 + row) * 3 + col]
+
+        self.assertEqual(at("rain", 0, 0, 0), 1.0, "dry at 08:00")
+        self.assertGreater(at("rain", 1, 0, 0), 1.0, "wet from 09:00")
+        self.assertGreater(at("rain", 1, 0, 2), 1.0, "8.1 is two lattice columns east")
+        self.assertIsNone(at("rain", 0, 0, 1), "no cell between them")
+        self.assertIsNone(at("rain", 0, 1, 0), "the cold cell")
+        self.assertEqual((at("wind_u", 0, 0, 0), at("wind_v", 0, 0, 0)), (20.0, -0.0))
+        self.assertEqual(field["headwind"][0], [0.0, 1.0])
+
+    def test_only_what_is_to_be_avoided(self):
+        calm = lambda at: {"rain_mm": 0.0, "precipitation_interval_s": 900, "wind_speed": 5, "wind_dir": 0}  # noqa: E731
+        field = self._field([(47.0, 8.0)], {(47.0, 8.0): calm}, avoid_headwind=False)
+        self.assertIn("rain", field)
+        self.assertNotIn("wind_u", field)
+        self.assertIsNone(self._field([(47.0, 8.0)], {(47.0, 8.0): calm}, avoid_rain=False, avoid_headwind=False))
+        self.assertIsNone(self._field([(47.0, 8.0)], {}), "no warm cell, no field")
+
+    def test_route_body_carries_the_field_and_skips_the_cache(self):
+        from .weather import _route
+
+        field = {"rows": 1}
+        points = ((8.0, 47.0), (8.1, 47.1))
+        self.assertEqual(_route_body("bike", points, weather=field)["weather"], field)
+        self.assertNotIn("weather", _route_body("bike", points))
+        reply = {"paths": [{}]}
+        with (
+            patch("core.weather._post_route", AsyncMock(return_value=reply)) as post,
+            patch("core.weather._fetch_route", AsyncMock(side_effect=AssertionError("cached"))),
+        ):
+            self.assertIs(async_to_sync(_route)("bike", points, weather=field), reply)
+        self.assertEqual(post.await_args.args[0]["weather"], field)
 
     def test_corridor_cells_are_lattice_keys_with_the_nearest_eta(self):
         cells = corridor_cells(
@@ -515,6 +606,55 @@ class JourneyTaskTests(TestCase):
         self.assertEqual(flags, [True, False], "the second day is past WEATHER_ROUTING_DAYS")
         self.assertEqual(self.journey.plan_status, Journey.PlanStatus.WEATHER)
         self.assertGreater(cells.aenqueue.await_count, 0)
+
+    def _plan_weather_day(self, weather_route):
+        from .tasks import _plan_day
+        from .test_journey_routing import fake_legs
+
+        field = {"rows": 1}
+        plain = [_gh_path(70, 8.0), _gh_path(72, 8.0)]
+        day = {
+            "index": 0,
+            "date": self.journey.start_date.isoformat(),
+            "start": [8.0, 47.0],
+            "end": [9.0, 47.0],
+            "vias": [],
+            "lodging": None,
+            "lodging_missing": False,
+            "weather": True,
+            "last_day": True,
+        }
+        pro = SimpleNamespace(max_journey_alternatives=3)
+        with (
+            patch("core.tasks._weather_field", AsyncMock(return_value=field)),
+            patch("core.tasks.build_geometry", AsyncMock(side_effect=weather_route)) as geometry,
+            patch("core.tasks.build_geometries", AsyncMock(return_value=plain)) as geometries,
+            patch("core.tasks.route_legs", AsyncMock(side_effect=fake_legs)),
+            patch("core.tasks._pois_along", AsyncMock(return_value=[])),
+        ):
+            planned = async_to_sync(_plan_day)(self.journey, day, pro, None)
+        return planned, geometry, geometries, field
+
+    def test_a_weather_day_puts_the_way_around_first(self):
+        around = _gh_path(75, 8.0)
+        around["polyline"][1] = [8.001, 47.001]
+
+        async def route(profile, points, interval, model, weather=None):
+            return around
+
+        planned, geometry, geometries, field = self._plan_weather_day(route)
+        self.assertEqual(geometry.await_args.kwargs["weather"], field)
+        self.assertNotIn("weather", geometries.await_args.kwargs, "alternatives cannot route by time")
+        self.assertEqual(len(planned["stages"]), 3)
+        self.assertEqual(planned["stages"][0]["geometry"]["polyline"][1], [8.001, 47.001])
+
+    def test_a_refused_weather_request_routes_plainly(self):
+        async def refuse(*args, **kwargs):
+            raise ValueError("unpatched GraphHopper")
+
+        planned, _, geometries, _ = self._plan_weather_day(refuse)
+        geometries.assert_awaited_once()
+        self.assertEqual(len(planned["stages"]), 2)
 
 
 @override_settings(CACHES=fixtures.LOCMEM_CACHE, CHANNEL_LAYERS=fixtures.INMEM_CHANNELS)

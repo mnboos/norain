@@ -87,6 +87,13 @@ declare module 'vue-router/auto-routes' {
       { slug: ParamValue<false> },
       | never
     >,
+    'random-rides': RouteRecordInfo<
+      'random-rides',
+      '/random',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     'route-detail': RouteRecordInfo<
       'route-detail',
       '/routes/:id',
@@ -177,6 +184,14 @@ declare module 'vue-router/auto-routes' {
         | never
       pathParamNames:
         | 'slug'
+    }
+    'src/pages/random/index.vue': {
+      routes:
+        | 'random-rides'
+      views:
+        | never
+      pathParamNames:
+        | never
     }
     'src/pages/routes/[id].vue': {
       routes:

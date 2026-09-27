@@ -16,7 +16,9 @@ from dataclasses import asdict, dataclass
 from typing import Literal
 
 Surface = Literal["any", "avoid_unpaved", "paved_only"]
-Climbing = Literal["neutral", "avoid"]
+# "avoid": flat preferred, climbs cost more. "hilly": hills preferred, so flat roads cost more;
+# a boost for climbs would break LM, a penalty on the flat does the same job.
+Climbing = Literal["neutral", "avoid", "hilly"]
 Traffic = Literal["neutral", "avoid_main", "avoid_off_network"]
 Towns = Literal["neutral", "avoid"]
 
@@ -54,6 +56,10 @@ def road_prefs_model(prefs: RoadPrefs) -> dict:
         # average_slope is signed in the direction of travel: only climbing costs more.
         priority.append({"if": "average_slope > 6", "multiply_by": "0.4"})
         priority.append({"else_if": "average_slope > 3", "multiply_by": "0.7"})
+    elif prefs.climbing == "hilly":
+        # Both directions: a hilly ride climbs and descends, and a loop has to do both.
+        priority.append({"if": "average_slope < 2 && average_slope > -2", "multiply_by": "0.6"})
+        priority.append({"else_if": "average_slope < 4 && average_slope > -4", "multiply_by": "0.85"})
     if prefs.traffic == "avoid_main":
         priority.append({"if": "road_class == TRUNK || road_class == PRIMARY", "multiply_by": "0.3"})
         priority.append({"else_if": "road_class == SECONDARY", "multiply_by": "0.6"})

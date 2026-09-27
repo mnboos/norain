@@ -28,6 +28,13 @@ import {
     WeatherPrefsInToJSON,
     WeatherPrefsInToJSONTyped,
 } from './WeatherPrefsIn';
+import type { RandomPrefsOut } from './RandomPrefsOut';
+import {
+    RandomPrefsOutFromJSON,
+    RandomPrefsOutFromJSONTyped,
+    RandomPrefsOutToJSON,
+    RandomPrefsOutToJSONTyped,
+} from './RandomPrefsOut';
 import type { JourneyDayOut } from './JourneyDayOut';
 import {
     JourneyDayOutFromJSON,
@@ -50,6 +57,14 @@ export interface JourneyOut {
      * 
      */
     name: string;
+    /**
+     * 
+     */
+    kind?: string;
+    /**
+     * 
+     */
+    randomPrefs?: RandomPrefsOut;
     /**
      * 
      */
@@ -189,6 +204,8 @@ export function JourneyOutFromJSONTyped(json: any, ignoreDiscriminator: boolean)
         
         'id': json['id'],
         'name': json['name'],
+        'kind': json['kind'] == null ? undefined : json['kind'],
+        'randomPrefs': json['random_prefs'] == null ? undefined : RandomPrefsOutFromJSON(json['random_prefs']),
         'startLat': json['start_lat'],
         'startLon': json['start_lon'],
         'startName': json['start_name'],
@@ -229,6 +246,8 @@ export function JourneyOutToJSONTyped(value?: JourneyOut | null, ignoreDiscrimin
         
         'id': value['id'],
         'name': value['name'],
+        'kind': value['kind'],
+        'random_prefs': RandomPrefsOutToJSON(value['randomPrefs']),
         'start_lat': value['startLat'],
         'start_lon': value['startLon'],
         'start_name': value['startName'],

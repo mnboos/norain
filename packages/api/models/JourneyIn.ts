@@ -14,6 +14,13 @@
  */
 
 import { mapValues, parseDate, parseDateTime, serializeDate, serializeDateTime } from '../runtime';
+import type { RandomPrefsIn } from './RandomPrefsIn';
+import {
+    RandomPrefsInFromJSON,
+    RandomPrefsInFromJSONTyped,
+    RandomPrefsInToJSON,
+    RandomPrefsInToJSONTyped,
+} from './RandomPrefsIn';
 import type { RoadPrefsIn } from './RoadPrefsIn';
 import {
     RoadPrefsInFromJSON,
@@ -39,6 +46,10 @@ export interface JourneyIn {
      * 
      */
     name: string;
+    /**
+     * A random ride is one day of generated candidates; fixed at creation
+     */
+    kind?: JourneyInKindEnum;
     /**
      * 
      */
@@ -115,7 +126,21 @@ export interface JourneyIn {
      * 
      */
     weatherPrefs?: WeatherPrefsIn;
+    /**
+     * 
+     */
+    randomPrefs?: RandomPrefsIn;
 }
+
+/**
+* @export
+* @enum {string}
+*/
+export enum JourneyInKindEnum {
+    Tour = 'tour',
+    Random = 'random'
+}
+
 
 /**
  * Check if a given object implements the JourneyIn interface.
@@ -143,6 +168,7 @@ export function JourneyInFromJSONTyped(json: any, ignoreDiscriminator: boolean):
     return {
         
         'name': json['name'],
+        'kind': json['kind'] == null ? undefined : json['kind'],
         'startLat': json['startLat'],
         'startLon': json['startLon'],
         'startName': json['startName'],
@@ -162,6 +188,7 @@ export function JourneyInFromJSONTyped(json: any, ignoreDiscriminator: boolean):
         'lodgingKinds': json['lodgingKinds'] == null ? undefined : json['lodgingKinds'],
         'roadPrefs': json['roadPrefs'] == null ? undefined : RoadPrefsInFromJSON(json['roadPrefs']),
         'weatherPrefs': json['weatherPrefs'] == null ? undefined : WeatherPrefsInFromJSON(json['weatherPrefs']),
+        'randomPrefs': json['randomPrefs'] == null ? undefined : RandomPrefsInFromJSON(json['randomPrefs']),
     };
 }
 
@@ -177,6 +204,7 @@ export function JourneyInToJSONTyped(value?: JourneyIn | null, ignoreDiscriminat
     return {
         
         'name': value['name'],
+        'kind': value['kind'],
         'startLat': value['startLat'],
         'startLon': value['startLon'],
         'startName': value['startName'],
@@ -196,6 +224,7 @@ export function JourneyInToJSONTyped(value?: JourneyIn | null, ignoreDiscriminat
         'lodgingKinds': value['lodgingKinds'],
         'roadPrefs': RoadPrefsInToJSON(value['roadPrefs']),
         'weatherPrefs': WeatherPrefsInToJSON(value['weatherPrefs']),
+        'randomPrefs': RandomPrefsInToJSON(value['randomPrefs']),
     };
 }
 

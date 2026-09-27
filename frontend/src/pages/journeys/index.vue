@@ -13,14 +13,14 @@ import { symSharpAdd, symSharpArrowBack, symSharpDelete, symSharpLuggage } from 
 import type { JourneyIn, JourneyOut } from "@norain/api/models";
 import JourneyFormDialog from "@/components/journey/JourneyFormDialog.vue";
 import { isQuotaExceeded } from "@/services/http";
-import { useCreateJourney, useDeleteJourney, useJourneys } from "@/queries/journeys";
+import { JourneyKind, useCreateJourney, useDeleteJourney, useJourneys } from "@/queries/journeys";
 import { journeyDates, planStatusLabel } from "@/utils/journeys";
 
 const $q = useQuasar();
 const router = useRouter();
 const showForm = ref(false);
 
-const { data: journeys, isLoading } = useJourneys();
+const { data: journeys, isLoading } = useJourneys(JourneyKind.Tour);
 const createMutation = useCreateJourney();
 const deleteMutation = useDeleteJourney();
 

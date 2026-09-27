@@ -20,6 +20,7 @@ import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
 import { placeLabel } from "@/utils/placeLabel";
 import { LODGING_KINDS, POI_CATEGORIES } from "@/utils/poiCategories";
 import ChipMultiSelect from "@/components/ChipMultiSelect.vue";
+import WeatherRoutingChoice from "@/components/WeatherRoutingChoice.vue";
 
 const props = defineProps<{
     modelValue: boolean;
@@ -32,7 +33,7 @@ const emit = defineEmits<{
     save: [data: JourneyIn];
 }>();
 
-const { isPro } = useEntitlements();
+const { isPro, weatherRouting } = useEntitlements();
 
 type Limit = "distance" | "time";
 
@@ -70,8 +71,9 @@ const surface = ref(Surface.Any);
 const climbing = ref(Climbing.Neutral);
 const traffic = ref(Traffic.Neutral);
 const towns = ref(Towns.Neutral);
-const avoidRain = ref(true);
-const avoidHeadwind = ref(true);
+// Off until the rider chooses it; see WeatherRoutingChoice.
+const avoidRain = ref(false);
+const avoidHeadwind = ref(false);
 const departureWindow = ref(60);
 
 function load(journey: JourneyOut | undefined) {
@@ -95,8 +97,8 @@ function load(journey: JourneyOut | undefined) {
     climbing.value = journey.roadPrefs.climbing ?? Climbing.Neutral;
     traffic.value = journey.roadPrefs.traffic ?? Traffic.Neutral;
     towns.value = journey.roadPrefs.towns ?? Towns.Neutral;
-    avoidRain.value = journey.weatherPrefs.avoidRain ?? true;
-    avoidHeadwind.value = journey.weatherPrefs.avoidHeadwind ?? true;
+    avoidRain.value = journey.weatherPrefs.avoidRain ?? false;
+    avoidHeadwind.value = journey.weatherPrefs.avoidHeadwind ?? false;
     departureWindow.value = journey.weatherPrefs.departureWindowMinutes ?? 60;
 }
 watch(
@@ -153,6 +155,7 @@ const surfaceOptions = [
 const climbingOptions = [
     { label: "Egal", value: Climbing.Neutral },
     { label: "Steigungen meiden", value: Climbing.Avoid },
+    { label: "Hügelig bevorzugen", value: Climbing.Hilly },
 ];
 const trafficOptions = [
     { label: "Egal", value: Traffic.Neutral },
@@ -202,8 +205,8 @@ function onSave() {
         lodgingKinds: lodgingKinds.value,
         roadPrefs: { surface: surface.value, climbing: climbing.value, traffic: traffic.value, towns: towns.value },
         weatherPrefs: {
-            avoidRain: avoidRain.value,
-            avoidHeadwind: avoidHeadwind.value,
+            avoidRain: weatherRouting.value && avoidRain.value,
+            avoidHeadwind: weatherRouting.value && avoidHeadwind.value,
             departureWindowMinutes: departureWindow.value,
         },
     };
@@ -430,11 +433,10 @@ function onClose() {
 
                 <q-expansion-item dense label="Wetter" header-class="text-caption q-px-none" default-opened>
                     <div class="q-pt-sm">
-                        <q-toggle v-model="avoidRain" label="Um Regen herum planen" />
-                        <q-toggle v-model="avoidHeadwind" label="Starken Gegenwind meiden" />
-                        <div v-if="!isPro" class="text-caption text-muted">
-                            Mit Plus plant NoRain die nächsten Tage um Regen und Gegenwind herum, vergleicht bis zu
-                            drei Varianten pro Tag und schlägt die beste Abfahrtszeit vor.
+                        <WeatherRoutingChoice v-model:avoid-rain="avoidRain" v-model:avoid-headwind="avoidHeadwind" />
+                        <div v-if="!isPro" class="text-caption text-muted q-mt-sm">
+                            Mit Plus vergleicht NoRain bis zu drei Varianten pro Tag und schlägt die beste Abfahrtszeit
+                            vor.
                         </div>
                         <q-select
                             v-else

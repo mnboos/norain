@@ -53,7 +53,8 @@ export enum RoadPrefsInSurfaceEnum {
 */
 export enum RoadPrefsInClimbingEnum {
     Neutral = 'neutral',
-    Avoid = 'avoid'
+    Avoid = 'avoid',
+    Hilly = 'hilly'
 }
 /**
 * @export
