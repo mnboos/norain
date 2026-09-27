@@ -1,7 +1,7 @@
 # Architecture and data lifecycle
 
 A point forecast describes weather at one location. A route forecast needs the
-weather at several locations at the times a traveler reaches them. NoRain separates
+weather at several locations at the times a traveler reaches them. Meteolane separates
 journey geometry from weather data so recurring trips can reuse both independently.
 
 ```mermaid
@@ -30,7 +30,7 @@ flowchart TD
 
 ## Geometry determines the sample times
 
-GraphHopper supplies a polyline and per-segment travel times. NoRain distributes
+GraphHopper supplies a polyline and per-segment travel times. Meteolane distributes
 each time interval across its subsegments by geographic length, accumulates elapsed
 time at every vertex, and chooses vertices nearest regular time targets. The final
 vertex is included and duplicate sample indices are removed.

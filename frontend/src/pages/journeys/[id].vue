@@ -113,7 +113,7 @@ function onSave(data: JourneyIn) {
         <template v-else>
             <q-banner v-if="planning" rounded class="bg-tint-warn q-mb-md">
                 <template #avatar><q-spinner-dots size="1.5rem" color="accent" /></template>
-                <template v-if="isRandom">Wird gewürfelt… NoRain sucht Strecken in der gewünschten Länge.</template>
+                <template v-if="isRandom">Wird gewürfelt… Meteolane sucht Strecken in der gewünschten Länge.</template>
                 <template v-else>
                     {{ planStatusLabel(journey.planStatus) }}… Etappen, Pausen und Unterkünfte werden gesucht.
                 </template>

@@ -6,6 +6,6 @@ test("shows the empty route dashboard", async ({ page }) => {
         route => route.fulfill({ json: [] }),
     );
     await page.goto("/");
-    await expect(page.getByText("NoRain", { exact: true })).toBeVisible();
+    await expect(page.getByText("Meteolane", { exact: true })).toBeVisible();
     await expect(page.getByText("Noch keine Routen — leg los!")).toBeVisible();
 });

@@ -164,7 +164,7 @@ def exact_geometry(points, duration_seconds, interval_seconds=300):
 
 def serialize_gpx(name, points):
     points = validate_track(points)
-    doc = ET.Element("gpx", {"xmlns": GPX_NS, "version": "1.1", "creator": "NoRain"})
+    doc = ET.Element("gpx", {"xmlns": GPX_NS, "version": "1.1", "creator": "Meteolane"})
     track = ET.SubElement(doc, "trk")
     # XML 1.0 rejects control characters even when text escaping is used.
     clean_name = "".join(
@@ -172,7 +172,7 @@ def serialize_gpx(name, points):
         for c in name[:200]
         if c in "\t\n\r" or 32 <= ord(c) <= 0xD7FF or 0xE000 <= ord(c) <= 0xFFFD or 0x10000 <= ord(c) <= 0x10FFFF
     )
-    ET.SubElement(track, "name").text = clean_name or "NoRain"
+    ET.SubElement(track, "name").text = clean_name or "Meteolane"
     segment = ET.SubElement(track, "trkseg")
     for point in points:
         node = ET.SubElement(segment, "trkpt", {"lat": str(point[1]), "lon": str(point[0])})

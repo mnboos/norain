@@ -59,7 +59,7 @@ class RideQualityConfig:
 # "sehr gut … sehr schlecht" wording alike, so colour and text stay in agreement.
 RIDE_QUALITY = RideQualityConfig()
 
-# Rain dominates - the app is called NoRain. Drizzle is a nuisance, 5 mm/h is the worst it
+# Rain dominates - it spoils a ride more than anything else. Drizzle is a nuisance, 5 mm/h is the worst it
 # gets for scoring purposes.
 RAIN_CURVE = ((0, 0), (0.2, 0.15), (1, 0.5), (2.5, 0.8), (5, 1))
 

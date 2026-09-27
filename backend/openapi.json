@@ -1,7 +1,7 @@
 {
     "openapi": "3.1.0",
     "info": {
-        "title": "NoRain API",
+        "title": "Meteolane API",
         "version": "1.0.0",
         "description": ""
     },
@@ -3618,7 +3618,7 @@
             "RoutePlanForecastIn": {
                 "properties": {
                     "name": {
-                        "default": "NoRain",
+                        "default": "Meteolane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"
@@ -4668,7 +4668,7 @@
             "GpxExportIn": {
                 "properties": {
                     "name": {
-                        "default": "NoRain",
+                        "default": "Meteolane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"
@@ -4738,7 +4738,7 @@
             "RoutePlanIn": {
                 "properties": {
                     "name": {
-                        "default": "NoRain",
+                        "default": "Meteolane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"

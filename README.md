@@ -1,6 +1,6 @@
-# NoRain — weather along your bike route
+# Meteolane — weather along your bike route
 
-NoRain forecasts the weather where you will be during a ride. It combines a route
+Meteolane forecasts the weather where you will be during a ride. It combines a route
 and departure time with precipitation, temperature, and wind forecasts, including
 headwind and crosswind relative to your direction of travel.
 
@@ -18,7 +18,7 @@ Start at the [documentation index](docs/README.md), organized using Diátaxis:
 
 | Your goal | Read |
 | --- | --- |
-| Run NoRain and create your first route | [First forecast tutorial](docs/tutorials/first-forecast.md) |
+| Run Meteolane and create your first route | [First forecast tutorial](docs/tutorials/first-forecast.md) |
 | Operate the worker and pre-warm forecasts | [Background jobs](docs/how-to/background-jobs.md) |
 | Change routing and search coverage | [Change region](docs/how-to/change-region.md) |
 | Run checks or regenerate the API client | [Development workflow](docs/how-to/development.md) |

@@ -70,7 +70,7 @@ function onDelete(journey: JourneyOut) {
                 <q-icon :name="symSharpLuggage" size="4rem" />
                 <p class="q-mt-md text-body1">Noch keine Reise.</p>
                 <p class="text-body2">
-                    Gib Start, Ziel und wie weit du am Tag fahren willst an. NoRain schlägt Etappen, Pausen mit
+                    Gib Start, Ziel und wie weit du am Tag fahren willst an. Meteolane schlägt Etappen, Pausen mit
                     Wasser und Toiletten, Übernachtungen und die beste Abfahrtszeit vor.
                 </p>
             </div>

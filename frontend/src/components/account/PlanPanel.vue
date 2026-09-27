@@ -64,8 +64,8 @@ function channels(current: string) {
 </script>
 
 <template>
-    <section aria-label="NoRain Tarife">
-        <h2 class="text-h6">{{ isPro ? "NoRain Plus" : "NoRain Free" }}</h2>
+    <section aria-label="Meteolane Tarife">
+        <h2 class="text-h6">{{ isPro ? "Meteolane Plus" : "Meteolane Free" }}</h2>
         <p>Finde eine bessere Abfahrtszeit und erhalte deine Vorhersage vor der Fahrt.</p>
         <q-banner v-if="error" role="alert" class="bg-tint-error q-mb-md">{{ error }}</q-banner>
         <q-banner v-if="message" role="status" class="q-mb-md">{{ message }}</q-banner>
@@ -157,7 +157,7 @@ function channels(current: string) {
         </p>
         <p v-if="!isPro">Aktiviere Plus, um Briefings einzurichten.</p>
         <p v-if="!pushSupported()" class="text-caption">
-            Dieser Browser unterstützt Push hier nicht. Nutze E-Mail. Auf dem iPhone installierst du NoRain zuerst über
+            Dieser Browser unterstützt Push hier nicht. Nutze E-Mail. Auf dem iPhone installierst du Meteolane zuerst über
             „Zum Home-Bildschirm“.
         </p>
         <div class="q-gutter-sm q-mb-md">

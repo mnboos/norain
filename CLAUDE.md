@@ -1,4 +1,4 @@
-# NoRain — Bike-route weather forecaster
+# Meteolane — Bike-route weather forecaster
 
 Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo
 (primary, free) with OpenWeatherMap One Call 3.0 as fallback. Multi-user with
@@ -126,7 +126,7 @@ Both the email and the username are sign-in identities. The SPA sends whatever w
 username. Do **not** branch on whether the identifier contains `@` —
 `UnicodeUsernameValidator` permits `@` in usernames. `core.auth.adapter.AccountAdapter`
 refuses a username that matches any existing email (and vice versa), or one sign-in would
-match two accounts. The adapter also names the site "NoRain" in allauth's mails and counts
+match two accounts. The adapter also names the site "Meteolane" in allauth's mails and counts
 allauth's rate limits by `core.auth.lockout.client_ip` (allauth's own
 `TRUSTED_CLIENT_IP_HEADER` has no fallback, so without Caddy every request would get a
 403). Links in the mails come from `HeadlessAdapter.get_frontend_url`, which puts
@@ -753,7 +753,7 @@ interpolated in space and time. Rules that hold this together:
 
 The third mode, next to commute routes and journeys: the user gives a start, loop or not (then a
 destination), a length (riding time or distance), a profile, an optional direction and a date,
-and NoRain generates the ride (`core/random_rides.py`). A random ride is a `Journey` with
+and Meteolane generates the ride (`core/random_rides.py`). A random ride is a `Journey` with
 `kind="random"` and `random_prefs` (`round_trip`, `heading`, `seed`, `consider_weather`): one
 day whose stages are the generated candidates. The SPA lists them at `/random` and opens them on
 the journey page. It has two modes:

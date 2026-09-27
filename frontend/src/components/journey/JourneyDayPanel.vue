@@ -305,11 +305,11 @@ function breakEta(elapsedS: number): string {
                 <template #avatar><q-icon :name="symSharpCloudOff" class="text-muted" /></template>
                 <template v-if="journey.kind === 'random'">
                     Für diesen Tag gibt es noch keine Vorhersage. Würfle die Runde näher am Termin neu, dann empfiehlt
-                    NoRain die Strecke mit dem besten Wetter.
+                    Meteolane die Strecke mit dem besten Wetter.
                 </template>
                 <template v-else>
                     Für diesen Tag gibt es noch keine Vorhersage. Plane die Reise näher am Termin neu, dann richtet
-                    NoRain Strecke und Abfahrt nach dem Wetter.
+                    Meteolane Strecke und Abfahrt nach dem Wetter.
                 </template>
             </q-banner>
             <q-banner v-else-if="forecastQuery.error.value" rounded class="bg-tint-error">

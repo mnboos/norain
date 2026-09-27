@@ -20,7 +20,7 @@ class RoutingProfile(StrEnum):
 
 
 class RoutePlanIn(CamelSchema):
-    name: str = Field(default="NoRain", max_length=200)
+    name: str = Field(default="Meteolane", max_length=200)
     geometry_source: GeometrySource = GeometrySource.GRAPHHOPPER
     coordinates: list[list[float]] = Field(min_length=2, max_length=100000)
     duration_seconds: int | None = Field(default=None, ge=1, le=MAX_DURATION_SECONDS)

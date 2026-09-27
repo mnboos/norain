@@ -32,13 +32,13 @@ const { weatherRouting } = useEntitlements();
             @update:model-value="avoidHeadwind = $event"
         />
         <div v-if="weatherRouting" class="text-caption text-muted">
-            Für Fahrten in den nächsten drei Tagen legt NoRain die Strecke dorthin, wo es trocken ist und der Wind
+            Für Fahrten in den nächsten drei Tagen legt Meteolane die Strecke dorthin, wo es trocken ist und der Wind
             weniger bläst, zur Zeit, zu der du dort bist. Aus: die Strecke folgt nur deinen Wünschen an die Strasse.
         </div>
         <div v-else class="row items-center no-wrap q-gutter-x-xs text-caption text-muted">
             <q-icon :name="symSharpLock" />
             <span>
-                Mit Plus kann NoRain die Strecke um Regen und Gegenwind herum legen.
+                Mit Plus kann Meteolane die Strecke um Regen und Gegenwind herum legen.
                 <router-link to="/account">Plus ansehen</router-link>
             </span>
         </div>

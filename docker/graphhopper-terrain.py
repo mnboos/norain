@@ -53,7 +53,7 @@ def digest(path):
 
 def download_json(url):
     request = urllib.request.Request(
-        url, headers={"User-Agent": "NoRain/1.0 (+https://github.com/mnboos/norain)"}
+        url, headers={"User-Agent": "Meteolane/1.0 (+https://meteolane.com)"}
     )
     with urllib.request.urlopen(request, timeout=60) as response:
         return json.load(response)

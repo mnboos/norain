@@ -108,6 +108,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    'welcome': RouteRecordInfo<
+      'welcome',
+      '/welcome',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
   }
 
   /**
@@ -204,6 +211,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/system.vue': {
       routes:
         | '/system'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/welcome.vue': {
+      routes:
+        | 'welcome'
       views:
         | never
       pathParamNames:

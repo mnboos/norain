@@ -1,4 +1,4 @@
-"""django-tasks task definitions for NoRain.
+"""django-tasks task definitions for Meteolane.
 
 Background tasks for route geometry computation and forecast grid pre-warming.
 """

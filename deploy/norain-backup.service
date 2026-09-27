@@ -1,5 +1,5 @@
 [Unit]
-Description=Back up NoRain PostgreSQL to Restic
+Description=Back up Meteolane PostgreSQL to Restic
 After=docker.service
 Requires=docker.service
 

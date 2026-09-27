@@ -22,12 +22,13 @@ blog.example.com {
 }
 ```
 
-For NoRain, use `docker-compose.prod.yml` plus `docker-compose.proxy.yml`. Its
+For Meteolane, use `docker-compose.prod.yml` plus `docker-compose.proxy.yml`. Its
 network alias is `norain-web`. Keep `sites/norain.caddy.example` inactive until a
 hostname is chosen. Then:
 
-1. Point the hostname's DNS A/AAAA records at the VPS.
-2. Set NoRain's `DOMAIN`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, and
+1. Point the hostname's DNS A/AAAA records at the VPS, and its `www.` name too: the example
+   redirects `www.` to the hostname, so Django only ever sees the one origin.
+2. Set Meteolane's `DOMAIN`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`, and
    `FRONTEND_URL` consistently; recreate the app services.
 3. Copy the example to `sites/norain.caddy`, replacing the example hostname.
 4. Validate and reload the proxy:
@@ -37,7 +38,7 @@ docker compose exec proxy caddy validate --config /etc/caddy/Caddyfile
 docker compose exec proxy caddy reload --config /etc/caddy/Caddyfile
 ```
 
-The inner NoRain frontend trusts forwarded headers from private network peers;
+The inner Meteolane frontend trusts forwarded headers from private network peers;
 only attach trusted application frontends to the shared network. Its backend,
 database, Redis, and GIS services stay off the shared proxy network.
 
@@ -45,7 +46,7 @@ database, Redis, and GIS services stay off the shared proxy network.
 
 The proxy image supports Let's Encrypt IP certificates. Copy
 `sites/norain-ip.caddy.example` to `sites/norain.caddy`, replace the documentation
-IP with the VPS's actual public IP, and set NoRain's `DOMAIN` and
+IP with the VPS's actual public IP, and set Meteolane's `DOMAIN` and
 `DJANGO_ALLOWED_HOSTS` to that IP. Set `DJANGO_CSRF_TRUSTED_ORIGINS` and
 `FRONTEND_URL` to `https://` followed by that IP.
 

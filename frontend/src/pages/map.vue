@@ -58,7 +58,7 @@ const duration = ref(0);
 const viaPoints = ref<number[][]>([]);
 const exporting = ref(false);
 const sharing = canShareFiles();
-const createRoute = useCreateRecurringRoute();
+const { mutateAsync: createRoute } = useCreateRecurringRoute();
 const exact = computed(() => draft.value?.plan.geometrySource === GeometrySource.Imported);
 const { isPro } = useEntitlements();
 
@@ -140,7 +140,7 @@ const ready = computed(() => !!zielort.value);
 const plan = computed<RoutePlanIn | null>(() => {
     if (!zielort.value) return null;
     return {
-        name: draft.value?.plan.name ?? "NoRain",
+        name: draft.value?.plan.name ?? "Meteolane",
         geometrySource: exact.value ? GeometrySource.Imported : GeometrySource.Graphhopper,
         coordinates: exact.value
             ? (draft.value?.plan.coordinates ?? [])
@@ -150,7 +150,7 @@ const plan = computed<RoutePlanIn | null>(() => {
     };
 });
 const validPlan = computed(() => !!plan.value && (!exact.value || (duration.value > 0 && duration.value <= 1382400)));
-const previewQuery = useQuery({
+const { data: preview, error: previewError } = useQuery({
     queryKey: computed(() => ["routePlanPreview", plan.value]),
     enabled: validPlan,
     queryFn: ({ signal }) => {
@@ -161,7 +161,7 @@ const previewQuery = useQuery({
     retry: false,
 });
 const currentDraft = computed<RouteDraft | null>(() =>
-    plan.value && previewQuery.data.value ? { plan: plan.value, preview: previewQuery.data.value } : null,
+    plan.value && preview.value ? { plan: plan.value, preview: preview.value } : null,
 );
 function applyImport(value: RouteDraft) {
     const points = value.plan.coordinates;
@@ -185,7 +185,7 @@ function saveDraft() {
 }
 async function saveRoute(data: RecurringRouteIn) {
     try {
-        const saved = await createRoute.mutateAsync(data);
+        const saved = await createRoute(data);
         await router.push({ path: "/routes/" + saved.id });
     } catch (e) {
         $q.notify({ type: "negative", message: await gpxError(e) });
@@ -203,7 +203,11 @@ async function exportRoute() {
         exporting.value = false;
     }
 }
-const comparisonQuery = useRouteWeather(
+const {
+    data: comparisonWeather,
+    isFetching: isFetchingComparison,
+    error: comparisonError,
+} = useRouteWeather(
     abfahrtsort,
     zielort,
     profile,
@@ -213,7 +217,7 @@ const comparisonQuery = useRouteWeather(
     validPlan,
     plan,
 );
-const selectedQuery = useRouteWeather(
+const { data: selectedWeather, isFetching: isFetchingSelected, error: selectedError } = useRouteWeather(
     abfahrtsort,
     zielort,
     profile,
@@ -223,14 +227,12 @@ const selectedQuery = useRouteWeather(
     () => selectedDeparture.value !== null && validPlan.value,
     plan,
 );
-const routeWeather = computed(() => (selectedDeparture.value ? selectedQuery.data.value : comparisonQuery.data.value));
+const routeWeather = computed(() => (selectedDeparture.value ? selectedWeather.value : comparisonWeather.value));
 const isFetchingWeather = computed(() =>
-    selectedDeparture.value ? selectedQuery.isFetching.value : comparisonQuery.isFetching.value,
+    selectedDeparture.value ? isFetchingSelected.value : isFetchingComparison.value,
 );
-const weatherError = computed(() =>
-    selectedDeparture.value ? selectedQuery.error.value : comparisonQuery.error.value,
-);
-const departureComparison = computed(() => comparisonQuery.data.value?.departureComparison);
+const weatherError = computed(() => (selectedDeparture.value ? selectedError.value : comparisonError.value));
+const departureComparison = computed(() => comparisonWeather.value?.departureComparison);
 watch(
     [abfahrtsort, zielort, profile, departureTime, flexBefore, flexAfter, plan],
     () => {
@@ -275,7 +277,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
         <RouteFormDialog v-model="showSave" :initial-draft="currentDraft ?? draft" @save="saveRoute" />
         <NiceMap
             :route-weather="routeWeather"
-            :preview-line="previewQuery.data.value?.coordinates"
+            :preview-line="preview?.coordinates"
             :abfahrtsort="abfahrtsort"
             :zielort="zielort"
             :position="position"
@@ -306,7 +308,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             <RouteTimingFields v-if="exact" v-model="duration" :distance-m="draft.preview.distanceM" />
                             <q-btn flat dense no-caps label="Neue Route planen" @click="clearImport" />
                         </template>
-                        <div v-if="previewQuery.error.value" class="text-negative" role="alert">
+                        <div v-if="previewError" class="text-negative" role="alert">
                             Die Strecke konnte nicht berechnet werden.
                         </div>
                         <q-select
@@ -395,10 +397,10 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             stack-label
                         />
                         <ElevationChart
-                            v-if="previewQuery.data.value"
-                            :coordinates="previewQuery.data.value.coordinates"
-                            :total-seconds="previewQuery.data.value.timeS"
-                            :vertex-times="previewQuery.data.value.vertexTimes"
+                            v-if="preview"
+                            :coordinates="preview.coordinates"
+                            :total-seconds="preview.timeS"
+                            :vertex-times="preview.vertexTimes"
                             :position="position"
                             @select-position="selectPosition"
                         />

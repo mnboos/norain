@@ -1,4 +1,4 @@
-# Deploy NoRain to a Docker VPS
+# Deploy Meteolane to a Docker VPS
 
 This deployment uses Caddy for automatic HTTPS, PostgreSQL/PostGIS for application data,
 Docker Compose for the application processes, GitHub Container Registry (GHCR)
@@ -6,7 +6,10 @@ for immutable images, and Restic for encrypted database backups.
 
 ## Requirements
 
-Use a domain whose A/AAAA records point to the VPS. Open only SSH, HTTP (80), and
+Use a domain whose A/AAAA records point to the VPS, and the same for its `www.` name:
+Caddy redirects `www.` to `DOMAIN` permanently (so `DJANGO_ALLOWED_HOSTS` and the other
+origin settings name `DOMAIN` only), and it needs the record to get that name's
+certificate. Open only SSH, HTTP (80), and
 HTTPS (443) in the VPS firewall. Install Docker Engine, the Docker Compose plugin,
 Git, and Restic. Create a non-root `norain` deployment user in the `docker` group,
 then clone this repository at `/srv/norain`.
@@ -173,7 +176,7 @@ approval and a verified backup.
 The GitHub Actions workflow publishes SHA-tagged images after backend and
 frontend checks pass. Configure the GitHub `production` environment with
 `VPS_DEPLOY_SSH_KEY`, `VPS_HOST`, `VPS_USER`, `VPS_KNOWN_HOSTS`, and
-`VPS_PUBLIC_HEALTH_URL` (for example, `https://norain.example.com/healthz`);
+`VPS_PUBLIC_HEALTH_URL` (for example, `https://meteolane.com/healthz`);
 protect that environment with the desired reviewer rule. `VPS_KNOWN_HOSTS` must
 contain the VPS's pinned SSH host key, obtained through an independently trusted
 channel.
@@ -268,16 +271,16 @@ On a server hosting several apps, run one independent Caddy stack that owns port
 network under a unique alias; databases and backend services remain private.
 See [the proxy setup and hostname activation guide](../../deploy/proxy/README.md).
 
-After creating the shared network, set this in NoRain's production `.env`:
+After creating the shared network, set this in Meteolane's production `.env`:
 
 ```dotenv
 COMPOSE_FILE=docker-compose.prod.yml:docker-compose.proxy.yml
 ```
 
 Then `docker compose up -d`, `just deploy-local`, and `deploy/release.sh` use both
-files. Commands that explicitly supply `-f` must include both files too. The NoRain
+files. Commands that explicitly supply `-f` must include both files too. The Meteolane
 frontend listens internally at `norain-web:80`, with no host ports, and preserves
-the central proxy's forwarded HTTPS headers. Keep the NoRain hostname template
+the central proxy's forwarded HTTPS headers. Keep the Meteolane hostname template
 inactive until you choose a domain and configure its DNS and application origins.
 
 ## Backups and recovery

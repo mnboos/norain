@@ -1,6 +1,6 @@
 # Build and deploy the routing graph
 
-NoRain builds **GraphHopper 12.0-SNAPSHOT** from commit
+Meteolane builds **GraphHopper 12.0-SNAPSHOT** from commit
 `d9506cd7d36d5d068d9118b19b86cf0609dbe773` with Java 25. Its native PMTiles
 provider reads **Mapterhorn zoom 15**, using bilinear interpolation. Photon keeps
 its own Java runtime. Both amd64 and arm64 images are built from the same Java source.

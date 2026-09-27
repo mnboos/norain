@@ -1,4 +1,4 @@
-# Brisavia website assets
+# Meteolane website assets
 
 - `logo.svg` / `logo.png`: general horizontal logo for light backgrounds.
 - `logo-light.svg` / `logo-light.png`: white wordmark for dark backgrounds.

@@ -225,7 +225,7 @@ function onClose() {
             <q-card-section>
                 <q-item-label overline>{{ journey ? "Reise bearbeiten" : "Neue Reise" }}</q-item-label>
                 <div class="text-caption text-muted">
-                    NoRain schlägt Tagesetappen, Pausen und Abfahrtszeiten vor, nach Wetter und deinen Wünschen.
+                    Meteolane schlägt Tagesetappen, Pausen und Abfahrtszeiten vor, nach Wetter und deinen Wünschen.
                 </div>
             </q-card-section>
 
@@ -435,7 +435,7 @@ function onClose() {
                     <div class="q-pt-sm">
                         <WeatherRoutingChoice v-model:avoid-rain="avoidRain" v-model:avoid-headwind="avoidHeadwind" />
                         <div v-if="!isPro" class="text-caption text-muted q-mt-sm">
-                            Mit Plus vergleicht NoRain bis zu drei Varianten pro Tag und schlägt die beste Abfahrtszeit
+                            Mit Plus vergleicht Meteolane bis zu drei Varianten pro Tag und schlägt die beste Abfahrtszeit
                             vor.
                         </div>
                         <q-select

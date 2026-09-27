@@ -147,7 +147,7 @@ class SignupTests(TestCase):
         self.assertNotIn("rider", user.username.lower())
         self.assertEqual(len(mail.outbox), 1)
         self.assertTrue(mailed_code())
-        self.assertNotIn("http", mail.outbox[0].body.split("NoRain ·")[0])
+        self.assertNotIn("http", mail.outbox[0].body.split("Meteolane ·")[0])
         self.assertIn("Bestätigungscode", mail.outbox[0].subject)
         self.assertFalse(self.browser.session()["authenticated"])
 
@@ -491,7 +491,7 @@ class ReadableConsoleBackendTests(SimpleTestCase):
     def test_a_long_link_comes_out_whole(self):
         link = "http://localhost:3000/account?reset_key=2-cz3k4q-6a1b2c3d4e5f60718293a4b5c6d7e8f9"
         stream = StringIO()
-        message = EmailMessage("NoRain: Password Reset", f"Click the link below.\n\n{link}\n", "a@b.test", ["c@d.test"])
+        message = EmailMessage("Meteolane: Password Reset", f"Click the link below.\n\n{link}\n", "a@b.test", ["c@d.test"])
 
         ReadableConsoleBackend(stream=stream).send_messages([message])
 

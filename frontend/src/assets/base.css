@@ -8,7 +8,7 @@
     --vt-c-black-soft: #222222;
     --vt-c-black-mute: #282828;
 
-    --vt-c-indigo: #2c3e50;
+    --vt-c-indigo: var(--q-brand-ink);
 
     --vt-c-divider-light-1: rgba(60, 60, 60, 0.29);
     --vt-c-divider-light-2: rgba(60, 60, 60, 0.12);
@@ -24,7 +24,7 @@
 /* semantic color variables for this project */
 :root {
     /* A light cool grey, so the white cards stand out. Dark mode uses Quasar's dark page instead. */
-    --color-background: #e6ebf1;
+    --color-background: var(--q-brand-page);
     --color-background-soft: var(--vt-c-white-soft);
     --color-background-mute: var(--vt-c-white-mute);
 

@@ -6,6 +6,12 @@
 
 import /etc/caddy/auth-ratelimit.caddy
 
+# One canonical origin: FRONTEND_URL, the CSRF origins and the session cookie all name DOMAIN,
+# so www is redirected here and never reaches Django. Needs a www DNS record for its certificate.
+www.{$DOMAIN} {
+    redir https://{$DOMAIN}{uri} permanent
+}
+
 {$DOMAIN} {
     encode zstd gzip
 

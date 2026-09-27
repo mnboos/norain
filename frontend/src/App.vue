@@ -3,8 +3,10 @@ import { useQuasar } from "quasar";
 import { symSharpDarkMode, symSharpLightMode, symSharpSettings } from "@quasar/extras/material-symbols-sharp";
 import { toggleDark } from "@/utils/theme";
 import { useSession } from "@/composables/useSession";
+import { useRoute } from "vue-router";
 
 const $q = useQuasar();
+const route = useRoute();
 const { isAuthenticated, session } = useSession();
 </script>
 
@@ -12,19 +14,16 @@ const { isAuthenticated, session } = useSession();
     <q-layout view="hHh LpR lFf">
         <!-- A navy gradient into the brand colour in light mode; Quasar's dark surface in dark
              mode, where white text on the lighter dark-mode primary would be hard to read. -->
-        <q-header
-            :class="{ 'bg-dark': $q.dark.isActive }"
-            :style="$q.dark.isActive ? undefined : 'background: linear-gradient(90deg, #1b365d, #2d5a8e)'"
-        >
+        <q-header v-if="!route.meta.bare" :class="$q.dark.isActive ? 'bg-dark' : 'bg-brand-gradient'">
             <q-toolbar class="q-px-xs-none row overflow-hidden" style="height: 50px">
                 <router-link to="/" class="text-white q-ma-none q-pa-none full-height row" style="">
                     <img
                         src="/brand/mark-master%20-%20Copy.png"
-                        alt="Brisavia Logo"
+                        alt="Meteolane Logo"
                         class="q-ma-none full-height"
                         style="translate: -10px 3px"
                     />
-                    <span class="text-subtitle1 self-center text-weight-bold">Brisavia</span>
+                    <span class="text-subtitle1 self-center text-weight-bold">Meteolane</span>
                 </router-link>
                 <q-space />
                 <q-btn v-if="session.system" flat dense no-caps size="sm" to="/system" label="Systemübersicht" />

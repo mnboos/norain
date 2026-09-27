@@ -246,7 +246,7 @@ function onClose() {
             <q-card-section>
                 <q-item-label overline>{{ ride ? "Runde bearbeiten" : "Neue Zufallsrunde" }}</q-item-label>
                 <div class="text-caption text-muted">
-                    Sag, wie lange oder wie weit du fahren willst. NoRain würfelt eine Strecke und prüft das Wetter
+                    Sag, wie lange oder wie weit du fahren willst. Meteolane würfelt eine Strecke und prüft das Wetter
                     darauf.
                 </div>
             </q-card-section>
@@ -412,7 +412,7 @@ function onClose() {
                 <ChipMultiSelect
                     v-model="poiCategories"
                     label="Unterwegs möchte ich vorbei an"
-                    hint="Optional: NoRain legt einen Halt auf die Strecke"
+                    hint="Optional: Meteolane legt einen Halt auf die Strecke"
                     :options="POI_CATEGORIES.filter(c => c.value !== 'lodging')"
                 />
 
@@ -429,7 +429,7 @@ function onClose() {
                     />
                     <div class="text-caption text-muted">
                         <template v-if="weatherMode">
-                            NoRain berechnet die Vorhersage für jede Variante und empfiehlt die mit dem besten Wetter.
+                            Meteolane berechnet die Vorhersage für jede Variante und empfiehlt die mit dem besten Wetter.
                         </template>
                         <template v-else>
                             Du bekommst drei Varianten ohne Wetter und wählst, welche du als Routen speichern willst.

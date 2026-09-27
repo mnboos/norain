@@ -87,7 +87,7 @@ export function pushSupported() {
 export async function enablePush(publicKey: string) {
     if (!pushSupported())
         throw new Error(
-            "Push ist hier nicht verfügbar. Nutze E-Mail oder installiere NoRain auf deinem Startbildschirm.",
+            "Push ist hier nicht verfügbar. Nutze E-Mail oder installiere Meteolane auf deinem Startbildschirm.",
         );
     const permission = await Notification.requestPermission();
     if (permission !== "granted") throw new Error("Bitte erlaube Benachrichtigungen in den Browser-Einstellungen.");

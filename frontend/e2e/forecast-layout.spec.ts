@@ -82,7 +82,7 @@ for (const width of [1400, 768, 390]) {
             expect(
                 await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
             ).toBe(true);
-            await expect(page.getByText("NoRain", { exact: true })).toBeVisible();
+            await expect(page.getByText("Meteolane", { exact: true })).toBeVisible();
             expect(await page.locator('.q-toolbar__title').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
             await expect(page.getByRole("tab", { name: "Karte", exact: true })).toBeVisible();
             await page.getByRole("button", { name: "Kennzahlen erklärt" }).click();

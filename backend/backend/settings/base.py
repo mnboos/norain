@@ -206,7 +206,7 @@ ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED = True
 # Two new codes per sign-up, on top of allauth's own mail rate limits.
 ACCOUNT_EMAIL_VERIFICATION_SUPPORTS_RESEND = True
 ACCOUNT_LOGIN_BY_CODE_ENABLED = True
-ACCOUNT_EMAIL_SUBJECT_PREFIX = "NoRain: "
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "Meteolane: "
 # Axes is the only lockout for failed sign-ins. allauth's own `login_failed` limit would
 # block one identity after 5 tries with a different error body, before axes ever counts
 # to 10. allauth's other limits (sign-up, mails, codes, reset) stay on.
@@ -223,7 +223,7 @@ HEADLESS_FRONTEND_URLS = {
 
 # 2FA for the admin: OTPAdminSite (backend/urls.py) asks for a code from an authenticator
 # app. The first device is created with `manage.py add_totp_device`.
-OTP_TOTP_ISSUER = "NoRain"
+OTP_TOTP_ISSUER = "Meteolane"
 # Only development.py may turn this off (DJANGO_ADMIN_OTP); production never reads it.
 ADMIN_OTP = True
 

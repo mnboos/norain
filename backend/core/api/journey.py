@@ -1,4 +1,4 @@
-"""Journeys: one-off rides over one or more days, planned by NoRain.
+"""Journeys: one-off rides over one or more days, planned by Meteolane.
 
 The endpoints never route or fetch: create and update enqueue ``plan_journey``, and a stage's
 weather is an ordinary forecast job (``JOURNEY_STAGE``). Reading a journey starts or joins

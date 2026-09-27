@@ -2,7 +2,7 @@
 self.addEventListener("push", event => {
     let data;
     try { data = event.data.json(); } catch { return; }
-    event.waitUntil(self.registration.showNotification(data.title || "Brisavia", {
+    event.waitUntil(self.registration.showNotification(data.title || "Meteolane", {
         body: data.body, tag: data.tag, data: { url: data.url }, icon: "/brand/icon-192.png",
     }));
 });

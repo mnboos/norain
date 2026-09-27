@@ -1,5 +1,10 @@
-# Rename to norain.caddy after choosing a hostname and setting its DNS record.
-# Also set DOMAIN and the Django public-origin settings in NoRain's .env.
-norain.example.com {
+# Rename to norain.caddy after choosing a hostname and setting its DNS records (apex and www).
+# Also set DOMAIN and the Django public-origin settings in Meteolane's .env.
+meteolane.com {
     reverse_proxy norain-web:80
+}
+
+# www redirects to the one origin Django knows, so it needs no ALLOWED_HOSTS entry.
+www.meteolane.com {
+    redir https://meteolane.com{uri} permanent
 }

@@ -30,7 +30,7 @@ async function main() {
   await fs.copyFile(path.join(dir,'favicon.ico'),path.join(dir,'../favicon.ico'));
   const mark=(await sharp(master).resize(256,256).png().toBuffer()).toString('base64');
   for (const [name,ink] of [['logo',navy],['logo-light','#ffffff']]) {
-    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="920" height="256" viewBox="0 0 920 256" role="img" aria-label="Brisavia"><image width="256" height="256" href="data:image/png;base64,${mark}"/><text x="292" y="166" font-family="Arial, sans-serif" font-size="112" font-weight="700" letter-spacing="-3" fill="${ink}">Brisavia</text></svg>`;
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="920" height="256" viewBox="0 0 920 256" role="img" aria-label="Meteolane"><image width="256" height="256" href="data:image/png;base64,${mark}"/><text x="292" y="166" font-family="Arial, sans-serif" font-size="112" font-weight="700" letter-spacing="-3" fill="${ink}">Meteolane</text></svg>`;
     await fs.writeFile(path.join(dir,`${name}.svg`),svg);
     await sharp(Buffer.from(svg)).png().toFile(path.join(dir,`${name}.png`));
   }

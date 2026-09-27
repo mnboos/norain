@@ -328,7 +328,7 @@ onBeforeUnmount(() => {
                         @error="mapError = $event"
                     />
                     <div class="text-caption q-pa-xs">
-                        NoRain-Cachegitter: 0.01° × 0.01°. Routen oder Zellen anklicken für Details.
+                        Meteolane-Cachegitter: 0.01° × 0.01°. Routen oder Zellen anklicken für Details.
                     </div>
                 </div>
                 <aside class="diagnostics" aria-label="Systemdiagnostik">

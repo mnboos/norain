@@ -86,7 +86,7 @@ function target(ride: JourneyOut): string {
                 <p class="q-mt-md text-body1">Noch keine Zufallsrunde.</p>
                 <p class="text-body2">
                     Keine Idee, wohin? Sag, ob du im Kreis oder zu einem Ziel fahren willst und wie lange oder wie weit.
-                    NoRain würfelt die Strecke und zeigt das Wetter darauf.
+                    Meteolane würfelt die Strecke und zeigt das Wetter darauf.
                 </p>
             </div>
 
