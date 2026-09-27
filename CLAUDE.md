@@ -509,6 +509,14 @@ absolute range, which the details panel still shows. Don't add a median line bac
 a chart that needs a new value needs it on the sample, not a figures endpoint. Results
 stored before this still carry a `figures` key; `forecast_view` drops it.
 
+**The selection is a route position, not a sample.** `composables/useRoutePosition.ts` holds one
+share (0..1) of the route's distance per page; the map, the elevation profile and the forecast
+charts each convert it to their own axis (line point, km or minutes) and write it back on hover,
+anywhere along the route, not only at samples. `selectedSample` is just the sample nearest to it,
+for the details panel. Sample places are measured on the forecast's own `line`; the map pins a
+finer detail line to the same samples (`remapProgress`), so don't measure positions on whichever
+line happens to be drawn.
+
 ### Routing graph
 
 GraphHopper is bike-only (`bike`, `ebike`, `fast_ebike`, each with CH); `ROUTING_PROFILES`
