@@ -71,14 +71,20 @@ class JourneyPlanner:
         self.profile, self.model, self.budget = profile, model, budget
         self.build_geometry, self.route_legs, self.pois_along = build_geometry, route_legs, pois_along
 
-    async def route(self, points, *, optional=False):
-        """Read exact GH visit indices, falling back to separate legs when unavailable."""
+    async def route(self, points, *, optional=False, weather=None):
+        """Read exact GH visit indices, falling back to separate legs when unavailable.
+
+        ``weather`` (a ``weather_routing.weather_field``) applies to the whole request only: the
+        field's clock starts at the day's departure, so the separate-leg fallback and the local
+        insertions route without it.
+        """
         points = tuple(tuple(p) for p in points)
         if optional and not self.budget.reserve(1):
             return None
         if not optional:
             self.budget.essential += 1
-        geometry = await self.build_geometry(self.profile, points, SAMPLE_INTERVAL_DEFAULT_S, self.model)
+        extra = {"weather": weather} if weather is not None else {}
+        geometry = await self.build_geometry(self.profile, points, SAMPLE_INTERVAL_DEFAULT_S, self.model, **extra)
         indices = geometry.get("waypoint_indices", [])
         if len(points) == 2:
             return geometry, [0, len(geometry["polyline"]) - 1]

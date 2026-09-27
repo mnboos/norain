@@ -34,7 +34,7 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     random_rides.py  random rides: candidate generation (loop / long way round) and sizing
     pois.py          POI categories (POI_RULES) + corridor query pois_along_sync
     road_prefs.py    road preferences -> penalty-only GraphHopper custom model
-    weather_routing.py  rain/headwind zones -> custom-model areas
+    weather_routing.py  corridor cells by the hour -> the `weather` field GraphHopper routes around
     schedule.py      croniter-based next_departure / forecast_available_at
     tasks.py         every heavy operation: geometry, cells, job planning/assembly, scans
     sections.py      route sectioning by weather condition
@@ -643,11 +643,13 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   vias still ahead. A day with a via gets one path: alternatives take two points only.
 - **Alternatives are per day.** `alternative_route` takes two points only and exceeds the
   2 M node cap beyond ~130 km, so a failure falls back to one path.
-- **Weather-aware routing** (Pro, days within `WEATHER_ROUTING_DAYS`): rain zones as request
-  `areas`, headwind as `in_<zone> && orientation …` (`urban_density` and `orientation` were
-  added to `graph.encoded_values`). Corridor cells are ordinary `ForecastCell`s on a 0.05°
-  lattice fetched by `refresh_forecast_cell`; `plan_journey_routes` re-defers until they are
-  warm (bounded), then reads `cache_only`. The multipliers are `ride_quality.ROUTING_*`.
+- **Weather-aware routing** (Pro, days within `WEATHER_ROUTING_DAYS`) is GraphHopper's own,
+  see "Weather routing in GraphHopper" below: the day's corridor cells by the hour go with the
+  request as a `weather` field (`weather_routing.weather_field`). Corridor cells are ordinary
+  `ForecastCell`s on a 0.05° lattice fetched by `refresh_forecast_cell`; `plan_journey_routes`
+  re-defers until they are warm (bounded), then reads `cache_only`. A weather day's first stage
+  is the way around the weather, then GraphHopper's plain alternatives to compare it with
+  (`alternative_route` cannot route by time); a refused weather request routes plainly.
 - **Stage weather is a normal forecast job** (`ForecastJob.Kind.JOURNEY_STAGE`, geometry from
   the stage row, ownership checked in `plan_forecast_job`, never station calls). Reading a
   journey starts or joins its stage jobs; the departure window reuses the departure
@@ -655,6 +657,32 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   and reasons only, never the weights.
 - **Revisions.** Every edit or re-plan bumps `plan_revision`; a planning task writes only
   while its revision is current, and replaces the days in one transaction.
+
+### Weather routing in GraphHopper
+
+The Dockerfile patches GraphHopper (`docker/graphhopper/weather/`, installed by a `grep`-guarded
+`sed` in `GraphHopper.doCreateRouter`, like the elevation patch): `WeatherRouter` solves a request
+that carries a `weather` hint with `WeatherAStar`, a time-dependent forward A*, and every other
+request exactly as before. An edge costs its weight times the weather where the rider is halfway
+along it, *when* they are there: rain by the cell and headwind along the edge's own bearing,
+interpolated in space and time. Rules that hold this together:
+
+- **GraphHopper never fetches weather.** The backend builds the field from the cache
+  (`weather_routing.weather_field`) and sends it with each request, so the provider budget and
+  the fetch lease stay in one place. A null is a cell without data and counts as no weather.
+- **The judgement stays in Python.** The field carries weight multipliers (`rain_curve`,
+  `headwind_table`, both from `ride_quality.ROUTING_*`), never the raw curves; Java only
+  interpolates. Every multiplier is ≥ 1, which keeps the landmark lower bound valid, so the A*
+  still uses LM. CH can never serve it: weather changes by the hour.
+- **Time runs forward, leg by leg.** A bidirectional search cannot know when it arrives, so a
+  weather request with `alternative_route` is refused (400). Via and round-trip legs start at the
+  departure plus the riding time of the legs before (`LegClockPathCalculator`). The riding times
+  in the reply stay the profile's: weather changes the choice of road, never the eta.
+- **Weather requests are uncached** (`weather._route`): the field is large and asked for once.
+  `JourneyPlanner.route` sends it only for a whole-day request; local POI insertions and the
+  separate-leg fallback route without it, because the field's clock starts at the departure.
+- `WeatherAStarTest` runs in the Docker build before packaging, and the smoke test checks that
+  a dry field changes nothing and that `alternative_route` is refused.
 
 ### Random rides
 
