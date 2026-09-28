@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, ref, watch } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { Map as MapLibreMap, NavigationControl, GeoJSONSource, config } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -8,6 +9,8 @@ import lightStyle from "@/assets/map-styles/positron.json?url";
 import darkStyle from "@/assets/map-styles/dark-matter.json?url";
 import type { SystemFeature, SystemCoveragePoint } from "@norain/api/models";
 import { systemGeoJson, coverageGeoJson, featureKey } from "@/utils/systemOverview";
+
+const { t } = useI18n();
 
 const props = defineProps<{
     items: SystemFeature[];
@@ -158,7 +161,7 @@ onMounted(() => {
         if (selected) emit("select", selected);
     });
     activeMap.on("error", () => {
-        emit("error", "Ein Teil der Karte konnte nicht geladen werden.");
+        emit("error", t("system.mapPartial"));
     });
 });
 watch(() => [props.items, props.selected, props.points, props.coverageKind, props.now, props.maxAgeSeconds], update);
@@ -173,7 +176,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div ref="container" class="system-map" role="region" aria-label="Systemkarte mit Routen und Wetterzellen" />
+    <div ref="container" class="system-map" role="region" :aria-label="t('system.mapLabel')" />
 </template>
 <style scoped>
 .system-map {

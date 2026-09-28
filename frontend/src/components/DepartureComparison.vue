@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useNow } from "@vueuse/core";
+import { useI18n } from "vue-i18n";
 import type { DepartureCandidate, DepartureComparison } from "@norain/api/models";
+import { intlLocale, te } from "@/i18n";
+import { rideLabelText } from "@/utils/levels";
 import { scoreColor } from "@/utils/rideQuality";
 
 const props = defineProps<{
@@ -10,6 +13,7 @@ const props = defineProps<{
     betterOnly?: boolean;
 }>();
 const emit = defineEmits<{ select: [time: string]; reset: [] }>();
+const { t } = useI18n();
 const now = useNow({ interval: 15_000 });
 const selected = computed(() => props.selectedTime ?? props.comparison.requestedTime);
 const recommended = computed(() =>
@@ -24,20 +28,32 @@ const candidates = computed(() => {
         c => available(c) && c.rideScore != null && c.rideScore < baselineScore,
     );
 });
-const formatter = new Intl.DateTimeFormat("de-CH", {
-    timeZone: "Europe/Zurich",
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
+// Rebuilt for the current language, so a switch reformats every time here.
+const formatter = computed(
+    () =>
+        new Intl.DateTimeFormat(intlLocale(), {
+            timeZone: "Europe/Zurich",
+            day: "2-digit",
+            month: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+        }),
+);
+const timeFormatter = computed(
+    () =>
+        new Intl.DateTimeFormat(intlLocale(), {
+            timeZone: "Europe/Zurich",
+            hour: "2-digit",
+            minute: "2-digit",
+            timeZoneName: "shortOffset",
+        }),
+);
+const format = (time: string) => formatter.value.format(new Date(time));
+/** The server's reason for the recommendation is a code; a newer one we don't know says nothing. */
+const explanation = computed(() => {
+    const key = `departures.explanation.${props.comparison.explanation}`;
+    return te(key) ? t(key) : "";
 });
-const timeFormatter = new Intl.DateTimeFormat("de-CH", {
-    timeZone: "Europe/Zurich",
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZoneName: "shortOffset",
-});
-const format = (time: string) => formatter.format(new Date(time));
 const sameTime = (a: string, b: string) => Date.parse(a) === Date.parse(b);
 function available(candidate: DepartureCandidate) {
     return candidate.available && Date.parse(candidate.departureTime) >= now.value.getTime();
@@ -53,20 +69,25 @@ function select(candidate: DepartureCandidate) {
 <template>
     <section
         v-if="!betterOnly || candidates.length || selectedTime"
-        aria-label="Abfahrtszeiten vergleichen"
+        :aria-label="t('departures.compare')"
         class="q-pa-sm departure-comparison"
     >
-        <div class="text-subtitle2">Beste Abfahrtszeit</div>
+        <div class="text-subtitle2">{{ t("departures.title") }}</div>
         <div class="text-caption">
-            Zeitfenster: {{ format(comparison.windowStart) }} – {{ format(comparison.windowEnd) }}
+            {{ t("departures.window", { from: format(comparison.windowStart), to: format(comparison.windowEnd) }) }}
         </div>
         <p v-if="recommended" class="q-my-sm">
-            Abfahrt etwa {{ format(recommended.departureTime) }} · Ankunft {{ format(recommended.arrivalTime) }}
+            {{
+                t("departures.recommended", {
+                    departure: format(recommended.departureTime),
+                    arrival: format(recommended.arrivalTime),
+                })
+            }}
             <br />
-            {{ comparison.explanation }}
+            {{ explanation }}
         </p>
-        <p v-else-if="!betterOnly" class="q-my-sm">Nicht genügend Wetterdaten oder keine zukünftige Abfahrt im Zeitfenster.</p>
-        <div class="departure-timeline" aria-label="Verglichene Abfahrtszeiten">
+        <p v-else-if="!betterOnly" class="q-my-sm">{{ t("departures.nothing") }}</p>
+        <div class="departure-timeline" :aria-label="t('departures.compared')">
             <button
                 v-for="candidate in candidates"
                 :key="candidate.departureTime"
@@ -78,17 +99,27 @@ function select(candidate: DepartureCandidate) {
                 @click="select(candidate)"
             >
                 <strong>{{ timeFormatter.format(new Date(candidate.departureTime)) }}</strong>
-                <span>{{ available(candidate) ? candidate.rideLabel : "Nicht verfügbar" }}</span>
-                <span v-if="sameTime(candidate.departureTime, comparison.requestedTime)">Gewünscht</span>
-                <span v-if="candidate.departureTime === recommended?.departureTime">Empfohlen</span>
-                <span v-if="sameTime(candidate.departureTime, selected)">Angezeigt</span>
+                <span>
+                    {{
+                        available(candidate) && candidate.rideLabel
+                            ? rideLabelText(candidate.rideLabel)
+                            : t("common.notAvailable")
+                    }}
+                </span>
+                <span v-if="sameTime(candidate.departureTime, comparison.requestedTime)">
+                    {{ t("departures.requested") }}
+                </span>
+                <span v-if="candidate.departureTime === recommended?.departureTime">
+                    {{ t("departures.recommendedBadge") }}
+                </span>
+                <span v-if="sameTime(candidate.departureTime, selected)">{{ t("departures.shown") }}</span>
             </button>
         </div>
         <button v-if="selectedTime" type="button" class="reset-time q-mt-sm" @click="emit('reset')">
-            Zur gewünschten Abfahrtszeit
+            {{ t("departures.backToRequested") }}
         </button>
         <div class="text-caption text-muted q-mt-sm">
-            Vergleich in 15-Minuten-Schritten. Die Wetterprognose kann gröber sein.
+            {{ t("departures.steps") }}
         </div>
     </section>
 </template>

@@ -11,6 +11,8 @@ backend/          Django 6 + Channels (async ASGI via daphne)
   backend/settings/  base.py + development.py / production.py (a package, not settings.py)
   backend/asgi.py    ProtocolTypeRouter: the Django app for http, consumers for websocket
   core/
+    middleware.py    UserLanguageMiddleware: the account's language over Accept-Language
+    locale/en/       django.po + compiled .mo (msgids are German); `just messages`
     weather.py       routing + sampling + wind logic, compute_route_weather, build_geometry
     grid.py          forecast grid cache (ForecastCell, EnsembleCell) + API fetch + extraction
     stations.py      Weather Underground stations: budgeted fetch, cache, near-now correction
@@ -50,7 +52,11 @@ frontend/         Vue 3 + Quasar + @tanstack/vue-query
     services/        http.ts (shared fetch+CSRF, allauthRequest), auth.ts, billing.ts — the
                      plain-Django and allauth endpoints; the ninja API goes through the
                      generated @norain/api client
-    composables/     useSession, useEntitlements
+    composables/     useSession, useEntitlements, useLocale (detect, switch and save the language)
+    i18n/index.ts    vue-i18n instance, t/te for .ts modules, intlLocale(), dateFnsLocale()
+    locales/         de.json (source) + en.json; __tests__ checks both have the same keys
+    utils/levels.ts  the server's band/level/weather codes -> words
+    utils/serverErrors.ts  stored job/plan error codes -> words
     utils/rideQuality.ts   score -> YlOrRd colour + its casing, line placement; no scoring
                            (that is core/ride_quality.py, server-only)
     utils/routeThumbnail.ts  geographic path -> square viewBox projection
@@ -73,15 +79,17 @@ user permits duplicate and blank emails (`unique=False, blank=True`) and its `us
 index is case-sensitive, so "one account per email address, however capitalised" cannot be
 expressed there — and you cannot add constraints to a model the project does not own. The
 model also overrides `email` to `blank=False` (an account with no email could never verify
-itself or reset its password) and adds `signup_completed` and `default_profile` (the bike
-profile the route, journey and map forms start with; `useSession().defaultProfile`).
+itself or reset its password) and adds `signup_completed`, `default_profile` (the bike
+profile the route, journey and map forms start with; `useSession().defaultProfile`) and
+`language` (see "Internationalisation").
 
 **Sign-up, sign-in, verification and password reset are django-allauth, headless.** allauth
 serves JSON under `/api/allauth/browser/v1/`; the Vue app draws every form
 (`components/account/SignInForms.vue`). Our own endpoints are only `/api/auth/session`
 (the session as the app needs it, plus the CSRF cookie), `/api/auth/complete-signup`,
 `/api/auth/username-available` (step 2's live check, signed-in only, limited per account)
-and `/api/auth/profile` (changes `default_profile`). Sign-up has two steps:
+and `/api/auth/profile` (changes `default_profile` and/or `language`, each optional). Sign-up has
+two steps:
 
 1. The form takes only the email. allauth creates the user with a placeholder username
    (`fahrer-<hex>`, `AccountAdapter.populate_username`: never the email's local part,
@@ -367,7 +375,11 @@ how fast the score climbs the colour ramp). It is the app's own judgement and st
   `temp_min`. `frontend/src/utils/rideQuality.ts` only maps a score to a colour and places
   samples along the line. Never add a curve, weight or breakpoint to the frontend — a threshold
   in the bundle gives the curve away. A *level* is a word, never a number the curve can be read
-  back out of; that is how `wind_effort_level` has always worked.
+  back out of; that is how `wind_effort_level` has always worked. The words are **codes**
+  (`RideBand`, `WindEffortLevel`, `ImpactLevel` in `ride_quality.py`: `very_good`…`very_poor`,
+  `tailwind`…`very_high`, `light`/`moderate`/`heavy`), and `ride_cause` names the factor that
+  dominates, if one does. The SPA words them (`utils/levels.ts`) and branches on them; see
+  "Internationalisation".
 - **Score on read, never store.** `core.jobs.forecast_view` (samples, summary *and* sections),
   `wind_arrows_at_detail` and `recurring_route._thumbnail_out` score the stored raw weather when
   serving, so a change to `RIDE_QUALITY` shows on the next request without rebuilding jobs or
@@ -887,6 +899,58 @@ those topics (`systemQueryAffected` in `utils/systemOverview.ts`). Rules that ho
   works out "possibly stalled" from `updatedAt` and the jobs page's `stall_timeout_seconds`.
   Cache freshness in the summary and coverage updates on the next notice or on "Aktualisieren".
 
+## Internationalisation
+
+The step-by-step workflow (adding a text on either side, adding a code, adding a language,
+the pre-commit checklist) is `docs/how-to/translations.md`; keep it in step with this section.
+
+German is the source language, English the second one. The frontend is vue-i18n
+(`src/i18n/index.ts`, catalogs in `src/locales/`), the backend Django's gettext with **German
+msgids** (`gettext("Route nicht gefunden.")`), so German needs no catalog and wrapping a string
+never changes what German users see. Rules that hold this together:
+
+- **One rule for server text.** Anything the SPA branches on, or that is stored, cached, reused
+  across readers or written by a worker, is a **code** the SPA words: the ride band and cause,
+  the rain/frost/wind-effort levels, the departure `explanation`, journey `reasons`
+  (`{kind, …}` from `rank_day`), `ForecastJob.error` and `Journey.plan_error` (rows from before
+  hold German prose, which `utils/serverErrors.ts` shows as it is), and the weather description
+  (the SPA words `weather_code`; `WMO_DE` is gone). **Language never enters a job key,
+  `job.result` or `forecast_view`**: one job serves readers in both languages, and the WebSocket
+  needs no locale. `gettext` is only for prose built inside a request (`HttpError`, `detail`,
+  validator messages, default names written on create such as "– Rückfahrt") and for mails and
+  briefings.
+- **Which language.** Signed in: `User.language` (`core.middleware.UserLanguageMiddleware`, after
+  `AuthenticationMiddleware`). Before that: `Accept-Language` through `LocaleMiddleware`; the SPA
+  sends its own locale in that header on every request (`services/http.ts` and the generated
+  client's middleware in `main.ts`). The SPA's order is the account's language, then the last
+  choice in this browser (localStorage), then the browser, then German (`useLocale.detectLocale`).
+  The switcher (`LanguageSwitcher.vue`, header and `/account`) saves to the account when signed
+  in. allauth creates the account in the request's language (`AccountAdapter.save_user`).
+- **Mails and briefings have no request.** `AccountAdapter.send_mail` renders in the
+  recipient's language when the address has an account ("account exists" goes to its owner,
+  whoever asked). Briefings and the trial mail use `translation.override(user.language)`. The
+  briefing body is stored, so it is worded once, in the owner's language.
+- **Never `t()` at import time.** A label built at module scope keeps the language the page
+  loaded with. Constants that carry labels are getters (`POI_CATEGORIES`, `LODGING_KINDS`,
+  `BIKE_PROFILE_OPTIONS`) or functions (`headingOptions()`, `weekdayLabels()`,
+  `metricLabels()`, `coverageLabels()`). `Intl`/`toLocale*` take `intlLocale()` (de-CH, en-GB),
+  date-fns takes `dateFnsLocale()`, both read inside a computed so a switch reformats. Charts
+  are keyed on the locale; NiceMap rebuilds its chips, arrows and stops on a switch.
+- **Catalogs.** `src/locales/de.json` is the source; `en.json` must have exactly the same keys,
+  placeholders and plural forms (`src/locales/__tests__/catalogs.spec.ts`). The Vite plugin
+  (`@intlify/unplugin-vue-i18n`) precompiles them, so a malformed message fails the build; its
+  `include` must stay `src/locales/*.json` (a broader glob swallows the spec). Escape literal
+  `{ } @ $ |` as `{'@'}`; plurals are `|`-separated (`t(key, n)`). ESLint's
+  `@intlify/vue-i18n/no-missing-keys` is an error, `no-raw-text` a warning. `welcome.vue` keeps
+  its own de/en copy object, switched by the app locale.
+- **Backend catalog.** `backend/core/locale/en/LC_MESSAGES/django.po` and the compiled `.mo`
+  are both committed, so neither the image nor a Windows dev box needs GNU gettext at runtime.
+  After adding or changing a `gettext` string or a `{% translate %}`, run `just messages`
+  (needs gettext) and translate the new `msgstr`s. `core/test_i18n.py` fails when the `.mo` is
+  missing or stale. Mail templates in `core/templates/account/email/` use `{% translate %}` /
+  `{% blocktranslate with site_name=current_site.name %}` (blocktranslate takes no attribute
+  lookups).
+
 ## Testing
 
 - `SimpleTestCase` for pure functions (no DB)
@@ -898,6 +962,8 @@ those topics (`systemQueryAffected` in `utils/systemOverview.ts`). Rules that ho
   test needs a live worker
 - Run: `cd backend && python manage.py test core`
 - Frontend: `cd frontend && npm run test:unit` and `npm run type-check`
+- Unit tests render in German: `src/test/setup.ts` registers i18n for every mount; Playwright's
+  default locale is `de-CH`. Backend tests run in German unless they set a language.
 
 **Patch at the binding site, which differs by module.** When asserting that a path spends no
 API request, patch `core.weather.get_or_fetch_forecast_cell` *and*

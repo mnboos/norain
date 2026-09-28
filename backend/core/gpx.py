@@ -7,6 +7,7 @@ from xml.etree import ElementTree as ET
 
 from defusedxml.common import DefusedXmlException
 from defusedxml.ElementTree import fromstring
+from django.utils.translation import gettext
 
 from .geo import haversine_m
 
@@ -18,17 +19,17 @@ GPX_NS = "http://www.topografix.com/GPX/1/1"
 
 def validate_track(points):
     if not 2 <= len(points) <= MAX_TRACK_POINTS:
-        raise ValueError("Eine Strecke braucht 2 bis 100000 Punkte.")
+        raise ValueError(gettext("Eine Strecke braucht 2 bis 100000 Punkte."))
     result = []
     for point in points:
         if len(point) not in (2, 3):
-            raise ValueError("Ein Punkt muss Längengrad, Breitengrad und optional Höhe enthalten.")
+            raise ValueError(gettext("Ein Punkt muss Längengrad, Breitengrad und optional Höhe enthalten."))
         values = [float(v) for v in point]
         if not all(math.isfinite(v) for v in values) or not (-180 <= values[0] <= 180 and -90 <= values[1] <= 90):
-            raise ValueError("Die Datei enthält ungültige Koordinaten.")
+            raise ValueError(gettext("Die Datei enthält ungültige Koordinaten."))
         result.append(values)
     if not any(p[:2] != result[0][:2] for p in result[1:]):
-        raise ValueError("Die Strecke braucht mindestens zwei unterschiedliche Positionen.")
+        raise ValueError(gettext("Die Strecke braucht mindestens zwei unterschiedliche Positionen."))
     return result
 
 
@@ -41,20 +42,20 @@ def distances(points):
 
 def parse_gpx(raw):
     if len(raw) > MAX_GPX_BYTES:
-        raise ValueError("Die GPX-Datei darf höchstens 10 MiB gross sein.")
+        raise ValueError(gettext("Die GPX-Datei darf höchstens 10 MiB gross sein."))
     try:
         doc = fromstring(raw, forbid_dtd=True, forbid_entities=True, forbid_external=True)
     except (ET.ParseError, DefusedXmlException) as exc:
-        raise ValueError("Die Datei ist kein gültiges GPX-XML.") from exc
+        raise ValueError(gettext("Die Datei ist kein gültiges GPX-XML.")) from exc
     namespace = doc.tag.partition("}")[0][1:] if doc.tag.startswith("{") else ""
     if namespace not in ("", "http://www.topografix.com/GPX/1/0", GPX_NS):
-        raise ValueError("Unbekanntes GPX-Format.")
+        raise ValueError(gettext("Unbekanntes GPX-Format."))
     prefix = "{" + namespace + "}" if namespace else ""
     if doc.tag != prefix + "gpx" or doc.get("version") not in ("1.0", "1.1"):
-        raise ValueError("Bitte eine GPX-Datei der Version 1.0 oder 1.1 wählen.")
+        raise ValueError(gettext("Bitte eine GPX-Datei der Version 1.0 oder 1.1 wählen."))
     count = sum(1 for e in doc.iter() if e.tag in (prefix + "trkpt", prefix + "rtept", prefix + "wpt"))
     if count > MAX_TRACK_POINTS:
-        raise ValueError("Die GPX-Datei darf höchstens 100000 Punkte enthalten.")
+        raise ValueError(gettext("Die GPX-Datei darf höchstens 100000 Punkte enthalten."))
     paths = []
     for element in doc:
         if element.tag not in (prefix + "trk", prefix + "rte"):
@@ -72,7 +73,7 @@ def parse_gpx(raw):
                     if elevation is not None:
                         coords.append(float(elevation))
                 except (KeyError, TypeError, ValueError) as exc:
-                    raise ValueError("Die Datei enthält ungültige Koordinaten oder Höhen.") from exc
+                    raise ValueError(gettext("Die Datei enthält ungültige Koordinaten oder Höhen.")) from exc
                 points.append(coords)
             if not points:
                 continue
@@ -87,7 +88,7 @@ def parse_gpx(raw):
                 }
             )
     if not paths:
-        raise ValueError("Keine Strecke gefunden. Einzelne Wegpunkte reichen nicht aus.")
+        raise ValueError(gettext("Keine Strecke gefunden. Einzelne Wegpunkte reichen nicht aus."))
     return paths
 
 
@@ -117,7 +118,7 @@ def guided_points(points, limit=17):
 def exact_geometry(points, duration_seconds, interval_seconds=300):
     points = validate_track(points)
     if not math.isfinite(duration_seconds) or not 1 <= duration_seconds <= MAX_DURATION_SECONDS:
-        raise ValueError("Die Fahrzeit muss zwischen einer Sekunde und 16 Tagen liegen.")
+        raise ValueError(gettext("Die Fahrzeit muss zwischen einer Sekunde und 16 Tagen liegen."))
     cumulative = distances(points)
     total = cumulative[-1]
     times = [d / total * duration_seconds for d in cumulative]

@@ -1,5 +1,8 @@
 import type { WindArrow, WindDistribution } from "@norain/api/models";
 
+import { t } from "@/i18n";
+import { windEffortText } from "@/utils/levels";
+
 /** The ground-wind fields the arrow and its label read. Nullable so partial data is refused here too. */
 export interface GroundWind {
     bearing?: number | null;
@@ -17,35 +20,38 @@ export function groundArrowBearing(wind: GroundWind): number | null {
     return normalizeBearing(wind.windDir + 180);
 }
 
+function sector(degrees: number): number {
+    return Math.floor((normalizeBearing(degrees) + 22.5) / 45) % 8;
+}
+
+/** "von vorne rechts" …: eight sectors relative to the direction of travel. */
 export function relativeWindLabel(angle: number): string {
-    const sectors = ["von vorne", "von vorne rechts", "von rechts", "von hinten rechts",
-        "von hinten", "von hinten links", "von links", "von vorne links"];
-    return sectors[Math.floor((normalizeBearing(angle) + 22.5) / 45) % 8] ?? "";
+    return t(`wind.relative.${sector(angle)}`);
 }
 
 export function compassLabel(degrees: number): string {
-    const sectors = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"];
-    return sectors[Math.floor((normalizeBearing(degrees) + 22.5) / 45) % 8] ?? "";
+    return t(`wind.compass.${sector(degrees)}`);
 }
 
 /** e.g. "12 km/h aus SW, von vorne rechts". */
 export function groundWindText(wind: GroundWind): string {
-    if (wind.windSpeed == null) return "Wind nicht verfügbar";
-    if (wind.windDir == null) return `${Math.round(wind.windSpeed)} km/h, keine Richtung`;
-    const base = `${Math.round(wind.windSpeed)} km/h aus ${compassLabel(wind.windDir)}`;
+    if (wind.windSpeed == null) return t("wind.notAvailable");
+    const speed = Math.round(wind.windSpeed);
+    if (wind.windDir == null) return t("wind.noDirection", { speed });
+    const base = t("wind.from", { speed, dir: compassLabel(wind.windDir) });
     return wind.bearing == null ? base : `${base}, ${relativeWindLabel(wind.windDir - wind.bearing)}`;
 }
 
 /**
- * Extra effort to hold the planned speed against the wind, as the word the server chose
- * (`windEffortLevel`: "Wind hilft", "keiner", "niedrig" … "sehr hoch"). The thresholds are
- * part of the ride-quality scoring and stay on the server.
+ * Extra effort to hold the planned speed against the wind, as the level the server chose
+ * (`windEffortLevel`: "tailwind", "none", "low" … "very_high"). The thresholds are part of
+ * the ride-quality scoring and stay on the server.
  */
 export function windPowerText(level: string | null | undefined): string {
-    if (level == null) return "Windaufwand nicht verfügbar";
-    if (level === "Wind hilft") return "Wind hilft (geschätzt)";
-    if (level === "keiner") return "Kein Windaufwand (geschätzt)";
-    return `Windaufwand ${level} (geschätzt)`;
+    if (level == null) return t("wind.effort.notAvailable");
+    if (level === "tailwind") return t("wind.effort.tailwind");
+    if (level === "none") return t("wind.effort.none");
+    return t("wind.effort.level", { level: windEffortText(level) });
 }
 
 /** Arrow edge length in px from the server's 0..1 `windEffort`: 20 at calm, tailwind or unknown, 32 at the top. */
@@ -78,10 +84,10 @@ export function visibleWindArrows(
 
 export function windDistributionParts(distribution: WindDistribution) {
     return [
-        { label: "Gegenwind", meters: distribution.headwindM, color: "#d24d78" },
-        { label: "Seitenwind", meters: distribution.crosswindM, color: "#2f7fd8" },
-        { label: "Rückenwind", meters: distribution.tailwindM, color: "#1a9e8f" },
-        { label: "Windstille", meters: distribution.calmM, color: "#b5c3cc" },
-        { label: "Unbekannt", meters: distribution.unknownM, color: "#666" },
+        { label: t("wind.distribution.headwind"), meters: distribution.headwindM, color: "#d24d78" },
+        { label: t("wind.distribution.crosswind"), meters: distribution.crosswindM, color: "#2f7fd8" },
+        { label: t("wind.distribution.tailwind"), meters: distribution.tailwindM, color: "#1a9e8f" },
+        { label: t("wind.distribution.calm"), meters: distribution.calmM, color: "#b5c3cc" },
+        { label: t("wind.distribution.unknown"), meters: distribution.unknownM, color: "#666" },
     ];
 }

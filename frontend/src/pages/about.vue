@@ -1,13 +1,19 @@
 <route lang="json5">
 {
   name: "about",
-  meta: { title: "Über" }
+  meta: { titleKey: "pages.about" }
 }
 </route>
 
+<script setup lang="ts">
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
+</script>
+
 <template>
     <div class="about">
-        <h1>This is an about page</h1>
+        <h1>{{ t("pages.about") }}</h1>
     </div>
 </template>
 

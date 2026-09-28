@@ -3,6 +3,7 @@ import { GPXApi } from "@norain/api/apis";
 import type { PlacesSearchResult, RecurringRouteOut, RoutePlanIn, RoutePlanOut } from "@norain/api/models";
 import { ResponseError } from "@norain/api/runtime";
 import { Notify } from "quasar";
+import { t } from "@/i18n";
 import { isRecord } from "@/services/http";
 
 export const gpxApi = new GPXApi();
@@ -34,7 +35,7 @@ export async function gpxError(error: unknown): Promise<string> {
         const body: unknown = await error.response.json().catch(() => null);
         if (isRecord(body) && typeof body.detail === "string") return body.detail;
     }
-    return error instanceof Error && !(error instanceof ResponseError) ? error.message : "Die GPX-Anfrage ist fehlgeschlagen.";
+    return error instanceof Error && !(error instanceof ResponseError) ? error.message : t("gpx.requestFailed");
 }
 
 function gpxFileName(name: string): string {
@@ -86,11 +87,11 @@ export async function shareGpx(response: Response, name = "route"): Promise<void
     const file = new File([blob], gpxFileName(name), { type: "application/gpx+xml" });
     if (await shareFile(file) !== "blocked") return;
     Notify.create({
-        message: "GPX ist bereit.",
+        message: t("gpx.ready"),
         timeout: 10000,
         actions: [
-            { label: "Teilen", color: "white", handler: () => { void shareFile(file); } },
-            { label: "Herunterladen", color: "white", handler: () => { downloadFile(file); } },
+            { label: t("gpx.share"), color: "white", handler: () => { void shareFile(file); } },
+            { label: t("gpx.download"), color: "white", handler: () => { downloadFile(file); } },
         ],
     });
 }

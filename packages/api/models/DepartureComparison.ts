@@ -51,8 +51,24 @@ export interface DepartureComparison {
     /**
      * 
      */
-    explanation: string;
+    explanation: DepartureComparisonExplanationEnum;
 }
+
+/**
+* @export
+* @enum {string}
+*/
+export enum DepartureComparisonExplanationEnum {
+    InsufficientData = 'insufficient_data',
+    BestInWindow = 'best_in_window',
+    RequestedEquivalent = 'requested_equivalent',
+    RequestedBest = 'requested_best',
+    LessRain = 'less_rain',
+    LessWind = 'less_wind',
+    Milder = 'milder',
+    LessFrost = 'less_frost'
+}
+
 
 /**
  * Check if a given object implements the DepartureComparison interface.

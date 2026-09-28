@@ -162,9 +162,13 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    # Accept-Language picks the language before sign-in; UserLanguageMiddleware then puts
+    # the account's own setting on top. The SPA has no language prefix in its URLs.
+    "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.middleware.UserLanguageMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -311,7 +315,13 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
+# German is the source language: every msgid is the German text, so "de" needs no catalog.
+# See "Internationalisation" in CLAUDE.md.
+LANGUAGE_CODE = "de"
+
+LANGUAGES = [("de", "Deutsch"), ("en", "English")]
+
+LOCALE_PATHS = [BASE_DIR / "core" / "locale"]
 
 TIME_ZONE = "Europe/Zurich"
 

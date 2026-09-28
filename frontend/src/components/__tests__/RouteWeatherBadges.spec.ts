@@ -1,5 +1,9 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
+import {
+    RouteThumbnailFrostLevelEnum as Frost,
+    RouteThumbnailRainLevelEnum as Rain,
+} from "@norain/api/models";
 
 import RouteWeatherBadges from "../RouteWeatherBadges.vue";
 import type { ThumbnailRoute } from "@/utils/routeThumbnail";
@@ -31,7 +35,7 @@ function readings(r: ThumbnailRoute) {
 describe("RouteWeatherBadges", () => {
     it("shows the chance of rain and the coldest point of the ride", () => {
         const [rain, frost] = readings(
-            route({ rainProbability: 0.6, maxRainRateMmH: 1.2, rainLevel: "mässig", tempMin: -2, frostLevel: "stark" }),
+            route({ rainProbability: 0.6, maxRainRateMmH: 1.2, rainLevel: Rain.Moderate, tempMin: -2, frostLevel: Frost.Heavy }),
         );
         expect(rain?.text).toBe("60 %");
         // A minus sign, not a hyphen.
@@ -40,25 +44,26 @@ describe("RouteWeatherBadges", () => {
     });
 
     it("falls back to the amount when there is no probability (OpenWeatherMap path)", () => {
-        const [rain] = readings(route({ rainProbability: null, maxRainRateMmH: 1.2, rainLevel: "leicht" }));
+        const [rain] = readings(route({ rainProbability: null, maxRainRateMmH: 1.2, rainLevel: Rain.Light }));
         expect(rain?.text).toBe("1.2 mm/h");
     });
 
     it("says the level in words, so the colour is never the only cue", () => {
         const [rain, frost] = readings(
-            route({ rainProbability: 0.6, rainLevel: "mässig", tempMin: -2, frostLevel: "stark" }),
+            route({ rainProbability: 0.6, rainLevel: Rain.Moderate, tempMin: -2, frostLevel: Frost.Heavy }),
         );
+        // The server sends codes; the title words them.
         expect(rain?.title).toBe("Regenrisiko 60 %, mässig");
         expect(frost?.title).toContain("stark");
     });
 
     it("shows only the reading that fires", () => {
         // The case this component exists for: a mild wet day is rain, not frost.
-        const wet = readings(route({ rainProbability: 0.6, rainLevel: "mässig", tempMin: 19, frostLevel: null }));
+        const wet = readings(route({ rainProbability: 0.6, rainLevel: Rain.Moderate, tempMin: 19, frostLevel: null }));
         expect(wet).toHaveLength(1);
         expect(wet[0]?.title).toContain("Regenrisiko");
 
-        const icy = readings(route({ rainProbability: 0, rainLevel: null, tempMin: -4, frostLevel: "stark" }));
+        const icy = readings(route({ rainProbability: 0, rainLevel: null, tempMin: -4, frostLevel: Frost.Heavy }));
         expect(icy).toHaveLength(1);
         expect(icy[0]?.title).toContain("Frost");
     });
@@ -73,8 +78,8 @@ describe("RouteWeatherBadges", () => {
 
     it("treats a thumbnail computed for a departure that has passed as no forecast", () => {
         const stale = route(
-            { departure: "2026-09-13T08:00:00+02:00", rainProbability: 0.9, rainLevel: "stark", tempMin: -5,
-              frostLevel: "stark" },
+            { departure: "2026-09-13T08:00:00+02:00", rainProbability: 0.9, rainLevel: Rain.Heavy, tempMin: -5,
+              frostLevel: Frost.Heavy },
             { nextDeparture: DEPARTURE },
         );
         expect(readings(stale)).toEqual([]);

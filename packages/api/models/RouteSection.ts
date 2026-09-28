@@ -67,8 +67,19 @@ export interface RouteSection {
     /**
      * 
      */
-    frostLevel?: string | null;
+    frostLevel?: RouteSectionFrostLevelEnum | null;
 }
+
+/**
+* @export
+* @enum {string}
+*/
+export enum RouteSectionFrostLevelEnum {
+    Light = 'light',
+    Moderate = 'moderate',
+    Heavy = 'heavy'
+}
+
 
 /**
  * Check if a given object implements the RouteSection interface.

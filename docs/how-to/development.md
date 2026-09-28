@@ -15,6 +15,11 @@ count: recipes run in a non-interactive shell); set `CONTAINER_ENGINE` to overri
 docker compose -f docker-compose.dev.yml up -d db
 ```
 
+To change backend texts (error messages, e-mails), you also need GNU gettext:
+`winget install mlocati.GetText` on Windows (then open a new terminal),
+`sudo apt install gettext` on Debian/Ubuntu, `brew install gettext` on macOS. See
+[Maintain the translations](translations.md).
+
 ## Check backend changes
 
 From `backend/`:
@@ -56,18 +61,22 @@ The application imports `@norain/api` from `packages/api/`. The existing
 `npm run update:api` script activates a Windows virtual environment and generates
 into `frontend/src/api/`; it does not update that shared package.
 
-For the shared package, export the schema from `backend/`:
+For the shared package, run this from the repository root (requires Java):
 
 ```bash
-uv run python manage.py export_openapi_schema --indent 4 --sorted --output openapi.json
+just update-api
 ```
 
-Then, still in `backend/`, use the generator supplied by the development dependencies
-(with a Java runtime available):
+This exports the schema, removes old generated models and endpoints, regenerates
+the client with the pinned generator, and runs frontend lint and build checks.
+Commit `backend/openapi.json` and all changes in `packages/api/`, including added
+and deleted files, on the feature branch. Regenerate again after merging or
+rebasing main so the client reflects both branches' backend changes.
 
-```bash
-uv run openapi-generator-cli generate   -g typescript-fetch   -i openapi.json   -o ../packages/api   -c api-generator.typescript-fetch.additionalProperties.json
-```
+The CI `test` job repeats generation and fails if either output differs from Git.
+Make this check required in the main branch's GitHub rules and require branches
+to be up to date before merging, so changes to main trigger a fresh check of the
+combined code.
 
 Review the generated diff, preserving the package's `@norain/api` name and exports.
 Run the frontend checks above. Verify an actual API response as well as its schema,

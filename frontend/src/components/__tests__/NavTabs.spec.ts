@@ -11,7 +11,7 @@ function mountTabs(compact: boolean) {
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [
-            { path: "/", component: { template: "<div />" } },
+            { path: "/routes", component: { template: "<div />" } },
             { path: "/map", component: { template: "<div />" } },
             { path: "/explore", component: { template: "<div />" } },
         ],

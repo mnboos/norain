@@ -59,6 +59,9 @@ class User(AbstractUser):
     default_profile = models.CharField(
         max_length=16, choices=[(p.value, p.value) for p in RoutingProfile], default=RoutingProfile.BIKE.value
     )
+    # The language of the app, the API's messages and every mail or briefing. Set from the
+    # request's language when allauth creates the account; changed on /account.
+    language = models.CharField(max_length=8, choices=settings.LANGUAGES, default="de")
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = UserManager()
@@ -454,6 +457,7 @@ class ForecastJob(models.Model):
     # (flagged stale) instead of a spinner. Only the HTTP envelope serves it; see
     # ``jobs.carry_stale`` for what may be kept.
     stale_result = models.JSONField(null=True, blank=True)
+    # A code the SPA words (e.g. "weather_failed"); rows from before hold German prose.
     error = models.TextField(blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -590,6 +594,7 @@ class Journey(models.Model):
     # for and stops writing once it is no longer current.
     plan_revision = models.PositiveIntegerField(default=0)
     plan_attempts = models.PositiveSmallIntegerField(default=0)
+    # A code the SPA words (e.g. "no_route"); rows from before hold German prose.
     plan_error = models.TextField(blank=True, default="")
     planned_at = models.DateTimeField(null=True, blank=True)
     # The day cuts between the two planning tasks: ends, lodging, which days are weather-routed.

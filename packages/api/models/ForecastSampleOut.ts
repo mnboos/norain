@@ -119,10 +119,6 @@ export interface ForecastSampleOut {
     /**
      * 
      */
-    weatherDesc: string;
-    /**
-     * 
-     */
     stationCount?: number | null;
     /**
      * 
@@ -135,16 +131,64 @@ export interface ForecastSampleOut {
     /**
      * 
      */
-    rideLabel?: string | null;
+    rideLabel?: ForecastSampleOutRideLabelEnum | null;
     /**
      * 
      */
-    windEffortLevel?: string | null;
+    rideCause?: ForecastSampleOutRideCauseEnum | null;
     /**
      * 
      */
-    frostLevel?: string | null;
+    windEffortLevel?: ForecastSampleOutWindEffortLevelEnum | null;
+    /**
+     * 
+     */
+    frostLevel?: ForecastSampleOutFrostLevelEnum | null;
 }
+
+/**
+* @export
+* @enum {string}
+*/
+export enum ForecastSampleOutRideLabelEnum {
+    VeryGood = 'very_good',
+    Good = 'good',
+    Fair = 'fair',
+    Poor = 'poor',
+    VeryPoor = 'very_poor'
+}
+/**
+* @export
+* @enum {string}
+*/
+export enum ForecastSampleOutRideCauseEnum {
+    Rain = 'rain',
+    Wind = 'wind',
+    Temp = 'temp',
+    Frost = 'frost'
+}
+/**
+* @export
+* @enum {string}
+*/
+export enum ForecastSampleOutWindEffortLevelEnum {
+    Tailwind = 'tailwind',
+    None = 'none',
+    Low = 'low',
+    Medium = 'medium',
+    High = 'high',
+    VeryHigh = 'very_high'
+}
+/**
+* @export
+* @enum {string}
+*/
+export enum ForecastSampleOutFrostLevelEnum {
+    Light = 'light',
+    Moderate = 'moderate',
+    Heavy = 'heavy'
+}
+
 
 /**
  * Check if a given object implements the ForecastSampleOut interface.
@@ -156,7 +200,6 @@ export function instanceOfForecastSampleOut(value: object): value is ForecastSam
     if (!('eta' in value) || value['eta'] === undefined) return false;
     if ((!('rainMm' in (value as Record<string, any>)) && !('rain_mm' in (value as Record<string, any>))) || ((value as Record<string, any>)['rainMm'] === undefined && (value as Record<string, any>)['rain_mm'] === undefined)) return false;
     if (!('temp' in value) || value['temp'] === undefined) return false;
-    if ((!('weatherDesc' in (value as Record<string, any>)) && !('weather_desc' in (value as Record<string, any>))) || ((value as Record<string, any>)['weatherDesc'] === undefined && (value as Record<string, any>)['weather_desc'] === undefined)) return false;
     return true;
 }
 
@@ -192,11 +235,11 @@ export function ForecastSampleOutFromJSONTyped(json: any, ignoreDiscriminator: b
         'sampleIndex': json['sample_index'] === undefined ? undefined : json['sample_index'] === null ? null : json['sample_index'],
         'windCoverage': json['wind_coverage'] === undefined ? undefined : json['wind_coverage'] === null ? null : json['wind_coverage'],
         'weatherCode': json['weather_code'] === undefined ? undefined : json['weather_code'] === null ? null : json['weather_code'],
-        'weatherDesc': json['weather_desc'],
         'stationCount': json['station_count'] === undefined ? undefined : json['station_count'] === null ? null : json['station_count'],
         'ensembleWeight': json['ensemble_weight'] === undefined ? undefined : json['ensemble_weight'] === null ? null : json['ensemble_weight'],
         'rideScore': json['ride_score'] === undefined ? undefined : json['ride_score'] === null ? null : json['ride_score'],
         'rideLabel': json['ride_label'] === undefined ? undefined : json['ride_label'] === null ? null : json['ride_label'],
+        'rideCause': json['ride_cause'] === undefined ? undefined : json['ride_cause'] === null ? null : json['ride_cause'],
         'windEffortLevel': json['wind_effort_level'] === undefined ? undefined : json['wind_effort_level'] === null ? null : json['wind_effort_level'],
         'frostLevel': json['frost_level'] === undefined ? undefined : json['frost_level'] === null ? null : json['frost_level'],
     };
@@ -235,11 +278,11 @@ export function ForecastSampleOutToJSONTyped(value?: ForecastSampleOut | null, i
         'sample_index': value['sampleIndex'],
         'wind_coverage': value['windCoverage'],
         'weather_code': value['weatherCode'],
-        'weather_desc': value['weatherDesc'],
         'station_count': value['stationCount'],
         'ensemble_weight': value['ensembleWeight'],
         'ride_score': value['rideScore'],
         'ride_label': value['rideLabel'],
+        'ride_cause': value['rideCause'],
         'wind_effort_level': value['windEffortLevel'],
         'frost_level': value['frostLevel'],
     };

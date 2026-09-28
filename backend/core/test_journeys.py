@@ -421,8 +421,8 @@ class RankingTests(SimpleTestCase):
         by_id = {row["id"]: row for row in rows}
         self.assertTrue(by_id["dry"]["recommended"])
         self.assertFalse(by_id["wet"]["recommended"])
-        self.assertIn("Toilette: 30 km ohne", by_id["dry"]["reasons"])
-        self.assertIn("8 % länger als die schnellste Variante", by_id["dry"]["reasons"])
+        self.assertIn({"kind": "gap", "category": "toilets", "km": 30}, by_id["dry"]["reasons"])
+        self.assertIn({"kind": "longer", "percent": 8}, by_id["dry"]["reasons"])
         self.assertNotIn("_combined", by_id["dry"], "the ranking value stays on the server")
 
     def test_unscored_stages_still_rank(self):
@@ -579,8 +579,9 @@ class JourneyTaskTests(TestCase):
         self.assertEqual(stored["leg_seconds"], 600)
         self.assertEqual(stored["limit_overruns"]["legs"][0]["leg"], 1)
         self.assertEqual(stored["gaps"]["toilets"], {"s": None, "m": 1700})
-        self.assertIn("Tageslimit: ~1 min zu lang", stored["reasons"])
-        self.assertIn("Etappe 1: ~5 min zu lang", stored["reasons"])
+        reasons = [{k: v for k, v in r.items() if v is not None} for r in stored["reasons"]]
+        self.assertIn({"kind": "day_limit", "minutes": 1}, reasons)
+        self.assertIn({"kind": "leg_limit", "leg": 1, "minutes": 5}, reasons)
 
     def test_weather_routing_only_for_pro_days_near_now(self):
         Subscription.objects.create(
@@ -845,13 +846,14 @@ class JourneyApiTests(TestCase):
         self.assertEqual(stage_out["limit_overruns"]["day"]["over_m"], 2500.0)
         self.assertEqual(stage_out["limit_overruns"]["legs"][0]["leg"], 2)
         self.assertEqual(stage_out["detours"][0]["detour_m"], 1200.0)
-        reasons = stage_out["reasons"]
-        self.assertIn("Trinkwasser: 30 km ohne", reasons)
-        self.assertIn("Toilette: 70 min ohne", reasons)
-        self.assertIn("Umweg ~1.2 km zu Toilette", reasons)
-        self.assertIn("Tageslimit: ~2.5 km zu weit", reasons)
-        self.assertIn("Etappe 2: ~5 min zu lang", reasons)
-        self.assertFalse(any(r.startswith("Tageslimit:") and "min" in r for r in reasons), "distance-only overrun")
+        # The schema serves every field; the unset ones are None.
+        reasons = [{k: v for k, v in r.items() if v is not None} for r in stage_out["reasons"]]
+        self.assertIn({"kind": "gap", "category": "drinking_water", "km": 30}, reasons)
+        self.assertIn({"kind": "gap", "category": "toilets", "minutes": 70}, reasons)
+        self.assertIn({"kind": "detour", "category": "toilets", "km": 1.2}, reasons)
+        self.assertIn({"kind": "day_limit", "km": 2.5}, reasons)
+        self.assertIn({"kind": "leg_limit", "leg": 2, "minutes": 5}, reasons)
+        self.assertFalse(any(r["kind"] == "day_limit" and "minutes" in r for r in reasons), "distance-only overrun")
 
     def _stage_on_day(self, journey, index: int, **day_fields) -> JourneyStage:
         day = JourneyDay.objects.create(

@@ -97,15 +97,15 @@ class RideScoreTests(SimpleTestCase):
         self.assertIsNone(ride_score(sample(rain_rate_mm_h=None, rain_mm=0.5, precipitation_interval_s=0)))
 
     def test_only_names_a_cause_when_one_factor_dominates(self):
-        self.assertIn("v. a. Regen", ride_score(sample(rain_rate_mm_h=3)).label)
+        self.assertEqual(ride_score(sample(rain_rate_mm_h=3)).cause, "rain")
         # Drizzle, headwind and cold together: wind is the largest term, but at well under
         # half the total it is not an honest culprit. Pinned weights, so tuning the live
         # config cannot change which factor is largest here.
         balanced = replace(RIDE_QUALITY, weights={"rain": 0.55, "wind": 0.25, "temp": 0.2}, sensitivity=1)
         mixed = ride_score(sample(rain_rate_mm_h=0.5, headwind=20, temp=8), balanced)
         self.assertEqual(mixed.worst, "wind")
-        self.assertEqual(mixed.label, "gut")
-        self.assertEqual(ride_score(sample()).label, "sehr gut")
+        self.assertEqual(mixed.label, "good")
+        self.assertEqual(ride_score(sample()).label, "very_good")
 
     def test_bands(self):
         self.assertEqual([score_band(s) for s in (0, 0.19, 0.2, 0.5, 1)], [0, 0, 1, 2, 4])
@@ -124,7 +124,7 @@ class RideQualityConfigTests(SimpleTestCase):
         config = replace(RIDE_QUALITY, weights={**RIDE_QUALITY.weights, "rain": 1})
         rq = ride_score(self.heavy_rain, config)
         self.assertEqual(rq.score, 1)
-        self.assertEqual(rq.label, "sehr schlecht · v. a. Regen")
+        self.assertEqual((rq.label, rq.cause), ("very_poor", "rain"))
 
     def test_sensitivity_bends_the_score_but_keeps_both_ends(self):
         w = self.rain_weight
@@ -137,7 +137,7 @@ class RideQualityConfigTests(SimpleTestCase):
         balanced = replace(RIDE_QUALITY, weights={"rain": 0.55, "wind": 0.25, "temp": 0.2}, sensitivity=1)
         harsh = ride_score(mixed, replace(balanced, sensitivity=3))
         self.assertAlmostEqual(harsh.worst_share, ride_score(mixed, balanced).worst_share)
-        self.assertNotIn("v. a.", harsh.label)
+        self.assertIsNone(harsh.cause)
 
 
 class RainImpactTests(SimpleTestCase):
@@ -179,15 +179,15 @@ class RainImpactTests(SimpleTestCase):
 class WindEffortTests(SimpleTestCase):
     def test_levels_follow_the_wind_curve_breakpoints(self):
         cases = {
-            -20: "Wind hilft",
-            0.4: "keiner",
-            1: "niedrig",
-            49: "niedrig",
-            50: "mittel",
-            129: "mittel",
-            130: "hoch",
-            229: "hoch",
-            230: "sehr hoch",
+            -20: "tailwind",
+            0.4: "none",
+            1: "low",
+            49: "low",
+            50: "medium",
+            129: "medium",
+            130: "high",
+            229: "high",
+            230: "very_high",
         }
         for watts, level in cases.items():
             self.assertEqual(wind_effort_level(watts), level, watts)
@@ -242,7 +242,7 @@ class FrostImpactTests(SimpleTestCase):
         icy = ride_score(sample(temp=-6, weather_code=75))
         self.assertAlmostEqual(icy.frost, 1)
         self.assertEqual(icy.worst, "frost")
-        self.assertIn("v. a. Frost", icy.label)
+        self.assertEqual(icy.cause, "frost")
 
     def test_a_config_without_a_frost_weight_still_scores(self):
         # Configs are hand-written and may name fewer factors than the code knows.
@@ -251,8 +251,8 @@ class FrostImpactTests(SimpleTestCase):
 
     def test_the_level_is_a_word_and_says_nothing_when_there_is_no_frost(self):
         self.assertIsNone(frost_level(sample(temp=18)))
-        self.assertEqual(frost_level(sample(temp=-6, weather_code=75)), "stark")
-        self.assertIn(frost_level(sample(temp=1)), ("leicht", "mässig"))
+        self.assertEqual(frost_level(sample(temp=-6, weather_code=75)), "heavy")
+        self.assertIn(frost_level(sample(temp=1)), ("light", "moderate"))
 
 
 class FeltTemperatureTests(SimpleTestCase):
@@ -276,8 +276,8 @@ class ServedRideQualityTests(SimpleTestCase):
         stored = sample(rain_rate_mm_h=3, wind_power_w=140)
         served = score_sample(stored)
         self.assertAlmostEqual(served["ride_score"], ride_score(stored).score, places=4)
-        self.assertIn("Regen", served["ride_label"])
-        self.assertEqual(served["wind_effort_level"], "hoch")
+        self.assertEqual(served["ride_cause"], "rain")
+        self.assertEqual(served["wind_effort_level"], "high")
         self.assertEqual(served["frost_level"], frost_level(stored))
         self.assertNotIn("ride_score", stored)
 
@@ -296,7 +296,7 @@ class ServedRideQualityTests(SimpleTestCase):
         out = _thumbnail_out(blob).model_dump()
         self.assertNotIn("samples", out)
         self.assertEqual(out["ride_score"], round(worst_ride_score(blob["samples"]).score, 4))
-        self.assertIn("v. a. Regen", out["ride_label"])
+        self.assertEqual(out["ride_cause"], "rain")
         # Verdicts and two aggregates, and nothing else of the weather: no wind, no code, no
         # per-sample series.
         self.assertEqual(
@@ -307,6 +307,7 @@ class ServedRideQualityTests(SimpleTestCase):
                 "computed_at",
                 "ride_score",
                 "ride_label",
+                "ride_cause",
                 "rain_level",
                 "frost_level",
                 "rain_probability",
@@ -330,7 +331,7 @@ class ServedRideQualityTests(SimpleTestCase):
         self.assertEqual(out.rain_probability, 0.8)
         self.assertEqual(out.max_rain_rate_mm_h, 4)
         self.assertEqual(out.temp_min, -3)
-        self.assertEqual(out.rain_level, "stark")
+        self.assertEqual(out.rain_level, "heavy")
         self.assertIsNotNone(out.frost_level)
 
     def test_thumbnail_says_nothing_rather_than_zero_when_there_is_no_reading(self):
@@ -359,5 +360,5 @@ class ServedRideQualityTests(SimpleTestCase):
             "wind_power_w": 115,
         }
         [arrow] = wind_arrows_at_detail({"wind_segments": [segment]}, "full")
-        self.assertEqual(arrow["wind_effort_level"], "mittel")
+        self.assertEqual(arrow["wind_effort_level"], "medium")
         self.assertAlmostEqual(arrow["wind_effort"], 0.5)

@@ -1,21 +1,24 @@
 <route lang="json5">
 {
     name: "account",
-    meta: { title: "Konto" },
+    meta: { titleKey: "pages.account" },
 }
 </route>
 
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 
 import CompleteSignupForm from "@/components/account/CompleteSignupForm.vue";
 import SignInForms from "@/components/account/SignInForms.vue";
 import { authApi, type BikeProfile, type SessionState } from "@/services/auth";
 import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
 import PlanPanel from "@/components/account/PlanPanel.vue";
+import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
 import { useSession } from "@/composables/useSession";
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const { isAuthenticated, session, setSession, refreshSession } = useSession();
@@ -24,7 +27,7 @@ const error = ref("");
 
 function nextPath() {
     const next = route.query.next;
-    return typeof next === "string" && next.startsWith("/") ? next : "/";
+    return typeof next === "string" && next.startsWith("/") ? next : "/routes";
 }
 
 /** allauth has signed the user in; step 2 of sign-up may still be due (the page shows it). */
@@ -44,9 +47,9 @@ async function changeProfile(value: BikeProfile) {
     error.value = "";
     savingProfile.value = true;
     try {
-        setSession(await authApi.updateProfile(value));
+        setSession(await authApi.updateProfile({ defaultProfile: value }));
     } catch (err) {
-        error.value = err instanceof Error ? err.message : "Die Einstellung konnte nicht gespeichert werden.";
+        error.value = err instanceof Error ? err.message : t("account.saveFailed");
     } finally {
         savingProfile.value = false;
     }
@@ -57,7 +60,7 @@ async function signOut() {
     try {
         await authApi.logout();
     } catch (err) {
-        error.value = err instanceof Error ? err.message : "Abmelden fehlgeschlagen.";
+        error.value = err instanceof Error ? err.message : t("account.signOutFailed");
         return;
     }
     setSession({ authenticated: false, user: null });
@@ -75,20 +78,19 @@ async function signOut() {
                     @completed="onSignupCompleted"
                 />
                 <q-banner v-if="error" class="bg-negative text-white q-mt-md" dense>{{ error }}</q-banner>
-                <q-btn class="q-mt-md" color="primary" label="Abmelden" flat @click="signOut" />
+                <q-btn class="q-mt-md" color="primary" :label="t('account.signOut')" flat @click="signOut" />
             </template>
 
             <template v-else-if="isAuthenticated">
-                <div class="text-h6 q-mb-md">Angemeldet</div>
+                <div class="text-h6 q-mb-md">{{ t("account.signedIn") }}</div>
                 <p class="q-mb-none">{{ session.user?.username }}</p>
                 <p class="text-caption text-grey q-mb-md">{{ session.user?.email }}</p>
                 <p v-if="session.user?.hasPassword === false" class="text-caption q-mb-md">
-                    Du meldest dich mit einem Code per E-Mail an. Ein Passwort kannst du über „Passwort
-                    vergessen?“ festlegen.
+                    {{ t("account.codeOnly") }}
                 </p>
 
                 <div v-if="session.user" class="q-mb-md">
-                    <div class="text-body2 q-mb-xs">Standard-Velotyp</div>
+                    <div class="text-body2 q-mb-xs">{{ t("account.defaultProfile") }}</div>
                     <q-btn-toggle
                         :model-value="session.user.defaultProfile"
                         :options="BIKE_PROFILE_OPTIONS"
@@ -96,9 +98,14 @@ async function signOut() {
                         toggle-color="primary"
                         spread
                         no-caps
-                        aria-label="Standard-Velotyp"
+                        :aria-label="t('account.defaultProfile')"
                         @update:model-value="changeProfile"
                     />
+                </div>
+
+                <div class="q-mb-md">
+                    <div class="text-body2 q-mb-xs">{{ t("language.label") }}</div>
+                    <LanguageSwitcher />
                 </div>
 
                 <q-banner v-if="error" class="bg-negative text-white q-mb-md" dense>{{ error }}</q-banner>
@@ -107,7 +114,7 @@ async function signOut() {
 
                 <PlanPanel class="q-mb-lg" />
 
-                <q-btn color="primary" label="Abmelden" flat @click="signOut" />
+                <q-btn color="primary" :label="t('account.signOut')" flat @click="signOut" />
             </template>
 
             <template v-else>

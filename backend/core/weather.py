@@ -61,38 +61,6 @@ COORD_ROUND = 2  # ~1 km grid: nearby samples share one forecast call
 # of live data so showery hours light up while clear hours stay quiet.
 POP_VERDICT = 0.25  # fraction of wet members at a point that flips will_rain to true
 
-# WMO weather codes -> short German description (Open-Meteo `weather_code`).
-WMO_DE = {
-    0: "Klar",
-    1: "Meist klar",
-    2: "Teils bewölkt",
-    3: "Bewölkt",
-    45: "Nebel",
-    48: "Reifnebel",
-    51: "Leichter Niesel",
-    53: "Niesel",
-    55: "Starker Niesel",
-    56: "Gefrierender Niesel",
-    57: "Starker gefrierender Niesel",
-    61: "Leichter Regen",
-    63: "Regen",
-    65: "Starker Regen",
-    66: "Gefrierender Regen",
-    67: "Starker gefrierender Regen",
-    71: "Leichter Schneefall",
-    73: "Schneefall",
-    75: "Starker Schneefall",
-    77: "Schneegriesel",
-    80: "Leichte Regenschauer",
-    81: "Regenschauer",
-    82: "Heftige Regenschauer",
-    85: "Leichte Schneeschauer",
-    86: "Starke Schneeschauer",
-    95: "Gewitter",
-    96: "Gewitter mit Hagel",
-    99: "Schweres Gewitter mit Hagel",
-}
-
 
 # --------------------------------------------------------------------------- geometry helpers
 def _cumulative_times_s(coords: list[list[float]], time_details: list[list]) -> list[float]:
@@ -741,7 +709,6 @@ async def compute_route_weather(
                 crosswind=round(crosswind, 1) if crosswind is not None else None,
                 wind_power_w=round(wind_power_w) if wind_power_w is not None else None,
                 weather_code=forecast["weather_code"],
-                weather_desc=WMO_DE.get(forecast["weather_code"], "") if forecast["weather_code"] is not None else "",
                 station_count=station_count,
                 ensemble_weight=ensemble_weights[i],
             )

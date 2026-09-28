@@ -9,6 +9,7 @@ import type { ExpressionSpecification, MapMouseEvent } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { shallowRef, computed, onBeforeUnmount, onMounted, type Ref, ref, useTemplateRef, watch, toRefs } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import lightStyleUrl from "@/assets/map-styles/positron.json?url";
@@ -16,6 +17,7 @@ import darkStyleUrl from "@/assets/map-styles/dark-matter.json?url";
 import type { PlacesSearchResult, RouteForecastOut, ForecastSampleOut, WindArrow } from "@norain/api/models";
 import { FROST_MARK, isNightEta, pickVisibleSamples, weatherIconSvg } from "@/utils/weatherIcons";
 import { swissTime } from "@/utils/forecastDetails";
+import { impactText, rideLabelText, weatherCodeText } from "@/utils/levels";
 import {
     alternativeColor,
     CASING_DARK,
@@ -45,6 +47,7 @@ import { CANDIDATE_COLOR, poiCategory, poiName, type MapPoi } from "@/utils/poiC
 maplibreConfig.WORKER_URL = maplibreWorkerUrl;
 
 const $q = useQuasar();
+const { t, locale } = useI18n();
 
 // Pale, low-ink vector basemaps (CARTO, no API key) so the route line and the weather chips
 // carry the map instead of competing with OSM's POIs and landuse fills. Both styles ship
@@ -137,7 +140,10 @@ function highlightPosition() {
     const time = positionTime(position);
     selectedMarker
         .getElement()
-        .setAttribute("aria-label", time ? `Ausgewählter Punkt: ${time} Uhr` : "Ausgewählter Punkt");
+        .setAttribute(
+            "aria-label",
+            time ? t("map.selectedPointAt", { time: t("common.clock", { time }) }) : t("map.selectedPoint"),
+        );
     selectedMarker.setLngLat(point).addTo(map);
 }
 
@@ -269,10 +275,10 @@ function initialWindMode(): WindMode {
     return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "arrows" : "animation";
 }
 const windMode = ref<WindMode>(initialWindMode());
-const windModeOptions = [
-    { label: "Animation", value: "animation" },
-    { label: "Pfeile", value: "arrows" },
-];
+const windModeOptions = computed(() => [
+    { label: t("map.windAnimation"), value: "animation" },
+    { label: t("map.windArrows"), value: "arrows" },
+]);
 /** Set when the particle layer could not start (no WebGL2 support for it): arrows then. */
 const particlesFailed = ref(false);
 const showParticles = computed(
@@ -346,7 +352,7 @@ function sampleMarkerEl(sample: ForecastSampleOut): HTMLDivElement {
     el.innerHTML = `
         ${
             !hasWindProfile.value && sample.windDir != null && sample.windSpeed != null && sample.windSpeed > 0
-                ? `<svg class="wx-wind" width="16" height="16" viewBox="0 0 24 24" aria-label="Wind über Grund"
+                ? `<svg class="wx-wind" width="16" height="16" viewBox="0 0 24 24" aria-label="${t("map.groundWind")}"
              style="transform:rotate(${sample.windDir + 180}deg)">
             <path d="M12 2 L17 13 L12 10.5 L7 13 Z"
                   fill="${strong ? "#d24d78" : "#2c3e50"}" stroke="white" stroke-width="1.5"/>
@@ -359,7 +365,7 @@ function sampleMarkerEl(sample: ForecastSampleOut): HTMLDivElement {
             ${
                 sample.frostLevel
                     ? `<svg class="wx-frost" width="14" height="14" viewBox="0 0 24 24"
-                            role="img" aria-label="Frost: ${sample.frostLevel}">${FROST_MARK}</svg>`
+                            role="img" aria-label="${t("map.frost", { level: impactText(sample.frostLevel) })}">${FROST_MARK}</svg>`
                     : ""
             }
         </div>`;
@@ -390,7 +396,7 @@ function clearWindMarkers() {
 }
 
 function windArrowLabel(arrow: WindArrow): string {
-    return `Wind: ${groundWindText(arrow)} · ${windPowerText(arrow.windEffortLevel)}`;
+    return t("map.windArrow", { wind: groundWindText(arrow), effort: windPowerText(arrow.windEffortLevel) });
 }
 
 /** The real wind, pointing where it blows; the bigger the arrow, the more it costs to hold the planned speed. */
@@ -525,32 +531,32 @@ function fmtTime(iso: string): string {
 }
 
 function windText(s: ForecastSampleOut): string {
-    if (s.headwind == null) return "Windrichtung zur Strecke nicht verfügbar";
-    if (s.headwind > 1) return `${Math.round(s.headwind)} km/h Gegenwind`;
-    if (s.headwind < -1) return `${Math.round(-s.headwind)} km/h Rückenwind`;
+    if (s.headwind == null) return t("map.popup.windDirUnavailable");
+    if (s.headwind > 1) return t("map.popup.headwind", { speed: Math.round(s.headwind) });
+    if (s.headwind < -1) return t("map.popup.tailwind", { speed: Math.round(-s.headwind) });
     return s.crosswind == null
-        ? "Seitenwind nicht verfügbar"
-        : `${Math.round(s.crosswind)} km/h Seitenwind (Abschnittsmittel)`;
+        ? t("map.popup.crosswindUnavailable")
+        : t("map.popup.crosswind", { speed: Math.round(s.crosswind) });
 }
 
 /** " (gefühlt 8°C)" where the wind chill at riding speed differs from the thermometer. */
 function feltText(s: ForecastSampleOut): string {
     if (s.feltTemp == null || Math.round(s.feltTemp) === Math.round(s.temp)) return "";
-    return ` (gefühlt ${s.feltTemp.toFixed(0)}°C)`;
+    return ` (${t("map.popup.felt", { temp: s.feltTemp.toFixed(0) })})`;
 }
 
 function samplePopupHtml(s: ForecastSampleOut): string {
     return `<div style="font:13px/1.4 var(--app-font);min-width:160px">
-        <b>${fmtTime(s.eta)} Uhr</b> · ${s.weatherDesc || ""}<br>
+        <b>${t("common.clock", { time: fmtTime(s.eta) })}</b> · ${weatherCodeText(s.weatherCode)}<br>
         🌧️ ${s.rainRateMmH == null ? "—" : s.rainRateMmH.toFixed(1)} mm/h &nbsp; 🌡️ ${s.temp.toFixed(0)}°C${feltText(s)}<br>
-        Regenrisiko: ${s.pop == null ? "Nicht verfügbar" : `${Math.round(s.pop * 100)}%`}<br>
-        💨 ${s.windSpeed == null ? "Nicht verfügbar" : `${s.windSpeed.toFixed(0)} km/h über Grund`}${s.windGust ? ` (Böen ${s.windGust.toFixed(0)})` : ""}<br>
+        ${t("map.popup.rainRisk", { risk: s.pop == null ? t("common.notAvailable") : `${Math.round(s.pop * 100)}%` })}<br>
+        💨 ${s.windSpeed == null ? t("common.notAvailable") : t("map.popup.groundSpeed", { speed: s.windSpeed.toFixed(0) })}${s.windGust ? ` (${t("map.popup.gusts", { speed: s.windGust.toFixed(0) })})` : ""}<br>
         <span class="${s.headwind != null && s.headwind > 8 ? "wx-strong" : ""}">↳ ${windText(s)}</span><br>
         ${s.windEffortLevel != null ? `↳ ${windPowerText(s.windEffortLevel)}<br>` : ""}
-        ${s.frostLevel != null ? `❄️ Frost: ${s.frostLevel}<br>` : ""}
-        ${s.windCoverage != null && s.windCoverage < 1 ? "Für Teile dieses Abschnitts fehlen Winddaten.<br>" : ""}
+        ${s.frostLevel != null ? `❄️ ${t("map.frost", { level: impactText(s.frostLevel) })}<br>` : ""}
+        ${s.windCoverage != null && s.windCoverage < 1 ? `${t("map.popup.windPartial")}<br>` : ""}
         <span class="wx-quality">
-            <i style="background:${scoreColor(s.rideScore)}"></i> Fahrqualität: ${s.rideLabel ?? "Nicht verfügbar"}
+            <i style="background:${scoreColor(s.rideScore)}"></i> ${t("thumbnail.quality", { quality: rideLabelText(s.rideLabel, s.rideCause) || t("common.notAvailable") })}
         </span>
     </div>`;
 }
@@ -567,7 +573,7 @@ function createSampleMarker(map: MapLibreMap, s: ForecastSampleOut, index: numbe
     const el = marker.getElement();
     el.tabIndex = 0;
     el.setAttribute("role", "button");
-    el.setAttribute("aria-label", `Wetter um ${fmtTime(s.eta)} Uhr auswählen`);
+    el.setAttribute("aria-label", t("map.selectWeatherAt", { time: t("common.clock", { time: fmtTime(s.eta) }) }));
     el.addEventListener("click", () => {
         selectSample(index);
     });
@@ -781,7 +787,7 @@ const POI_LAYER = "journey-poi";
 const POI_PIXEL_RATIO = 2;
 
 function poiLabel(poi: MapPoi): string {
-    return `${poiCategory(poi.category).emoji} ${poiName(poi)}${poi.planned ? "" : ` · ${poi.note ?? "nicht eingeplant"}`}`;
+    return `${poiCategory(poi.category).emoji} ${poiName(poi)}${poi.planned ? "" : ` · ${poi.note ?? t("map.notPlanned")}`}`;
 }
 
 /** A shown planned stop. Its popup is built on first open. */
@@ -902,6 +908,19 @@ async function renderPois() {
 }
 watch([() => props.pois, hasMap], () => void renderPois());
 
+// Chips, arrows and stops carry their words in the DOM (aria-labels, cached popups), so a
+// language switch rebuilds them; the line and the particle field have no words and stay.
+watch(locale, () => {
+    const map = mymap.value;
+    if (!map) return;
+    clearSampleMarkers();
+    applyMarkerThinning();
+    clearWindMarkers();
+    renderWindMarkers();
+    highlightPosition();
+    void renderPois();
+});
+
 function showPoiPopup(event: MapMouseEvent & { features?: GeoJSON.Feature[] }) {
     const map = mymap.value;
     const feature = event.features?.[0];
@@ -1007,8 +1026,7 @@ onMounted(() => {
             console.error("MapLibre error:", e);
         });
     } catch (e) {
-        webglError.value =
-            "WebGL konnte nicht initialisiert werden. Bitte aktiviere Hardwarebeschleunigung im Browser.";
+        webglError.value = t("map.webglError");
         console.error("Map init failed:", e);
     }
 });
@@ -1034,7 +1052,7 @@ onBeforeUnmount(() => {
     <q-card flat class="transparent column col wx-map-wrap" :style="height ? { height, flex: 'none' } : undefined">
         <slot name="search"></slot>
         <q-card-section v-if="webglError" class="fit flex column items-center justify-center text-center q-pa-xl">
-            <div class="text-h6 q-mb-md">Karte konnte nicht geladen werden</div>
+            <div class="text-h6 q-mb-md">{{ t("map.loadFailed") }}</div>
             <div class="text-body2">{{ webglError }}</div>
         </q-card-section>
         <q-card-section v-else class="col column q-pa-none">
@@ -1049,7 +1067,7 @@ onBeforeUnmount(() => {
                 <div class="row items-center no-wrap q-gutter-x-sm">
                     <q-item-label caption>
                         <span aria-hidden="true">➤</span>
-                        Wind
+                        {{ t("map.wind") }}
                     </q-item-label>
                     <q-btn-toggle
                         v-model="windMode"
@@ -1060,11 +1078,11 @@ onBeforeUnmount(() => {
                         size="sm"
                         toggle-color="primary"
                         text-color="white"
-                        aria-label="Winddarstellung"
+                        :aria-label="t('map.windMode')"
                     />
                 </div>
-                <div v-if="showParticles">Partikel zeigen Richtung und Stärke des Winds zur Fahrzeit</div>
-                <div v-else>Pfeile zeigen Richtung und Stärke</div>
+                <div v-if="showParticles">{{ t("map.particlesHint") }}</div>
+                <div v-else>{{ t("map.arrowsHint") }}</div>
             </div>
         </q-card-section>
     </q-card>

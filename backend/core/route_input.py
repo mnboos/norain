@@ -2,6 +2,7 @@
 
 from enum import StrEnum
 
+from django.utils.translation import gettext
 from pydantic import Field, field_validator, model_validator
 
 from .gpx import MAX_DURATION_SECONDS, validate_track
@@ -31,9 +32,9 @@ class RoutePlanIn(CamelSchema):
     @model_validator(mode="after")
     def check_shape(self):
         if self.geometry_source == "imported" and self.duration_seconds is None:
-            raise ValueError("Bitte eine Fahrzeit angeben.")
+            raise ValueError(gettext("Bitte eine Fahrzeit angeben."))
         if self.geometry_source == "graphhopper":
             if len(self.coordinates) > 17:
-                raise ValueError("Höchstens 15 Zwischenpunkte sind erlaubt.")
+                raise ValueError(gettext("Höchstens 15 Zwischenpunkte sind erlaubt."))
             self.coordinates = [p[:2] for p in self.coordinates]
         return self

@@ -269,8 +269,12 @@ once, since Stripe retries on any non-2xx. The Checkout success redirect grants 
 a browser may never load it.
 
 Handled events: `checkout.session.completed`, `customer.subscription.created`,
-`customer.subscription.updated`, `customer.subscription.deleted`,
-`invoice.payment_failed`. Anything else gets a 200 and is ignored.
+`customer.subscription.updated`, `customer.subscription.paused`,
+`customer.subscription.resumed`, `customer.subscription.deleted`,
+`customer.subscription.trial_will_end`, `invoice.payment_failed`. Paused and resumed
+events sync the subscription status and access tier. `trial_will_end` is recorded for
+monitoring, sends the customer an email reminder, and leaves access unchanged. Anything
+else gets a 200 and is ignored.
 
 ## Route list thumbnails
 

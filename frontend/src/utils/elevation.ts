@@ -1,6 +1,8 @@
 import type { Data, Layout } from "plotly.js";
 import type { ElevationPoint } from "@norain/api/models";
 
+import { t } from "@/i18n";
+
 export interface ElevationSeries {
     points: ElevationPoint[];
     color: string;
@@ -65,10 +67,10 @@ export function elevationFigure(
             showlegend: false,
             uirevision: `elevation-${axis}`,
             xaxis: {
-                title: { text: axis === "distance" ? "Strecke (km)" : "Fahrzeit (min)" },
+                title: { text: axis === "distance" ? t("charts.axis.distanceKm") : t("charts.axis.rideMinutes") },
                 rangemode: "tozero",
             },
-            yaxis: { title: { text: "Höhe (m ü. M.)" }, autorange: true },
+            yaxis: { title: { text: t("charts.axis.elevation") }, autorange: true },
         },
     };
 }

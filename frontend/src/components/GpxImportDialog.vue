@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { GeometrySource } from "@norain/api/models";
 import { computed, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import type { GpxPathOut, RoutePlanIn, RoutePlanOut } from "@norain/api/models";
 import { gpxApi, gpxError, routingProfile, type RouteDraft } from "@/services/gpx";
 import GpxPreviewMap from "./GpxPreviewMap.vue";
@@ -8,6 +9,7 @@ import RouteTimingFields from "./RouteTimingFields.vue";
 import RouteEditorDialog from "./RouteEditorDialog.vue";
 import { toLonLat } from "@/utils/routeEditing";
 const props = defineProps<{ modelValue: boolean; profile?: string }>();
+const { t } = useI18n();
 const emit = defineEmits<{ "update:modelValue": [value: boolean]; apply: [draft: RouteDraft] }>();
 const paths = ref<GpxPathOut[]>([]);
 const selected = ref(0);
@@ -42,7 +44,7 @@ async function upload(value: File | null) {
     const current = ++generation;
     error.value = ""; loading.value = true;
     try {
-        if (value.size > 10 * 1024 * 1024) throw new Error("Die GPX-Datei darf höchstens 10 MiB gross sein.");
+        if (value.size > 10 * 1024 * 1024) throw new Error(t("gpx.tooLarge"));
         const result = await gpxApi.coreApiGpxImportGpx({ file: value });
         if (current !== generation) return;
         selected.value = 0; paths.value = result;
@@ -82,26 +84,26 @@ function adjust(points: number[][]) {
 <template>
     <q-dialog :model-value="modelValue" :maximized="$q.screen.xs" @update:model-value="emit('update:modelValue', $event)">
         <q-card style="width: 760px; max-width: 96vw" @dragover.prevent @drop.prevent="drop">
-            <q-card-section class="text-h6">GPX importieren</q-card-section>
+            <q-card-section class="text-h6">{{ t("gpx.import") }}</q-card-section>
             <q-card-section class="q-gutter-md">
-                <q-file v-model="file" accept=".gpx,application/gpx+xml" outlined label="GPX-Datei wählen oder hier ablegen" @update:model-value="upload" />
+                <q-file v-model="file" accept=".gpx,application/gpx+xml" outlined :label="t('gpx.chooseFile')" @update:model-value="upload" />
                 <q-select
-v-if="paths.length > 1" v-model="selected" outlined label="Strecke oder Abschnitt"
+v-if="paths.length > 1" v-model="selected" outlined :label="t('gpx.track')"
                     :options="paths.map((p, i) => ({ label: p.name, value: i }))" emit-value map-options />
                 <template v-if="path">
-                    <q-input v-model="name" outlined dense label="Name" maxlength="200" />
+                    <q-input v-model="name" outlined dense :label="t('routeForm.name')" maxlength="200" />
                     <q-option-group
 v-model="mode" :options="[
-                        { label: 'Originalstrecke behalten', value: 'imported' },
-                        { label: 'Fürs Velo neu berechnen', value: 'graphhopper' },
+                        { label: t('gpx.keepOriginal'), value: 'imported' },
+                        { label: t('gpx.recalculate'), value: 'graphhopper' },
                     ]" />
                     <RouteTimingFields v-if="mode === 'imported'" v-model="duration" :distance-m="path.distanceM" />
-                    <div v-if="mode === 'imported'" class="text-caption">Die Wettervorhersage verwendet deine neue Abfahrtszeit und diese Fahrzeit.</div>
-                    <div v-else class="text-caption">Orange: Original. Blau: neu berechnete Strecke. Die Strecke kann vom Original abweichen.</div>
+                    <div v-if="mode === 'imported'" class="text-caption">{{ t("gpx.importedHint") }}</div>
+                    <div v-else class="text-caption">{{ t("gpx.recalculatedHint") }}</div>
                     <GpxPreviewMap :original="path.coordinates" :calculated="mode === 'graphhopper' ? preview?.coordinates : undefined" />
                     <div>{{ ((preview?.distanceM ?? path.distanceM) / 1000).toFixed(1) }} km
                         <template v-if="preview"> · {{ Math.round(preview.timeS / 60) }} min</template></div>
-                    <q-btn v-if="mode === 'graphhopper'" outline no-caps label="Zwischenpunkte anpassen" @click="editing = true" />
+                    <q-btn v-if="mode === 'graphhopper'" outline no-caps :label="t('gpx.adjustVias')" @click="editing = true" />
                     <RouteEditorDialog
 v-if="routingPoints.length >= 2" v-model="editing"
                         :start="toLonLat(routingPoints[0]!)" :dest="toLonLat(routingPoints[routingPoints.length - 1]!)"
@@ -111,8 +113,8 @@ v-if="routingPoints.length >= 2" v-model="editing"
                 <div v-if="error" role="alert" class="text-negative">{{ error }}</div>
             </q-card-section>
             <q-card-actions align="right">
-                <q-btn flat no-caps label="Abbrechen" @click="emit('update:modelValue', false)" />
-                <q-btn color="primary" no-caps label="Übernehmen" :disable="!preview || !valid || loading" @click="apply" />
+                <q-btn flat no-caps :label="t('common.cancel')" @click="emit('update:modelValue', false)" />
+                <q-btn color="primary" no-caps :label="t('common.apply')" :disable="!preview || !valid || loading" @click="apply" />
             </q-card-actions>
         </q-card>
     </q-dialog>

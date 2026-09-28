@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, watch } from "vue";
+import { useI18n } from "vue-i18n";
 
 import { authApi, type BikeProfile, type SessionState } from "@/services/auth";
+import { currentLocale } from "@/i18n";
 import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
 
 import { samePassword } from "./passwordRules";
@@ -14,6 +16,7 @@ import { samePassword } from "./passwordRules";
  */
 const props = defineProps<{ email: string; defaultProfile: BikeProfile }>();
 const emit = defineEmits<{ completed: [session: SessionState] }>();
+const { t } = useI18n();
 
 /** How long typing has to pause before the username is checked. */
 const CHECK_DELAY_MS = 400;
@@ -70,9 +73,9 @@ async function submit() {
     error.value = "";
     submitting.value = true;
     try {
-        emit("completed", await authApi.completeSignup(username.value, password.value, profile.value));
+        emit("completed", await authApi.completeSignup(username.value, password.value, profile.value, currentLocale()));
     } catch (err) {
-        error.value = err instanceof Error ? err.message : "Das Konto konnte nicht eingerichtet werden.";
+        error.value = err instanceof Error ? err.message : t("signup.completeFailed");
     } finally {
         submitting.value = false;
     }
@@ -80,43 +83,43 @@ async function submit() {
 </script>
 
 <template>
-    <div class="text-h6 q-mb-sm">Fast fertig</div>
-    <p class="text-body2 q-mb-md">Deine E-Mail-Adresse ist bestätigt. Richte jetzt dein Konto ein.</p>
+    <div class="text-h6 q-mb-sm">{{ t("signup.almostDone") }}</div>
+    <p class="text-body2 q-mb-md">{{ t("signup.verifiedIntro") }}</p>
     <q-banner v-if="error" class="bg-negative text-white q-mb-md" dense>{{ error }}</q-banner>
 
     <q-form class="q-gutter-md" @submit.prevent="submit">
         <q-input
             v-model="username"
-            label="Benutzername"
-            hint="Damit kannst du dich auch anmelden. Andere können ihn sehen."
+            :label="t('signup.username')"
+            :hint="t('signup.usernameHint')"
             autocomplete="username"
             outlined
             :loading="checking"
             :error="!!usernameProblem"
             :error-message="usernameProblem"
-            :rules="[v => !!v.trim() || 'Pflichtfeld']"
+            :rules="[v => !!v.trim() || t('common.required')]"
         />
 
         <div>
-            <div class="text-body2 q-mb-xs">Womit fährst du meistens?</div>
+            <div class="text-body2 q-mb-xs">{{ t("signup.profileQuestion") }}</div>
             <q-btn-toggle
                 v-model="profile"
                 :options="BIKE_PROFILE_OPTIONS"
                 toggle-color="primary"
                 spread
                 no-caps
-                aria-label="Standard-Velotyp"
+                :aria-label="t('account.defaultProfile')"
             />
             <div class="text-caption text-grey q-mt-xs">
-                Voreinstellung für neue Strecken und Touren. Du kannst sie jederzeit ändern.
+                {{ t("signup.profileHint") }}
             </div>
         </div>
 
         <q-input
             v-model="password"
             type="password"
-            label="Passwort (optional)"
-            hint="Ohne Passwort meldest du dich mit einem Code per E-Mail an."
+            :label="t('signup.passwordOptional')"
+            :hint="t('signup.passwordHint')"
             autocomplete="new-password"
             outlined
         />
@@ -124,7 +127,7 @@ async function submit() {
             v-if="password"
             v-model="passwordRepeat"
             type="password"
-            label="Passwort wiederholen"
+            :label="t('signup.passwordRepeat')"
             autocomplete="new-password"
             outlined
             :rules="repeatRules"
@@ -132,7 +135,7 @@ async function submit() {
         <q-btn
             type="submit"
             color="primary"
-            label="Konto einrichten"
+            :label="t('signup.submit')"
             :loading="submitting"
             :disable="!!usernameProblem"
         />

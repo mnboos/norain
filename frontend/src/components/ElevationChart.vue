@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from "vue";
 import { useQueries, useQuery } from "@tanstack/vue-query";
+import { useI18n } from "vue-i18n";
 import { ElevationApi, PublicRoutesApi } from "@norain/api/apis";
 import type { ElevationOut } from "@norain/api/models";
 import { ELEVATION_PRIMARY_GROUP, elevationFigure, type ElevationSeries } from "@/utils/elevation";
 import { interpolate } from "@/utils/forecastSelection";
 
 const NiceChart = defineAsyncComponent(() => import("./chart/NiceChart.vue"));
+const { t } = useI18n();
 const props = defineProps<{
     routeId?: string;
     stageId?: string;
@@ -92,7 +94,7 @@ const profiles = computed(() =>
         {
             data: query.data.value,
             color: props.color ?? "#32966b",
-            label: props.label ?? "Höhe",
+            label: props.label ?? t("elevation.height"),
             primary: true,
         },
     ].filter((p): p is typeof p & { data: ElevationOut } => usable(p.data)),
@@ -151,16 +153,16 @@ const figure = computed(() => {
 <template>
     <q-card flat bordered class="q-pa-sm" :class="{ 'compact-elevation': compact }">
         <div class="row items-center justify-between q-gutter-sm">
-            <div class="text-subtitle2">Höhenprofil</div>
+            <div class="text-subtitle2">{{ t("elevation.title") }}</div>
             <q-btn-toggle
                 v-model="axis"
                 dense
                 flat
                 no-caps
-                aria-label="Achse des Höhenprofils"
+                :aria-label="t('elevation.axis')"
                 :options="[
-                    { label: 'Strecke', value: 'distance' },
-                    { label: 'Fahrzeit', value: 'time' },
+                    { label: t('elevation.distance'), value: 'distance' },
+                    { label: t('timing.duration'), value: 'time' },
                 ]"
             />
         </div>
@@ -178,29 +180,29 @@ const figure = computed(() => {
         <q-skeleton
             v-else-if="pending"
             :height="props.compact ? '180px' : '220px'"
-            aria-label="Höhenprofil wird geladen"
+            :aria-label="t('elevation.loading')"
         />
         <div v-else-if="failed.length" role="alert" class="q-pa-md">
-            Höhendaten konnten nicht geladen werden.
-            <q-btn flat no-caps label="Erneut versuchen" @click="retryFailed" />
+            {{ t("elevation.loadFailed") }}
+            <q-btn flat no-caps :label="t('common.retry')" @click="retryFailed" />
         </div>
-        <div v-else class="q-pa-md">Keine Höhendaten für diese Strecke verfügbar.</div>
+        <div v-else class="q-pa-md">{{ t("elevation.noData") }}</div>
         <template v-if="hasData">
             <div v-if="query.isError.value" role="alert" class="q-pa-md">
-                Höhendaten für die gewählte Strecke konnten nicht geladen werden.
-                <q-btn flat no-caps label="Erneut versuchen" @click="query.refetch()" />
+                {{ t("elevation.selectedLoadFailed") }}
+                <q-btn flat no-caps :label="t('common.retry')" @click="query.refetch()" />
             </div>
             <div v-else-if="query.isPending.value" role="status" class="q-pa-md">
-                Höhenprofil für die gewählte Strecke wird geladen…
+                {{ t("elevation.selectedLoading") }}
             </div>
             <div v-else-if="!usable(query.data.value)" class="q-pa-md">
-                Keine Höhendaten für die gewählte Strecke verfügbar.
+                {{ t("elevation.selectedNoData") }}
             </div>
         </template>
         <div v-if="hasData" class="text-caption text-muted">
             {{ sources }}
-            <span v-if="axis === 'time' && approximateTiming">· Fahrzeit nach Streckenlänge geschätzt</span>
-            <span v-if="partialHeights">· Höhendaten teilweise nicht verfügbar</span>
+            <span v-if="axis === 'time' && approximateTiming">· {{ t("elevation.approximateTiming") }}</span>
+            <span v-if="partialHeights">· {{ t("elevation.partial") }}</span>
         </div>
         <div v-if="$slots.footer" class="text-caption text-muted"><slot name="footer" /></div>
     </q-card>

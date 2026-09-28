@@ -1,13 +1,14 @@
 <route lang="json5">
 {
     name: "journey-detail",
-    meta: { title: "Reise", requiresAuth: true },
+    meta: { titleKey: "pages.journey", requiresAuth: true },
 }
 </route>
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import {
     symSharpArrowBack,
@@ -24,8 +25,10 @@ import { useEntitlements } from "@/composables/useEntitlements";
 import { useJourney, useReplanJourney, useUpdateJourney } from "@/queries/journeys";
 import { dayLabel, duration, km, planStatusLabel } from "@/utils/journeys";
 import { headingLabel } from "@/utils/randomRides";
+import { planErrorText } from "@/utils/serverErrors";
 
 const $q = useQuasar();
+const { t } = useI18n();
 const currentRoute = useRoute();
 const journeyId = computed(() => String(currentRoute.params.id));
 const { data: journey, isLoading, error } = useJourney(journeyId);
@@ -43,9 +46,15 @@ const subtitle = computed(() => {
     if (!j) return "";
     if (!isRandom.value) return `${j.startName} → ${j.destName}`;
     const length = j.maxDaySeconds ? duration(j.maxDaySeconds) : km(j.maxDayDistanceM ?? 0);
-    const shape = (j.randomPrefs?.roundTrip ?? true) ? `Rundkurs ab ${j.startName}` : `${j.startName} → ${j.destName}`;
-    const heading = j.randomPrefs?.heading != null ? ` · Richtung ${headingLabel(j.randomPrefs.heading)}` : "";
-    return `${shape} · ${length}${heading}`;
+    const shape =
+        (j.randomPrefs?.roundTrip ?? true)
+            ? t("random.loopFrom", { start: j.startName, length })
+            : `${j.startName} → ${j.destName} · ${length}`;
+    const heading =
+        j.randomPrefs?.heading != null
+            ? ` · ${t("journeyPage.heading", { heading: headingLabel(j.randomPrefs.heading) })}`
+            : "";
+    return `${shape}${heading}`;
 });
 const planning = computed(() => !!journey.value && !["done", "failed"].includes(journey.value.planStatus));
 const selectedDay = ref(0);
@@ -70,7 +79,7 @@ function onSave(data: JourneyIn) {
             onError: () =>
                 $q.notify({
                     type: "negative",
-                    message: `${isRandom.value ? "Runde" : "Reise"} konnte nicht gespeichert werden.`,
+                    message: isRandom.value ? t("journeyPage.rideSaveFailed") : t("journeyPage.journeySaveFailed"),
                 }),
         },
     );
@@ -86,20 +95,20 @@ function onSave(data: JourneyIn) {
                 dense
                 :icon="symSharpArrowBack"
                 :to="isRandom ? '/random' : '/journeys'"
-                aria-label="Zurück"
+                :aria-label="t('common.back')"
             />
             <div v-if="journey" class="col q-ml-sm ellipsis">
                 <h1 class="text-h6 text-weight-bold q-my-none ellipsis">{{ journey.name }}</h1>
                 <div class="text-caption text-muted ellipsis">{{ subtitle }}</div>
             </div>
             <template v-if="journey">
-                <q-btn flat dense no-caps :icon="symSharpEdit" label="Bearbeiten" @click="editing = true" />
+                <q-btn flat dense no-caps :icon="symSharpEdit" :label="t('common.edit')" @click="editing = true" />
                 <q-btn
                     flat
                     dense
                     no-caps
                     :icon="isRandom ? symSharpCasino : symSharpRefresh"
-                    :label="isRandom ? 'Neu würfeln' : 'Neu planen'"
+                    :label="isRandom ? t('journeyPage.reroll') : t('journeyPage.replan')"
                     :loading="replan.isPending.value"
                     :disable="planning"
                     @click="replan.mutate(journeyId)"
@@ -108,18 +117,18 @@ function onSave(data: JourneyIn) {
         </div>
 
         <div v-if="isLoading" class="text-center q-mt-xl"><q-spinner-dots size="3rem" /></div>
-        <q-banner v-else-if="error || !journey" class="bg-tint-error" rounded>Nicht gefunden.</q-banner>
+        <q-banner v-else-if="error || !journey" class="bg-tint-error" rounded>{{ t("journeyPage.notFound") }}</q-banner>
 
         <template v-else>
             <q-banner v-if="planning" rounded class="bg-tint-warn q-mb-md">
                 <template #avatar><q-spinner-dots size="1.5rem" color="accent" /></template>
-                <template v-if="isRandom">Wird gewürfelt… Meteolane sucht Strecken in der gewünschten Länge.</template>
+                <template v-if="isRandom">{{ t("journeyPage.rolling") }}</template>
                 <template v-else>
-                    {{ planStatusLabel(journey.planStatus) }}… Etappen, Pausen und Unterkünfte werden gesucht.
+                    {{ t("journeyPage.planning", { status: planStatusLabel(journey.planStatus) }) }}
                 </template>
             </q-banner>
             <q-banner v-else-if="journey.planStatus === 'failed'" rounded class="bg-tint-error q-mb-md">
-                {{ journey.planError || "Die Reise konnte nicht geplant werden." }}
+                {{ planErrorText(journey.planError) }}
             </q-banner>
 
             <template v-if="days.length">
@@ -133,7 +142,7 @@ function onSave(data: JourneyIn) {
                     class="q-mb-md"
                 >
                     <q-tab v-for="(d, i) in days" :key="d.id" :name="i" no-caps>
-                        <div class="text-weight-medium">Tag {{ i + 1 }} · {{ dayLabel(d.date) }}</div>
+                        <div class="text-weight-medium">{{ t("journeyDay.day", { n: i + 1 }) }} · {{ dayLabel(d.date) }}</div>
                         <div class="text-caption text-muted">{{ dayStats(i) }}</div>
                     </q-tab>
                 </q-tabs>

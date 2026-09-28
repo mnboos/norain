@@ -48,58 +48,45 @@ def lodging_candidates(hits: list[PoiHit], kinds: list[str], from_along_m: float
 
 
 # --------------------------------------------------------------------------- ranking on read
-CATEGORY_LABELS = {
-    "toilets": "Toilette",
-    "bbq": "Grillstelle",
-    "drinking_water": "Trinkwasser",
-    "vending_food": "Automat: Essen",
-    "vending_drinks": "Automat: Getränke",
-    "vending_sweets": "Automat: Süsses",
-    "vending_coffee": "Automat: Kaffee",
-    "shelter": "Unterstand",
-    "bike_repair": "Veloreparatur",
-    "food": "Essen",
-    "groceries": "Einkauf",
-    "ebike_charging": "E-Bike-Laden",
-    "train_station": "Bahnhof",
-    "lodging": "Unterkunft",
-}
 
 
-def stage_weather(result: dict | None, now: datetime | None = None) -> tuple[float | None, str | None, str | None]:
-    """(score, label, recommended departure) of a finished stage forecast.
+def stage_weather(
+    result: dict | None, now: datetime | None = None
+) -> tuple[float | None, ride_quality.RideBand | None, ride_quality.RideFactor | None, str | None]:
+    """(score, band, cause, recommended departure) of a finished stage forecast.
 
     With a departure window the comparison's recommended time and its score; otherwise the
     ride at the planned time, aggregated the same way (``departures.aggregate``).
     """
     if not result:
-        return None, None, None
+        return None, None, None, None
     inputs = result.get("departure_inputs")
     if inputs:
         view = departures.comparison_view(inputs, now)
         chosen = next((c for c in view["candidates"] if c["departure_time"] == view["recommended_time"]), None)
         if chosen and chosen["ride_score"] is not None:
-            return chosen["ride_score"], chosen["ride_label"], view["recommended_time"]
+            return chosen["ride_score"], chosen["ride_label"], None, view["recommended_time"]
     samples = result.get("samples") or []
     scores = [ride_quality.ride_score(sample) for sample in samples]
     if not samples or any(score is None for score in scores):
-        return None, None, result.get("departure_time")
+        return None, None, None, result.get("departure_time")
     score = departures.aggregate([s.score for s in scores], samples)
     worst = ride_quality.worst_ride_score(samples)
-    label = worst.label if worst else ride_quality.BAND_LABELS[ride_quality.score_band(score)]
-    return score, label, result.get("departure_time")
+    if worst:
+        return score, worst.label, worst.cause, result.get("departure_time")
+    return score, ride_quality.BAND_LABELS[ride_quality.score_band(score)], None, result.get("departure_time")
 
 
 def rank_day(stages: list[dict], leg_m: float = 0) -> list[dict]:
     """Rank one day's alternatives. Each input: ``{id, total_seconds, gaps, detours, result}``.
 
-    Returns per stage ``{id, ride_score, ride_label, departure, recommended, reasons}``; the
+    Returns per stage ``{id, ride_score, ride_label, ride_cause, departure, recommended, reasons}``; the
     combined ranking value itself stays here.
     """
     fastest = min((s["total_seconds"] for s in stages), default=0) or 1
     rows = []
     for stage in stages:
-        score, label, departure = stage_weather(stage.get("result"))
+        score, label, cause, departure = stage_weather(stage.get("result"))
         stage_m = stage.get("leg_m", leg_m)
         stage_s = stage.get("leg_seconds", 0)
         gaps = stage.get("gaps") or {}
@@ -117,43 +104,53 @@ def rank_day(stages: list[dict], leg_m: float = 0) -> list[dict]:
         penalty = min(1, sum(penalties) / len(penalties)) if penalties else 0
         extra = max(0.0, stage["total_seconds"] / fastest - 1)
         combined = (score if score is not None else 0.5) + POI_GAP_WEIGHT * penalty + EXTRA_TIME_WEIGHT * extra
-        reasons = []
+        # Structured, never prose: the SPA words them and sorts planning warnings from details
+        # by `kind`. See "Internationalisation" in CLAUDE.md.
+        reasons: list[dict] = []
         for category, gap in sorted((stage.get("gaps") or {}).items()):
             if isinstance(gap, dict) and category not in visited_categories:
-                reasons.append(f"Kein erreichbarer Stopp für {CATEGORY_LABELS.get(category, category)} gefunden.")
+                reasons.append({"kind": "missing_stop", "category": category})
             seconds, meters = (gap.get("s", 0), gap.get("m", 0)) if isinstance(gap, dict) else (0, gap)
-            parts = []
+            excess = {}
             if stage_s and seconds > stage_s:
-                parts.append(f"{seconds / 60:.0f} min")
+                excess["minutes"] = round(seconds / 60)
             if stage_m and meters > stage_m:
-                parts.append(f"{meters / 1000:.0f} km")
-            if parts:
-                reasons.append(f"{CATEGORY_LABELS.get(category, category)}: {' / '.join(parts)} ohne")
+                excess["km"] = round(meters / 1000)
+            if excess:
+                reasons.append({"kind": "gap", "category": category, **excess})
         for detour in stage.get("detours") or []:
-            name = detour.get("name") or CATEGORY_LABELS.get(detour["category"], detour["category"])
             meters = detour.get("detour_m")
             if meters is None:
                 meters = 2 * detour["offset_m"]
-            reasons.append(f"Umweg ~{meters / 1000:.1f} km zu {name}")
+            reasons.append(
+                {
+                    "kind": "detour",
+                    "category": detour["category"],
+                    "name": detour.get("name") or None,
+                    "km": round(meters / 1000, 1),
+                }
+            )
         if extra >= 0.05:
-            reasons.append(f"{round(extra * 100)} % länger als die schnellste Variante")
+            reasons.append({"kind": "longer", "percent": round(extra * 100)})
         overruns = stage.get("limit_overruns") or {}
-        for title, over in [
-            ("Tageslimit", overruns.get("day", {})),
-            *((f"Etappe {leg['leg']}", leg) for leg in overruns.get("legs", [])),
+        for limit in [
+            {"kind": "day_limit", **overruns.get("day", {})},
+            *({"kind": "leg_limit", **leg} for leg in overruns.get("legs", [])),
         ]:
-            if over.get("over_s", 0) > 0:
-                reasons.append(f"{title}: ~{max(1, round(over['over_s'] / 60))} min zu lang")
-            if over.get("over_m", 0) > 0:
-                reasons.append(f"{title}: ~{over['over_m'] / 1000:.1f} km zu weit")
+            where = {"kind": limit["kind"], **({"leg": limit["leg"]} if "leg" in limit else {})}
+            if limit.get("over_s", 0) > 0:
+                reasons.append({**where, "minutes": max(1, round(limit["over_s"] / 60))})
+            if limit.get("over_m", 0) > 0:
+                reasons.append({**where, "km": round(limit["over_m"] / 1000, 1)})
         rows.append(
             {
                 "id": stage["id"],
                 "ride_score": round(score, 4) if score is not None else None,
                 "ride_label": label,
+                "ride_cause": cause,
                 "departure": departure,
                 # Two unnamed toilets read the same; say it once.
-                "reasons": list(dict.fromkeys(reasons)),
+                "reasons": list({tuple(sorted(r.items())): r for r in reasons}.values()),
                 "_combined": (bool(overruns.get("day")), bool(overruns.get("legs")), combined),
             }
         )
