@@ -2,8 +2,10 @@
 import {
     symSharpAdd,
     symSharpCasino,
+    symSharpClose,
     symSharpDelete,
     symSharpLuggage,
+    symSharpOpenInNew,
     symSharpRoute,
 } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
@@ -12,9 +14,11 @@ import { useI18n } from "vue-i18n";
 import RouteThumbnail from "@/components/RouteThumbnail.vue";
 import RouteWeatherBadges from "@/components/RouteWeatherBadges.vue";
 import { liveThumbnail } from "@/utils/routeThumbnail";
+import { computed, ref, toRefs } from "vue";
+import { useQuasar } from "quasar";
+import { useRouter } from "vue-router";
 import { intlLocale, te } from "@/i18n";
 import { rideLabelText } from "@/utils/levels";
-import { computed, toRefs } from "vue";
 
 const props = withDefaults(
     defineProps<{
@@ -69,6 +73,46 @@ function profileLabel(profile: string): string {
     return te(key) ? t(key) : profile;
 }
 
+const $q = useQuasar();
+const router = useRouter();
+/** Phones swipe a row left to delete it; the delete button is for wider screens only. */
+const swipeToDelete = computed(() => $q.screen.lt.sm);
+
+/**
+ * Swiping and long-pressing are invisible, so phones get a one-line hint until the rider has
+ * used either once or closed it. Kept per browser only; storage may be unavailable.
+ */
+const GESTURE_HINT_KEY = "norain.routeGestureHintSeen";
+function initialHintSeen(): boolean {
+    try {
+        return localStorage.getItem(GESTURE_HINT_KEY) === "1";
+    } catch {
+        return false;
+    }
+}
+const gestureHintSeen = ref(initialHintSeen());
+const showGestureHint = computed(() => swipeToDelete.value && !gestureHintSeen.value);
+function dismissGestureHint() {
+    if (gestureHintSeen.value) return;
+    gestureHintSeen.value = true;
+    try {
+        localStorage.setItem(GESTURE_HINT_KEY, "1");
+    } catch {
+        // Not remembered: the hint comes back on the next visit.
+    }
+}
+
+function onSwipeDelete(id: string, reset: () => void) {
+    // Slide the row back at once: the confirmation dialog decides, and a deleted row leaves the list.
+    reset();
+    dismissGestureHint();
+    emit("delete", id);
+}
+
+function openInNewTab(id: string) {
+    window.open(router.resolve(`/routes/${id}`).href, "_blank", "noopener");
+}
+
 const addButtonLabel = computed(() => (atRouteLimit.value ? t("quota.title") : t("routeList.add")));
 </script>
 
@@ -119,50 +163,95 @@ const addButtonLabel = computed(() => (atRouteLimit.value ? t("quota.title") : t
                     </q-item-section>
                 </q-item>
 
-                <!-- Route items -->
-                <q-item
-                    v-for="route in routes"
-                    :key="route.id"
-                    v-ripple
-                    :to="`/routes/${route.id}`"
-                    class="q-py-sm q-pl-sm q-pr-none"
-                >
-                    <q-item-section avatar class="">
-                        <RouteThumbnail :route="route" />
-                    </q-item-section>
-                    <q-item-section>
-                        <q-item-label>{{ route.name }}</q-item-label>
-                        <q-item-label caption>
-                            {{ relativeTime(route.nextDeparture) }} · {{ qualityLabel(route) }}
-                        </q-item-label>
-                        <q-item-label caption>
-                            {{ route.startName }} → {{ route.destName }} · {{ profileLabel(route.profile) }}
-                        </q-item-label>
-                        <q-item-label v-if="route.returnRouteId" caption>
-                            {{ t("routeList.return", { schedule: route.returnScheduleDescription }) }} ·
-                            {{ relativeTime(route.returnNextDeparture) }}
-                        </q-item-label>
-                        <!-- Rain and frost: the two readings that decide whether you ride. They add
-                     to the wording above, never replace it, and the line is there only when
-                     there is rain or frost to report - the component owns its own label. -->
-                        <RouteWeatherBadges :route="route" />
-                    </q-item-section>
+                <q-item v-if="showGestureHint" dense class="text-caption text-grey-7">
+                    <q-item-section>Nach links wischen zum Löschen, lange drücken für weitere Aktionen.</q-item-section>
                     <q-item-section side>
                         <q-btn
                             flat
                             round
                             dense
                             size="sm"
-                            :icon="symSharpDelete"
-                            color="negative"
-                            :aria-label="t('routes.delete.title')"
-                            @click.stop.prevent="emit('delete', route.id)"
+                            :icon="symSharpClose"
+                            aria-label="Hinweis schliessen"
+                            @click="dismissGestureHint"
                         />
                     </q-item-section>
                 </q-item>
+
+                <!-- Route items. On a phone a row is deleted by swiping it left, on a wider
+                     screen by its delete button; a right-click or long press opens the actions
+                     as a menu. Every path asks in index.vue before it deletes. -->
+                <q-slide-item
+                    v-for="route in routes"
+                    :key="route.id"
+                    right-color="negative"
+                    @right="({ reset }) => onSwipeDelete(route.id, reset)"
+                >
+                                        <template v-if="swipeToDelete" #right>
+                        <q-icon :name="symSharpDelete" />
+                    </template>
+                    <q-item v-ripple :to="`/routes/${route.id}`" class="route-row q-py-sm q-pl-sm q-pr-none">
+                        <q-item-section avatar class="">
+                            <RouteThumbnail :route="route" />
+                        </q-item-section>
+                        <q-item-section>
+                            <q-item-label>{{ route.name }}</q-item-label>
+                            <q-item-label caption>
+                                {{ relativeTime(route.nextDeparture) }} · {{ qualityLabel(route) }}
+                            </q-item-label>
+                            <q-item-label caption>
+                                {{ route.startName }} → {{ route.destName }} · {{ profileLabel(route.profile) }}
+                            </q-item-label>
+                            <q-item-label v-if="route.returnRouteId" caption>
+                                {{ t("routeList.return", { schedule: route.returnScheduleDescription }) }} ·
+                                {{ relativeTime(route.returnNextDeparture) }}
+                            </q-item-label>
+                            <!-- Rain and frost: the two readings that decide whether you ride. They add
+                         to the wording above, never replace it, and the line is there only when
+                         there is rain or frost to report - the component owns its own label. -->
+                            <RouteWeatherBadges :route="route" />
+                        </q-item-section>
+                        <q-item-section side>
+                            <q-btn
+                                flat
+                                round
+                                dense
+                                size="sm"
+                                :icon="symSharpDelete"
+                                color="negative"
+                                :aria-label="t('routes.delete.title')"
+                                @click.stop.prevent="emit('delete', route.id)"
+                            />
+                        </q-item-section>
+                        <q-menu context-menu touch-position @show="dismissGestureHint">
+                            <q-list dense style="min-width: 180px">
+                                <q-item v-close-popup clickable :to="`/routes/${route.id}`">
+                                    <q-item-section avatar><q-icon :name="symSharpRoute" /></q-item-section>
+                                    <q-item-section>Öffnen</q-item-section>
+                                </q-item>
+                                <q-item v-close-popup clickable @click="openInNewTab(route.id)">
+                                    <q-item-section avatar><q-icon :name="symSharpOpenInNew" /></q-item-section>
+                                    <q-item-section>In neuem Tab öffnen</q-item-section>
+                                </q-item>
+                                <q-separator />
+                                <q-item v-close-popup clickable class="text-negative" @click="emit('delete', route.id)">
+                                    <q-item-section avatar>
+                                        <q-icon :name="symSharpDelete" color="negative" />
+                                    </q-item-section>
+                                    <q-item-section>Löschen</q-item-section>
+                                </q-item>
+                            </q-list>
+                        </q-menu>
+                    </q-item>
+                </q-slide-item>
             </q-list>
         </q-card-section>
     </q-card>
 </template>
 
-<style scoped></style>
+<style scoped>
+/* A long press opens our menu; without this iOS also shows its own link preview. */
+.route-row {
+    -webkit-touch-callout: none;
+}
+</style>
