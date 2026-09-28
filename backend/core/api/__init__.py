@@ -11,7 +11,7 @@ from .recurring_route import router as routes_router
 from .route_weather import router as weather_router
 from .system import router as system_router
 
-api = NinjaAPI(auth=session_auth, title="Meteolane API")
+api = NinjaAPI(auth=session_auth, title="MeteoLane API")
 api.add_router("", elevation_router)
 api.add_router("", weather_router)
 api.add_router("", routes_router)

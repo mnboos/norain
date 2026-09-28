@@ -47,7 +47,7 @@ const copy = {
         ],
         windTitle: "Wind, gemessen an deiner Fahrtrichtung.",
         windBody:
-            "Eine Windangabe für den Ort sagt wenig. Meteolane rechnet Gegen- und Seitenwind entlang jeder Kurve deiner Route und zeigt den Windaufwand als Stufe – von niedrig bis sehr hoch.",
+            "Eine Windangabe für den Ort sagt wenig. MeteoLane rechnet Gegen- und Seitenwind entlang jeder Kurve deiner Route und zeigt den Windaufwand als Stufe – von niedrig bis sehr hoch.",
         pricingTitle: "Preise",
         perYear: "/ Jahr",
         orMonthly: "oder 3,90 € pro Monat",
@@ -61,7 +61,7 @@ const copy = {
         ],
         faq: [
             {
-                q: "Wo funktioniert Meteolane?",
+                q: "Wo funktioniert MeteoLane?",
                 a: "Routenplanung und Ortssuche decken derzeit die Schweiz ab, die Ortssuche zusätzlich Liechtenstein.",
             },
             {
@@ -114,7 +114,7 @@ const copy = {
         ],
         windTitle: "Wind, measured against your direction.",
         windBody:
-            "A wind reading for a town tells you little. Meteolane works out headwind and crosswind along every bend of your route and shows the wind effort as a level – from low to very high.",
+            "A wind reading for a town tells you little. MeteoLane works out headwind and crosswind along every bend of your route and shows the wind effort as a level – from low to very high.",
         pricingTitle: "Pricing",
         perYear: "/ year",
         orMonthly: "or €3.90 per month",
@@ -128,7 +128,7 @@ const copy = {
         ],
         faq: [
             {
-                q: "Where does Meteolane work?",
+                q: "Where does MeteoLane work?",
                 a: "Routing and place search currently cover Switzerland; place search also includes Liechtenstein.",
             },
             {
@@ -169,7 +169,7 @@ const { isAuthenticated } = useSession();
         <q-card tag="header" flat square :dark="false" class="hero bg-brand-gradient text-white">
             <q-toolbar class="landing-wrap row items-center justify-between q-py-xs">
                 <router-link to="/" class="brand row items-center no-wrap text-white q-pa-none">
-                    <span class="text-weight-bold">Meteolane</span>
+                    <span class="text-weight-bold">MeteoLane</span>
                 </router-link>
                 <div class="bar-right row items-center justify-between q-gutter-x-md">
                     <nav class="links gt-sm row q-gutter-x-md">
@@ -229,7 +229,7 @@ const { isAuthenticated } = useSession();
                                 <q-btn
                                     outline
                                     no-caps
-                                    to="/account"
+                                    to="/routes"
                                     color="white"
                                     size="16px"
                                     padding="13px 22px"
@@ -310,7 +310,7 @@ const { isAuthenticated } = useSession();
                                 <div class="row items-baseline justify-between q-col-gutter-sm q-mb-md">
                                     <div class="col-12 col-sm-auto text-h6 text-weight-bold">
                                         <q-badge v-if="plus" rounded color="brand-gold" class="q-mr-sm" />
-                                        Meteolane {{ plus ? "Plus" : "Free" }}
+                                        MeteoLane {{ plus ? "Plus" : "Free" }}
                                     </div>
                                     <div class="col-12 col-sm-auto price text-weight-bold">
                                         {{ plus ? "29 €" : "0 €" }}
@@ -390,7 +390,7 @@ const { isAuthenticated } = useSession();
 
         <q-card tag="footer" flat square :dark="false" class="bg-brand-navy text-brand-mist">
             <q-card-section class="landing-wrap row items-center justify-between q-gutter-y-md q-py-lg">
-                <span class="footer-brand text-weight-bold text-white">Meteolane</span>
+                <span class="footer-brand text-weight-bold text-white">MeteoLane</span>
                 <span class="text-caption">{{ t.footer }}</span>
             </q-card-section>
         </q-card>

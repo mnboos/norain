@@ -35,7 +35,7 @@ class UserManager(DjangoUserManager):
 
 
 class User(AbstractUser):
-    """A Meteolane account: the sign-in identities plus whether sign-up was finished.
+    """A MeteoLane account: the sign-in identities plus whether sign-up was finished.
 
     The reason this is a custom model rather than ``django.contrib.auth.User`` is the two
     constraints below. Django's default user permits duplicate and blank emails
@@ -543,7 +543,7 @@ class Poi(models.Model):
 
 
 class Journey(models.Model):
-    """A one-off ride over one or more days, planned by Meteolane (core/journeys.py).
+    """A one-off ride over one or more days, planned by MeteoLane (core/journeys.py).
 
     The user gives the ends, the date, how far a day and a leg may be, which POIs matter and
     how the road should be. ``plan_journey`` turns that into days (ending at lodging) and, per

@@ -1,13 +1,13 @@
-# Meteolane for Forerunner 255
+# MeteoLane for Forerunner 255
 
 Connect IQ watch app. Opening it requests the chronologically next departure across
 active, eligible recurring routes (including return rides) and upcoming days of planned
-journeys. Journey alternatives use Meteolane's existing recommendation ranking.
+journeys. Journey alternatives use MeteoLane's existing recommendation ranking.
 Unselected random route suggestions are not scheduled rides; save one as a route first.
 
 The first page shows departure, distance, duration, and the air-temperature range.
-UP/DOWN switches to maximum rain probability, maximum rain rate, and maximum headwind
-(positive means against the rider). START refreshes. While open it refreshes every minute.
+UP/DOWN switches to maximum rain probability, maximum rain rate, and maximum headwind (positive means against the
+rider). START refreshes. While open it refreshes every minute.
 An offline response retains the current screen with an offline label; a departed ride
 is no longer presented as the next ride. Internet requests use the paired phone and
 Garmin Connect. The app does not record an activity or replace Garmin navigation.
@@ -25,7 +25,7 @@ Then create a watch token on the local account page and put it in the private se
 file below, using `http://localhost:8000` as the server for simulator testing.
 
 Deploy the accompanying backend/frontend changes and run `python manage.py migrate`.
-The normal forecast workers must be running. On the Meteolane account page, create a
+The normal forecast workers must be running. On the MeteoLane account page, create a
 watch token. It grants access only to the next-ride feed. Creating another token or
 disconnecting the watch immediately revokes the old one. The server retains only a hash.
 
@@ -50,11 +50,11 @@ like billing and notification settings, outside the generated Ninja client.
    ```
 
 The script creates a private signing key on the first build. Keep it for future updates.
-The output is `garmin/bin/Meteolane.prg`. This personal binary contains your token;
+The output is `garmin/bin/MeteoLane.prg`. This personal binary contains your token;
 keep it private. The settings, signing key, and build output are git-ignored.
 
 Connect the watch by USB and copy the PRG into its `GARMIN/APPS` folder, then disconnect
-and open Meteolane from the watch's apps list. See Garmin's
+and open MeteoLane from the watch's apps list. See Garmin's
 [sideload instructions](https://developer.garmin.com/connect-iq/connect-iq-basics/your-first-app/).
 
 For a store package without credentials, omit `-SettingsFile` and add `-Package`.
@@ -69,7 +69,7 @@ missing authentication, weather summary). `just update-api` completed, including
 frontend lint, type checking and build.
 Database-backed token tests could not connect to the configured PostgreSQL database.
 The Forerunner 255 device definition is installed. Garmin SDK 9.2.0 successfully
-compiled and signed `garmin/bin/Meteolane.prg` after the web-request callback types
+compiled and signed `garmin/bin/MeteoLane.prg` after the web-request callback types
 were corrected. That binary has no account token configured.
 
 The latest release build succeeds without warnings. Both watch-side tests in

@@ -1,4 +1,4 @@
-# Meteolane backend
+# MeteoLane backend
 
 Django and django-ninja provide the ASGI API. PostgreSQL/PostGIS stores recurring routes,
 forecast cells, and database-backed tasks; `db_worker` processes queued geometry

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the Meteolane routing contract against a running candidate graph."""
+"""Exercise the MeteoLane routing contract against a running candidate graph."""
 
 import argparse
 import json

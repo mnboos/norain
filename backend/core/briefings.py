@@ -100,7 +100,7 @@ def _send_push(user, body, url, tag):
         try:
             webpush(
                 subscription_info={"endpoint": device.endpoint, "keys": device.keys},
-                data=json.dumps({"title": gettext("Meteolane – Deine Fahrt"), "body": body, "url": url, "tag": tag}),
+                data=json.dumps({"title": gettext("MeteoLane – Deine Fahrt"), "body": body, "url": url, "tag": tag}),
                 vapid_private_key=settings.VAPID_PRIVATE_KEY,
                 vapid_claims={"sub": settings.VAPID_SUBJECT},
                 ttl=600,
@@ -166,7 +166,7 @@ def deliver(briefing_id, now=None):
                     }
                     sent = bool(
                         send_mail(
-                            gettext("Meteolane – Deine Fahrt"),
+                            gettext("MeteoLane – Deine Fahrt"),
                             f"{briefing.body}\n\n{url}\n\n{manage}",
                             settings.DEFAULT_FROM_EMAIL,
                             [user.email],

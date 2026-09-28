@@ -41,7 +41,7 @@ base.sourcePath = $root/source
 base.resourcePath = $root/private/resources
 "@ | Set-Content -LiteralPath $jungle -Encoding utf8NoBOM
 }
-$artifact = Join-Path $output $(if ($Package) { 'Meteolane.iq' } else { 'Meteolane.prg' })
+$artifact = Join-Path $output $(if ($Package) { 'MeteoLane.iq' } else { 'MeteoLane.prg' })
 $arguments = @('-f', $jungle, '-o', $artifact, '-y', $DeveloperKey, '-w', '-r')
 if ($Package) { $arguments += '-e' } else { $arguments += @('-d', 'fr255') }
 & $compiler @arguments

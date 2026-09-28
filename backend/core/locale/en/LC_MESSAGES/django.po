@@ -1,4 +1,4 @@
-# English messages of the Meteolane backend. The msgids are the German source text.
+# English messages of the MeteoLane backend. The msgids are the German source text.
 # Regenerate with `just messages` (makemessages + compilemessages); see CLAUDE.md.
 #
 msgid ""
@@ -48,22 +48,22 @@ msgid "bald"
 msgstr "soon"
 
 #: .\core\api\billing.py:279
-msgid "Dein Meteolane Plus-Testzeitraum endet bald"
-msgstr "Your Meteolane Plus trial ends soon"
+msgid "Dein MeteoLane Plus-Testzeitraum endet bald"
+msgstr "Your MeteoLane Plus trial ends soon"
 
 #: .\core\api\billing.py:281
 #, python-format
 msgid ""
 "Hallo %(name)s,\n"
 "\n"
-"Dein Testzeitraum für Meteolane Plus endet am %(date)s. Bitte prüfe dein Abo "
+"Dein Testzeitraum für MeteoLane Plus endet am %(date)s. Bitte prüfe dein Abo "
 "oder verwalte es hier:\n"
 "\n"
 "%(url)s\n"
 msgstr ""
 "Hello %(name)s,\n"
 "\n"
-"Your Meteolane Plus trial ends on %(date)s. Please check your subscription "
+"Your MeteoLane Plus trial ends on %(date)s. Please check your subscription "
 "or manage it here:\n"
 "\n"
 "%(url)s\n"
@@ -539,8 +539,8 @@ msgid "Die Vorhersage kann sich ändern; dies ist keine laufende Wetterwarnung."
 msgstr "The forecast can change; this is not a running weather warning."
 
 #: .\core\briefings.py:103 .\core\briefings.py:169
-msgid "Meteolane – Deine Fahrt"
-msgstr "Meteolane – Your ride"
+msgid "MeteoLane – Deine Fahrt"
+msgstr "MeteoLane – Your ride"
 
 #: .\core\briefings.py:164
 #, python-format

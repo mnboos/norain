@@ -1,4 +1,4 @@
-# Deploy Meteolane to a Docker VPS
+# Deploy MeteoLane to a Docker VPS
 
 This deployment uses Caddy for automatic HTTPS, PostgreSQL/PostGIS for application data,
 Docker Compose for the application processes, GitHub Container Registry (GHCR)
@@ -21,13 +21,15 @@ Git, and Restic. Create a non-root `norain` deployment user in the `docker` grou
 then clone this repository at `/srv/norain`.
 
 GraphHopper never builds its routing graph by itself: before the first start, build it with
-`just build-graphhopper-graph-from FILE` ([path C: build on the VPS](build-routing-graph.md#4-import-without-interrupting-routing)), or
+`just build-graphhopper-graph-from FILE`
+([path C: build on the VPS](build-routing-graph.md#4-import-without-interrupting-routing)), or
 copy one in. Until then the container stops with an error. Building needs more memory than serving:
 Switzerland needs a build heap (`GRAPHHOPPER_BUILD_HEAP`) of about 6 GB, DACH 16–24 GB.
-Serving uses `GRAPHHOPPER_DATAACCESS=MMAP`, so a 3 GB serving heap is enough for either
-(with `RAM_STORE`, DACH would need 10–14 GB). `GRAPHHOPPER_MEM_LIMIT` must fit the build heap.
+Serving uses `GRAPHHOPPER_DATAACCESS=MMAP`, so a 3 GB serving heap is enough for either (with `RAM_STORE`, DACH would
+need 10–14 GB). `GRAPHHOPPER_MEM_LIMIT` must fit the build heap.
 If the VPS cannot hold the build, [build the graph on another
-machine](build-routing-graph.md#4-import-without-interrupting-routing) and copy it in. Prepare Photon with a manual import before first startup (see below), using
+machine](build-routing-graph.md#4-import-without-interrupting-routing) and copy it in. Prepare Photon with a manual
+import before first startup (see below), using
 `PHOTON_IMPORT_HEAP` (4 GB by default). The published images are built for
 both amd64 and arm64, so ARM hosts such as Oracle's Ampere A1 work. Do not expose
 GraphHopper, Photon, PostgreSQL, or Django directly.
@@ -36,8 +38,8 @@ GraphHopper, Photon, PostgreSQL, or Django directly.
 
 The application images support arm64, but
 [`postgis/postgis:18-3.6`](https://github.com/postgis/docker-postgis) is amd64-only.
-Production therefore sets `platform: linux/amd64` for `db`. On an ARM VPS
-(`uname -m` prints `aarch64`), register amd64 emulation before starting the database:
+Production therefore sets `platform: linux/amd64` for `db`. On an ARM VPS (`uname -m` prints `aarch64`), register amd64
+emulation before starting the database:
 
 ```bash
 docker run --privileged --rm tonistiigi/binfmt --install amd64
@@ -46,7 +48,8 @@ docker compose -f docker-compose.prod.yml up -d db
 ```
 
 The first command registers QEMU with the host kernel and needs privileged access,
-as described in [Docker's emulation setup](https://docs.docker.com/build/building/multi-platform/#install-qemu-manually).
+as described
+in [Docker's emulation setup](https://docs.docker.com/build/building/multi-platform/#install-qemu-manually).
 If `exec /usr/local/bin/docker-entrypoint.sh: exec format error` returns after a
 host reboot, repeat registration and the version check. Selecting a platform alone
 does not install an emulator. Emulation adds database CPU overhead.

@@ -7,7 +7,7 @@ using Toybox.Time;
 using Toybox.Timer;
 using Toybox.WatchUi;
 
-class MeteolaneApp extends Application.AppBase {
+class MeteoLaneApp extends Application.AppBase {
     var view;
     function initialize() { AppBase.initialize(); }
     function getInitialView() {

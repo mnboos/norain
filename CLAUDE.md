@@ -1,7 +1,7 @@
-# Meteolane — Bike-route weather forecaster
+# MeteoLane — Bike-route weather forecaster
 
-Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo
-(primary, free) with OpenWeatherMap One Call 3.0 as fallback. Multi-user with
+Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo (primary, free) with OpenWeatherMap One
+Call 3.0 as fallback. Multi-user with
 email/username sign-in, and a free/Pro subscription tier backed by Stripe.
 
 ## Project layout
@@ -84,20 +84,20 @@ profile the route, journey and map forms start with; `useSession().defaultProfil
 `language` (see "Internationalisation").
 
 **Sign-up, sign-in, verification and password reset are django-allauth, headless.** allauth
-serves JSON under `/api/allauth/browser/v1/`; the Vue app draws every form
-(`components/account/SignInForms.vue`). Our own endpoints are only `/api/auth/session`
+serves JSON under `/api/allauth/browser/v1/`; the Vue app draws every form (`components/account/SignInForms.vue`). Our
+own endpoints are only `/api/auth/session`
 (the session as the app needs it, plus the CSRF cookie), `/api/auth/complete-signup`,
 `/api/auth/username-available` (step 2's live check, signed-in only, limited per account)
 and `/api/auth/profile` (changes `default_profile` and/or `language`, each optional). Sign-up has
 two steps:
 
-1. The form takes only the email. allauth creates the user with a placeholder username
-   (`fahrer-<hex>`, `AccountAdapter.populate_username`: never the email's local part,
+1. The form takes only the email. allauth creates the user with a placeholder username (`fahrer-<hex>`,
+   `AccountAdapter.populate_username`: never the email's local part,
    because usernames are public) and no usable password, and mails a **code**
    (`ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED`), never a link. The user types it into the
    same tab, which verifies the address and signs in, whichever device read the mail. The
-   pending verification lives in the session: the code is useless in another browser
-   (409), 3 wrong codes end it, and two resends are allowed at least 10 s apart (allauth
+   pending verification lives in the session: the code is useless in another browser (409), 3 wrong codes end it, and
+   two resends are allowed at least 10 s apart (allauth
    answers 429 before that, and to a second sign-up of one address within 10 s). A known
    address gets the same reply (allauth mails its owner a pointer to sign-in by code
    instead), so the form reveals nothing. When the pending verification is gone, sign-in
@@ -117,8 +117,8 @@ in `core/templates/account/email/`, which win over allauth's because `core` come
 `INSTALLED_APPS`; the others are still allauth's English ones. Mails get `frontend_url` in
 their context (`AccountAdapter.send_mail`).
 
-Every step 1 makes a `User` before the mailbox is proven, so the hourly pass
-(`refresh_upcoming_forecasts`) runs `_purge_abandoned_signups`: accounts older than
+Every step 1 makes a `User` before the mailbox is proven, so the hourly pass (`refresh_upcoming_forecasts`) runs
+`_purge_abandoned_signups`: accounts older than
 `ABANDONED_SIGNUP_RETENTION` (7 days) with no verified address, no usable password, sign-up
 not completed and not staff. The password condition is what spares an account made by hand
 in the admin before `verify_user` ran — keep it.
@@ -134,7 +134,7 @@ Both the email and the username are sign-in identities. The SPA sends whatever w
 username. Do **not** branch on whether the identifier contains `@` —
 `UnicodeUsernameValidator` permits `@` in usernames. `core.auth.adapter.AccountAdapter`
 refuses a username that matches any existing email (and vice versa), or one sign-in would
-match two accounts. The adapter also names the site "Meteolane" in allauth's mails and counts
+match two accounts. The adapter also names the site "MeteoLane" in allauth's mails and counts
 allauth's rate limits by `core.auth.lockout.client_ip` (allauth's own
 `TRUSTED_CLIENT_IP_HEADER` has no fallback, so without Caddy every request would get a
 403). Links in the mails come from `HeadlessAdapter.get_frontend_url`, which puts
@@ -149,14 +149,15 @@ sign-in and the `account.action` milestones. They are allauth's signals, not Dja
 (production refuses a missing value or `admin`; Caddy routes the same variable). It is an
 `OTPAdminSite` (django-otp): password plus an authenticator code, and the first device comes
 from `manage.py add_totp_device` (`DJANGO_ADMIN_OTP=false` turns the code off, under the
-development settings only). And django-axes counts failed sign-ins — app and admin —
-**per IP**, not per account+IP: a pair lockout never trips when one address tries a new
+development settings only). And django-axes counts failed sign-ins — app and admin — **per IP**, not per account+IP: a
+pair lockout never trips when one address tries a new
 account each time. It is the only limit on wrong *passwords*: allauth's own `login_failed`
 limit is off (`ACCOUNT_RATE_LIMITS`), or it would block one identity after 5 tries, before
 axes counts to 10, with a different reply. Axes does **not** cover sign-in by code (no
 password is checked, so a locked-out address can still get in by code). That is on
 purpose: a code proves the mailbox, and guessing one is capped by allauth (3 tries per
-code, `request_login_code` 3 a minute per address). A test pins this. The IP comes only from `X-Real-IP`, which Caddy sets from `{client_ip}`
+code, `request_login_code` 3 a minute per address). A test pins this. The IP comes only from `X-Real-IP`, which Caddy
+sets from `{client_ip}`
 (`core/auth/lockout.py`); daphne has no proxy headers, and behind Cloudflare
 `X-Forwarded-For` is a chain, not the client. The lockout reply is JSON because the SPA's `request()` parses every body.
 
@@ -193,8 +194,8 @@ switches locked for free accounts. The route and forecast
 limits are enforced at **three** places, and a limit is only real if all three hold:
 
 1. `create_route` / `update_route` (`api/recurring_route.py`) — the route count, 402 when full.
-2. `assemble_forecast_job` (`tasks.py`) — `strip_uncertainty()` for free accounts. This is
-   **not** in the endpoints any more: the job's stored `result` is what the WebSocket pushes
+2. `assemble_forecast_job` (`tasks.py`) — `strip_uncertainty()` for free accounts. This is **not** in the endpoints any
+   more: the job's stored `result` is what the WebSocket pushes
    and what the job endpoint returns, so it has to be stripped *before* storage or a free
    account reads Pro data straight out of the row. The owner is part of the job key, so
    results never cross accounts — but the tier is not, so assembly records
@@ -231,14 +232,14 @@ simplify it back to one lookup. Leaving it null costs the renewal date in the UI
 the expiry guard in `_entitlements_for_subscription`. Tests cover both shapes.
 
 Use `client.v1.*` for every Stripe call (`v1.customers`, `v1.checkout`, `v1.billing_portal`):
-the accessors without `v1` are deprecated. `stripe.Webhook.construct_event` is deliberately
-*not* the client method — the webhook needs only `STRIPE_WEBHOOK_SECRET`, and
+the accessors without `v1` are deprecated. `stripe.Webhook.construct_event` is deliberately *not* the client method —
+the webhook needs only `STRIPE_WEBHOOK_SECRET`, and
 `client.construct_event` would make it need a secret key too.
 
 ### Planning needs an account
 
-Every endpoint that plans a ride is `session_auth` (401 without a session): the ad-hoc forecast
-(`GET`/`POST /api/route_weather`), a public route's forecast, `POST /api/routes/preview`,
+Every endpoint that plans a ride is `session_auth` (401 without a session): the ad-hoc forecast (`GET`/
+`POST /api/route_weather`), a public route's forecast, `POST /api/routes/preview`,
 `POST /api/elevation`, place search and the whole GPX router. Each spends provider or
 GraphHopper budget. The SPA's `/map` planner is `requiresAuth`. What stays open to anyone is
 reading: a public route, its photos and comments, and a forecast job by its unguessable id.
@@ -247,7 +248,8 @@ reading: a public route, its photos and comments, and a forecast job by its ungu
 
 No HTTP request performs a provider fetch or a GraphHopper call — with one deliberate
 exception, `POST /api/routes/preview` (see "Route editing"). The forecast endpoints create a
-`ForecastJob`, enqueue `plan_forecast_job` and return **202** with a job id; a finished job that is still fresh returns **200** with its stored payload.
+`ForecastJob`, enqueue `plan_forecast_job` and return **202** with a job id; a finished job that is still fresh returns
+**200** with its stored payload.
 
 ```
 POST-ish GET  ->  ForecastJob (202)
@@ -258,8 +260,8 @@ POST-ish GET  ->  ForecastJob (202)
                            -> job.result, pushed over ws/forecast/<job_id>/
 ```
 
-The stored `job.result` is always complete. `job_snapshot` serves a slim view of it
-(`core.jobs.forecast_view`: a ~50 m line, wind arrows ~2 km apart instead of the wind
+The stored `job.result` is always complete. `job_snapshot` serves a slim view of it (`core.jobs.forecast_view`: a ~50 m
+line, wind arrows ~2 km apart instead of the wind
 segments, no per-model breakdown), and pages fetch those parts from
 `/api/forecast_jobs/{id}/map_detail?detail=` (line + arrows) and
 `/samples/{i}/uncertainty` only when they draw them. Shape on read only — never let page
@@ -327,7 +329,8 @@ dies on import. Don't paper over a new cycle with a function-level import; fix t
 `RecurringRoute.thumbnail` is a precomputed blob (simplified path ≤ 64 vertices + the ten
 weather fields per sample that `core.ride_quality` reads, `weather_code` and `felt_temp` among
 them — frost needs the code and the temperature factor the felt value, and without them the list
-would score from the thermometer alone and disagree with the map), written by the `refresh_route_thumbnail` task and only *read* by `list_routes`,
+would score from the thermometer alone and disagree with the map), written by the `refresh_route_thumbnail` task and
+only *read* by `list_routes`,
 which serves the path plus the worst sample's `ride_score` / `ride_label` and the ride's worst
 rain and frost (`rain_level`, `frost_level`, `rain_probability`, `max_rain_rate_mm_h`,
 `temp_min`) — never the raw samples. The rain and frost readings are the worst *point* of the
@@ -350,9 +353,9 @@ Two rules hold this together:
 **The glyph is one colour: the worst sample's.** The whole line is painted
 `scoreColor(thumbnail.rideScore)` — the same YlOrRd ramp as the map route line, for the
 sample whose `rideLabel` `RouteListPanel.qualityLabel` shows, so glyph and caption always
-agree. Where along the route it changes is the map's job. At 40 px the ramp's pale good end
-(`#ffeda0`) all but disappears, so the line sits on the theme-flipping casing the map uses
-(`CASING_*` in `rideQuality.ts`, shared by both — change them there). The glyph has no legend
+agree. Where along the route it changes is the map's job. At 40 px the ramp's pale good end (`#ffeda0`) all but
+disappears, so the line sits on the theme-flipping casing the map uses (`CASING_*` in `rideQuality.ts`, shared by both —
+change them there). The glyph has no legend
 or hover, so the colour is never the only channel: the caption and the `aria-label` say the
 quality in words. Do not remove that caption.
 
@@ -385,8 +388,8 @@ how fast the score climbs the colour ramp). It is the app's own judgement and st
   not the cyclist's wind effort, and hike samples, summaries and arrows carry no wind-effort level).
   Assembly records the job's `profile` in `job.result` and in `departure_inputs` (from the geometry
   `plan_forecast_job` resolved); a result without it is a bike ride. Every scorer on read takes the
-  config from there, or from the route or journey row. A hike never routes around headwind
-  (`tasks._weather_prefs`), and "off the network" is `foot_network` for it (`road_prefs_model`).
+  config from there, or from the route or journey row. A hike never routes around headwind (`tasks._weather_prefs`), and
+  "off the network" is `foot_network` for it (`road_prefs_model`).
 - **Score on read, never store.** `core.jobs.forecast_view` (samples, summary *and* sections),
   `wind_arrows_at_detail` and `recurring_route._thumbnail_out` score the stored raw weather when
   serving, so a change to `RIDE_QUALITY` shows on the next request without rebuilding jobs or
@@ -481,8 +484,8 @@ Rules that hold this together:
   worker: `Retry-After`, else the hour/day the reply's `reason` names, else doubling from 60 s.
   It also halves a factor on the *shortest* window, which climbs back 0.1 a quiet minute (halving
   the hour would lock a half-spent hour and send every cell to OWM over a minute-level 429). The first 429
-  of a burst adapts, the rest don't. This is what corrects a weight we guessed too low
-  (the ensemble's weighting is undocumented).
+  of a burst adapts, the rest don't. This is what corrects a weight we guessed too low (the ensemble's weighting is
+  undocumented).
 - **Fail open for Open-Meteo, closed for OWM and Weather Underground**, for the same reasons as
   `claims.py` and `_spend_call` (which is now a thin wrapper over `ratelimit`). Open-Meteo's
   forecast and ensemble APIs share one budget.
@@ -516,8 +519,8 @@ stored `forecast_days` is less than what the caller needs.
 
 ### Data format difference (critical)
 
-**Open-Meteo**: `hourly` = `{"time": [...], "temperature_2m": [...], ...}` — dict of parallel arrays
-**OpenWeatherMap**: `hourly` = `[{"dt": 123, "temp": 15, ...}, ...]` — list of objects
+**Open-Meteo**: `hourly` = `{"time": [...], "temperature_2m": [...], ...}` — dict of parallel arrays **OpenWeatherMap**:
+`hourly` = `[{"dt": 123, "temp": 15, ...}, ...]` — list of objects
 
 `_from_open_meteo()` expects dict blocks; `_from_owm()` expects a list. Both have
 `isinstance` guards rejecting the wrong format. `extract_sample()` routes directly based
@@ -575,8 +578,8 @@ together:
 ### Charts
 
 The backend draws no charts. `frontend/src/utils/forecastCharts.ts` builds the temperature,
-precipitation and headwind charts from the samples the job result already carries
-(`temp`, `rainRateMmH`, `pop`, `headwind` and the ensemble p10/median/p90), so they need no
+precipitation and headwind charts from the samples the job result already carries (`temp`, `rainRateMmH`, `pop`,
+`headwind` and the ensemble p10/median/p90), so they need no
 request of their own; `NiceChart.vue` adds the theme. Each metric is **one line**: the sample's
 own value (main run near now, the ensemble centre from 72 h, see "Ensemble central estimate").
 The band around it is the ensemble spread **recentred on that line**:
@@ -609,7 +612,8 @@ mounted at `/osm_data`, required in `.env`), never an extract itself:
 `docker/graphhopper-filter-osm.sh` (osmium) keeps only the ways, nodes and cycle-route relations
 the bike profiles use (a third of the Swiss file, same speeds). A build from
 `bike-<OSM_DATA_URL's file name>` downloads `OSM_DATA_URL` (only ever an unfiltered extract) and
-filters it, and redoes that when the extract is newer; any other file is used as it is. `just osm-filter-many-raw-pbf-into-one FILE…` runs the same script on
+filters it, and redoes that when the extract is newer; any other file is used as it is.
+`just osm-filter-many-raw-pbf-into-one FILE…` runs the same script on
 local files (several are filtered one by one, then merged) and writes `ROUTING_OSM_FILE_FILTERED`,
 which it requires to be set, plus the matching `pois-<name without bike->.geojsonseq`; it builds
 no graph, `just build-graphhopper-graph-from FILE` does.
@@ -654,7 +658,8 @@ geometry and enqueues `refresh_route_geometry`, like a changed start or profile.
 The return journey gets the via points reversed, set in `_save_return` like its swapped
 endpoints. It always rides on the outbound days (a restriction on purpose): only minute and hour
 come from its own schedule (`_on_outbound_days`), in `_save_return` and in `update_route` on a
-return route alike, so a change to the outbound days carries over. To edit it, the user reshapes the outbound route; the UI offers no editor on a
+return route alike, so a change to the outbound days carries over. To edit it, the user reshapes the outbound route; the
+UI offers no editor on a
 return route.
 
 The editor (`components/RouteEditorDialog.vue`) draws its line from `POST /api/routes/preview`,
@@ -671,8 +676,8 @@ request body elsewhere.
 
 A journey is a one-off ride over one or more days: start, end, date, a limit per day and per
 leg (time or distance), the POIs wanted on every leg, lodging kinds, road and weather
-preferences. `plan_journey` (queue `default`) picks the day ends one day at a time
-(`tasks._plan_day_ends`: route the remainder, choose lodging, start the next day there) and
+preferences. `plan_journey` (queue `default`) picks the day ends one day at a time (`tasks._plan_day_ends`: route the
+remainder, choose lodging, start the next day there) and
 hands over to `plan_journey_routes`, which gets each day's GraphHopper alternatives and, per
 alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.stage`). Rows:
 `Journey` → `JourneyDay` → `JourneyStage` (one per alternative, geometry like a
@@ -694,7 +699,8 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
 - **Request custom models only penalise** (`multiply_by` ≤ 1). GraphHopper runs LM without CH,
   and LM is only correct for a model that makes edges more expensive. "Prefer the cycle
   network" is therefore `avoid_off_network`, and "prefer it hilly" (`climbing="hilly"`, the
-  random-ride form's "Gelände") makes the flat dearer in both directions instead of climbs cheaper. Every GraphHopper request still goes through
+  random-ride form's "Gelände") makes the flat dearer in both directions instead of climbs cheaper. Every GraphHopper
+  request still goes through
   `weather._route_body`; `_route` keeps a request without a model at `(profile, points)`.
 - **POIs steer the route by via points, not by the custom model.** "Water once per leg" is a
   rule about the whole path and GraphHopper weighs edges. Every chosen POI (lodging, gap fix,
@@ -715,8 +721,8 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   POI → ~2 km after it (`journey_planner.INSERT_SPAN_M`) against the path's own time between
   those points, so an alternative keeps its road. `offset_m` only orders the prefilter (top
   `MAX_ROUTED_CANDIDATES`); only candidates that routed are eligible — a failed or unchecked
-  one never wins, whatever its offset. Pair requests go through `weather.route_legs`: uncached
-  (they would evict the planning pass's geometries from the LRU), through `_route_body` with no
+  one never wins, whatever its offset. Pair requests go through `weather.route_legs`: uncached (they would evict the
+  planning pass's geometries from the LRU), through `_route_body` with no
   points, with the same model as the path, and with a limiter and memo created **per planning
   invocation** (`RoutingBudget`): `async_to_sync` may give each task a new event loop, and a
   module-level semaphore would stay bound to a dead one. `MAX_PLAN_ROUTE_REQUESTS` caps a plan.
@@ -737,8 +743,8 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   request as a `weather` field (`weather_routing.weather_field`). Corridor cells are ordinary
   `ForecastCell`s on a 0.05° lattice fetched by `refresh_forecast_cell`; `plan_journey_routes`
   re-defers until they are warm (bounded), then reads `cache_only`. A weather day's first stage
-  is the way around the weather, then GraphHopper's plain alternatives to compare it with
-  (`alternative_route` cannot route by time); a refused weather request routes plainly.
+  is the way around the weather, then GraphHopper's plain alternatives to compare it with (`alternative_route` cannot
+  route by time); a refused weather request routes plainly.
 - **Stage weather is a normal forecast job** (`ForecastJob.Kind.JOURNEY_STAGE`, geometry from
   the stage row, ownership checked in `plan_forecast_job`, never station calls). Reading a
   journey starts or joins its stage jobs; the departure window reuses the departure
@@ -756,8 +762,8 @@ request exactly as before. An edge costs its weight times the weather where the 
 along it, *when* they are there: rain by the cell and headwind along the edge's own bearing,
 interpolated in space and time. Rules that hold this together:
 
-- **GraphHopper never fetches weather.** The backend builds the field from the cache
-  (`weather_routing.weather_field`) and sends it with each request, so the provider budget and
+- **GraphHopper never fetches weather.** The backend builds the field from the cache (`weather_routing.weather_field`)
+  and sends it with each request, so the provider budget and
   the fetch lease stay in one place. A null is a cell without data and counts as no weather.
 - **The judgement stays in Python.** The field carries weight multipliers (`rain_curve`,
   `headwind_table`, both from `ride_quality.ROUTING_*`), never the raw curves; Java only
@@ -777,7 +783,7 @@ interpolated in space and time. Rules that hold this together:
 
 The third mode, next to commute routes and journeys: the user gives a start, loop or not (then a
 destination), a length (riding time or distance), a profile, an optional direction and a date,
-and Meteolane generates the ride (`core/random_rides.py`). A random ride is a `Journey` with
+and MeteoLane generates the ride (`core/random_rides.py`). A random ride is a `Journey` with
 `kind="random"` and `random_prefs` (`round_trip`, `heading`, `seed`, `consider_weather`): one
 day whose stages are the generated candidates. The SPA lists them at `/random` and opens them on
 the journey page. It has two modes:
@@ -788,13 +794,13 @@ the journey page. It has two modes:
   them through for the wanted POI categories (and which each one misses), their elevation
   profiles in one chart (`ElevationChart` with the stages as alternatives, stored heights, no
   routing) and each one's climb (`JourneyStageOut.ascent_m`). Each variant the rider ticks is saved with
-  `POST /journeys/{id}/stages/{stage_id}/route` as an imported route on the variant's exact line
-  (heights included, the stage's riding time as its duration) with a weekly schedule prefilled
+  `POST /journeys/{id}/stages/{stage_id}/route` as an imported route on the variant's exact line (heights included, the
+  stage's riding time as its duration) with a weekly schedule prefilled
   from the ride's day and departure. That goes through `create_route`, so the route quota (402)
   and the geometry task apply, and the forecast is the route's own from then on.
-- **Considering the weather (Plus, `weather_routing`).** The tier's alternatives, each forecast
-  (`JOURNEY_STAGE` jobs) and ranked on read (`rank_day`), optionally routed around the weather
-  (`weather_prefs`). `_random_prefs` stores `consider_weather` off without Plus, and
+- **Considering the weather (Plus, `weather_routing`).** The tier's alternatives, each forecast (`JOURNEY_STAGE` jobs)
+  and ranked on read (`rank_day`), optionally routed around the weather (`weather_prefs`). `_random_prefs` stores
+  `consider_weather` off without Plus, and
   `RandomPrefs.weather_mode(limits)` checks it again when planning and reading, so a downgraded
   ride falls back to picking.
 
@@ -888,8 +894,8 @@ poll. `ws/system/` (`SystemEventsConsumer`) sends change notices only, never dat
 `{"type": "hello" | "changed", "topics": [...]}`, and the page invalidates the queries that read
 those topics (`systemQueryAffected` in `utils/systemOverview.ts`). Rules that hold this together:
 
-- **Every write the dashboard shows calls `core.system_events.notify_system`** with its topic
-  (`cells`, `jobs`, `routes`, `journeys`), after the write is committed. Today that is the grid
+- **Every write the dashboard shows calls `core.system_events.notify_system`** with its topic (`cells`, `jobs`,
+  `routes`, `journeys`), after the write is committed. Today that is the grid
   cell stores, `jobs.publish` plus job creation, restart and purge, route geometry and route
   CRUD, and journey CRUD plus the stored plan. A new writer that skips it leaves the dashboard
   stale without any error.
@@ -911,8 +917,8 @@ those topics (`systemQueryAffected` in `utils/systemOverview.ts`). Rules that ho
 The step-by-step workflow (adding a text on either side, adding a code, adding a language,
 the pre-commit checklist) is `docs/how-to/translations.md`; keep it in step with this section.
 
-German is the source language, English the second one. The frontend is vue-i18n
-(`src/i18n/index.ts`, catalogs in `src/locales/`), the backend Django's gettext with **German
+German is the source language, English the second one. The frontend is vue-i18n (`src/i18n/index.ts`, catalogs in
+`src/locales/`), the backend Django's gettext with **German
 msgids** (`gettext("Route nicht gefunden.")`), so German needs no catalog and wrapping a string
 never changes what German users see. Rules that hold this together:
 
@@ -920,8 +926,8 @@ never changes what German users see. Rules that hold this together:
   across readers or written by a worker, is a **code** the SPA words: the ride band and cause,
   the rain/frost/wind-effort levels, the departure `explanation`, journey `reasons`
   (`{kind, …}` from `rank_day`), `ForecastJob.error` and `Journey.plan_error` (rows from before
-  hold German prose, which `utils/serverErrors.ts` shows as it is), and the weather description
-  (the SPA words `weather_code`; `WMO_DE` is gone). **Language never enters a job key,
+  hold German prose, which `utils/serverErrors.ts` shows as it is), and the weather description (the SPA words
+  `weather_code`; `WMO_DE` is gone). **Language never enters a job key,
   `job.result` or `forecast_view`**: one job serves readers in both languages, and the WebSocket
   needs no locale. `gettext` is only for prose built inside a request (`HttpError`, `detail`,
   validator messages, default names written on create such as "– Rückfahrt") and for mails and
@@ -1003,5 +1009,5 @@ cd backend
 .venv/bin/python add_ts_nocheck.py
 ```
 
-Do not pass `--remove-operation-id-prefix`: it renames every method
-(`coreRoutesApiListRoutes` -> `routesApiListRoutes`) and breaks every call site.
+Do not pass `--remove-operation-id-prefix`: it renames every method (`coreRoutesApiListRoutes` -> `routesApiListRoutes`)
+and breaks every call site.

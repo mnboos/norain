@@ -37,13 +37,21 @@ watch(
                         class="q-ma-none full-height"
                         style="translate: -10px 3px"
                     />
-                    <span class="text-subtitle1 self-center text-weight-bold">Meteolane</span>
+                    <span class="text-subtitle1 self-center text-weight-bold">MeteoLane</span>
                 </router-link>
                 <q-space />
                 <q-btn v-if="session.system" flat dense no-caps size="sm" to="/system" :label="t('app.system')" />
                 <!--                <NavTabs v-if="!$q.screen.lt.sm" />-->
                 <LanguageSwitcher dense class="q-mx-xs" />
-                <q-btn flat dense no-caps size="sm" to="/account" :icon="symSharpSettings" :aria-label="t('app.account')">
+                <q-btn
+                    flat
+                    dense
+                    no-caps
+                    size="sm"
+                    to="/account"
+                    :icon="symSharpSettings"
+                    :aria-label="t('app.account')"
+                >
                     <q-tooltip v-if="isAuthenticated">{{ session.user?.email }}</q-tooltip>
                 </q-btn>
                 <q-btn

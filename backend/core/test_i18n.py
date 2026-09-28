@@ -18,7 +18,7 @@ from core.models import User
 from core.test_signup import TEST_SETTINGS, SpaClient, verified_user
 
 MISSING_ROUTE = "/api/public/routes/no-such-route"
-# allauth puts this in front of every subject ("Meteolane: "); it is not translated.
+# allauth puts this in front of every subject ("MeteoLane: "); it is not translated.
 SUBJECT_PREFIX = settings.ACCOUNT_EMAIL_SUBJECT_PREFIX
 
 

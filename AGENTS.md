@@ -1,7 +1,7 @@
-# Meteolane — Bike-route weather forecaster
+# MeteoLane — Bike-route weather forecaster
 
-Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo
-(primary, free) with OpenWeatherMap One Call 3.0 as fallback.
+Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo (primary, free) with OpenWeatherMap One
+Call 3.0 as fallback.
 
 ## Project layout
 
@@ -52,8 +52,8 @@ stored `forecast_days` is less than what the caller needs.
 
 ### Data format difference (critical)
 
-**Open-Meteo**: `hourly` = `{"time": [...], "temperature_2m": [...], ...}` — dict of parallel arrays
-**OpenWeatherMap**: `hourly` = `[{"dt": 123, "temp": 15, ...}, ...]` — list of objects
+**Open-Meteo**: `hourly` = `{"time": [...], "temperature_2m": [...], ...}` — dict of parallel arrays **OpenWeatherMap**:
+`hourly` = `[{"dt": 123, "temp": 15, ...}, ...]` — list of objects
 
 `_from_open_meteo()` expects dict blocks; `_from_owm()` expects a list. Both have
 `isinstance` guards rejecting the wrong format. `extract_sample()` routes directly based

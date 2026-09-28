@@ -6,7 +6,7 @@
         "replace": "Replace watch token",
         "revoke": "Disconnect watch",
         "token": "Watch token",
-        "help": "Copy this token now. Enter it in the Meteolane Connect IQ app settings. Replacing or disconnecting it disables the previous token.",
+        "help": "Copy this token now. Enter it in the MeteoLane Connect IQ app settings. Replacing or disconnecting it disables the previous token.",
         "connected": "A watch token is active."
     },
     "errors": {
@@ -163,13 +163,13 @@
         }
     },
     "app": {
-        "logoAlt": "Meteolane logo",
+        "logoAlt": "MeteoLane logo",
         "system": "System overview",
         "account": "Account",
         "lightTheme": "Light theme",
         "darkTheme": "Dark theme",
-        "title": "{page} – Meteolane",
-        "defaultTitle": "Meteolane – Weather along your route"
+        "title": "{page} – MeteoLane",
+        "defaultTitle": "MeteoLane – Weather along your route"
     },
     "nav": {
         "dashboard": "Dashboard",
@@ -238,14 +238,14 @@
         "loopFrom": "Loop from {start} · {length}",
         "new": "New ride",
         "empty": "No random ride yet.",
-        "emptyHint": "No idea where to go? Say whether you want to ride a loop or to a destination, and for how long or how far. Meteolane rolls the dice for a route and shows the weather on it."
+        "emptyHint": "No idea where to go? Say whether you want to ride a loop or to a destination, and for how long or how far. MeteoLane rolls the dice for a route and shows the weather on it."
     },
     "weatherRouting": {
         "title": "Ride around bad weather",
         "avoidRain": "Avoid rain",
         "avoidHeadwind": "Avoid strong headwind",
-        "explanation": "For rides in the next three days, Meteolane routes you where it is dry and the wind blows less, at the time you are there. Off: the route follows only your road preferences.",
-        "plusOnly": "With Plus, Meteolane can route you around rain and headwind.",
+        "explanation": "For rides in the next three days, MeteoLane routes you where it is dry and the wind blows less, at the time you are there. Off: the route follows only your road preferences.",
+        "plusOnly": "With Plus, MeteoLane can route you around rain and headwind.",
         "seePlus": "See Plus"
     },
     "windBar": {
@@ -271,7 +271,7 @@
         },
         "new": "New journey",
         "empty": "No journey yet.",
-        "emptyHint": "Enter start, destination and how far you want to ride each day. Meteolane suggests stages, breaks with water and toilets, overnight stays and the best departure time.",
+        "emptyHint": "Enter start, destination and how far you want to ride each day. MeteoLane suggests stages, breaks with water and toilets, overnight stays and the best departure time.",
         "days": "{n} day | {n} days",
         "reason": {
             "tooLong": "~{minutes} min too long",
@@ -311,7 +311,7 @@
         "tryPlus": "Try Plus free for 14 days",
         "tryAgain": "Please try again.",
         "email": "Email",
-        "label": "Meteolane plans",
+        "label": "MeteoLane plans",
         "pitch": "Find a better departure time and get your forecast before the ride.",
         "activeRoutes": "{count} / {max} active routes",
         "complimentary": "Plus as a gift until {date}. No automatic payment.",
@@ -341,7 +341,7 @@
         "briefingsTitle": "Informed before the ride",
         "briefingsHint": "One briefing per outbound and return ride about 60 minutes before the earliest departure in your time window. Up to 10 briefings per day. No running weather warnings.",
         "briefingsNeedPlus": "Activate Plus to set up briefings.",
-        "noPush": "This browser does not support push here. Use email. On an iPhone, first install Meteolane with “Add to Home Screen”.",
+        "noPush": "This browser does not support push here. Use email. On an iPhone, first install MeteoLane with “Add to Home Screen”.",
         "pushOn": "Turn on push on this device",
         "pushOnDone": "Device connected. Now choose push for your route.",
         "pushOff": "Turn off push on this device",
@@ -468,7 +468,7 @@
         "frost": "Frost"
     },
     "briefings": {
-        "pushUnavailable": "Push is not available here. Use email or install Meteolane on your home screen.",
+        "pushUnavailable": "Push is not available here. Use email or install MeteoLane on your home screen.",
         "allowNotifications": "Please allow notifications in your browser settings."
     },
     "details": {
@@ -565,15 +565,15 @@
         "defaultNameTo": "To {dest}",
         "editTitle": "Edit ride",
         "newTitle": "New random ride",
-        "intro": "Say how long or how far you want to ride. Meteolane rolls the dice for a route and checks the weather on it.",
+        "intro": "Say how long or how far you want to ride. MeteoLane rolls the dice for a route and checks the weather on it.",
         "profile": "Profile (sets the pace)",
         "headingLoop": "Direction first",
         "headingDetour": "Detour to the side",
         "pois": "On the way I would like to pass",
-        "poisHint": "Optional: Meteolane puts a stop on the route",
+        "poisHint": "Optional: MeteoLane puts a stop on the route",
         "weather": "Weather",
         "considerWeather": "Consider the weather",
-        "weatherOn": "Meteolane calculates the forecast for every variant and recommends the one with the best weather.",
+        "weatherOn": "MeteoLane calculates the forecast for every variant and recommends the one with the best weather.",
         "weatherOff": "You get three variants without weather and choose which to save as routes. Every saved route then gets its forecast.",
         "saveAndReplan": "Save and replan",
         "roll": "Roll variants"
@@ -612,7 +612,7 @@
         "windowLater": "up to {minutes} min later",
         "windowFixed": "Fixed",
         "editTitle": "Edit journey",
-        "intro": "Meteolane suggests daily stages, breaks and departure times, based on the weather and your wishes.",
+        "intro": "MeteoLane suggests daily stages, breaks and departure times, based on the weather and your wishes.",
         "profile": "Profile",
         "firstDay": "First day",
         "earliestStart": "Earliest start",
@@ -624,7 +624,7 @@
         "poisHint": "Every choice must be on every leg",
         "lodging": "Stay overnight in",
         "lodgingHint": "Empty: any kind",
-        "plusPitch": "With Plus, Meteolane compares up to three variants per day and suggests the best departure time.",
+        "plusPitch": "With Plus, MeteoLane compares up to three variants per day and suggests the best departure time.",
         "shiftDeparture": "Shift departure",
         "plan": "Plan journey"
     },
@@ -646,8 +646,8 @@
         "noBreak": "No break needed.",
         "nothingWanted": "Nothing you asked for here.",
         "detourTo": "Detour to {poi}",
-        "noForecastRandom": "There is no forecast for this day yet. Roll the ride again closer to the date, and Meteolane recommends the route with the best weather.",
-        "noForecastJourney": "There is no forecast for this day yet. Replan the journey closer to the date, and Meteolane fits route and departure to the weather.",
+        "noForecastRandom": "There is no forecast for this day yet. Roll the ride again closer to the date, and MeteoLane recommends the route with the best weather.",
+        "noForecastJourney": "There is no forecast for this day yet. Replan the journey closer to the date, and MeteoLane fits route and departure to the weather.",
         "weatherLoadFailed": "The weather data could not be loaded.",
         "chosen": "{label} (chosen)",
         "otherVariants": "other variants",
@@ -776,7 +776,7 @@
         },
         "mapLoaded": "Map area: {loaded} / {total} objects loaded.",
         "noMatches": "No matching data.",
-        "gridHint": "Meteolane cache grid: 0.01° × 0.01°. Click routes or cells for details.",
+        "gridHint": "MeteoLane cache grid: 0.01° × 0.01°. Click routes or cells for details.",
         "diagnostics": "System diagnostics",
         "cell": "Weather cell",
         "selection": "Selection",
@@ -850,7 +850,7 @@
         "reroll": "Roll again",
         "replan": "Replan",
         "notFound": "Not found.",
-        "rolling": "Rolling… Meteolane is looking for routes of the length you asked for.",
+        "rolling": "Rolling… MeteoLane is looking for routes of the length you asked for.",
         "planning": "{status}… looking for stages, breaks and lodging."
     },
     "routeEditor": {

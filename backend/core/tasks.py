@@ -1,4 +1,4 @@
-"""django-tasks task definitions for Meteolane.
+"""django-tasks task definitions for MeteoLane.
 
 Background tasks for route geometry computation and forecast grid pre-warming.
 """

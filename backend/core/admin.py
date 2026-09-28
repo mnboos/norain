@@ -31,7 +31,7 @@ from .models import (
 
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
-    """Django's user admin plus the Meteolane fields.
+    """Django's user admin plus the MeteoLane fields.
 
     Email verification is on allauth's own "Email addresses" admin page.
     """
@@ -52,7 +52,7 @@ class UserAdmin(DjangoUserAdmin):
             subscription.save(update_fields=["complimentary_until", "updated_at"])
         self.message_user(request, "Complimentary Plus granted; no payments or messages were sent.")
 
-    fieldsets = (*DjangoUserAdmin.fieldsets, ("Meteolane", {"fields": ["signup_completed", "created_at"]}))
+    fieldsets = (*DjangoUserAdmin.fieldsets, ("MeteoLane", {"fields": ["signup_completed", "created_at"]}))
 
 
 @admin.register(Subscription)
