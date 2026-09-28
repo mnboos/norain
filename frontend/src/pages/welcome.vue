@@ -466,25 +466,26 @@ const { isAuthenticated } = useSession();
 }
 .footer-brand {
     font-size: 17px;
-.hero-mark {
-    margin-top: -24px;
-    img {
-        display: block;
-        width: 100%;
-        max-width: 500px;
-        height: auto;
+    .hero-mark {
+        margin-top: -24px;
+        img {
+            display: block;
+            width: 100%;
+            max-width: 500px;
+            height: auto;
+        }
     }
-}
-@media (max-width: 599px) {
-    .hero .q-toolbar {
-        flex-wrap: wrap;
-        padding-bottom: 16px;
-    }
-    .bar-right {
-        width: 100%;
-        margin-left: 0;
-        > .language {
+    @media (max-width: 599px) {
+        .hero .q-toolbar {
+            flex-wrap: wrap;
+            padding-bottom: 16px;
+        }
+        .bar-right {
+            width: 100%;
             margin-left: 0;
+            > .language {
+                margin-left: 0;
+            }
         }
     }
 }
