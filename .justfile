@@ -79,6 +79,7 @@ manage +args:
 [group('tasks')]
 [working-directory("backend")]
 messages:
+    uv run python -c "import shutil, sys; shutil.which('msguniq') or sys.exit('GNU gettext is not installed (or not on PATH). Windows: winget install mlocati.GetText, then open a new terminal. Debian/Ubuntu: apt install gettext. macOS: brew install gettext.')"
     uv run python manage.py makemessages --locale en --ignore ".venv/*" --ignore "core/test*" --no-obsolete
     uv run python manage.py compilemessages --locale en --ignore ".venv/*"
 
