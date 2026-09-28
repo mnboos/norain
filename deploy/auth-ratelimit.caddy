@@ -88,6 +88,36 @@
 			events 30
 			window 1m
 		}
+		# The coverage page (/coverage) is open to visitors without an account. Its "tell me
+		# when" mails a confirmation to whatever address is typed; the backend sends at most one
+		# per address in 10 minutes and caps requests per IP an hour (core/coverage.py).
+		zone coverage_notify {
+			match {
+				path /api/coverage/*/notify
+				method POST
+			}
+			key {client_ip}
+			events 10
+			window 10m
+		}
+		# The confirm and unsubscribe links check a token.
+		zone coverage_token {
+			match {
+				path /api/coverage/notify/confirm /api/coverage/notify/unsubscribe
+			}
+			key {client_ip}
+			events 30
+			window 10m
+		}
+		# Anonymous votes: the backend allows one per area and IP a day; this stops a flood.
+		zone coverage_vote {
+			match {
+				path /api/coverage/*/vote
+			}
+			key {client_ip}
+			events 60
+			window 1m
+		}
 	}
 
 	# JSON, because the SPA parses every reply body as JSON (like the axes lockout).

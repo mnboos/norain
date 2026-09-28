@@ -2132,6 +2132,193 @@
                 }
             }
         },
+        "/api/coverage": {
+            "get": {
+                "operationId": "core_api_coverage_get_coverage",
+                "summary": "Get Coverage",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoverageOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Covered and planned areas, every area with votes, and the countries one may vote for.",
+                "tags": [
+                    "Coverage"
+                ]
+            }
+        },
+        "/api/coverage/{code}/vote": {
+            "put": {
+                "operationId": "core_api_coverage_vote",
+                "summary": "Vote",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "code",
+                        "schema": {
+                            "title": "Code",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VoteOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Vote for an area Meteolane does not cover yet; voting twice changes nothing.",
+                "tags": [
+                    "Coverage"
+                ]
+            },
+            "delete": {
+                "operationId": "core_api_coverage_withdraw_vote",
+                "summary": "Withdraw Vote",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "code",
+                        "schema": {
+                            "title": "Code",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VoteOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Coverage"
+                ]
+            }
+        },
+        "/api/coverage/{code}/notify": {
+            "post": {
+                "operationId": "core_api_coverage_subscribe",
+                "summary": "Subscribe",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "code",
+                        "schema": {
+                            "title": "Code",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubscribeOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Leave an address to be told when the area is covered. It is confirmed by mail first.",
+                "tags": [
+                    "Coverage"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SubscribeIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/coverage/notify/confirm": {
+            "post": {
+                "operationId": "core_api_coverage_confirm_subscription",
+                "summary": "Confirm Subscription",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConfirmOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Coverage"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TokenIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/coverage/notify/unsubscribe": {
+            "post": {
+                "operationId": "core_api_coverage_unsubscribe",
+                "summary": "Unsubscribe",
+                "parameters": [],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                },
+                "description": "Always 204: whether the link was still valid is nobody's business but the mailbox's.",
+                "tags": [
+                    "Coverage"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TokenIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
         "/api/system/summary": {
             "get": {
                 "operationId": "core_api_system_summary",
@@ -6521,6 +6708,207 @@
                     }
                 },
                 "title": "CopyIn",
+                "type": "object"
+            },
+            "CoverageAreaOut": {
+                "properties": {
+                    "code": {
+                        "title": "Code",
+                        "type": "string"
+                    },
+                    "name": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Name"
+                    },
+                    "name_en": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Name En"
+                    },
+                    "status": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "covered",
+                                    "planned",
+                                    "candidate"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Status"
+                    },
+                    "note": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Note"
+                    },
+                    "note_en": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Note En"
+                    },
+                    "covered_since": {
+                        "anyOf": [
+                            {
+                                "format": "date",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Covered Since"
+                    },
+                    "votes": {
+                        "default": 0,
+                        "title": "Votes",
+                        "type": "integer"
+                    },
+                    "voted": {
+                        "default": false,
+                        "title": "Voted",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "code"
+                ],
+                "title": "CoverageAreaOut",
+                "type": "object"
+            },
+            "CoverageOut": {
+                "properties": {
+                    "areas": {
+                        "items": {
+                            "$ref": "#/components/schemas/CoverageAreaOut"
+                        },
+                        "title": "Areas",
+                        "type": "array"
+                    },
+                    "countries": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Countries",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "areas",
+                    "countries"
+                ],
+                "title": "CoverageOut",
+                "type": "object"
+            },
+            "VoteOut": {
+                "properties": {
+                    "code": {
+                        "title": "Code",
+                        "type": "string"
+                    },
+                    "votes": {
+                        "title": "Votes",
+                        "type": "integer"
+                    },
+                    "voted": {
+                        "title": "Voted",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "code",
+                    "votes",
+                    "voted"
+                ],
+                "title": "VoteOut",
+                "type": "object"
+            },
+            "SubscribeOut": {
+                "properties": {
+                    "status": {
+                        "enum": [
+                            "pending",
+                            "confirmed"
+                        ],
+                        "title": "Status",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "status"
+                ],
+                "title": "SubscribeOut",
+                "type": "object"
+            },
+            "SubscribeIn": {
+                "properties": {
+                    "email": {
+                        "maxLength": 254,
+                        "title": "Email",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "email"
+                ],
+                "title": "SubscribeIn",
+                "type": "object"
+            },
+            "ConfirmOut": {
+                "properties": {
+                    "code": {
+                        "title": "Code",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "code"
+                ],
+                "title": "ConfirmOut",
+                "type": "object"
+            },
+            "TokenIn": {
+                "properties": {
+                    "token": {
+                        "maxLength": 64,
+                        "minLength": 20,
+                        "title": "Token",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "token"
+                ],
+                "title": "TokenIn",
                 "type": "object"
             },
             "SystemCacheCount": {

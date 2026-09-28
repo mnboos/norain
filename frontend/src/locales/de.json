@@ -181,7 +181,8 @@
         "publicRoute": "Öffentliche Route",
         "randomRides": "Zufallsrunden",
         "route": "Route",
-        "system": "Systemübersicht"
+        "system": "Systemübersicht",
+        "coverage": "Abdeckung"
     },
     "account": {
         "passwordMismatch": "Die Passwörter stimmen nicht überein.",
@@ -1011,5 +1012,40 @@
         "submitButtonLabel": "Senden",
         "confirmButtonLabel": "Bestätigen",
         "successMessageText": "Danke für dein Feedback!"
+    },
+    "coverage": {
+        "title": "Wo Meteolane funktioniert",
+        "intro": "Routenplanung, Ortssuche und Wetter entlang der Strecke gibt es in diesen Gebieten. Fehlt deins? Stimm dafür ab – auch ohne Konto.",
+        "covered": "Abgedeckt",
+        "noneCovered": "Noch keine Gebiete.",
+        "since": "seit {date}",
+        "planned": "In Arbeit",
+        "wish": "Wünsch dir ein Gebiet",
+        "wishHint": "Wähle ein Land oder eine Region. Die Stimmen helfen uns zu entscheiden, wo es als Nächstes weitergeht.",
+        "pick": "Land oder Region",
+        "noMatch": "Nichts gefunden.",
+        "notifyMe": "Benachrichtige mich per E-Mail, sobald es so weit ist",
+        "email": "E-Mail-Adresse",
+        "emailHint": "Du bekommst zuerst eine Mail zum Bestätigen. Nach der Nachricht löschen wir die Adresse.",
+        "emailInvalid": "Bitte gib eine gültige E-Mail-Adresse ein.",
+        "submit": "Abstimmen",
+        "notifySubmit": "Benachrichtigen",
+        "alreadyVoted": "Du hast schon dafür gestimmt.",
+        "voted": "Danke! Deine Stimme für {area} ist gezählt.",
+        "notifyPending": "Danke! Bitte bestätige die Benachrichtigung über den Link, den wir an {email} geschickt haben.",
+        "notifyConfirmed": "Danke! Wir schreiben dir, sobald Meteolane {area} abdeckt.",
+        "voteFailed": "Die Stimme konnte nicht gespeichert werden.",
+        "ranking": "Meistgewünscht",
+        "noVotes": "Noch keine Stimmen. Mach den Anfang!",
+        "votes": "keine Stimmen | eine Stimme | {n} Stimmen",
+        "voteShort": "Stimmen",
+        "votedShort": "Gestimmt",
+        "voteFor": "Für {area} stimmen",
+        "withdraw": "Stimme für {area} zurückziehen",
+        "notifyFor": "Benachrichtigung für {area}",
+        "confirmed": "Bestätigt. Wir schreiben dir, sobald Meteolane {area} abdeckt.",
+        "unsubscribed": "Abbestellt. Deine Adresse ist gelöscht.",
+        "linkFailed": "Der Link hat nicht funktioniert. Vielleicht ist er abgelaufen.",
+        "loadFailed": "Die Abdeckung konnte nicht geladen werden."
     }
 }

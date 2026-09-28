@@ -25,8 +25,11 @@ backend/          Django 6 + Channels (async ASGI via daphne)
     system_events.py notify_system: change notices for the admin system dashboard
     forecast_schemas.py  the forecast payload (RouteWeatherOut, WeatherSample, ForecastJobOut, …)
     api/             ninja routers: route_weather.py, recurring_route.py (route CRUD),
-                     billing.py, places.py, community.py (sharing, photos, comments, likes)
+                     billing.py, places.py, community.py (sharing, photos, comments, likes),
+                     coverage.py (the public coverage page)
     public_routes.py the public view of a route: privacy zones, public_geometry
+    coverage.py      the coverage page: votes (anonymous too), double opt-in "tell me when" mails
+    countries.py     votable ISO country codes + de/en names for the mails (generated from ICU)
     photos.py        upload re-encoding (no EXIF/GPS); signals.py deletes the files with the row
     auth/            backend.py (session_auth), adapter.py (allauth rules), signals.py,
                      views.py (session, sign-up step 2, profile), lockout.py
@@ -844,6 +847,35 @@ weather need a session). Rules that hold this together:
   moderate in the admin. Posting is limited per account per minute (fails open).
 - **Copy** ("In meine Routen") saves the public line as an *imported* route of the visitor's, so it
   goes through `create_route` and its quota and never contains the hidden ends.
+
+### Coverage page and votes
+
+`/coverage` (`pages/coverage.vue`, `core/api/coverage.py`, rules in `core/coverage.py`) lists the
+areas Meteolane covers and lets **anyone**, signed in or not, vote for one it does not cover yet
+and leave an address to be told when it is. Rows are the admin's (`CoverageArea`: covered,
+planned, or a region below a country listed for votes); a country needs no row to be voted for,
+its ISO code is enough (`core/countries.py`). The seed migration marks Switzerland covered.
+Rules that hold this together:
+
+- **Votes are one per voter and area, and store no IP.** An account votes as `user:<id>`, a
+  visitor as `anon:` + a hash of the random token in the httpOnly `meteolane_voter` cookie.
+  Against cookie clearing, the IP counts in the cache only (30 votes an hour, one anonymous vote
+  per area a day, released when withdrawn). Both fail open, like the other per-minute limits.
+- **Double opt-in.** Anyone can type anyone's address, so nothing but the confirmation goes to
+  it until its link was used; the reply is `pending` whether the address was new, pending or
+  confirmed, and a confirmation is sent at most once per `RESEND_AFTER`. Only a signed-in
+  account's own verified address skips the confirmation (`confirmed`). The links go to the SPA
+  (`/coverage?confirm=` / `?unsubscribe=`), which POSTs the token, so a mail scanner fetching
+  the link confirms nothing. Unconfirmed rows are purged by the hourly pass after 7 days.
+- **Saving an area as covered mails the waiting addresses once**, whoever saved it:
+  `core.signals.notify_coverage_subscribers` enqueues `notify_area_covered` after commit, and
+  `coverage.notify_covered` deletes each row it mailed (rows locked, skipped when locked).
+- **Names are the reader's.** The API serves codes; the SPA names a country with
+  `Intl.DisplayNames` (`utils/coverage.ts`), a region by the admin's `name` / `name_en`. The
+  mails use `core/countries.py`, generated from the same ICU data, in the language of the page
+  the visitor asked from. Don't hand-edit that table; regenerate it.
+- The mail-sending, token and vote endpoints have Caddy flood limits in
+  `deploy/auth-ratelimit.caddy`, like the auth endpoints.
 
 ### Recurring routes
 

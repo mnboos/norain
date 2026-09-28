@@ -6,6 +6,9 @@ from django.utils import timezone
 
 from .models import (
     CellFetchLease,
+    CoverageArea,
+    CoverageSubscription,
+    CoverageVote,
     ElevationProfile,
     EnsembleCell,
     ForecastCell,
@@ -232,3 +235,50 @@ class RouteLikeAdmin(admin.ModelAdmin):
     list_display = ("user", "route", "created_at")
     search_fields = ("user__username", "route__name")
     raw_id_fields = ("route", "user")
+
+
+@admin.register(CoverageArea)
+class CoverageAreaAdmin(admin.ModelAdmin):
+    """The public coverage page. Saving an area as covered mails everyone waiting for it."""
+
+    list_display = ("code", "name", "status", "covered_since", "vote_count", "waiting", "updated_at")
+    list_filter = ("status",)
+    search_fields = ("code", "name", "name_en")
+    actions = ["mark_covered"]
+
+    @admin.display(description="Votes")
+    def vote_count(self, obj):
+        return CoverageVote.objects.filter(area_code=obj.code).count()
+
+    @admin.display(description="Confirmed addresses waiting")
+    def waiting(self, obj):
+        return CoverageSubscription.objects.filter(area_code=obj.code, confirmed_at__isnull=False).count()
+
+    @admin.action(description="Mark as covered and mail everyone waiting")
+    def mark_covered(self, request, queryset):
+        for area in queryset:
+            area.status = CoverageArea.Status.COVERED
+            area.save()  # the save sends the mails, see core.signals
+        self.message_user(request, "Marked as covered; the mails are queued.")
+
+
+@admin.register(CoverageVote)
+class CoverageVoteAdmin(admin.ModelAdmin):
+    """Single votes, read-only. The public page (/coverage) ranks the areas by their count."""
+
+    list_display = ("area_code", "voter", "created_at")
+    list_filter = ("area_code",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(CoverageSubscription)
+class CoverageSubscriptionAdmin(admin.ModelAdmin):
+    list_display = ("area_code", "email", "language", "confirmed_at", "created_at")
+    list_filter = ("area_code",)
+    search_fields = ("email", "area_code")
+    readonly_fields = ("token",)

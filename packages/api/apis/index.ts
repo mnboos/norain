@@ -1,5 +1,6 @@
 /* tslint:disable */
 /* eslint-disable */
+export * from './CoverageApi';
 export * from './ElevationApi';
 export * from './GPXApi';
 export * from './JourneysApi';

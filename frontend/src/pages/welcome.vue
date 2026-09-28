@@ -19,6 +19,7 @@ const copy = {
     de: {
         navFeatures: "Funktionen",
         navPricing: "Preise",
+        navCoverage: "Abdeckung",
         signIn: "Anmelden",
         toApp: "Route planen",
         cta: "Kostenlos starten",
@@ -62,7 +63,7 @@ const copy = {
         faq: [
             {
                 q: "Wo funktioniert Meteolane?",
-                a: "Routenplanung und Ortssuche decken derzeit die Schweiz ab, die Ortssuche zusätzlich Liechtenstein.",
+                a: "Routenplanung und Ortssuche decken derzeit die Schweiz ab, die Ortssuche zusätzlich Liechtenstein. Unter „Abdeckung“ kannst du für dein Land stimmen.",
             },
             {
                 q: "Was ist ein Briefing?",
@@ -86,6 +87,7 @@ const copy = {
     en: {
         navFeatures: "Features",
         navPricing: "Pricing",
+        navCoverage: "Coverage",
         signIn: "Sign in",
         toApp: "Start planning",
         cta: "Sign up free",
@@ -129,7 +131,7 @@ const copy = {
         faq: [
             {
                 q: "Where does Meteolane work?",
-                a: "Routing and place search currently cover Switzerland; place search also includes Liechtenstein.",
+                a: "Routing and place search currently cover Switzerland; place search also includes Liechtenstein. Vote for your country under “Coverage”.",
             },
             {
                 q: "What is a briefing?",
@@ -176,6 +178,7 @@ const { isAuthenticated } = useSession();
                         <a class="text-brand-mist" href="#features">{{ t.navFeatures }}</a>
                         <a class="text-brand-mist" href="#pricing">{{ t.navPricing }}</a>
                         <a class="text-brand-mist" href="#faq">FAQ</a>
+                        <router-link class="text-brand-mist" to="/coverage">{{ t.navCoverage }}</router-link>
                     </nav>
                     <q-btn-group
                         flat
@@ -391,6 +394,7 @@ const { isAuthenticated } = useSession();
         <q-card tag="footer" flat square :dark="false" class="bg-brand-navy text-brand-mist">
             <q-card-section class="landing-wrap row items-center justify-between q-gutter-y-md q-py-lg">
                 <span class="footer-brand text-weight-bold text-white">Meteolane</span>
+                <router-link class="text-caption text-brand-mist" to="/coverage">{{ t.navCoverage }}</router-link>
                 <span class="text-caption">{{ t.footer }}</span>
             </q-card-section>
         </q-card>
