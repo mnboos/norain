@@ -1,6 +1,6 @@
-# Meteolane — weather along your bike route
+# MeteoLane — weather along your bike route
 
-Meteolane forecasts the weather where you will be during a ride. It combines a route
+MeteoLane forecasts the weather where you will be during a ride. It combines a route
 and departure time with precipitation, temperature, and wind forecasts, including
 headwind and crosswind relative to your direction of travel.
 
@@ -16,21 +16,23 @@ The default geographic data covers Switzerland (Photon includes Liechtenstein).
 
 Start at the [documentation index](docs/README.md), organized using Diátaxis:
 
-| Your goal | Read |
-| --- | --- |
-| Run Meteolane and create your first route | [First forecast tutorial](docs/tutorials/first-forecast.md) |
-| Operate the worker and pre-warm forecasts | [Background jobs](docs/how-to/background-jobs.md) |
-| Change routing and search coverage | [Change region](docs/how-to/change-region.md) |
-| Run checks or regenerate the API client | [Development workflow](docs/how-to/development.md) |
-| Diagnose a failed setup or forecast | [Troubleshooting](docs/how-to/troubleshooting.md) |
-| Look up settings and API fields | [Configuration](docs/reference/configuration.md) · [HTTP API](docs/reference/api.md) |
-| Understand the implementation | [Architecture](docs/explanation/architecture.md) · [Forecast interpretation](docs/explanation/forecasts.md) |
+| Your goal                                 | Read                                                                                                        |
+|-------------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| Run MeteoLane and create your first route | [First forecast tutorial](docs/tutorials/first-forecast.md)                                                 |
+| Operate the worker and pre-warm forecasts | [Background jobs](docs/how-to/background-jobs.md)                                                           |
+| Change routing and search coverage        | [Change region](docs/how-to/change-region.md)                                                               |
+| Run checks or regenerate the API client   | [Development workflow](docs/how-to/development.md)                                                          |
+| Install and test the Forerunner 255 app   | [Garmin watch setup](docs/how-to/garmin-watch.md)                                                            |
+| Diagnose a failed setup or forecast       | [Troubleshooting](docs/how-to/troubleshooting.md)                                                           |
+| Look up settings and API fields           | [Configuration](docs/reference/configuration.md) · [HTTP API](docs/reference/api.md)                        |
+| Understand the implementation             | [Architecture](docs/explanation/architecture.md) · [Forecast interpretation](docs/explanation/forecasts.md) |
 
 ## Repository
 
 - `backend/`: Django ASGI application, models, migrations, and tests.
 - `frontend/`: Vue application with MapLibre maps and Plotly charts.
 - `packages/api/`: TypeScript API client imported by the frontend.
+- `garmin/`: Connect IQ app for Forerunner 255, build script, and simulator tests.
 - `Dockerfile`: every image (`backend`, `frontend`, `graphhopper`, `photon`) as a build stage.
 - `docker/`: GraphHopper and Photon startup scripts and build certificates.
 - `data/graphhopper/`: routing configuration, custom models, and local data mounts.

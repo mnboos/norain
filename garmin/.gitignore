@@ -1,0 +1,5 @@
+bin/
+private/
+*.prg
+*.iq
+*.debug.xml

@@ -7,6 +7,7 @@ set -euo pipefail
 GRAPH_DIR=/graph-cache
 GRAPHHOPPER_HEAP="${GRAPHHOPPER_HEAP:-6g}"
 GRAPHHOPPER_BUILD_HEAP="${GRAPHHOPPER_BUILD_HEAP:-$GRAPHHOPPER_HEAP}"
+GRAPHHOPPER_BUILD_THREADS="${GRAPHHOPPER_BUILD_THREADS:-3}"
 GRAPHHOPPER_DATAACCESS="${GRAPHHOPPER_DATAACCESS:-MMAP}"
 # RAM_STORE builds in the heap. MMAP keeps the graph in files on /graph-cache, so a large area
 # builds with a much smaller heap (and more slowly). Both write the same graph.
@@ -63,6 +64,11 @@ terrain() {
 }
 
 build() {
+    python /graphhopper/memory.py "$GRAPHHOPPER_BUILD_HEAP"
+    if ! [[ "$GRAPHHOPPER_BUILD_THREADS" =~ ^[1-9][0-9]*$ ]]; then
+        echo "GRAPHHOPPER_BUILD_THREADS must be a positive integer, got: $GRAPHHOPPER_BUILD_THREADS" >&2
+        exit 1
+    fi
     exec 9>/graph-cache/.build.lock
     flock -n 9 || { echo "Another graph build is running." >&2; exit 1; }
     prepare_osm
@@ -93,6 +99,10 @@ build() {
         -Ddw.graphhopper.graph.elevation.cache_dir="$terrain_dir/cache" \
         "${fallback_opts[@]}" \
         -Ddw.graphhopper.graph.dataaccess.default_type="${GRAPHHOPPER_BUILD_DATAACCESS}" \
+        -Ddw.graphhopper.prepare.ch.threads="${GRAPHHOPPER_BUILD_THREADS}" \
+        -Ddw.graphhopper.prepare.lm.threads="${GRAPHHOPPER_BUILD_THREADS}" \
+        -Ddw.graphhopper.graph.urban_density.threads="${GRAPHHOPPER_BUILD_THREADS}" \
+        -Ddw.graphhopper.prepare.subnetworks.threads="${GRAPHHOPPER_BUILD_THREADS}" \
         -Ddw.graphhopper.datareader.file="${BIKE_DATA_FILE}" \
         -jar graphhopper.jar import "$artifact/config.yaml"
     python /graphhopper/artifact.py finish "${artifact#/graph-cache/}"
@@ -100,6 +110,7 @@ build() {
 }
 
 serve() {
+    python /graphhopper/memory.py "$GRAPHHOPPER_HEAP"
     artifact=$(python /graphhopper/artifact.py check "${1:-current}")
     terrain_dir=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["terrain"])' "$artifact/artifact.json")
     fallback_args "$terrain_dir"

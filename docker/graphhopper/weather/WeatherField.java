@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The weather a request carries in its {@code weather} hint (Meteolane's backend builds it in
+ * The weather a request carries in its {@code weather} hint (MeteoLane's backend builds it in
  * core/weather_routing.py): a lattice of cells by hour, each with a rain weight multiplier and
  * the wind as a vector. GraphHopper never fetches weather itself.
  *

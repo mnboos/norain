@@ -13,6 +13,7 @@ from .models import (
     EnsembleCell,
     ForecastCell,
     ForecastJob,
+    GarminToken,
     Journey,
     JourneyDay,
     JourneyStage,
@@ -33,7 +34,7 @@ from .models import (
 
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
-    """Django's user admin plus the Meteolane fields.
+    """Django's user admin plus the MeteoLane fields.
 
     Email verification is on allauth's own "Email addresses" admin page.
     """
@@ -54,7 +55,7 @@ class UserAdmin(DjangoUserAdmin):
             subscription.save(update_fields=["complimentary_until", "updated_at"])
         self.message_user(request, "Complimentary Plus granted; no payments or messages were sent.")
 
-    fieldsets = (*DjangoUserAdmin.fieldsets, ("Meteolane", {"fields": ["signup_completed", "created_at"]}))
+    fieldsets = (*DjangoUserAdmin.fieldsets, ("MeteoLane", {"fields": ["signup_completed", "created_at"]}))
 
 
 @admin.register(Subscription)
@@ -282,3 +283,13 @@ class CoverageSubscriptionAdmin(admin.ModelAdmin):
     list_filter = ("area_code",)
     search_fields = ("email", "area_code")
     readonly_fields = ("token",)
+
+
+@admin.register(GarminToken)
+class GarminTokenAdmin(admin.ModelAdmin):
+    """Only the digest is stored, so there is nothing to read here: revoke by deleting the row."""
+
+    list_display = ("user", "created_at")
+    search_fields = ("user__username",)
+    raw_id_fields = ("user",)
+    readonly_fields = ("digest", "created_at")

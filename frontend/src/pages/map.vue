@@ -142,7 +142,7 @@ const ready = computed(() => !!zielort.value);
 const plan = computed<RoutePlanIn | null>(() => {
     if (!zielort.value) return null;
     return {
-        name: draft.value?.plan.name ?? "Meteolane",
+        name: draft.value?.plan.name ?? "MeteoLane",
         geometrySource: exact.value ? GeometrySource.Imported : GeometrySource.Graphhopper,
         coordinates: exact.value
             ? (draft.value?.plan.coordinates ?? [])
@@ -219,7 +219,11 @@ const {
     validPlan,
     plan,
 );
-const { data: selectedWeather, isFetching: isFetchingSelected, error: selectedError } = useRouteWeather(
+const {
+    data: selectedWeather,
+    isFetching: isFetchingSelected,
+    error: selectedError,
+} = useRouteWeather(
     abfahrtsort,
     zielort,
     profile,
@@ -303,7 +307,13 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                                 :loading="exporting"
                                 @click="exportRoute"
                             />
-                            <q-btn flat no-caps :label="t('mapPage.saveRoute')" :disable="!currentDraft" @click="saveDraft" />
+                            <q-btn
+                                flat
+                                no-caps
+                                :label="t('mapPage.saveRoute')"
+                                :disable="!currentDraft"
+                                @click="saveDraft"
+                            />
                         </div>
                         <template v-if="draft">
                             <div class="text-subtitle2">{{ draft.plan.name }}</div>

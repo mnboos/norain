@@ -10,6 +10,8 @@ import { useEntitlements } from "@/composables/useEntitlements";
  */
 const avoidRain = defineModel<boolean>("avoidRain", { required: true });
 const avoidHeadwind = defineModel<boolean>("avoidHeadwind", { required: true });
+/** Off for hiking: a headwind barely slows a walker, so the server never routes around one. */
+const { headwind } = defineProps<{ headwind: boolean }>();
 
 const { t } = useI18n();
 const { weatherRouting } = useEntitlements();
@@ -28,6 +30,7 @@ const { weatherRouting } = useEntitlements();
             @update:model-value="avoidRain = $event"
         />
         <q-toggle
+            v-if="headwind"
             :model-value="weatherRouting && avoidHeadwind"
             :disable="!weatherRouting"
             :label="t('weatherRouting.avoidHeadwind')"

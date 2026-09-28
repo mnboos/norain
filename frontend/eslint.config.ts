@@ -37,7 +37,7 @@ export default defineConfigWithVueTs(
                 {
                     ignorePattern: "^[-–—·•:,.()/+|→↑➤°%#!?\\s\\d]*$",
                     ignoreText: [
-                        ...["Meteolane", "Meteolane Plus", "Meteolane Free", "Plus", "Free", "FAQ"],
+                        ...["MeteoLane", "MeteoLane Plus", "MeteoLane Free", "Plus", "Free", "FAQ"],
                         ...["km", "km ·", "min", "h", "m", "m ↑", "°C", "Open-Meteo", "OpenWeatherMap"],
                     ],
                 },

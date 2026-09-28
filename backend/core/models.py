@@ -36,7 +36,7 @@ class UserManager(DjangoUserManager):
 
 
 class User(AbstractUser):
-    """A Meteolane account: the sign-in identities plus whether sign-up was finished.
+    """A MeteoLane account: the sign-in identities plus whether sign-up was finished.
 
     The reason this is a custom model rather than ``django.contrib.auth.User`` is the two
     constraints below. Django's default user permits duplicate and blank emails
@@ -127,6 +127,14 @@ class ProcessedStripeEvent(models.Model):
         return self.event_id
 
 
+class GarminToken(models.Model):
+    """Read-only watch credential. Only its SHA-256 digest is retained."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    digest = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now=True)
+
+
 class RecurringRoute(models.Model):
     """A user-configured bike route with a cron schedule for recurring weather checks."""
 
@@ -157,7 +165,7 @@ class RecurringRoute(models.Model):
     profile = models.CharField(
         max_length=50,
         default="bike",
-        help_text="GraphHopper routing profile: bike, ebike, fast_ebike",
+        help_text="GraphHopper routing profile: bike, ebike, fast_ebike, hike",
     )
 
     schedule_cron = models.CharField(max_length=100, help_text="5-field cron expression")
@@ -536,7 +544,7 @@ class Poi(models.Model):
 
 
 class Journey(models.Model):
-    """A one-off ride over one or more days, planned by Meteolane (core/journeys.py).
+    """A one-off ride over one or more days, planned by MeteoLane (core/journeys.py).
 
     The user gives the ends, the date, how far a day and a leg may be, which POIs matter and
     how the road should be. ``plan_journey`` turns that into days (ending at lodging) and, per

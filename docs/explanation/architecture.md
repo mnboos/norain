@@ -1,7 +1,7 @@
 # Architecture and data lifecycle
 
 A point forecast describes weather at one location. A route forecast needs the
-weather at several locations at the times a traveler reaches them. Meteolane separates
+weather at several locations at the times a traveler reaches them. MeteoLane separates
 journey geometry from weather data so recurring trips can reuse both independently.
 
 ```mermaid
@@ -30,7 +30,7 @@ flowchart TD
 
 ## Geometry determines the sample times
 
-GraphHopper supplies a polyline and per-segment travel times. Meteolane distributes
+GraphHopper supplies a polyline and per-segment travel times. MeteoLane distributes
 each time interval across its subsegments by geographic length, accumulates elapsed
 time at every vertex, and chooses vertices nearest regular time targets. The final
 vertex is included and duplicate sample indices are removed.
@@ -152,22 +152,22 @@ come from independent numerical pieces. Ground scoring keeps its existing curves
 wind produces an unknown score. Algorithm version and saved-route geometry revision enter
 job identity to avoid reusing older calculations after a geometry backfill.
 
-| Module | Responsibility |
-| --- | --- |
-| `backend/core/api/` | API router registration, endpoint modules, and schemas |
-| `backend/core/weather.py` | Routing, sampling, arrival times, wind, summary |
-| `backend/core/geo.py`, `wind.py` | Pure geometry, local wind projection/integration and exposure distribution |
-| `backend/core/grid.py` | Provider fetching, cache lookup, source-aware extraction |
-| `backend/core/models.py` | Recurring routes and weather-cell persistence |
-| `backend/core/schedule.py` | Cron departures and forecast window |
-| `backend/core/tasks.py` | Every heavy operation: geometry, cells, job planning and assembly, scans |
-| `backend/core/jobs.py`, `claims.py` | Forecast-job lifecycle; in-flight cell claims |
-| `backend/core/consumers.py`, `routing.py` | WebSocket delivery of job progress |
-| `backend/core/api/recurring_route.py` | Saved-route CRUD and forecast assembly |
-| `backend/backend/settings/` | Shared, development, and production Django settings |
-| `backend/core/sections.py` | Condition groups |
-| `frontend/src/pages/`, `components/` | Route UI, maps, summaries, charts |
-| `frontend/src/queries/` | TanStack query keys, fetch hooks, mutations, and cache invalidation |
-| `packages/api/` | Shared generated TypeScript API client |
+| Module                                    | Responsibility                                                             |
+|-------------------------------------------|----------------------------------------------------------------------------|
+| `backend/core/api/`                       | API router registration, endpoint modules, and schemas                     |
+| `backend/core/weather.py`                 | Routing, sampling, arrival times, wind, summary                            |
+| `backend/core/geo.py`, `wind.py`          | Pure geometry, local wind projection/integration and exposure distribution |
+| `backend/core/grid.py`                    | Provider fetching, cache lookup, source-aware extraction                   |
+| `backend/core/models.py`                  | Recurring routes and weather-cell persistence                              |
+| `backend/core/schedule.py`                | Cron departures and forecast window                                        |
+| `backend/core/tasks.py`                   | Every heavy operation: geometry, cells, job planning and assembly, scans   |
+| `backend/core/jobs.py`, `claims.py`       | Forecast-job lifecycle; in-flight cell claims                              |
+| `backend/core/consumers.py`, `routing.py` | WebSocket delivery of job progress                                         |
+| `backend/core/api/recurring_route.py`     | Saved-route CRUD and forecast assembly                                     |
+| `backend/backend/settings/`               | Shared, development, and production Django settings                        |
+| `backend/core/sections.py`                | Condition groups                                                           |
+| `frontend/src/pages/`, `components/`      | Route UI, maps, summaries, charts                                          |
+| `frontend/src/queries/`                   | TanStack query keys, fetch hooks, mutations, and cache invalidation        |
+| `packages/api/`                           | Shared generated TypeScript API client                                     |
 
 [Documentation index](../README.md)

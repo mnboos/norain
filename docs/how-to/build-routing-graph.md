@@ -1,17 +1,17 @@
 # Build and deploy the routing graph
 
-Meteolane builds **GraphHopper 12.0-SNAPSHOT** from commit
+MeteoLane builds **GraphHopper 12.0-SNAPSHOT** from commit
 `d9506cd7d36d5d068d9118b19b86cf0609dbe773` with Java 25. Its native PMTiles
 provider reads **Mapterhorn zoom 15**, using bilinear interpolation. Photon keeps
 its own Java runtime. Both amd64 and arm64 images are built from the same Java source.
 
 There are three separate artifacts:
 
-| Artifact | Container location | Purpose |
-| --- | --- | --- |
-| Filtered OSM | `/osm_data/bike-*.osm.pbf` | Roads and bike-route relations |
-| Terrain | `/osm_data/elevation/<manifest-hash>/` | Zoom-15 and zoom-12 fallback PMTiles, attribution, and reusable decoded caches |
-| Routing graph | `/graph-cache/releases/<id>/` | Graph, configuration snapshot, models, and build identity |
+| Artifact      | Container location                     | Purpose                                                                        |
+|---------------|----------------------------------------|--------------------------------------------------------------------------------|
+| Filtered OSM  | `/osm_data/bike-*.osm.pbf`             | Roads and paths, bike- and hiking-route relations                              |
+| Terrain       | `/osm_data/elevation/<manifest-hash>/` | Zoom-15 and zoom-12 fallback PMTiles, attribution, and reusable decoded caches |
+| Routing graph | `/graph-cache/releases/<id>/`          | Graph, configuration snapshot, models, and build identity                      |
 
 `/graph-cache/current` selects the active graph. `candidate` selects the newest
 successful import; `previous` retains the last activated managed graph. Graph
@@ -130,9 +130,14 @@ Only one import runs at a time. Failed release directories are retained for
 inspection and can be removed once no import uses them.
 
 `GRAPHHOPPER_BUILD_HEAP` defaults to `GRAPHHOPPER_HEAP` (6g).
+`GRAPHHOPPER_BUILD_THREADS` defaults to 3 and controls CH, LM, urban-density
+and subnetwork preparation; increasing it raises peak CPU and memory use.
 `GRAPHHOPPER_BUILD_DATAACCESS=RAM_STORE` uses heap; `MMAP` trades speed for a
 smaller heap. Serving defaults to `GRAPHHOPPER_DATAACCESS=MMAP`. Leave enough RAM
-for the running graph plus the import, or build on another machine.
+for the running graph plus the import, or build on another machine. Before Java
+starts, the container rejects a cgroup memory limit smaller than the heap plus
+native-memory headroom (at least 2 GiB or 10% of the heap), with an actionable
+`GRAPHHOPPER_MEM_LIMIT` error instead of a later exit 137.
 
 A different filtered file needs its own terrain: run `download-elevation-for` for it
 before the import, or the check refuses the build.

@@ -32,6 +32,7 @@ import MapLegend from "@/components/MapLegend.vue";
 import { useForecastMapDetail, type LineDetail } from "@/queries/forecastParts";
 import { finerDetail, lineDetailForZoom } from "@/utils/mapDetail";
 import { groundArrowBearing, groundWindText, visibleWindArrows, windArrowSize, windPowerText } from "@/utils/wind";
+import { hasWindEffort } from "@/utils/bikeProfiles";
 import {
     interpolate,
     lineProgress,
@@ -396,6 +397,8 @@ function clearWindMarkers() {
 }
 
 function windArrowLabel(arrow: WindArrow): string {
+    // A hike's arrows carry no effort (the server sizes them by the wind): name the wind only.
+    if (!hasWindEffort(props.routeWeather?.profile)) return groundWindText(arrow);
     return t("map.windArrow", { wind: groundWindText(arrow), effort: windPowerText(arrow.windEffortLevel) });
 }
 

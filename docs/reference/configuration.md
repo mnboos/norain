@@ -31,9 +31,10 @@ take precedence over values loaded by `python-dotenv`.
 | `GRAPHHOPPER_IMAGE` | `norain-graphhopper:local` locally; required in production | Same immutable image for import, validation and serving; contains GraphHopper 12.0-SNAPSHOT built from the source commit in `Dockerfile` |
 | `GRAPHHOPPER_HEAP` | `6g` | GraphHopper serving JVM maximum heap. With `MMAP` a few GB are enough; with `RAM_STORE` it must hold the whole graph |
 | `GRAPHHOPPER_BUILD_HEAP` | `GRAPHHOPPER_HEAP` | JVM maximum heap while building the graph |
+| `GRAPHHOPPER_BUILD_THREADS` | `3` | Positive integer used by each parallel build phase: CH, LM, urban-density classification and subnetwork preparation. More threads can reduce build time but increase peak CPU and memory use |
 | `GRAPHHOPPER_DATAACCESS` | `MMAP` | How the server holds the graph. `MMAP` lets the OS page it in from disk, so the heap stays small and the first queries after a start are slower; `RAM_STORE` keeps all of it in the heap. Serving only: the build uses `GRAPHHOPPER_BUILD_DATAACCESS`. Both write the same files, so switching needs no rebuild |
 | `GRAPHHOPPER_BUILD_DATAACCESS` | `RAM_STORE` | How the build holds the graph. `RAM_STORE` builds it in the heap; `MMAP` builds it in files on `/graph-cache`, so a large area (all of Europe, say) builds on a machine with far less memory, more slowly. The heap still holds the OSM reader's node map and the CH/LM bookkeeping |
-| `GRAPHHOPPER_MEM_LIMIT` | `8g` | GraphHopper container memory and swap limit, during the build too: it must fit `GRAPHHOPPER_BUILD_HEAP` plus JVM overhead, or the kernel kills the build (exit 137, `Killed`) |
+| `GRAPHHOPPER_MEM_LIMIT` | `8g` | GraphHopper container memory and swap limit, during the build too. Before starting Java, the container requires the effective cgroup limit to exceed the selected heap by at least 2 GiB or 10%, whichever is larger, so a mismatch fails clearly instead of being killed with exit 137 |
 | `PHOTON_INDEX_URL` | `https://download1.graphhopper.com/public/europe/switzerland-liechtenstein/photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst` | Photon import |
 | `PHOTON_INDEX_FILE` | Empty | Local artifact path inside the container; takes precedence over the URL. Several `.jsonl.zst` / `.jsonl` dumps, separated by spaces, become one index |
 | `PHOTON_REPLACE_INDEX` | `false` | `true` imports even when an index exists, and swaps the old one out only once the new one is ready (`just photon-import` sets it) |
@@ -113,9 +114,10 @@ despite older comments in Compose referring to a model-free application.
 | Forecast availability | Today through today + 15 days | Calendar window used for scheduled departures |
 | `ENSEMBLE_MODELS` | `icon_seamless_eps,meteoswiss_icon_ch1_ensemble,meteoswiss_icon_ch2_ensemble` | Models requested by the application |
 
-Enabled routing profiles are `bike`, `ebike`, and `fast_ebike`, each with a CH
-preparation. `ROUTING_PROFILES` in `core/api/route_weather.py` must list the same
-names; the API rejects any other profile with 422.
+Enabled routing profiles are `bike`, `ebike` and `fast_ebike`, each with an LM (landmark)
+preparation, and `hike`, which has none: hikes are short, so GraphHopper routes them in flexible
+mode, and landmarks would add about 200 MB per country-sized graph. `ROUTING_PROFILES` in
+`core/api/route_weather.py` must list the same names; the API rejects any other profile with 422.
 
 ### Ride speed
 
@@ -129,6 +131,7 @@ in `data/graphhopper/models/`:
 | `bike` | `bike.json` + `bike_elevation.json` (both from the jar) + `bike_speed.json` | road speed, slope, then ×1.15 capped at 30 km/h | ~18 km/h |
 | `ebike` | `ebike.json` | road speed ×1.35, soft slope rules, capped at 25 km/h | ~22 km/h |
 | `fast_ebike` | `fast_ebike.json` | road speed ×2.0, soft slope rules, capped at 35 km/h | ~32 km/h |
+| `hike` | `hike.json` + `foot_elevation.json` (both from the jar) | `foot_average_speed`, 4 km/h on T2, 1.5 km/h on T3–T5, slower uphill | ~4 km/h |
 
 "Road speed" is GraphHopper's `bike_average_speed`, which comes from the OSM road type and
 surface, so a forest track is slower than a cycleway for all three. Each profile's block

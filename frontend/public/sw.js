@@ -1,10 +1,22 @@
 /* No offline caching: account and forecast responses must remain private and fresh. */
 self.addEventListener("push", event => {
     let data;
-    try { data = event.data.json(); } catch { return; }
-    event.waitUntil(self.registration.showNotification(data.title || "Meteolane", {
-        body: data.body, tag: data.tag, data: { url: data.url }, icon: "/brand/icon-192.png",
-    }));
+    try {
+        data = event.data.json();
+    } catch {
+        return;
+    }
+    event.waitUntil(
+        self.registration.showNotification(data.title || "MeteoLane", {
+            body: data.body,
+            tag: data.tag,
+            // Without it, a notification whose tag is already showing (a second test, a
+            // re-sent briefing) replaces it silently: no popup, no sound.
+            renotify: Boolean(data.tag),
+            data: { url: data.url },
+            icon: "/brand/icon-192.png",
+        }),
+    );
 });
 self.addEventListener("notificationclick", event => {
     event.notification.close();
