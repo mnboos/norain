@@ -130,9 +130,14 @@ Only one import runs at a time. Failed release directories are retained for
 inspection and can be removed once no import uses them.
 
 `GRAPHHOPPER_BUILD_HEAP` defaults to `GRAPHHOPPER_HEAP` (6g).
+`GRAPHHOPPER_BUILD_THREADS` defaults to 3 and controls CH, LM, urban-density
+and subnetwork preparation; increasing it raises peak CPU and memory use.
 `GRAPHHOPPER_BUILD_DATAACCESS=RAM_STORE` uses heap; `MMAP` trades speed for a
 smaller heap. Serving defaults to `GRAPHHOPPER_DATAACCESS=MMAP`. Leave enough RAM
-for the running graph plus the import, or build on another machine.
+for the running graph plus the import, or build on another machine. Before Java
+starts, the container rejects a cgroup memory limit smaller than the heap plus
+native-memory headroom (at least 2 GiB or 10% of the heap), with an actionable
+`GRAPHHOPPER_MEM_LIMIT` error instead of a later exit 137.
 
 A different filtered file needs its own terrain: run `download-elevation-for` for it
 before the import, or the check refuses the build.
