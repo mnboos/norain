@@ -22,6 +22,7 @@ Start at the [documentation index](docs/README.md), organized using Diátaxis:
 | Operate the worker and pre-warm forecasts | [Background jobs](docs/how-to/background-jobs.md)                                                           |
 | Change routing and search coverage        | [Change region](docs/how-to/change-region.md)                                                               |
 | Run checks or regenerate the API client   | [Development workflow](docs/how-to/development.md)                                                          |
+| Install and test the Forerunner 255 app   | [Garmin watch setup](docs/how-to/garmin-watch.md)                                                            |
 | Diagnose a failed setup or forecast       | [Troubleshooting](docs/how-to/troubleshooting.md)                                                           |
 | Look up settings and API fields           | [Configuration](docs/reference/configuration.md) · [HTTP API](docs/reference/api.md)                        |
 | Understand the implementation             | [Architecture](docs/explanation/architecture.md) · [Forecast interpretation](docs/explanation/forecasts.md) |
@@ -31,6 +32,7 @@ Start at the [documentation index](docs/README.md), organized using Diátaxis:
 - `backend/`: Django ASGI application, models, migrations, and tests.
 - `frontend/`: Vue application with MapLibre maps and Plotly charts.
 - `packages/api/`: TypeScript API client imported by the frontend.
+- `garmin/`: Connect IQ app for Forerunner 255, build script, and simulator tests.
 - `Dockerfile`: every image (`backend`, `frontend`, `graphhopper`, `photon`) as a build stage.
 - `docker/`: GraphHopper and Photon startup scripts and build certificates.
 - `data/graphhopper/`: routing configuration, custom models, and local data mounts.

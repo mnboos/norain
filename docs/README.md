@@ -16,6 +16,7 @@ the implementation, and explanation develops understanding.
 ## How-to guides — accomplish a task
 
 - [Run background jobs and pre-warm forecasts](how-to/background-jobs.md).
+- [Install and test MeteoLane on a Garmin Forerunner 255](how-to/garmin-watch.md): local server access, pairing, building, USB installation, and troubleshooting.
 - [Monitor product usage, forecasts, and workers with Sentry](how-to/sentry-metrics.md).
 - [Change the geographic coverage](how-to/change-region.md).
 - [Build routing and search from downloaded files, for several countries](how-to/import-geodata.md).

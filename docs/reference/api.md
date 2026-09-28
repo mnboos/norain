@@ -5,7 +5,47 @@ The base path is `/api`. With the backend running, use
 <http://127.0.0.1:8000/api/openapi.json> for the live schema.
 [Export and regenerate](../how-to/development.md) after schema changes.
 
+## Garmin watch
+
+Setup: [Install and test the Forerunner 255 app](../how-to/garmin-watch.md).
+These plain Django endpoints are outside `/api/docs` and the generated Ninja client.
+All responses set `Cache-Control: no-store`.
+
+| Method and path | Authentication | Result |
+| --- | --- | --- |
+| `GET /api/garmin/token` | Active signed-in session | `connected`: whether a token exists |
+| `POST /api/garmin/token` | Active session and CSRF | Replaces token; returns `token` once and `connected: true` |
+| `DELETE /api/garmin/token` | Active session and CSRF | Revokes token; returns `connected: false` |
+| `GET /api/garmin/next-ride` | `Authorization: Bearer <token>` | `{"ride": {...}}` or `{"ride": null}` |
+
+The feed requires a watch token even if a browser session exists. Invalid/revoked
+tokens and inactive accounts receive 401. Tokens belong to one account; only their
+SHA-256 hashes are stored. Replacement invalidates the previous token.
+
+The earliest future departure wins across eligible active recurring routes (including
+returns) and completed planned tour days owned by the account. Tour alternatives use
+the existing journey ranking. Random suggestions are excluded until saved as routes.
+The feed starts or joins forecast jobs; pending weather does not hide the ride.
+
+| Ride field | Meaning |
+| --- | --- |
+| `id`, `name` | Route or journey-day identifier and display name |
+| `departureEpoch` | Departure as Unix seconds |
+| `departureLabel` | Europe/Zurich date, time, and zone label |
+| `distanceKm`, `durationMinutes` | Distance and duration; nullable |
+| `tempMin`, `tempMax` | Sample air-temperature range in °C; nullable |
+| `rainProbability` | Maximum sample rain probability, 0–100 percent; nullable |
+| `rainRate` | Maximum sample rain rate in mm/h; nullable |
+| `headwind` | Maximum sample headwind in km/h, positive against the rider; nullable |
+| `weatherStatus` | Watch display text describing availability or refresh state |
+
+Missing weather is null, not zero. Cached results must satisfy the existing forecast
+age and entitlement checks. The response omits map geometry and charts.
+
 ## Naming and time conventions
+
+See also the [Garmin watch endpoints](#garmin-watch), which are plain Django views
+outside the Ninja schema and generated TypeScript client.
 
 Query parameters use the Python names shown below, such as `departure_time`.
 Body schemas define camelCase aliases and accept Python snake_case field names as
