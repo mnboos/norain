@@ -12,6 +12,7 @@ import RouteThumbnail from "@/components/RouteThumbnail.vue";
 import RouteWeatherBadges from "@/components/RouteWeatherBadges.vue";
 import { liveThumbnail } from "@/utils/routeThumbnail";
 import { computed, toRefs } from "vue";
+import { useQuasar } from "quasar";
 
 const props = withDefaults(
     defineProps<{
@@ -69,6 +70,16 @@ function profileLabel(profile: string): string {
     return labels[profile] ?? profile;
 }
 
+const $q = useQuasar();
+/** Phones swipe a row left to delete it; the delete button is for wider screens only. */
+const swipeToDelete = computed(() => $q.screen.lt.sm);
+
+function onSwipeDelete(id: string, reset: () => void) {
+    // Slide the row back at once: the confirmation dialog decides, and a deleted row leaves the list.
+    reset();
+    emit("delete", id);
+}
+
 const addButtonLabel = computed(() => (atRouteLimit.value ? "Tarifgrenze erreicht" : "Route hinzufügen"));
 </script>
 
@@ -119,46 +130,52 @@ const addButtonLabel = computed(() => (atRouteLimit.value ? "Tarifgrenze erreich
                     </q-item-section>
                 </q-item>
 
-                <!-- Route items -->
-                <q-item
+                <!-- Route items. On a phone a row is deleted by swiping it left, on a wider
+                     screen by its delete button. Either way index.vue asks before it deletes. -->
+                <q-slide-item
                     v-for="route in routes"
                     :key="route.id"
-                    v-ripple
-                    :to="`/routes/${route.id}`"
-                    class="q-py-sm q-pl-sm q-pr-none"
+                    right-color="negative"
+                    @right="({ reset }) => onSwipeDelete(route.id, reset)"
                 >
-                    <q-item-section avatar class="">
-                        <RouteThumbnail :route="route" />
-                    </q-item-section>
-                    <q-item-section>
-                        <q-item-label>{{ route.name }}</q-item-label>
-                        <q-item-label caption>
-                            {{ relativeTime(route.nextDeparture) }} · {{ qualityLabel(route) }}
-                        </q-item-label>
-                        <q-item-label caption>
-                            {{ route.startName }} → {{ route.destName }} · {{ profileLabel(route.profile) }}
-                        </q-item-label>
-                        <q-item-label v-if="route.returnRouteId" caption>
-                            Rückfahrt: {{ route.returnScheduleDescription }} ·
-                            {{ relativeTime(route.returnNextDeparture) }}
-                        </q-item-label>
-                        <!-- Rain and frost: the two readings that decide whether you ride. They add
-                     to the wording above, never replace it, and the line is there only when
-                     there is rain or frost to report - the component owns its own label. -->
-                        <RouteWeatherBadges :route="route" />
-                    </q-item-section>
-                    <q-item-section side>
-                        <q-btn
-                            flat
-                            round
-                            dense
-                            size="sm"
-                            :icon="symSharpDelete"
-                            color="negative"
-                            @click.stop.prevent="emit('delete', route.id)"
-                        />
-                    </q-item-section>
-                </q-item>
+                    <template v-if="swipeToDelete" #right>
+                        <q-icon :name="symSharpDelete" />
+                    </template>
+                    <q-item v-ripple :to="`/routes/${route.id}`" class="q-py-sm q-pl-sm q-pr-none">
+                        <q-item-section avatar class="">
+                            <RouteThumbnail :route="route" />
+                        </q-item-section>
+                        <q-item-section>
+                            <q-item-label>{{ route.name }}</q-item-label>
+                            <q-item-label caption>
+                                {{ relativeTime(route.nextDeparture) }} · {{ qualityLabel(route) }}
+                            </q-item-label>
+                            <q-item-label caption>
+                                {{ route.startName }} → {{ route.destName }} · {{ profileLabel(route.profile) }}
+                            </q-item-label>
+                            <q-item-label v-if="route.returnRouteId" caption>
+                                Rückfahrt: {{ route.returnScheduleDescription }} ·
+                                {{ relativeTime(route.returnNextDeparture) }}
+                            </q-item-label>
+                            <!-- Rain and frost: the two readings that decide whether you ride. They add
+                         to the wording above, never replace it, and the line is there only when
+                         there is rain or frost to report - the component owns its own label. -->
+                            <RouteWeatherBadges :route="route" />
+                        </q-item-section>
+                        <q-item-section v-if="!swipeToDelete" side>
+                            <q-btn
+                                flat
+                                round
+                                dense
+                                size="sm"
+                                :icon="symSharpDelete"
+                                color="negative"
+                                aria-label="Route löschen"
+                                @click.stop.prevent="emit('delete', route.id)"
+                            />
+                        </q-item-section>
+                    </q-item>
+                </q-slide-item>
             </q-list>
         </q-card-section>
     </q-card>
