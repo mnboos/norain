@@ -166,12 +166,14 @@ class FreemiumTests(TestCase):
             "https://127.0.0.1/push",
             "https://fcm.googleapis.com.evil.test/push",
             "https://fcm.googleapis.com:8443/push",
+            "https://notify.windows.com.evil.test/w/",
+            "https://evilnotify.windows.com/w/",
         ):
             with self.subTest(endpoint=endpoint), self.assertRaises(ValueError):
                 validate_subscription({"endpoint": endpoint, "keys": keys})
-        self.assertEqual(
-            validate_subscription({"endpoint": "https://fcm.googleapis.com/push/id", "keys": keys})[1], keys
-        )
+        for endpoint in ("https://fcm.googleapis.com/push/id", "https://wns2-par02p.notify.windows.com/w/?token=abc"):
+            with self.subTest(endpoint=endpoint):
+                self.assertEqual(validate_subscription({"endpoint": endpoint, "keys": keys})[1], keys)
 
     def test_two_way_ride_uses_one_slot_and_two_independent_geometries(self):
         body = {
@@ -392,10 +394,69 @@ class FreemiumTests(TestCase):
 
         PushSubscription.objects.create(user=self.user, endpoint="https://fcm.googleapis.com/push/id", keys={})
         with patch(
-            "core.briefings.webpush", side_effect=WebPushException("gone", response=SimpleNamespace(status_code=410))
+            "core.push.webpush", side_effect=WebPushException("gone", response=SimpleNamespace(status_code=410))
         ):
             self.assertFalse(_send_push(self.user, "Forecast", "https://example.com", "ride"))
         self.assertEqual(PushSubscription.objects.count(), 0)
+
+    @override_settings(VAPID_PUBLIC_KEY="public", VAPID_PRIVATE_KEY="private", VAPID_SUBJECT="mailto:test@example.com")
+    def test_push_test_sends_to_this_device_only(self):
+        from core.models import PushSubscription
+
+        self.plus()
+        PushSubscription.objects.create(user=self.user, endpoint="https://fcm.googleapis.com/push/here", keys={})
+        PushSubscription.objects.create(user=self.user, endpoint="https://fcm.googleapis.com/push/phone", keys={})
+        with patch("core.push.webpush") as send:
+            response = self.post("/api/briefings/push/test", {"endpoint": "https://fcm.googleapis.com/push/here"})
+            self.assertEqual(response.status_code, 200)
+            send.assert_called_once()
+            self.assertEqual(send.call_args.kwargs["subscription_info"]["endpoint"], "https://fcm.googleapis.com/push/here")
+            payload = json.loads(send.call_args.kwargs["data"])
+            self.assertEqual(payload["title"], "MeteoLane – Testbenachrichtigung")
+            self.assertEqual(payload["tag"], "test")
+            # One test per account per cooldown.
+            again = self.post("/api/briefings/push/test", {"endpoint": "https://fcm.googleapis.com/push/here"})
+            self.assertEqual(again.status_code, 429)
+            send.assert_called_once()
+
+    @override_settings(VAPID_PUBLIC_KEY="public", VAPID_PRIVATE_KEY="private", VAPID_SUBJECT="mailto:test@example.com")
+    def test_push_test_refuses_foreign_or_unknown_endpoint_and_free_accounts(self):
+        from core.models import PushSubscription
+
+        other = User.objects.create_user(username="other", email="other@example.test", password="x")
+        PushSubscription.objects.create(user=other, endpoint="https://fcm.googleapis.com/push/other", keys={})
+        PushSubscription.objects.create(user=self.user, endpoint="https://fcm.googleapis.com/push/mine", keys={})
+        with patch("core.push.webpush") as send:
+            free = self.post("/api/briefings/push/test", {"endpoint": "https://fcm.googleapis.com/push/mine"})
+            self.assertEqual(free.status_code, 402)
+            self.plus()
+            for endpoint in ("https://fcm.googleapis.com/push/other", "https://fcm.googleapis.com/push/unknown"):
+                self.assertEqual(self.post("/api/briefings/push/test", {"endpoint": endpoint}).status_code, 404)
+            self.assertEqual(self.post("/api/briefings/push/test", {}).status_code, 400)
+            with override_settings(VAPID_PRIVATE_KEY=""):
+                unset = self.post("/api/briefings/push/test", {"endpoint": "https://fcm.googleapis.com/push/mine"})
+                self.assertEqual(unset.status_code, 503)
+        send.assert_not_called()
+
+    @override_settings(VAPID_PUBLIC_KEY="public", VAPID_PRIVATE_KEY="private", VAPID_SUBJECT="mailto:test@example.com")
+    def test_push_test_reports_refusal_and_drops_gone_device(self):
+        from pywebpush import WebPushException
+
+        from core.models import PushSubscription
+
+        self.plus()
+        PushSubscription.objects.create(user=self.user, endpoint="https://fcm.googleapis.com/push/gone", keys={})
+        with patch(
+            "core.push.webpush", side_effect=WebPushException("gone", response=SimpleNamespace(status_code=410))
+        ):
+            response = self.post("/api/briefings/push/test", {"endpoint": "https://fcm.googleapis.com/push/gone"})
+        self.assertEqual(response.status_code, 502)
+        self.assertFalse(PushSubscription.objects.exists())
+
+    def test_push_test_needs_sign_in(self):
+        anonymous = Client()
+        response = anonymous.post("/api/briefings/push/test", "{}", content_type="application/json")
+        self.assertIn(response.status_code, {401, 403})
 
     @override_settings(BILLING_ENABLED=True, STRIPE_SECRET_KEY="test", STRIPE_PRICE_ID_PLUS_ANNUAL="annual")
     def test_checkout_reuses_open_session_and_allows_resubscription_after_cancel(self):

@@ -87,6 +87,9 @@ VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "")
 BRIEFING_EMAIL_ENABLED = os.environ.get("BRIEFING_EMAIL_ENABLED", "false").lower() == "true"
 # Only known browser push services: never allow a user-supplied URL to reach internal services.
 PUSH_ENDPOINT_HOSTS = ("fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com")
+# Push services whose endpoint host varies per device: any subdomain of these. Edge (Windows
+# Notification Service) hands out wns2-<region>.notify.windows.com.
+PUSH_ENDPOINT_HOST_SUFFIXES = (".notify.windows.com",)
 
 # Application definition
 

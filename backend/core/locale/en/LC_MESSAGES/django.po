@@ -116,6 +116,26 @@ msgstr "Push briefings require Plus."
 msgid "Push ist nicht eingerichtet."
 msgstr "Push is not configured."
 
+#: .\core\api\briefings.py
+msgid "Push ist auf diesem Gerät nicht aktiviert."
+msgstr "Push is not turned on on this device."
+
+#: .\core\api\briefings.py
+msgid "Warte kurz, bevor du erneut testest."
+msgstr "Please wait a moment before testing again."
+
+#: .\core\api\briefings.py
+msgid "MeteoLane – Testbenachrichtigung"
+msgstr "MeteoLane – Test notification"
+
+#: .\core\api\briefings.py
+msgid "Push-Benachrichtigungen funktionieren auf diesem Gerät."
+msgstr "Push notifications work on this device."
+
+#: .\core\api\briefings.py
+msgid "Der Push-Dienst hat die Nachricht abgelehnt."
+msgstr "The push service refused the message."
+
 #: .\core\api\briefings.py:160
 msgid ""
 "Dieser Browser ist mit einem anderen Konto verbunden. Schalte die "

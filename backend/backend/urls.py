@@ -23,7 +23,7 @@ from django_otp.admin import OTPAdminSite
 
 from core.api import api
 from core.api.billing import checkout_view, entitlements_view, free_routes_view, portal_view, trial_view, webhook_view
-from core.api.briefings import preferences_view, push_view
+from core.api.briefings import preferences_view, push_test_view, push_view
 from core.api.garmin import next_ride_view, token_view
 from core.auth.views import complete_signup_view, profile_view, session_view, username_available_view
 
@@ -53,6 +53,7 @@ urlpatterns = [
     path("api/garmin/token", token_view),
     path("api/garmin/next-ride", next_ride_view),
     path("api/briefings/push", push_view),
+    path("api/briefings/push/test", push_test_view),
     path("api/billing/trial", trial_view),
     path("api/billing/free-routes", free_routes_view),
     path("api/billing/entitlements", entitlements_view),

@@ -5,7 +5,7 @@ import { useI18n } from "vue-i18n";
 import { intlLocale } from "@/i18n";
 import { useEntitlements } from "@/composables/useEntitlements";
 import { billingApi } from "@/services/billing";
-import { briefingsApi, enablePush, disablePush, pushSupported } from "@/services/briefings";
+import { briefingsApi, enablePush, disablePush, pushSupported, testPush } from "@/services/briefings";
 
 const { t } = useI18n();
 const client = useQueryClient();
@@ -171,6 +171,19 @@ function channels(current: string) {
                 :label="t('plan.pushOn')"
                 :loading="busy"
                 @click="run(() => enablePush(preferences.data.value!.pushPublicKey), t('plan.pushOnDone'))"
+            />
+            <q-btn
+                v-if="
+                    isPro &&
+                    preferences.data.value?.pushPublicKey &&
+                    preferences.data.value.pushDeviceCount &&
+                    pushSupported()
+                "
+                outline
+                no-caps
+                :label="t('plan.pushTest')"
+                :loading="busy"
+                @click="run(testPush, t('plan.pushTestDone'))"
             />
             <q-btn
                 v-if="pushSupported()"

@@ -346,6 +346,8 @@
         "pushOnDone": "Gerät verbunden. Wähle jetzt Push für deine Route.",
         "pushOff": "Push auf diesem Gerät ausschalten",
         "pushOffDone": "Push auf diesem Gerät ausgeschaltet.",
+        "pushTest": "Testbenachrichtigung senden",
+        "pushTestDone": "Testbenachrichtigung gesendet. Sie sollte gleich erscheinen.",
         "briefingsLoadFailed": "Briefing-Einstellungen konnten nicht geladen werden.",
         "deliveryMissing": "Der Versand ist noch nicht eingerichtet. Deine Vorhersagen sind weiterhin in der App verfügbar.",
         "briefingSaved": "Briefing-Einstellung gespeichert.",
@@ -469,7 +471,8 @@
     },
     "briefings": {
         "pushUnavailable": "Push ist hier nicht verfügbar. Nutze E-Mail oder installiere MeteoLane auf deinem Startbildschirm.",
-        "allowNotifications": "Bitte erlaube Benachrichtigungen in den Browser-Einstellungen."
+        "allowNotifications": "Bitte erlaube Benachrichtigungen in den Browser-Einstellungen.",
+        "pushNotOnDevice": "Push ist auf diesem Gerät nicht aktiviert."
     },
     "details": {
         "title": "Details",

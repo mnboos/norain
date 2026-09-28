@@ -88,6 +88,16 @@
 			events 30
 			window 1m
 		}
+		# The test notification sends a push right away. Django allows one per account every
+		# 30 s; this caps one address across the accounts it may hold.
+		zone push_test_ip {
+			match {
+				path /api/briefings/push/test
+			}
+			key {client_ip}
+			events 10
+			window 10m
+		}
 	}
 
 	# JSON, because the SPA parses every reply body as JSON (like the axes lockout).

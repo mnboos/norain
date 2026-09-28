@@ -373,6 +373,9 @@ These session-authenticated JSON endpoints use camelCase and require CSRF for mu
 - `POST /api/briefings/push`: browser `PushSubscription.toJSON()` containing `endpoint`
   and `keys`. Only supported HTTPS push-provider endpoints are accepted.
 - `DELETE /api/briefings/push {"endpoint":"..."}`: remove this account's registration.
+- `POST /api/briefings/push/test {"endpoint":"..."}`: send a test notification to this
+  account's registration with that endpoint, now. 404 if it is not registered, 429 within
+  30 s of the last test, 502 if the push service refused it (a gone subscription is removed).
 
 Recurring-route creation accepts optional `returnScheduleCron` and
 `returnScheduleDescription`. A return journey swaps start/destination and is routed

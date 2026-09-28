@@ -346,6 +346,8 @@
         "pushOnDone": "Device connected. Now choose push for your route.",
         "pushOff": "Turn off push on this device",
         "pushOffDone": "Push turned off on this device.",
+        "pushTest": "Send test notification",
+        "pushTestDone": "Test notification sent. It should appear shortly.",
         "briefingsLoadFailed": "The briefing settings could not be loaded.",
         "deliveryMissing": "Delivery is not set up yet. Your forecasts are still available in the app.",
         "briefingSaved": "Briefing setting saved.",
@@ -469,7 +471,8 @@
     },
     "briefings": {
         "pushUnavailable": "Push is not available here. Use email or install MeteoLane on your home screen.",
-        "allowNotifications": "Please allow notifications in your browser settings."
+        "allowNotifications": "Please allow notifications in your browser settings.",
+        "pushNotOnDevice": "Push is not turned on on this device."
     },
     "details": {
         "title": "Details",

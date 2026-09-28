@@ -10,6 +10,9 @@ self.addEventListener("push", event => {
         self.registration.showNotification(data.title || "MeteoLane", {
             body: data.body,
             tag: data.tag,
+            // Without it, a notification whose tag is already showing (a second test, a
+            // re-sent briefing) replaces it silently: no popup, no sound.
+            renotify: Boolean(data.tag),
             data: { url: data.url },
             icon: "/brand/icon-192.png",
         }),

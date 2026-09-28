@@ -42,6 +42,7 @@ vi.mock("@/services/briefings", () => ({
     pushSupported: () => false,
     enablePush: vi.fn(),
     disablePush: vi.fn(),
+    testPush: vi.fn(),
 }));
 
 beforeEach(() => {
