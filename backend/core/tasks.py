@@ -1,4 +1,4 @@
-"""django-tasks task definitions for Meteolane.
+"""django-tasks task definitions for MeteoLane.
 
 Background tasks for route geometry computation and forecast grid pre-warming.
 """
@@ -16,7 +16,7 @@ from django.db import transaction
 from django.db.models import F
 from loguru import logger
 
-from core import departures, telemetry
+from core import coverage, departures, telemetry
 from core.claims import claim_cell, release_cell
 from core.entitlements import (
     allowed_route_ids,
@@ -400,11 +400,12 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
             "vertex_elevations": route.vertex_elevations,
             "total_seconds": route.total_seconds,
             "total_distance_m": route.total_distance_m,
+            "profile": route.profile,
         }
 
     if job.kind == ForecastJob.Kind.JOURNEY_STAGE:
         # Written whole by plan_journey, never without geometry: nothing to wait for.
-        stage = await JourneyStage.objects.filter(id=params["journey_stage_id"]).afirst()
+        stage = await JourneyStage.objects.select_related("day__journey").filter(id=params["journey_stage_id"]).afirst()
         if stage is None:
             raise ValueError(f"Journey stage {params['journey_stage_id']} no longer exists")
         return {
@@ -414,6 +415,7 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
             "vertex_elevations": stage.vertex_elevations,
             "total_seconds": stage.total_seconds,
             "total_distance_m": stage.total_distance_m,
+            "profile": stage.day.journey.profile,
         }
 
     if job.kind == ForecastJob.Kind.PUBLIC_ROUTE:
@@ -424,14 +426,19 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
         geometry = public_geometry(route) if route else None
         if geometry is None:
             raise ValueError(f"Public route {params['public_route_id']} is not public any more")
-        return geometry
+        return {**geometry, "profile": route.profile}
 
     if params.get("geometry_source") == "imported":
-        return exact_geometry(
-            params["coordinates"], params["duration_seconds"], params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S)
-        )
+        return {
+            **exact_geometry(
+                params["coordinates"],
+                params["duration_seconds"],
+                params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S),
+            ),
+            "profile": params.get("profile", "bike"),
+        }
 
-    return await build_geometry(
+    geometry = await build_geometry(
         params["profile"],
         routing_points(
             params["start_lat"],
@@ -442,6 +449,7 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
         ),
         params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S),
     )
+    return {**geometry, "profile": params["profile"]}
 
 
 @task(queue_name="forecasts")
@@ -462,7 +470,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     if job.kind == ForecastJob.Kind.ROUTE and str(job.params.get("route_id")) not in {
         str(i) for i in await sync_to_async(allowed_route_ids)(job.owner)
     }:
-        await _fail_not_allowed(job, "Diese Route ist durch deinen Tarif pausiert.")
+        await _fail_not_allowed(job, "route_paused")
         return
     if (
         job.kind == ForecastJob.Kind.JOURNEY_STAGE
@@ -470,7 +478,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
             id=job.params.get("journey_stage_id"), day__journey__owner_id=job.owner_id
         ).aexists()
     ):
-        await _fail_not_allowed(job, "Diese Etappe gibt es nicht mehr.")
+        await _fail_not_allowed(job, "stage_gone")
         return
     if (
         job.kind == ForecastJob.Kind.PUBLIC_ROUTE
@@ -478,7 +486,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
             id=job.params.get("public_route_id"), visibility=RecurringRoute.Visibility.PUBLIC
         ).aexists()
     ):
-        await _fail_not_allowed(job, "Diese Route ist nicht mehr öffentlich.")
+        await _fail_not_allowed(job, "route_private")
         return
     await telemetry.bind_job(job)
     await set_status(job, ForecastJob.Status.PLANNING)
@@ -487,7 +495,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         geometry = await _job_geometry(job)
     except ROUTING_ERRORS as exc:  # ValueError also covers a saved route that no longer exists
         logger.error(f"Forecast job {job.id} could not resolve geometry: {exc}")
-        await set_status(job, ForecastJob.Status.FAILED, error="Route konnte nicht berechnet werden.")
+        await set_status(job, ForecastJob.Status.FAILED, error="route_failed")
         return
 
     if geometry is None:
@@ -496,7 +504,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         # would have its plan task re-deferring itself forever.
         job.attempts += 1
         if job.attempts >= MAX_PLAN_ATTEMPTS:
-            await set_status(job, ForecastJob.Status.FAILED, error="Routen-Geometrie konnte nicht berechnet werden.")
+            await set_status(job, ForecastJob.Status.FAILED, error="geometry_failed")
             return
         await job.asave(update_fields=["attempts", "updated_at"])
         await plan_forecast_job.using(run_after=datetime.now(tz=UTC) + PLAN_RETRY_DELAY).aenqueue(str(job.id))
@@ -689,6 +697,7 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
                 )
                 candidates.append(departures.compact_candidate(departure, candidate, len(geometry["sample_points"])))
             comparison = {
+                "profile": geometry.get("profile", "bike"),
                 "requested_time": departures.local_iso(departures.instant(params["departure_time"])),
                 "window_start": departures.local_iso(times[0]),
                 "window_end": departures.local_iso(times[-1]),
@@ -702,7 +711,7 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
             strip_uncertainty(forecast.samples)
 
         if not forecast.samples and job.cells_total:
-            await _fail_forecast_stage(job, "Noch keine Wetterdaten verfügbar.")
+            await _fail_forecast_stage(job, "no_weather_yet")
             return
         await sync_to_async(_store_computed_weather)(
             job,
@@ -713,7 +722,7 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
             },
         )
     except Exception:
-        await _fail_forecast_stage(job, "Wetterdaten konnten nicht berechnet werden.")
+        await _fail_forecast_stage(job, "weather_failed")
         raise
 
 
@@ -737,7 +746,7 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
             raise TypeError("Forecast assembly requires computed weather")
         limits = await entitlements_for(job.owner)
         if computed["entitlements"] != limits.result_marker():
-            await _fail_forecast_stage(job, "Berechtigungen geändert. Bitte Wetter erneut laden.")
+            await _fail_forecast_stage(job, "entitlements_changed")
             return
         forecast = RouteWeatherOut.model_validate(computed["forecast"])
         payload = forecast.model_dump(mode="json")
@@ -752,6 +761,9 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
             key: (job.geometry or {}).get(key) for key in ("vertex_times", "vertex_elevations")
         }
         payload["departure_time"] = params["departure_time"]
+        # Which ride-quality config scores this result on read (ride_quality.config_for). Jobs
+        # stored before it was recorded are all bike profiles, which is what a missing key means.
+        payload["profile"] = (job.geometry or {}).get("profile", "bike")
         payload["entitlements"] = computed["entitlements"]
         if computed.get("departure_inputs"):
             payload["departure_inputs"] = computed["departure_inputs"]
@@ -768,7 +780,7 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
             updated_at=now,
         )
     except Exception:
-        await _fail_forecast_stage(job, "Wetterdaten konnten nicht zusammengestellt werden.")
+        await _fail_forecast_stage(job, "assembly_failed")
         raise
 
     if won:
@@ -776,6 +788,15 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
         await publish(job)
         telemetry.completed(job, "success")
         logger.info(f"Forecast job {job.id} done ({len(forecast.samples)} samples)")
+        if job.kind == ForecastJob.Kind.ROUTE:
+            # The cells this job needed are warm now. The background scan only covers briefing
+            # routes departing within four hours, so for every other route this is the one
+            # moment the list's glyph can be scored; without it the list says "Noch keine
+            # Prognose" right after the forecast was shown. Cache-only, spends no provider call.
+            try:
+                await refresh_route_thumbnail.aenqueue(str(params["route_id"]))
+            except Exception:
+                logger.exception(f"Forecast job {job.id}: could not enqueue the route thumbnail refresh")
 
 
 async def start_forecast_job(kind: str, owner, params: dict, *, min_remaining: timedelta = timedelta(0)) -> ForecastJob:
@@ -1004,11 +1025,13 @@ async def _refresh_upcoming_forecasts_async() -> dict:
         await notify_system("jobs")
     stations_purged = await sync_to_async(purge_station_data)()
     signups_purged = await sync_to_async(_purge_abandoned_signups)()
+    coverage_purged = await sync_to_async(coverage.purge_unconfirmed)()
 
     logger.info(
         f"refresh_upcoming_forecasts: {scanned} route scans enqueued, {prebuilds} pre-builds enqueued, "
         f"{purged} stripe events purged, {jobs_purged} forecast jobs purged, "
-        f"{stations_purged} station rows purged, {signups_purged} abandoned sign-ups purged"
+        f"{stations_purged} station rows purged, {signups_purged} abandoned sign-ups purged, "
+        f"{coverage_purged} unconfirmed coverage addresses purged"
     )
     return {
         "routes": scanned,
@@ -1017,7 +1040,14 @@ async def _refresh_upcoming_forecasts_async() -> dict:
         "forecast_jobs_purged": jobs_purged,
         "station_rows_purged": stations_purged,
         "signups_purged": signups_purged,
+        "coverage_subscriptions_purged": coverage_purged,
     }
+
+
+@task()
+def notify_area_covered(code: str) -> dict:
+    """Mail everyone who asked to be told once ``code`` is covered (see core.coverage)."""
+    return {"sent": coverage.notify_covered(code)}
 
 
 @task()
@@ -1118,8 +1148,17 @@ def _day_departure(journey: Journey, day: date) -> datetime:
     return datetime.combine(day, journey.earliest_start, tzinfo=LOCAL_TZ)
 
 
+def _weather_prefs(journey: Journey) -> dict:
+    """The journey's weather preferences as planning applies them. A headwind barely slows a
+    walker, so a hike never routes around one, whatever the stored switch says."""
+    prefs = dict(journey.weather_prefs or {})
+    if journey.profile == "hike":
+        prefs["avoid_headwind"] = False
+    return prefs
+
+
 def _wants_weather_routing(journey: Journey, limits, day: date) -> bool:
-    prefs = journey.weather_prefs or {}
+    prefs = _weather_prefs(journey)
     if not limits.weather_routing or not (prefs.get("avoid_rain", False) or prefs.get("avoid_headwind", False)):
         return False
     return 0 <= (day - local_today()).days < WEATHER_ROUTING_DAYS
@@ -1143,7 +1182,7 @@ async def _plan_journey_async(journey_id: str, revision: int) -> None:
     if not await _set_plan_status(journey_id, revision, Journey.PlanStatus.ROUTING):
         return
     limits = await entitlements_for(journey.owner)
-    road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs)) or None
+    road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs), journey.profile) or None
     if journey.kind == Journey.Kind.RANDOM:
         await _plan_random_ride(journey, limits, road_model)
         return
@@ -1156,14 +1195,10 @@ async def _plan_journey_async(journey_id: str, revision: int) -> None:
         return
     except ROUTING_ERRORS as exc:
         logger.info(f"Journey {journey_id}: no route: {exc}")
-        await _set_plan_status(
-            journey_id, revision, Journey.PlanStatus.FAILED, "Für diese Reise wurde keine Route gefunden."
-        )
+        await _set_plan_status(journey_id, revision, Journey.PlanStatus.FAILED, "no_route")
         return
     except Exception:
-        await _set_plan_status(
-            journey_id, revision, Journey.PlanStatus.FAILED, "Die Reise konnte nicht geplant werden."
-        )
+        await _set_plan_status(journey_id, revision, Journey.PlanStatus.FAILED, "planning_failed")
         raise
     finally:
         _log_journey_routing(journey_id, budget, began)
@@ -1192,7 +1227,11 @@ async def _plan_journey_async(journey_id: str, revision: int) -> None:
 
 
 class JourneyPlanningError(Exception):
-    """A valid request for which no progressing day plan can be made."""
+    """A valid request for which no progressing day plan can be made.
+
+    The message is a code stored in ``Journey.plan_error`` and worded by the SPA, like every
+    job and plan error written by a worker (see "Internationalisation" in CLAUDE.md).
+    """
 
 
 def _planner(journey, model, budget):
@@ -1227,7 +1266,7 @@ async def _plan_day_ends(journey, entitlements, model, budget):
         if not await _journey_is_current(journey.id, journey.plan_revision).aexists():
             return None
         if len(days) >= MAX_JOURNEY_DAYS:
-            raise JourneyPlanningError(f"Mehr als {MAX_JOURNEY_DAYS} Tage: bitte längere Tagesetappen wählen.")
+            raise JourneyPlanningError("too_many_days")
         measure = LineMeasure(remainder)
         last = day_limits.scaled(1 + LAST_DAY_SLACK).allows(*measure.between(0, -1))
         lodging, lodging_detour = None, None
@@ -1236,7 +1275,7 @@ async def _plan_day_ends(journey, entitlements, model, budget):
         else:
             boundary = measure.boundary(0, day_limits)
             if measure.meters[boundary] < 1:
-                raise JourneyPlanningError("Das Tageslimit erlaubt keine Fahrt.")
+                raise JourneyPlanningError("day_limit_too_short")
             events = [
                 {"index": idx, "point": point, "mandatory": True}
                 for point, idx in zip(pending, indices[1:-1], strict=True)
@@ -1283,7 +1322,7 @@ async def _plan_day_ends(journey, entitlements, model, budget):
                     lodging_detour = {"s": lodging["detour_s"], "m": lodging["detour_m"]}
                 break
             if accepted is None:
-                raise JourneyPlanningError("Das Tageslimit erlaubt keine Fahrt.")
+                raise JourneyPlanningError("day_limit_too_short")
             end, day_vias, next_pending, next_geometry, next_indices = accepted
         day_date = journey.start_date + timedelta(days=len(days))
         days.append(
@@ -1342,7 +1381,7 @@ async def _plan_journey_routes_async(journey_id: str, revision: int) -> None:
     if journey is None or not journey.plan_state:
         return
     limits = await entitlements_for(journey.owner)
-    road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs)) or None
+    road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs), journey.profile) or None
     days = journey.plan_state["days"]
 
     # Wait for the corridor cells, within bounds: a cell that never arrives only costs its
@@ -1378,14 +1417,10 @@ async def _plan_journey_routes_async(journey_id: str, revision: int) -> None:
             )
     except ROUTING_ERRORS as exc:
         logger.info(f"Journey {journey_id}: a day could not be routed: {exc}")
-        await _set_plan_status(
-            journey_id, revision, Journey.PlanStatus.FAILED, "Eine Tagesetappe konnte nicht berechnet werden."
-        )
+        await _set_plan_status(journey_id, revision, Journey.PlanStatus.FAILED, "day_failed")
         return
     except Exception:
-        await _set_plan_status(
-            journey_id, revision, Journey.PlanStatus.FAILED, "Die Reise konnte nicht geplant werden."
-        )
+        await _set_plan_status(journey_id, revision, Journey.PlanStatus.FAILED, "planning_failed")
         raise
     finally:
         _log_journey_routing(journey_id, budget, began)
@@ -1399,7 +1434,7 @@ async def _weather_field(journey: Journey, day: dict, road_model: dict | None) -
 
     GraphHopper reads it at the time the rider reaches each road (``core.weather_routing``), so
     one request replaces the old rounds of "route, read the etas, route again"."""
-    prefs = journey.weather_prefs or {}
+    prefs = _weather_prefs(journey)
     geometry, cells, departure, day_key, forecast_days = await _day_corridor(journey, day, road_model)
     return await weather_field(
         cells,
@@ -1500,9 +1535,7 @@ async def _plan_random_ride(journey: Journey, limits, road_model: dict | None) -
         await _set_plan_status(journey.id, revision, Journey.PlanStatus.FAILED, str(exc))
         return
     except Exception:
-        await _set_plan_status(
-            journey.id, revision, Journey.PlanStatus.FAILED, "Die Runde konnte nicht geplant werden."
-        )
+        await _set_plan_status(journey.id, revision, Journey.PlanStatus.FAILED, "ride_failed")
         raise
     finally:
         _log_journey_routing(journey.id, budget, began)
@@ -1533,7 +1566,7 @@ async def _random_ride_weather(journey: Journey) -> tuple[dict | None, bool]:
                 str(journey.id), journey.plan_revision
             )
         return None, True
-    prefs = journey.weather_prefs or {}
+    prefs = _weather_prefs(journey)
     field = await weather_field(
         cells,
         departure,
@@ -1581,7 +1614,7 @@ async def _random_ride_day(
                 with suppress(*ROUTING_ERRORS):
                     paths.append(await candidate())
     if not paths:
-        raise JourneyPlanningError("Von diesem Start aus wurde keine passende Runde gefunden.")
+        raise JourneyPlanningError("no_round_found")
 
     planner = _planner(journey, road_model, budget)
     stages, seen = [], set()

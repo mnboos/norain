@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, useTemplateRef, watch } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { GeoJSONSource, LngLatBounds, Map, Marker, Popup, config } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -14,6 +15,7 @@ import { alternativeColor } from "@/utils/rideQuality";
  */
 const props = defineProps<{ paths: number[][][]; picked: boolean[]; pois?: MapPoi[] }>();
 const emit = defineEmits<{ toggle: [index: number] }>();
+const { t } = useI18n();
 
 const $q = useQuasar();
 const container = useTemplateRef<HTMLDivElement>("container");
@@ -135,7 +137,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div ref="container" class="variants-map" role="img" aria-label="Karte der Varianten" />
+    <div ref="container" class="variants-map" role="img" :aria-label="t('variants.mapLabel')" />
 </template>
 
 <style scoped>

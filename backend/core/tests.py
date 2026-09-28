@@ -1310,6 +1310,27 @@ class StripeWebhookTests(TestCase):
         self.assertEqual(self.subscription.status, "past_due")
         self.assertEqual(entitlements_for_sync(self.user), FREE)
 
+    def test_paused_and_resumed_events_sync_subscription_access(self):
+        self.post_event(self.subscription_event("evt_active", "customer.subscription.updated", status="active"))
+        self.post_event(self.subscription_event("evt_paused", "customer.subscription.paused", status="paused"))
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, "paused")
+        self.assertEqual(entitlements_for_sync(self.user), FREE)
+
+        self.post_event(self.subscription_event("evt_resumed", "customer.subscription.resumed", status="active"))
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, "active")
+        self.assertEqual(entitlements_for_sync(self.user), PRO)
+
+    def test_trial_will_end_notice_does_not_change_subscription_access(self):
+        self.post_event(self.subscription_event("evt_trial", "customer.subscription.created", status="trialing"))
+        self.post_event(
+            self.subscription_event("evt_trial_ending", "customer.subscription.trial_will_end", status="trialing")
+        )
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, "trialing")
+        self.assertEqual(entitlements_for_sync(self.user), PRO)
+
     def test_an_unknown_event_is_acknowledged_without_changing_anything(self):
         response = self.post_event(self.subscription_event("evt_x", "customer.created"))
         self.assertEqual(response.status_code, 200)
@@ -2017,6 +2038,10 @@ class ForecastJobTests(TestCase):
         self.assertIsNone(job.computed_weather)
         # The frontend draws the charts from the samples; the result carries no figures.
         self.assertNotIn("figures", job.result)
+        # Only the winning assembly asks for the list glyph, now that the route's cells are warm.
+        thumbnails = DBTaskResult.objects.filter(task_path="core.tasks.refresh_route_thumbnail")
+        self.assertEqual(thumbnails.count(), 1)
+        self.assertEqual(thumbnails.get().args_kwargs["args"], [str(self.route.id)])
 
     def test_stale_computation_cannot_overwrite_or_fail_the_next_stage(self):
         from django_tasks_db.models import DBTaskResult
@@ -2389,7 +2414,7 @@ class ForecastJobTests(TestCase):
         # The stale payload has no samples: a 404 for the index, not for the job.
         response = self.client.get(f"/api/forecast_jobs/{job.id}/samples/0/uncertainty")
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["detail"], "Sample not found.")
+        self.assertEqual(response.json()["detail"], "Messpunkt nicht gefunden.")
 
         ForecastJob.objects.filter(id=job.id).update(stale_result=None)
         response = self.client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "medium"})
@@ -2641,10 +2666,10 @@ class ForecastViewTests(TestCase):
         ]
         view = forecast_view(self._job(payload, key="frost"))
 
-        self.assertEqual(view["sections"][0]["frost_level"], "stark")
+        self.assertEqual(view["sections"][0]["frost_level"], "heavy")
         # The mild half says nothing rather than claiming frost for the whole ride.
         self.assertIsNone(view["sections"][1]["frost_level"])
-        self.assertEqual(view["summary"]["max_frost_level"], "stark")
+        self.assertEqual(view["summary"]["max_frost_level"], "heavy")
 
     def test_sections_stored_before_they_carried_their_sample_range_still_serve(self):
         """Old jobs live for hours; a required index would 500 the detail page until they expire."""
@@ -2731,7 +2756,7 @@ class ForecastViewTests(TestCase):
                 "wind_speed": 12.0,
                 "wind_dir": 270.0,
                 "wind_power_w": -34,
-                "wind_effort_level": "Wind hilft",
+                "wind_effort_level": "tailwind",
                 "wind_effort": 0.0,
             },
         )

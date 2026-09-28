@@ -1,5 +1,5 @@
 [Unit]
-Description=Run Meteolane backup daily
+Description=Run MeteoLane backup daily
 
 [Timer]
 OnCalendar=*-*-* 03:15:00 UTC

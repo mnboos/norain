@@ -4,11 +4,12 @@ GraphHopper runs with LM (landmarks) and no CH, so a request may bring its own c
 but LM only stays correct when that model makes edges *more* expensive, never cheaper. Every
 preference here is therefore a penalty (``multiply_by`` <= 1 on ``priority``). "Prefer the
 cycle network" cannot be a boost, so it is written, and named, as what it does: roads off the
-network cost more (``avoid_off_network``).
+network cost more (``avoid_off_network``). For the hike profile the network is the hiking one
+(``foot_network``).
 
 The encoded values used here must be in ``graph.encoded_values``
 (data/graphhopper/graphhopper-config.yaml): surface, road_class, average_slope and
-bike_network were there already; urban_density was added for journeys.
+bike_network were there already; urban_density was added for journeys, foot_network for hikes.
 """
 
 import json
@@ -45,7 +46,7 @@ def _either(field: str, values: tuple[str, ...]) -> str:
     return " || ".join(f"{field} == {value}" for value in values)
 
 
-def road_prefs_model(prefs: RoadPrefs) -> dict:
+def road_prefs_model(prefs: RoadPrefs, profile: str = "bike") -> dict:
     """The penalty-only custom model for these preferences; ``{}`` when there are none."""
     priority: list[dict] = []
     if prefs.surface == "avoid_unpaved":
@@ -64,7 +65,8 @@ def road_prefs_model(prefs: RoadPrefs) -> dict:
         priority.append({"if": "road_class == TRUNK || road_class == PRIMARY", "multiply_by": "0.3"})
         priority.append({"else_if": "road_class == SECONDARY", "multiply_by": "0.6"})
     elif prefs.traffic == "avoid_off_network":
-        priority.append({"if": "bike_network == MISSING", "multiply_by": "0.7"})
+        network = "foot_network" if profile == "hike" else "bike_network"
+        priority.append({"if": f"{network} == MISSING", "multiply_by": "0.7"})
     if prefs.towns == "avoid":
         priority.append({"if": "urban_density == CITY", "multiply_by": "0.5"})
         priority.append({"else_if": "urban_density == RESIDENTIAL", "multiply_by": "0.8"})

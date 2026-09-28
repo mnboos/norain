@@ -12,7 +12,7 @@ Django commands from `backend/`.
 | GeoDjango cannot find GEOS or GDAL                                                                 | Install the host GIS libraries documented in the development guide, or correct `GEOS_LIBRARY_PATH` / `GDAL_LIBRARY_PATH`.                                                                                                                                                                                                                          |
 | Missing database table                                                                             | Run `uv run python manage.py migrate` against the same environment as the server and worker.                                                                                                                                                                                                                                                       |
 | Search fails                                                                                       | Set `GEOCODER_API_URL=http://localhost:2322/api`, restart the backend, and inspect Photon logs and import completion.                                                                                                                                                                                                                              |
-| Routing fails or times out                                                                         | Inspect GraphHopper logs; confirm the graph build is complete and both points are covered. Only `bike`, `ebike` and `fast_ebike` are configured; the API answers 422 for any other profile.                                                                                                                                                                 |
+| Routing fails or times out                                                                         | Inspect GraphHopper logs; confirm the graph build is complete and both points are covered. Only `bike`, `ebike`, `fast_ebike` and `hike` are configured; the API answers 422 for any other profile.                                                                                                                                                                 |
 | GraphHopper stops with `No graph in /graph-cache`, the graph build stops with `Killed` / exit code 137 or `OutOfMemoryError`, a file is `not in ROUTING_OSM_IMPORT_DIR`, a `bike-bike-…` file appears, or a copied graph is refused | See [when something goes wrong](build-routing-graph.md#rollback) in the routing-graph guide. |
 | `just osm-filter-many-raw-pbf-into-one` stops with `Set ROUTING_OSM_FILE_FILTERED in .env…` | Set the name of the merged file it writes, e.g. `ROUTING_OSM_FILE_FILTERED=bike-europe-cycling.osm.pbf` ([path B](build-routing-graph.md#2-prepare-osm)). Nothing was changed. |
 | `just poi-extract-from-unfiltered-osm-pbf` stops with `got 0 positional arguments`, or an older version with `Open failed for '/osm_data/…': No such file or directory` | It needs the raw extracts the graph was filtered from: `just poi-extract-from-unfiltered-osm-pbf data/downloads/osm/*.osm.pbf`. Or copy the `pois-….geojsonseq` that `just osm-filter-many-raw-pbf-into-one` wrote into `ROUTING_OSM_IMPORT_DIR` and run `just poi-import-into-db`. |
@@ -44,6 +44,20 @@ Changing an API URL requires restarting processes that read it at import time. C
 they have separate in-memory caches and must share the same persistent database.
 
 [Documentation index](../README.md)
+
+## `just messages` fails: gettext is missing
+
+`just messages` says "GNU gettext is not installed", or `makemessages` says
+`Can't find msguniq`. Install GNU gettext once per computer: `winget install mlocati.GetText`
+(Windows), `sudo apt install gettext` (Debian/Ubuntu) or `brew install gettext` (macOS). Then
+close the terminal and open a new one, and check with `msguniq --version`. Details:
+[Maintain the translations](translations.md#problems).
+
+## `No module named '_cffi_backend'` (or another missing module)
+
+The backend's Python environment is broken. On Windows this happens when `uv` updates
+packages while the backend or a worker is running. Stop them, then in `backend/` run
+`uv pip install --reinstall cffi` (or `uv sync --reinstall` for everything).
 
 ## Sign-in answers "Zu viele fehlgeschlagene Anmeldeversuche"
 

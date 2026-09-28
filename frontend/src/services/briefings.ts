@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { isRecord, request, type Parse } from "@/services/http";
 
 export interface BriefingRoute {
@@ -77,6 +78,7 @@ export const briefingsApi = {
         request("/api/briefings/preferences", parse, "POST", { routeId, channel }),
     subscribe: (subscription: PushSubscriptionJSON) => request("/api/briefings/push", ok, "POST", subscription),
     unsubscribe: (endpoint: string) => request("/api/briefings/push", ok, "DELETE", { endpoint }),
+    test: (endpoint: string) => request("/api/briefings/push/test", ok, "POST", { endpoint }),
 };
 
 export function pushSupported() {
@@ -86,11 +88,9 @@ export function pushSupported() {
 }
 export async function enablePush(publicKey: string) {
     if (!pushSupported())
-        throw new Error(
-            "Push ist hier nicht verfügbar. Nutze E-Mail oder installiere Meteolane auf deinem Startbildschirm.",
-        );
+        throw new Error(t("briefings.pushUnavailable"));
     const permission = await Notification.requestPermission();
-    if (permission !== "granted") throw new Error("Bitte erlaube Benachrichtigungen in den Browser-Einstellungen.");
+    if (permission !== "granted") throw new Error(t("briefings.allowNotifications"));
     await navigator.serviceWorker.register("/sw.js");
     const registration = await navigator.serviceWorker.ready;
     const bytes = Uint8Array.from(
@@ -104,6 +104,13 @@ export async function enablePush(publicKey: string) {
             applicationServerKey: bytes,
         }));
     await briefingsApi.subscribe(subscription.toJSON());
+}
+/** Sends a test notification to this browser, not to the account's other devices. */
+export async function testPush() {
+    const registration = pushSupported() ? await navigator.serviceWorker.getRegistration("/") : undefined;
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) throw new Error(t("briefings.pushNotOnDevice"));
+    await briefingsApi.test(subscription.endpoint);
 }
 export async function disablePush() {
     if (!("serviceWorker" in navigator)) return;

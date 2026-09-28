@@ -115,6 +115,7 @@ RUN python3 -m venv --system-site-packages /opt/terrain \
     && /opt/terrain/bin/pip install --no-cache-dir pmtiles==3.8.1
 ENV PATH="/opt/terrain/bin:$PATH"
 COPY docker/graphhopper-entrypoint.sh entrypoint.sh
+COPY docker/graphhopper-memory.py memory.py
 COPY docker/graphhopper-terrain.py terrain.py
 COPY docker/graphhopper-artifact.py artifact.py
 COPY docker/graphhopper-smoke.py smoke.py

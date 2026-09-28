@@ -2,6 +2,8 @@ import { ref } from "vue";
 import { PlacesApi } from "@norain/api/apis";
 import type { PlacesSearchResult } from "@norain/api/models";
 
+import { t } from "@/i18n";
+
 const api = new PlacesApi();
 
 /** Only secure contexts (HTTPS, localhost) have the Geolocation API; elsewhere the button stays hidden. */
@@ -9,9 +11,9 @@ export const geolocationAvailable = typeof navigator !== "undefined" && "geoloca
 
 /** Why the browser gave no position, in words the user can act on. */
 export function geolocationErrorMessage(error: GeolocationPositionError): string {
-    if (error.code === error.PERMISSION_DENIED) return "Der Zugriff auf den Standort wurde nicht erlaubt.";
-    if (error.code === error.TIMEOUT) return "Der Standort konnte nicht rechtzeitig bestimmt werden.";
-    return "Der Standort konnte nicht bestimmt werden.";
+    if (error.code === error.PERMISSION_DENIED) return t("location.denied");
+    if (error.code === error.TIMEOUT) return t("location.timeout");
+    return t("location.failed");
 }
 
 /** A place at the point itself, named by its coordinates, as the map picker names one. */

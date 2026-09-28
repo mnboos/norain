@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 
 import { authApi, pendingFlows, signedIn } from "@/services/auth";
 import { ApiError } from "@/services/http";
@@ -15,6 +16,7 @@ import { samePassword } from "./passwordRules";
  */
 const emit = defineEmits<{ "signed-in": [] }>();
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 
@@ -38,13 +40,13 @@ const submitting = ref(false);
 const resetKey = computed(() => (typeof route.query.reset_key === "string" ? route.query.reset_key : null));
 
 const title = computed(() => {
-    if (resetKey.value) return "Neues Passwort";
+    if (resetKey.value) return t("auth.title.newPassword");
     return {
-        login: "Anmelden",
-        signup: "Konto erstellen",
-        verify: "E-Mail bestätigen",
-        code: "Mit Code anmelden",
-        reset: "Passwort zurücksetzen",
+        login: t("auth.title.login"),
+        signup: t("auth.title.signup"),
+        verify: t("auth.title.verify"),
+        code: t("auth.title.code"),
+        reset: t("auth.title.reset"),
     }[mode.value];
 });
 
@@ -75,17 +77,19 @@ const signIn = () =>
         if (signedIn(reply)) {
             emit("signed-in");
         } else if (pendingFlows(reply).includes("verify_email")) {
-            awaitCode("Bitte bestätige zuerst deine E-Mail-Adresse.");
+            awaitCode(t("auth.verifyFirst"));
         } else {
-            error.value = "Anmeldung fehlgeschlagen.";
+            error.value = t("auth.loginFailed");
         }
-    }, "Anmeldung fehlgeschlagen.");
+    }, t("auth.loginFailed"));
 
 /** allauth has mailed a sign-up code and waits for it in this session. */
 function awaitCode(intro: string) {
-    const email = identifier.value.includes("@") ? ` an ${identifier.value}` : "";
+    const sent = identifier.value.includes("@")
+        ? t("auth.codeSentTo", { email: identifier.value })
+        : t("auth.codeSent");
     switchTo("verify");
-    message.value = `${intro} Wir haben dir einen Code${email} geschickt. Gib ihn hier ein.`;
+    message.value = `${intro} ${sent}`;
 }
 
 const signUp = () =>
@@ -97,8 +101,8 @@ const signUp = () =>
         }
         // The reply is the same whether or not the address already has an account; an
         // owner gets a mail saying so instead of a code.
-        awaitCode("Fast geschafft.");
-    }, "Registrierung fehlgeschlagen.");
+        awaitCode(t("auth.almostThere"));
+    }, t("auth.signupFailed"));
 
 /** The code only counts in this browser: allauth keeps the pending sign-up in the session. */
 const verifyCode = () =>
@@ -111,18 +115,18 @@ const verifyCode = () =>
                 // Too many wrong codes, or the sign-up expired. The mailbox can still be
                 // proven with a sign-in code, which also verifies the address.
                 switchTo("code");
-                error.value = "Der Code ist abgelaufen oder wurde zu oft falsch eingegeben. Fordere einen Anmeldecode an.";
+                error.value = t("auth.codeExpired");
                 return;
             }
             if (err instanceof ApiError && err.status === 400) {
-                error.value = "Der Code stimmt nicht.";
+                error.value = t("auth.codeWrong");
                 return;
             }
             throw err;
         }
         if (signedIn(reply)) emit("signed-in");
-        else error.value = "Der Code stimmt nicht.";
-    }, "E-Mail konnte nicht bestätigt werden.");
+        else error.value = t("auth.codeWrong");
+    }, t("auth.verifyFailed"));
 
 const resendCode = () =>
     run(async () => {
@@ -130,39 +134,39 @@ const resendCode = () =>
             await authApi.resendEmailCode();
         } catch (err) {
             if (err instanceof ApiError && err.status === 429) {
-                error.value = "Bitte warte ein paar Sekunden, bevor du einen neuen Code anforderst.";
+                error.value = t("auth.waitBeforeResend");
                 return;
             }
             if (err instanceof ApiError && err.status === 409) {
                 switchTo("code");
-                error.value = "Wir können keinen weiteren Code schicken. Fordere einen Anmeldecode an.";
+                error.value = t("auth.noMoreCodes");
                 return;
             }
             throw err;
         }
         code.value = "";
-        message.value = "Wir haben dir einen neuen Code geschickt. Der alte gilt nicht mehr.";
-    }, "Der Code konnte nicht gesendet werden.");
+        message.value = t("auth.newCodeSent");
+    }, t("auth.codeSendFailed"));
 
 const sendCode = () =>
     run(async () => {
         await authApi.requestLoginCode(identifier.value);
         codeSent.value = true;
-        message.value = `Falls es ein Konto für ${identifier.value} gibt, ist ein Code unterwegs.`;
-    }, "Der Code konnte nicht gesendet werden.");
+        message.value = t("auth.loginCodeSent", { email: identifier.value });
+    }, t("auth.codeSendFailed"));
 
 const confirmCode = () =>
     run(async () => {
         const reply = await authApi.confirmLoginCode(code.value.trim());
         if (signedIn(reply)) emit("signed-in");
-        else error.value = "Der Code ist ungültig oder abgelaufen.";
-    }, "Der Code ist ungültig oder abgelaufen.");
+        else error.value = t("auth.codeInvalid");
+    }, t("auth.codeInvalid"));
 
 const requestReset = () =>
     run(async () => {
         await authApi.requestPasswordReset(identifier.value);
-        message.value = "Falls es ein Konto für diese Adresse gibt, haben wir dir einen Link geschickt.";
-    }, "Anfrage fehlgeschlagen.");
+        message.value = t("auth.resetSent");
+    }, t("auth.requestFailed"));
 
 const confirmReset = () =>
     run(async () => {
@@ -177,7 +181,7 @@ const confirmReset = () =>
             if (err instanceof ApiError && err.code === "invalid_password_reset") {
                 await router.replace({ query: {} });
                 switchTo("reset");
-                error.value = "Der Link ist ungültig oder abgelaufen. Fordere einen neuen an.";
+                error.value = t("auth.resetLinkInvalid");
                 return;
             }
             throw err;
@@ -190,8 +194,8 @@ const confirmReset = () =>
             return;
         }
         switchTo("login");
-        message.value = "Passwort geändert. Du kannst dich jetzt anmelden.";
-    }, "Passwort konnte nicht geändert werden.");
+        message.value = t("auth.passwordChanged");
+    }, t("auth.passwordChangeFailed"));
 
 function submit() {
     if (mode.value === "login") void signIn();
@@ -202,8 +206,13 @@ function submit() {
 }
 
 const submitLabel = computed(() => {
-    if (mode.value === "code") return codeSent.value ? "Anmelden" : "Code senden";
-    return { login: "Anmelden", signup: "Weiter", verify: "Bestätigen", reset: "Link anfordern" }[mode.value];
+    if (mode.value === "code") return codeSent.value ? t("auth.submit.login") : t("auth.submit.sendCode");
+    return {
+        login: t("auth.submit.login"),
+        signup: t("auth.submit.next"),
+        verify: t("auth.submit.confirm"),
+        reset: t("auth.submit.requestLink"),
+    }[mode.value];
 });
 
 onMounted(async () => {
@@ -212,7 +221,7 @@ onMounted(async () => {
     if (typeof route.query.verify_key === "string") {
         await router.replace({ query: {} });
         switchTo("code");
-        message.value = "Dieser Link gilt nicht mehr. Melde dich mit einem Code an, den wir dir per E-Mail schicken.";
+        message.value = t("auth.oldLink");
     }
 });
 </script>
@@ -226,20 +235,20 @@ onMounted(async () => {
         <q-input
             v-model="password"
             type="password"
-            label="Neues Passwort"
+            :label="t('auth.title.newPassword')"
             autocomplete="new-password"
             outlined
-            :rules="[v => !!v || 'Pflichtfeld']"
+            :rules="[v => !!v || t('common.required')]"
         />
         <q-input
             v-model="passwordRepeat"
             type="password"
-            label="Passwort wiederholen"
+            :label="t('signup.passwordRepeat')"
             autocomplete="new-password"
             outlined
             :rules="repeatRules"
         />
-        <q-btn type="submit" color="primary" label="Passwort speichern" :loading="submitting" />
+        <q-btn type="submit" color="primary" :label="t('auth.savePassword')" :loading="submitting" />
     </q-form>
 
     <template v-else>
@@ -248,29 +257,29 @@ onMounted(async () => {
                 v-if="mode !== 'verify'"
                 v-model="identifier"
                 :type="mode === 'login' ? 'text' : 'email'"
-                :label="mode === 'login' ? 'E-Mail oder Benutzername' : 'E-Mail-Adresse'"
-                :hint="mode === 'signup' ? 'Wir schicken dir einen Code. Benutzername und Passwort wählst du danach.' : undefined"
+                :label="mode === 'login' ? t('auth.emailOrUsername') : t('auth.email')"
+                :hint="mode === 'signup' ? t('auth.signupHint') : undefined"
                 :readonly="mode === 'code' && codeSent"
                 autocomplete="username"
                 outlined
-                :rules="[v => !!v || 'Pflichtfeld']"
+                :rules="[v => !!v || t('common.required')]"
             />
             <q-input
                 v-if="mode === 'login'"
                 v-model="password"
                 type="password"
-                label="Passwort"
+:label="t('auth.password')"
                 autocomplete="current-password"
                 outlined
-                :rules="[v => !!v || 'Pflichtfeld']"
+                :rules="[v => !!v || t('common.required')]"
             />
             <q-input
                 v-if="mode === 'verify' || (mode === 'code' && codeSent)"
                 v-model="code"
-                label="Code aus der E-Mail"
+:label="t('auth.codeFromMail')"
                 autocomplete="one-time-code"
                 outlined
-                :rules="[v => !!v || 'Pflichtfeld']"
+                :rules="[v => !!v || t('common.required')]"
             />
             <q-btn type="submit" no-caps class="fit" color="primary" :label="submitLabel" :loading="submitting" />
         </q-form>
@@ -280,14 +289,20 @@ onMounted(async () => {
                 v-if="mode === 'verify'"
                 flat
                 no-caps
-                label="Neuen Code senden"
+                :label="t('auth.resend')"
                 :disable="submitting"
                 @click="resendCode"
             />
-            <q-btn v-if="mode !== 'login'" flat no-caps label="Zur Anmeldung" @click="switchTo('login')" />
-            <q-btn v-if="mode !== 'code'" flat no-caps label="Mit Code per E-Mail anmelden" @click="switchTo('code')" />
-            <q-btn v-if="mode !== 'signup' && mode !== 'verify'" flat no-caps label="Konto erstellen" @click="switchTo('signup')" />
-            <q-btn v-if="mode !== 'reset'" flat no-caps label="Passwort vergessen?" @click="switchTo('reset')" />
+            <q-btn v-if="mode !== 'login'" flat no-caps :label="t('auth.toLogin')" @click="switchTo('login')" />
+            <q-btn v-if="mode !== 'code'" flat no-caps :label="t('auth.withCode')" @click="switchTo('code')" />
+            <q-btn
+                v-if="mode !== 'signup' && mode !== 'verify'"
+                flat
+                no-caps
+                :label="t('auth.title.signup')"
+                @click="switchTo('signup')"
+            />
+            <q-btn v-if="mode !== 'reset'" flat no-caps :label="t('auth.forgot')" @click="switchTo('reset')" />
         </div>
     </template>
 </template>

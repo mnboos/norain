@@ -2,17 +2,35 @@
     email {$ACME_EMAIL}
     # rate_limit is a plugin directive (caddy-ratelimit); Caddy needs to know where it runs.
     order rate_limit before basic_auth
+
+    # The site sits behind Cloudflare's proxy, so every connection comes from a Cloudflare
+    # address. Trust only those (https://www.cloudflare.com/ips/) and take the rider's IP from
+    # CF-Connecting-IP: {client_ip} feeds X-Real-IP (the login lockout) and the rate limits,
+    # which would otherwise count every rider behind one Cloudflare node as one client.
+    servers {
+        trusted_proxies static 173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 2c0f:f248::/32
+        client_ip_headers CF-Connecting-IP
+    }
+}
+
+# Cloudflare Origin CA certificate (meteolane.com + *.meteolane.com), from
+# APP_STORAGE_PATH/caddy/certs. Only Cloudflare trusts it: the DNS records must stay proxied,
+# with SSL/TLS mode "Full (strict)".
+(origin_cert) {
+    tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
 }
 
 import /etc/caddy/auth-ratelimit.caddy
 
 # One canonical origin: FRONTEND_URL, the CSRF origins and the session cookie all name DOMAIN,
-# so www is redirected here and never reaches Django. Needs a www DNS record for its certificate.
+# so www is redirected here and never reaches Django.
 www.{$DOMAIN} {
+    import origin_cert
     redir https://{$DOMAIN}{uri} permanent
 }
 
 {$DOMAIN} {
+    import origin_cert
     encode zstd gzip
 
     header {

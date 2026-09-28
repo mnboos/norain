@@ -2,12 +2,12 @@
 /**
  * The two readings that decide whether you ride, beside each route in the list: rain and
  * frost. Everything shown here is the server's verdict - `rainLevel` and `frostLevel` are
- * words computed from the ride-quality curves in `core/ride_quality.py`, and the numbers are
+ * codes computed from the ride-quality curves in `core/ride_quality.py`, and the numbers are
  * the worst point of the ride. There is no threshold in this file, and there must not be:
  * a breakpoint in the bundle gives the curves away.
  *
- * Colour is never the only channel. Each reading carries a German title that repeats the
- * level in words, so an icon's emphasis is a second cue and not the message.
+ * Colour is never the only channel. Each reading carries a title that repeats the level in
+ * words, so an icon's emphasis is a second cue and not the message.
  *
  * A reading is drawn only when the server gave it a level, so an icon always means the
  * forecast has something to say: no snowflake on a mild day, no umbrella on a dry one, and
@@ -16,20 +16,23 @@
  * do not have; with nothing to say this claims nothing.
  */
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 import { symSharpAcUnit, symSharpRainy } from "@quasar/extras/material-symbols-sharp";
 
+import { impactText } from "@/utils/levels";
 import { liveThumbnail } from "@/utils/routeThumbnail";
 import type { ThumbnailRoute } from "@/utils/routeThumbnail";
 
 const props = defineProps<{ route: ThumbnailRoute }>();
+const { t } = useI18n();
 
 const thumbnail = computed(() => liveThumbnail(props.route));
 
-/** How strongly a reading is drawn. The steps come from the server's own wording. */
+/** How strongly a reading is drawn. The steps are the server's own levels. */
 const EMPHASIS: Record<string, string> = {
-    leicht: "text-primary",
-    mässig: "text-warning",
-    stark: "text-negative",
+    light: "text-primary",
+    moderate: "text-warning",
+    heavy: "text-negative",
 };
 
 interface Reading {
@@ -54,26 +57,26 @@ function reading(key: string, icon: string, name: string, value: string | null, 
 }
 
 const rain = computed<Reading>(() => {
-    const t = thumbnail.value;
+    const thumb = thumbnail.value;
     // The chance of rain is the headline; without an ensemble there is none, and the amount
     // the main run predicts is the honest second best.
     // A percentage is a risk and millimetres are an amount, so the wording follows the number
     // rather than calling both "Regen".
-    const chance = t?.rainProbability;
-    const amount = t?.maxRainRateMmH;
-    if (t != null && chance != null) {
-        return reading("rain", symSharpRainy, "Regenrisiko", `${Math.round(chance * 100)} %`, t.rainLevel);
+    const chance = thumb?.rainProbability;
+    const amount = thumb?.maxRainRateMmH;
+    if (thumb != null && chance != null) {
+        return reading("rain", symSharpRainy, t("badges.rainRisk"), `${Math.round(chance * 100)} %`, thumb.rainLevel);
     }
-    const value = t != null && amount != null ? `${amount.toFixed(1)} mm/h` : null;
-    return reading("rain", symSharpRainy, "Regen", value, t?.rainLevel);
+    const value = thumb != null && amount != null ? `${amount.toFixed(1)} mm/h` : null;
+    return reading("rain", symSharpRainy, t("badges.rain"), value, thumb?.rainLevel);
 });
 
 const frost = computed<Reading>(() => {
-    const t = thumbnail.value;
+    const thumb = thumbnail.value;
     // Minus U+2212, not a hyphen: it is the glyph a negative temperature is written with.
-    const degrees = t?.tempMin == null ? null : Math.round(t.tempMin);
+    const degrees = thumb?.tempMin == null ? null : Math.round(thumb.tempMin);
     const value = degrees == null ? null : `${degrees < 0 ? "\u2212" : ""}${Math.abs(degrees)}\u00a0°C`;
-    return reading("frost", symSharpAcUnit, "Frost", value, t?.frostLevel);
+    return reading("frost", symSharpAcUnit, t("badges.frost"), value, thumb?.frostLevel);
 });
 
 /**
@@ -85,7 +88,7 @@ const readings = computed(() => [rain.value, frost.value].filter(r => r.level !=
 
 /** The whole reading in words, for the title and the screen reader. */
 function describe(r: Reading): string {
-    return r.level ? `${r.name} ${r.value}, ${r.level}` : `${r.name} ${r.value}`;
+    return r.level ? `${r.name} ${r.value}, ${impactText(r.level)}` : `${r.name} ${r.value}`;
 }
 
 defineExpose({ describe, readings });

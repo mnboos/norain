@@ -1,2 +1,0 @@
-# Only *.caddy files are active. Keep undecided hostnames in *.example files.
-import /etc/caddy/sites/*.caddy

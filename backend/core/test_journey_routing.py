@@ -93,9 +93,9 @@ class MeasuredJourneyTests(SimpleTestCase):
             ]
         )
         self.assertTrue(rows[1]["recommended"])
-        self.assertIn("Tageslimit: ~0.5 km zu weit", rows[0]["reasons"])
-        self.assertIn("Etappe 2: ~1 min zu lang", rows[0]["reasons"])
-        self.assertIn("Trinkwasser: 15 min / 1 km ohne", rows[0]["reasons"])
+        self.assertIn({"kind": "day_limit", "km": 0.5}, rows[0]["reasons"])
+        self.assertIn({"kind": "leg_limit", "leg": 2, "minutes": 1}, rows[0]["reasons"])
+        self.assertIn({"kind": "gap", "category": "drinking_water", "minutes": 15, "km": 1}, rows[0]["reasons"])
 
     def test_path_geometry_keeps_exact_visit_boundaries(self):
         raw = {
@@ -208,7 +208,7 @@ class RoutedPlannerTests(SimpleTestCase):
         self.assertFalse(result["breaks"])
         self.assertEqual(result["gaps"]["drinking_water"]["m"], round(LineMeasure(path).meters[-1], 1))
         ranked = rank_day([{**result, "id": "missing", "total_seconds": path["total_seconds"]}])
-        self.assertIn("Kein erreichbarer Stopp für Trinkwasser gefunden.", ranked[0]["reasons"])
+        self.assertIn({"kind": "missing_stop", "category": "drinking_water"}, ranked[0]["reasons"])
 
     def test_failed_nearby_poi_does_not_satisfy_category(self):
         path, hit = self.window_poi()

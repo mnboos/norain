@@ -1,6 +1,6 @@
-# Meteolane documentation
+# MeteoLane documentation
 
-Meteolane connects the time and location of a journey to weather forecasts. These
+MeteoLane connects the time and location of a journey to weather forecasts. These
 pages cover using the local application, operating its services, and contributing
 changes.
 
@@ -16,11 +16,14 @@ the implementation, and explanation develops understanding.
 ## How-to guides — accomplish a task
 
 - [Run background jobs and pre-warm forecasts](how-to/background-jobs.md).
+- [Install and test MeteoLane on a Garmin Forerunner 255](how-to/garmin-watch.md): local server access, pairing, building, USB installation, and troubleshooting.
 - [Monitor product usage, forecasts, and workers with Sentry](how-to/sentry-metrics.md).
 - [Change the geographic coverage](how-to/change-region.md).
+- [Keep the public coverage page up to date, and mail the people waiting for an area](how-to/coverage-page.md).
 - [Build routing and search from downloaded files, for several countries](how-to/import-geodata.md).
 - [Build the routing graph, step by step: one country, several countries, on the VPS, or elsewhere and copied](how-to/build-routing-graph.md).
 - [Develop, test, and regenerate the API client](how-to/development.md).
+- [Maintain the translations: frontend catalogs, backend messages, and the codes between them](how-to/translations.md).
 - [Deploy and operate a production VPS](how-to/deploy-vps.md).
 - [Troubleshoot setup and missing forecasts](how-to/troubleshooting.md).
 

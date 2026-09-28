@@ -26,6 +26,6 @@ describe("place labels", () => {
     it("copes with the shape built from a saved route", () => {
         expect(placeLabel(place({ city: null, state: "" }))).toBe("Bahnhof");
         expect(placeSecondaryLine(place({ city: null, state: "" }))).toBe("");
-        expect(placeLabel(place({ name: "" }))).toBe("Unknown");
+        expect(placeLabel(place({ name: "" }))).toBe("Unbekannt");
     });
 });

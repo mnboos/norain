@@ -9,6 +9,7 @@ from uuid import UUID
 
 from pydantic import Field
 
+from .ride_quality import ImpactLevel, RideBand, RideFactor, WindEffortLevel
 from .schemas import CamelSchema
 
 
@@ -81,8 +82,9 @@ class WeatherSample(CamelSchema):
     sample_index: int | None = None  # original sample_points index, stable across missing cells
     wind_coverage: float | None = Field(default=None, ge=0, le=1)
 
-    weather_code: int | None = None  # WMO weather code (Open-Meteo)
-    weather_desc: str
+    # WMO weather code (Open-Meteo). The SPA words it; results stored before this also carry a
+    # German `weather_desc`, which is dropped on the way out.
+    weather_code: int | None = None
     # How many weather stations nudged this sample's temperature or rain probability.
     # None when the sample is the plain model forecast.
     station_count: int | None = None
@@ -133,12 +135,12 @@ class RouteWeatherSummary(CamelSchema):
     rain_amount: float  # "if it rains" mm at the peak-risk point
     max_headwind: float | None = None
     max_wind_power_w: float | None = None  # largest sample wind effort, W
-    # "niedrig" … "sehr hoch" for max_wind_power_w. Filled when served (core.jobs.forecast_view),
+    # "low" … "very_high" for max_wind_power_w. Filled when served (core.jobs.forecast_view),
     # never stored, like every field derived from the ride-quality curves.
-    max_wind_effort_level: str | None = None
+    max_wind_effort_level: WindEffortLevel | None = None
     # The iciest point of the ride as a word, filled when served. None means no frost worth
     # naming - a ride with no samples at all says so through `samples` being empty.
-    max_frost_level: str | None = None
+    max_frost_level: ImpactLevel | None = None
     wind_distribution: WindDistribution | None = None
     source: str  # "open-meteo" or "openweathermap"
     station_corrected: bool = False  # some samples were corrected with station readings
@@ -170,16 +172,18 @@ class RouteSection(CamelSchema):
     start_index: int | None = None
     end_index: int | None = None
     # Filled on read by ``forecast_view``; never stored. See ``core.ride_quality``.
-    frost_level: str | None = None
+    frost_level: ImpactLevel | None = None
 
 
 class ForecastSampleOut(WeatherSample):
     uncertainty: ForecastUncertaintySummary | None = None
     # Served from core.ride_quality when the forecast is read; None where it cannot be scored.
     ride_score: float | None = Field(default=None, ge=0, le=1)  # 0 = best ride, 1 = worst
-    ride_label: str | None = None  # e.g. "mässig · v. a. Regen"
-    wind_effort_level: str | None = None  # "Wind hilft", "keiner", "niedrig" … "sehr hoch"
-    frost_level: str | None = None  # "leicht" … "stark"; None means no frost worth naming
+    # Codes, never words: the SPA translates them (see "Internationalisation" in CLAUDE.md).
+    ride_label: RideBand | None = None
+    ride_cause: RideFactor | None = None  # the factor that dominates, when one does
+    wind_effort_level: WindEffortLevel | None = None
+    frost_level: ImpactLevel | None = None  # None means no frost worth naming
 
 
 class WindArrow(CamelSchema):
@@ -191,8 +195,23 @@ class WindArrow(CamelSchema):
     wind_speed: float  # km/h over ground
     wind_dir: float  # degrees, direction the wind comes FROM
     wind_power_w: float | None = None  # extra watts at the planned speed; negative = helps
-    wind_effort_level: str | None = None  # the effort as a word; see core.ride_quality
+    wind_effort_level: WindEffortLevel | None = None  # the effort as a code; see core.ride_quality
     wind_effort: float = Field(default=0, ge=0, le=1)  # 0..1, sizes the arrow
+
+
+# Why the recommended departure was chosen: "insufficient_data" (nothing to compare),
+# "best_in_window", "requested_equivalent" / "requested_best" (the wanted time is fine), or
+# the factor it improves most. Codes, because the SPA and the briefing word them.
+DepartureExplanation = Literal[
+    "insufficient_data",
+    "best_in_window",
+    "requested_equivalent",
+    "requested_best",
+    "less_rain",
+    "less_wind",
+    "milder",
+    "less_frost",
+]
 
 
 class DepartureCandidate(CamelSchema):
@@ -200,7 +219,7 @@ class DepartureCandidate(CamelSchema):
     arrival_time: str
     available: bool
     ride_score: float | None = None
-    ride_label: str
+    ride_label: RideBand | None = None  # None when the weather is incomplete (`available` false)
 
 
 class DepartureComparison(CamelSchema):
@@ -209,7 +228,7 @@ class DepartureComparison(CamelSchema):
     window_end: str
     candidates: list[DepartureCandidate]
     recommended_time: str | None = None
-    explanation: str
+    explanation: DepartureExplanation
 
 
 class RouteForecastOut(CamelSchema):
@@ -228,6 +247,9 @@ class RouteForecastOut(CamelSchema):
     # existed. The page shows it while a stale result stands in for a refreshing one.
     computed_at: str | None = None
     route_id: UUID | None = None
+    # The routing profile it was planned for. "hike" has no wind effort: its samples, summary
+    # and arrows carry no wind-effort level. Results stored before it existed are bike rides.
+    profile: str = "bike"
     departure_time: str
     line: list[list[float]]  # coarse route line as [[lon, lat], ...]
     total_seconds: int

@@ -11,6 +11,7 @@ from django.db.models import Count, Max, Min, Q
 from django.db.models.functions import Cast
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.translation import gettext
 from ninja import Query, Router
 from ninja.errors import HttpError
 from ninja.utils import check_csrf
@@ -30,11 +31,11 @@ from ..weather import forecast_days_for
 
 def system_auth(request):
     if check_csrf(request):
-        raise HttpError(403, "CSRF check failed.")
+        raise HttpError(403, gettext("CSRF-Prüfung fehlgeschlagen."))
     if not request.user.is_authenticated:
-        raise HttpError(401, "Sign in first.")
+        raise HttpError(401, gettext("Bitte zuerst anmelden."))
     if not has_system_access(request.user, request.session):
-        raise HttpError(403, "Administrator access and admin verification are required.")
+        raise HttpError(403, gettext("Administrator-Zugang und Admin-Bestätigung sind erforderlich."))
     return request.user
 
 
@@ -95,7 +96,7 @@ class SystemMapFilter(CamelSchema):
     source: Literal["all", "open-meteo", "openweathermap"] = "all"
     day: date | None = None
     active: bool | None = None
-    profile: Literal["bike", "ebike", "fast_ebike"] | None = None
+    profile: Literal["bike", "ebike", "fast_ebike", "hike"] | None = None
     alternatives: bool = False
 
 
@@ -105,11 +106,11 @@ def viewport_boxes(value):
     try:
         west, south, east, north = (float(n) for n in value.split(","))
     except (TypeError, ValueError) as exc:
-        raise HttpError(422, "bbox must be west,south,east,north.") from exc
+        raise HttpError(422, gettext("bbox muss west,süd,ost,nord sein.")) from exc
     if not all(isfinite(n) for n in (west, south, east, north)) or not (
         -180 <= west <= 180 and -180 <= east <= 180 and -90 <= south < north <= 90
     ):
-        raise HttpError(422, "Invalid map bounds.")
+        raise HttpError(422, gettext("Ungültiger Kartenausschnitt."))
     return [(west, south, east, north)] if west <= east else [(west, south, 180, north), (-180, south, east, north)]
 
 
@@ -271,7 +272,7 @@ def cell_history(request, lat: float, lon: float, offset: int = 0, limit: int = 
         or offset < 0
         or not 1 <= limit <= 100
     ):
-        raise HttpError(422, "Invalid cell or page.")
+        raise HttpError(422, gettext("Ungültige Zelle oder Seite."))
     # Union only metadata; raw forecast payloads never leave the server.
     from django.db.models import CharField, Value
 
@@ -372,17 +373,17 @@ def coverage(request, kind: Literal["route", "stage"], item_id: UUID):
     samples = route.sample_points or []
     unavailable = None
     if not route.polyline or not samples:
-        unavailable = "Keine gespeicherte Routengeometrie oder Messpunkte."
+        unavailable = gettext("Keine gespeicherte Routengeometrie oder Messpunkte.")
     elif departure is None:
-        unavailable = "Kein gültiger Abfahrtstermin."
+        unavailable = gettext("Kein gültiger Abfahrtstermin.")
     else:
         departure = instant(departure)
         end = departure + timedelta(seconds=max(p["elapsed_s"] for p in samples))
         today = now.astimezone(LOCAL_TZ).date()
         if departure < now:
-            unavailable = "Diese Abfahrt liegt in der Vergangenheit."
+            unavailable = gettext("Diese Abfahrt liegt in der Vergangenheit.")
         elif end.astimezone(LOCAL_TZ).date() > today + timedelta(days=15):
-            unavailable = "Diese Fahrt liegt ausserhalb des Vorhersagezeitraums."
+            unavailable = gettext("Diese Fahrt liegt ausserhalb des Vorhersagezeitraums.")
     points = []
     if unavailable is None:
         day = departure.astimezone(LOCAL_TZ).date()
@@ -449,7 +450,7 @@ class SystemJobsPage(CamelSchema):
 @router.get("/jobs", response=SystemJobsPage)
 def jobs(request, offset: int = 0, limit: int = 25):
     if offset < 0 or not 1 <= limit <= 100:
-        raise HttpError(422, "Invalid page.")
+        raise HttpError(422, gettext("Ungültige Seite."))
     now = timezone.now()
     rows = ForecastJob.objects.filter(
         ~Q(status__in=ForecastJob.TERMINAL_STATUSES) | Q(updated_at__gte=now - timedelta(hours=24))

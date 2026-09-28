@@ -87,6 +87,9 @@ VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT", "")
 BRIEFING_EMAIL_ENABLED = os.environ.get("BRIEFING_EMAIL_ENABLED", "false").lower() == "true"
 # Only known browser push services: never allow a user-supplied URL to reach internal services.
 PUSH_ENDPOINT_HOSTS = ("fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com")
+# Push services whose endpoint host varies per device: any subdomain of these. Edge (Windows
+# Notification Service) hands out wns2-<region>.notify.windows.com.
+PUSH_ENDPOINT_HOST_SUFFIXES = (".notify.windows.com",)
 
 # Application definition
 
@@ -162,9 +165,13 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    # Accept-Language picks the language before sign-in; UserLanguageMiddleware then puts
+    # the account's own setting on top. The SPA has no language prefix in its URLs.
+    "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.middleware.UserLanguageMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -206,7 +213,7 @@ ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED = True
 # Two new codes per sign-up, on top of allauth's own mail rate limits.
 ACCOUNT_EMAIL_VERIFICATION_SUPPORTS_RESEND = True
 ACCOUNT_LOGIN_BY_CODE_ENABLED = True
-ACCOUNT_EMAIL_SUBJECT_PREFIX = "Meteolane: "
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "MeteoLane: "
 # Axes is the only lockout for failed sign-ins. allauth's own `login_failed` limit would
 # block one identity after 5 tries with a different error body, before axes ever counts
 # to 10. allauth's other limits (sign-up, mails, codes, reset) stay on.
@@ -223,7 +230,7 @@ HEADLESS_FRONTEND_URLS = {
 
 # 2FA for the admin: OTPAdminSite (backend/urls.py) asks for a code from an authenticator
 # app. The first device is created with `manage.py add_totp_device`.
-OTP_TOTP_ISSUER = "Meteolane"
+OTP_TOTP_ISSUER = "MeteoLane"
 # Only development.py may turn this off (DJANGO_ADMIN_OTP); production never reads it.
 ADMIN_OTP = True
 
@@ -311,7 +318,13 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
+# German is the source language: every msgid is the German text, so "de" needs no catalog.
+# See "Internationalisation" in CLAUDE.md.
+LANGUAGE_CODE = "de"
+
+LANGUAGES = [("de", "Deutsch"), ("en", "English")]
+
+LOCALE_PATHS = [BASE_DIR / "core" / "locale"]
 
 TIME_ZONE = "Europe/Zurich"
 

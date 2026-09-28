@@ -8,6 +8,7 @@ node_modules
 .env.*
 !.env.template
 db
+.cache
 
 *.osm.pbf
 *.jsonl.zst
@@ -23,6 +24,5 @@ data/downloads/
 
 # Python helpers and tests
 __pycache__/
-.cache
 garmin/bin
 garmin/private

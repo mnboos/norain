@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from "vue";
 import { QSelect } from "quasar";
-import { symSharpElectricBike, symSharpElectricMoped, symSharpPedalBike } from "@quasar/extras/material-symbols-sharp";
+import { useI18n } from "vue-i18n";
 import {
     JourneyInKindEnum,
     RoadPrefsInClimbingEnum as Climbing,
@@ -20,7 +20,8 @@ import { useEntitlements } from "@/composables/useEntitlements";
 import { usePlaceSearch } from "@/queries/places";
 import { placeLabel } from "@/utils/placeLabel";
 import { POI_CATEGORIES } from "@/utils/poiCategories";
-import { HEADING_OPTIONS, paceHint } from "@/utils/randomRides";
+import { headingOptions, paceHint } from "@/utils/randomRides";
+import { BIKE_PROFILE_OPTIONS, followProfileDefaults, hasWindEffort } from "@/utils/bikeProfiles";
 
 const props = defineProps<{
     modelValue: boolean;
@@ -33,6 +34,7 @@ const emit = defineEmits<{
     save: [data: JourneyIn];
 }>();
 
+const { t } = useI18n();
 const { weatherRouting } = useEntitlements();
 
 type Length = "time" | "distance";
@@ -66,6 +68,7 @@ const departure = ref(soon());
 const length = ref<Length>("time");
 const hours = ref(2);
 const kilometres = ref(40);
+followProfileDefaults(profile, [[kilometres, 40]]);
 const heading = ref<number | null>(null);
 const poiCategories = ref<string[]>([]);
 const surface = ref(Surface.Any);
@@ -140,39 +143,36 @@ function selectInputText(e: Event) {
     if (e.target instanceof HTMLInputElement) e.target.select();
 }
 
-const profileOptions = [
-    { label: "Velo", value: "bike", icon: symSharpPedalBike },
-    { label: "E-Bike", value: "ebike", icon: symSharpElectricBike },
-    { label: "S-Pedelec", value: "fast_ebike", icon: symSharpElectricMoped },
-];
-const lengthOptions = [
-    { label: "Zeit", value: "time" },
-    { label: "Distanz", value: "distance" },
-];
-const shapeOptions = [
-    { label: "Rundkurs", value: true },
-    { label: "Zu einem Ziel", value: false },
-];
-const surfaceOptions = [
-    { label: "Egal", value: Surface.Any },
-    { label: "Wenig Naturbelag", value: Surface.AvoidUnpaved },
-    { label: "Nur asphaltiert", value: Surface.PavedOnly },
-];
+// Built in computeds, so every label follows a language switch.
+const lengthOptions = computed(() => [
+    { label: t("randomForm.length.time"), value: "time" },
+    { label: t("randomForm.length.distance"), value: "distance" },
+]);
+const shapeOptions = computed(() => [
+    { label: t("randomForm.shape.loop"), value: true },
+    { label: t("randomForm.shape.toDestination"), value: false },
+]);
+const surfaceOptions = computed(() => [
+    { label: t("roadPrefs.any"), value: Surface.Any },
+    { label: t("roadPrefs.surface.avoidUnpaved"), value: Surface.AvoidUnpaved },
+    { label: t("roadPrefs.surface.pavedOnly"), value: Surface.PavedOnly },
+]);
 // The terrain is the first thing to know about a ride out; it sits beside the profile.
-const terrainOptions = [
-    { label: "Flach", value: Climbing.Avoid },
-    { label: "Egal", value: Climbing.Neutral },
-    { label: "Hügelig", value: Climbing.Hilly },
-];
-const trafficOptions = [
-    { label: "Egal", value: Traffic.Neutral },
-    { label: "Hauptstrassen meiden", value: Traffic.AvoidMain },
-    { label: "Velonetz bevorzugen", value: Traffic.AvoidOffNetwork },
-];
-const townOptions = [
-    { label: "Egal", value: Towns.Neutral },
-    { label: "Ortschaften meiden", value: Towns.Avoid },
-];
+const terrainOptions = computed(() => [
+    { label: t("roadPrefs.climbing.flat"), value: Climbing.Avoid },
+    { label: t("roadPrefs.any"), value: Climbing.Neutral },
+    { label: t("roadPrefs.climbing.hilly"), value: Climbing.Hilly },
+]);
+const trafficOptions = computed(() => [
+    { label: t("roadPrefs.any"), value: Traffic.Neutral },
+    { label: t("roadPrefs.traffic.avoidMain"), value: Traffic.AvoidMain },
+    { label: t("roadPrefs.traffic.preferNetwork"), value: Traffic.AvoidOffNetwork },
+]);
+const townOptions = computed(() => [
+    { label: t("roadPrefs.any"), value: Towns.Neutral },
+    { label: t("roadPrefs.towns.avoid"), value: Towns.Avoid },
+]);
+const headings = computed(() => headingOptions());
 
 // The weather mode is Plus; without it the ride is always the picker.
 const weatherMode = computed(() => weatherRouting.value && considerWeather.value);
@@ -200,7 +200,9 @@ function onSave() {
     const data: JourneyIn = {
         name:
             name.value.trim() ||
-            (roundTrip.value ? `Runde ab ${start.value.properties.name}` : `Nach ${target.properties.name}`),
+            (roundTrip.value
+                ? t("randomForm.defaultNameLoop", { start: start.value.properties.name })
+                : t("randomForm.defaultNameTo", { dest: target.properties.name })),
         kind: JourneyInKindEnum.Random,
         startLat: start.value.geometry.coordinates[1] ?? 0,
         startLon: start.value.geometry.coordinates[0] ?? 0,
@@ -228,7 +230,7 @@ function onSave() {
         },
         weatherPrefs: {
             avoidRain: weatherMode.value && avoidRain.value,
-            avoidHeadwind: weatherMode.value && avoidHeadwind.value,
+            avoidHeadwind: weatherMode.value && avoidHeadwind.value && hasWindEffort(profile.value),
         },
     };
     emit("save", data);
@@ -244,11 +246,8 @@ function onClose() {
     <q-dialog :model-value="modelValue" persistent :maximized="$q.screen.xs" @update:model-value="onClose">
         <q-card style="min-width: min(640px, 96vw)">
             <q-card-section>
-                <q-item-label overline>{{ ride ? "Runde bearbeiten" : "Neue Zufallsrunde" }}</q-item-label>
-                <div class="text-caption text-muted">
-                    Sag, wie lange oder wie weit du fahren willst. Meteolane würfelt eine Strecke und prüft das Wetter
-                    darauf.
-                </div>
+                <q-item-label overline>{{ ride ? t("randomForm.editTitle") : t("randomForm.newTitle") }}</q-item-label>
+                <div class="text-caption text-muted">{{ t("randomForm.intro") }}</div>
             </q-card-section>
 
             <q-card-section class="q-gutter-md">
@@ -258,12 +257,12 @@ function onClose() {
                     toggle-color="primary"
                     spread
                     no-caps
-                    aria-label="Art der Runde"
+                    :aria-label="t('randomForm.shape.label')"
                 />
 
                 <q-select
                     v-model="start"
-                    label="Start"
+                    :label="t('routeForm.start')"
                     dense
                     outlined
                     use-input
@@ -289,7 +288,7 @@ function onClose() {
                 <q-select
                     v-if="!roundTrip"
                     v-model="dest"
-                    label="Ziel"
+                    :label="t('routeForm.dest')"
                     dense
                     outlined
                     use-input
@@ -315,12 +314,19 @@ function onClose() {
                 <RouteLocationPicker v-model:start="start" v-model:dest="dest" />
 
                 <div>
-                    <div class="text-caption q-mb-sm">Profil (bestimmt das Tempo)</div>
-                    <q-btn-toggle v-model="profile" :options="profileOptions" toggle-color="primary" spread size="sm" />
+                    <div class="text-caption q-mb-sm">{{ t("randomForm.profile") }}</div>
+                    <q-btn-toggle
+                        v-model="profile"
+                        :options="BIKE_PROFILE_OPTIONS"
+                        toggle-color="primary"
+                        spread
+                        no-caps
+                        size="sm"
+                    />
                 </div>
 
                 <div>
-                    <div class="text-caption q-mb-sm">Gelände</div>
+                    <div class="text-caption q-mb-sm">{{ t("roadPrefs.climbing.label") }}</div>
                     <q-btn-toggle
                         v-model="climbing"
                         :options="terrainOptions"
@@ -328,20 +334,20 @@ function onClose() {
                         spread
                         no-caps
                         size="sm"
-                        aria-label="Gelände"
+                        :aria-label="t('roadPrefs.climbing.label')"
                     />
                     <div class="text-caption text-muted q-mt-xs">
-                        <template v-if="climbing === Climbing.Avoid">Möglichst wenig Steigungen.</template>
+                        <template v-if="climbing === Climbing.Avoid">{{ t("roadPrefs.climbing.flatHint") }}</template>
                         <template v-else-if="climbing === Climbing.Hilly">
-                            Lieber auf und ab, so hügelig die Gegend es hergibt.
+                            {{ t("roadPrefs.climbing.hillyHint") }}
                         </template>
-                        <template v-else>Das Gelände spielt keine Rolle.</template>
+                        <template v-else>{{ t("roadPrefs.climbing.anyHint") }}</template>
                     </div>
                 </div>
 
                 <div>
                     <div class="row items-center justify-between">
-                        <div class="text-caption">Länge</div>
+                        <div class="text-caption">{{ t("randomForm.length.label") }}</div>
                         <q-btn-toggle
                             v-model="length"
                             :options="lengthOptions"
@@ -360,7 +366,7 @@ function onClose() {
                             :step="0.25"
                             label
                             :label-value="`${hours} h`"
-                            aria-label="Fahrzeit in Stunden"
+                            :aria-label="t('randomForm.length.hoursLabel')"
                         />
                         <q-slider
                             v-else
@@ -371,7 +377,7 @@ function onClose() {
                             :step="5"
                             label
                             :label-value="`${kilometres} km`"
-                            aria-label="Distanz in Kilometern"
+                            :aria-label="t('randomForm.length.kmLabel')"
                         />
                         <div class="text-body2 text-weight-medium" style="min-width: 4rem; text-align: right">
                             {{ length === "time" ? `${hours} h` : `${kilometres} km` }}
@@ -382,69 +388,65 @@ function onClose() {
 
                 <q-select
                     v-model="heading"
-                    :options="HEADING_OPTIONS"
+                    :options="headings"
                     emit-value
                     map-options
-                    :label="roundTrip ? 'Richtung zuerst' : 'Umweg auf der Seite'"
+                    :label="roundTrip ? t('randomForm.headingLoop') : t('randomForm.headingDetour')"
                     outlined
                     dense
                     style="max-width: 260px"
                 />
 
                 <div class="row q-col-gutter-sm">
-                    <q-input v-model="date" class="col-6" type="date" label="Datum" outlined dense />
+                    <q-input v-model="date" class="col-6" type="date" :label="t('routeForm.date')" outlined dense />
                     <q-input
                         v-model="departure"
                         class="col-6"
-                        label="Abfahrt"
+                        :label="t('routeForm.departure')"
                         outlined
                         dense
                         mask="##:##"
                         fill-mask
                         :error="!TIME.test(departure)"
-                        error-message="Als HH:MM"
+                        :error-message="t('routeForm.timeFormat')"
                         no-error-icon
                     />
                 </div>
 
-                <q-input v-model="name" label="Name (optional)" outlined dense no-error-icon />
+                <q-input v-model="name" :label="t('routeForm.nameOptional')" outlined dense no-error-icon />
 
                 <ChipMultiSelect
                     v-model="poiCategories"
-                    label="Unterwegs möchte ich vorbei an"
-                    hint="Optional: Meteolane legt einen Halt auf die Strecke"
+                    :label="t('randomForm.pois')"
+                    :hint="t('randomForm.poisHint')"
                     :options="POI_CATEGORIES.filter(c => c.value !== 'lodging')"
                 />
 
                 <div data-testid="random-mode">
                     <div class="row items-center q-gutter-x-sm">
-                        <span class="text-caption">Wetter</span>
+                        <span class="text-caption">{{ t("randomForm.weather") }}</span>
                         <q-badge v-if="!weatherRouting" color="accent" label="Plus" />
                     </div>
                     <q-toggle
                         :model-value="weatherMode"
                         :disable="!weatherRouting"
-                        label="Wetter berücksichtigen"
+                        :label="t('randomForm.considerWeather')"
                         @update:model-value="considerWeather = $event"
                     />
                     <div class="text-caption text-muted">
-                        <template v-if="weatherMode">
-                            Meteolane berechnet die Vorhersage für jede Variante und empfiehlt die mit dem besten Wetter.
-                        </template>
-                        <template v-else>
-                            Du bekommst drei Varianten ohne Wetter und wählst, welche du als Routen speichern willst.
-                            Die Vorhersage gibt es dann für jede gespeicherte Route.
-                        </template>
+                        <template v-if="weatherMode">{{ t("randomForm.weatherOn") }}</template>
+                        <template v-else>{{ t("randomForm.weatherOff") }}</template>
                     </div>
                     <WeatherRoutingChoice
                         v-if="weatherMode"
                         v-model:avoid-rain="avoidRain"
                         v-model:avoid-headwind="avoidHeadwind"
+                        :headwind="hasWindEffort(profile)"
                         class="q-mt-sm"
                     />
                 </div>
 
-                <q-expansion-item dense label="Strasse" header-class="text-caption q-px-none">
+                <q-expansion-item dense :label="t('roadPrefs.title')" header-class="text-caption q-px-none">
                     <div class="row q-col-gutter-sm q-pt-sm">
                         <q-select
                             v-model="surface"
@@ -452,7 +454,7 @@ function onClose() {
                             :options="surfaceOptions"
                             emit-value
                             map-options
-                            label="Belag"
+                            :label="t('roadPrefs.surface.label')"
                             outlined
                             dense
                         />
@@ -462,7 +464,7 @@ function onClose() {
                             :options="trafficOptions"
                             emit-value
                             map-options
-                            label="Verkehr"
+                            :label="t('roadPrefs.traffic.label')"
                             outlined
                             dense
                         />
@@ -472,7 +474,7 @@ function onClose() {
                             :options="townOptions"
                             emit-value
                             map-options
-                            label="Ortschaften"
+                            :label="t('roadPrefs.towns.label')"
                             outlined
                             dense
                         />
@@ -481,10 +483,10 @@ function onClose() {
             </q-card-section>
 
             <q-card-actions align="right">
-                <q-btn flat label="Abbrechen" no-caps @click="onClose" />
+                <q-btn flat :label="t('common.cancel')" no-caps @click="onClose" />
                 <q-btn
                     color="primary"
-                    :label="ride ? 'Speichern und neu planen' : 'Varianten würfeln'"
+                    :label="ride ? t('randomForm.saveAndReplan') : t('randomForm.roll')"
                     :disable="!isValid"
                     no-caps
                     @click="onSave"

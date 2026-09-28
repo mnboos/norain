@@ -1,5 +1,6 @@
 import { ResponseError } from "@norain/api/runtime";
 
+import { currentLocale, t } from "@/i18n";
 import { getCookie, useBackendHost } from "@/utils";
 
 export interface DetailResponse {
@@ -47,21 +48,19 @@ export async function request<T>(path: string, parse: Parse<T>, method = "GET", 
     const response = await fetch(`${useBackendHost()}${path}`, {
         method,
         credentials: "include",
-        headers: body
-            ? {
-                  "Content-Type": "application/json",
-                  "X-CSRFToken": getCookie("csrftoken") ?? "",
-              }
-            : undefined,
+        headers: {
+            "Accept-Language": currentLocale(),
+            ...(body ? { "Content-Type": "application/json", "X-CSRFToken": getCookie("csrftoken") ?? "" } : {}),
+        },
         body: body ? JSON.stringify(body) : undefined,
     });
     const payload: unknown = await response.json();
     if (!response.ok) {
-        throw new ApiError(detailOf(payload) ?? "Die Anfrage ist fehlgeschlagen.", response.status);
+        throw new ApiError(detailOf(payload) ?? t("errors.requestFailed"), response.status);
     }
     const parsed = parse(payload);
     if (parsed === null) {
-        throw new ApiError("Unerwartete Antwort vom Server.", response.status);
+        throw new ApiError(t("errors.unexpectedReply"), response.status);
     }
     return parsed;
 }
@@ -101,6 +100,7 @@ export async function allauthRequest(
         method,
         credentials: "include",
         headers: {
+            "Accept-Language": currentLocale(),
             ...(body ? { "Content-Type": "application/json" } : {}),
             ...(method === "GET" ? {} : { "X-CSRFToken": getCookie("csrftoken") ?? "" }),
             ...headers,
@@ -110,7 +110,7 @@ export async function allauthRequest(
     const payload: unknown = await response.json().catch(() => null);
     if (response.status !== 200 && response.status !== 401) {
         const { message, code } = allauthErrorOf(payload);
-        throw new ApiError(message ?? "Die Anfrage ist fehlgeschlagen.", response.status, code);
+        throw new ApiError(message ?? t("errors.requestFailed"), response.status, code);
     }
     const reply = isRecord(payload) ? payload : {};
     return {

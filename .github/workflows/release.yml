@@ -1,13 +1,13 @@
 name: Release production images
 
 on:
+  pull_request:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
 
 env:
   REGISTRY: ghcr.io
@@ -17,6 +17,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
+      redis:
+        image: redis:8
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       postgis:
         image: postgis/postgis:18-3.6
         env:
@@ -31,6 +40,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      REDIS_URL: redis://localhost:6379
       DB_NAME: norain
       DB_HOST: localhost
       DB_PORT: 5432
@@ -45,11 +55,35 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: sudo apt-get update && sudo apt-get install -y binutils libproj-dev gdal-bin
       - run: cd backend && uv sync --frozen && uv run python manage.py test core
+      - name: Check generated API is up to date
+        shell: bash
+        run: |
+          # Keep generation aligned with just export-openapi-schema / update-api--build-only.
+          cd backend
+          uv run --frozen python manage.py export_openapi_schema --api core.api.api --indent 4 --output openapi.json
+          rm -rf ../packages/api/apis ../packages/api/models
+          uv run --frozen openapi-generator-cli generate \
+            --global-property "supportingFiles,apis,apiTests,models,apiDocs=false,modelDocs=false" \
+            -i openapi.json -g typescript-fetch -o ../packages/api \
+            --enable-post-process-file -c api-generator.typescript-fetch.additionalProperties.json
+          uv run --frozen python add_ts_nocheck.py
+          cd ..
+          changes=$(git status --porcelain --untracked-files=all -- backend/openapi.json packages/api)
+          if [ -n "$changes" ]; then
+            echo "::error::Generated API is stale. Run 'just update-api' on your feature branch and commit backend/openapi.json and packages/api, including added and deleted files. Regenerate again after merging or rebasing main."
+            printf '%s\n' "$changes"
+            git diff --stat -- backend/openapi.json packages/api
+            exit 1
+          fi
       - run: uv run --no-project --with pmtiles==3.8.1 --with pillow==12.3.0 python -m unittest discover -s docker/tests -v
       - run: cd frontend && npm ci && npm run build
 
   publish:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: test
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -84,6 +118,7 @@ jobs:
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
 
   deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: publish
     runs-on: ubuntu-latest
     environment: production

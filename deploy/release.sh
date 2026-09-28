@@ -6,7 +6,7 @@ set -eu
 : "${GRAPHHOPPER_IMAGE:?GRAPHHOPPER_IMAGE must be set}"
 : "${PHOTON_IMAGE:?PHOTON_IMAGE must be set}"
 
-# COMPOSE_FILE in the production .env selects standalone or shared-proxy deployment.
+# COMPOSE_FILE in the production .env selects the compose file (docker-compose.prod.yml).
 compose="docker compose --env-file .env"
 
 export BACKEND_IMAGE FRONTEND_IMAGE GRAPHHOPPER_IMAGE PHOTON_IMAGE

@@ -1,7 +1,7 @@
 {
     "openapi": "3.1.0",
     "info": {
-        "title": "Meteolane API",
+        "title": "MeteoLane API",
         "version": "1.0.0",
         "description": ""
     },
@@ -2132,6 +2132,193 @@
                 }
             }
         },
+        "/api/coverage": {
+            "get": {
+                "operationId": "core_api_coverage_get_coverage",
+                "summary": "Get Coverage",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CoverageOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Covered and planned areas, every area with votes, and the countries one may vote for.",
+                "tags": [
+                    "Coverage"
+                ]
+            }
+        },
+        "/api/coverage/{code}/vote": {
+            "put": {
+                "operationId": "core_api_coverage_vote",
+                "summary": "Vote",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "code",
+                        "schema": {
+                            "title": "Code",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VoteOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Vote for an area Meteolane does not cover yet; voting twice changes nothing.",
+                "tags": [
+                    "Coverage"
+                ]
+            },
+            "delete": {
+                "operationId": "core_api_coverage_withdraw_vote",
+                "summary": "Withdraw Vote",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "code",
+                        "schema": {
+                            "title": "Code",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/VoteOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Coverage"
+                ]
+            }
+        },
+        "/api/coverage/{code}/notify": {
+            "post": {
+                "operationId": "core_api_coverage_subscribe",
+                "summary": "Subscribe",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "code",
+                        "schema": {
+                            "title": "Code",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SubscribeOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Leave an address to be told when the area is covered. It is confirmed by mail first.",
+                "tags": [
+                    "Coverage"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SubscribeIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/coverage/notify/confirm": {
+            "post": {
+                "operationId": "core_api_coverage_confirm_subscription",
+                "summary": "Confirm Subscription",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConfirmOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Coverage"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TokenIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/coverage/notify/unsubscribe": {
+            "post": {
+                "operationId": "core_api_coverage_unsubscribe",
+                "summary": "Unsubscribe",
+                "parameters": [],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                },
+                "description": "Always 204: whether the link was still valid is nobody's business but the mailbox's.",
+                "tags": [
+                    "Coverage"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/TokenIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
         "/api/system/summary": {
             "get": {
                 "operationId": "core_api_system_summary",
@@ -2295,7 +2482,8 @@
                                     "enum": [
                                         "bike",
                                         "ebike",
-                                        "fast_ebike"
+                                        "fast_ebike",
+                                        "hike"
                                     ],
                                     "type": "string"
                                 },
@@ -2613,15 +2801,28 @@
                         "title": "Ride Score"
                     },
                     "ride_label": {
-                        "title": "Ride Label",
-                        "type": "string"
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Label"
                     }
                 },
                 "required": [
                     "departure_time",
                     "arrival_time",
-                    "available",
-                    "ride_label"
+                    "available"
                 ],
                 "title": "DepartureCandidate",
                 "type": "object"
@@ -2659,6 +2860,16 @@
                         "title": "Recommended Time"
                     },
                     "explanation": {
+                        "enum": [
+                            "insufficient_data",
+                            "best_in_window",
+                            "requested_equivalent",
+                            "requested_best",
+                            "less_rain",
+                            "less_wind",
+                            "milder",
+                            "less_frost"
+                        ],
                         "title": "Explanation",
                         "type": "string"
                     }
@@ -2978,10 +3189,6 @@
                         ],
                         "title": "Weather Code"
                     },
-                    "weather_desc": {
-                        "title": "Weather Desc",
-                        "type": "string"
-                    },
                     "station_count": {
                         "anyOf": [
                             {
@@ -3022,6 +3229,13 @@
                     "ride_label": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3030,9 +3244,34 @@
                         ],
                         "title": "Ride Label"
                     },
+                    "ride_cause": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "rain",
+                                    "wind",
+                                    "temp",
+                                    "frost"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Cause"
+                    },
                     "wind_effort_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "tailwind",
+                                    "none",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "very_high"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3044,6 +3283,11 @@
                     "frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3059,8 +3303,7 @@
                     "elapsed_s",
                     "eta",
                     "rain_mm",
-                    "temp",
-                    "weather_desc"
+                    "temp"
                 ],
                 "title": "ForecastSampleOut",
                 "type": "object"
@@ -3158,6 +3401,11 @@
                             }
                         ],
                         "title": "Route Id"
+                    },
+                    "profile": {
+                        "default": "bike",
+                        "title": "Profile",
+                        "type": "string"
                     },
                     "departure_time": {
                         "title": "Departure Time",
@@ -3304,6 +3552,11 @@
                     "frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3398,6 +3651,14 @@
                     "max_wind_effort_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "tailwind",
+                                    "none",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "very_high"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3409,6 +3670,11 @@
                     "max_frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3483,6 +3749,14 @@
                     "wind_effort_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "tailwind",
+                                    "none",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "very_high"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3618,7 +3892,7 @@
             "RoutePlanForecastIn": {
                 "properties": {
                     "name": {
-                        "default": "Meteolane",
+                        "default": "MeteoLane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"
@@ -3703,7 +3977,8 @@
                 "enum": [
                     "bike",
                     "ebike",
-                    "fast_ebike"
+                    "fast_ebike",
+                    "hike"
                 ],
                 "title": "RoutingProfile",
                 "type": "string"
@@ -4182,6 +4457,13 @@
                     "ride_label": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -4190,9 +4472,31 @@
                         ],
                         "title": "Ride Label"
                     },
+                    "ride_cause": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "rain",
+                                    "wind",
+                                    "temp",
+                                    "frost"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Cause"
+                    },
                     "rain_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -4204,6 +4508,11 @@
                     "frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -4668,7 +4977,7 @@
             "GpxExportIn": {
                 "properties": {
                     "name": {
-                        "default": "Meteolane",
+                        "default": "MeteoLane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"
@@ -4738,7 +5047,7 @@
             "RoutePlanIn": {
                 "properties": {
                     "name": {
-                        "default": "Meteolane",
+                        "default": "MeteoLane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"
@@ -5134,6 +5443,94 @@
                 "title": "JourneyOut",
                 "type": "object"
             },
+            "JourneyReasonOut": {
+                "description": "Why a variant ranks where it does, as data the SPA words (``journeys.rank_day``).\n\n``missing_stop``: no reachable stop for ``category``. ``gap``: ``minutes`` / ``km`` of a leg\nwithout ``category``. ``detour``: ``km`` off the line to ``name`` (or ``category``).\n``longer``: ``percent`` longer than the fastest variant. ``day_limit`` / ``leg_limit``\n(with ``leg``): ``minutes`` too long or ``km`` too far.",
+                "properties": {
+                    "kind": {
+                        "enum": [
+                            "missing_stop",
+                            "gap",
+                            "detour",
+                            "longer",
+                            "day_limit",
+                            "leg_limit"
+                        ],
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "category": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Category"
+                    },
+                    "name": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Name"
+                    },
+                    "leg": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Leg"
+                    },
+                    "minutes": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Minutes"
+                    },
+                    "km": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Km"
+                    },
+                    "percent": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Percent"
+                    }
+                },
+                "required": [
+                    "kind"
+                ],
+                "title": "JourneyReasonOut",
+                "type": "object"
+            },
             "JourneyStageOut": {
                 "properties": {
                     "id": {
@@ -5280,6 +5677,13 @@
                     "ride_label": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -5287,6 +5691,23 @@
                             }
                         ],
                         "title": "Ride Label"
+                    },
+                    "ride_cause": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "rain",
+                                    "wind",
+                                    "temp",
+                                    "frost"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Cause"
                     },
                     "recommended_departure": {
                         "anyOf": [
@@ -5306,7 +5727,7 @@
                     },
                     "reasons": {
                         "items": {
-                            "type": "string"
+                            "$ref": "#/components/schemas/JourneyReasonOut"
                         },
                         "title": "Reasons",
                         "type": "array"
@@ -6296,6 +6717,207 @@
                 "title": "CopyIn",
                 "type": "object"
             },
+            "CoverageAreaOut": {
+                "properties": {
+                    "code": {
+                        "title": "Code",
+                        "type": "string"
+                    },
+                    "name": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Name"
+                    },
+                    "name_en": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Name En"
+                    },
+                    "status": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "covered",
+                                    "planned",
+                                    "candidate"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Status"
+                    },
+                    "note": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Note"
+                    },
+                    "note_en": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Note En"
+                    },
+                    "covered_since": {
+                        "anyOf": [
+                            {
+                                "format": "date",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Covered Since"
+                    },
+                    "votes": {
+                        "default": 0,
+                        "title": "Votes",
+                        "type": "integer"
+                    },
+                    "voted": {
+                        "default": false,
+                        "title": "Voted",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "code"
+                ],
+                "title": "CoverageAreaOut",
+                "type": "object"
+            },
+            "CoverageOut": {
+                "properties": {
+                    "areas": {
+                        "items": {
+                            "$ref": "#/components/schemas/CoverageAreaOut"
+                        },
+                        "title": "Areas",
+                        "type": "array"
+                    },
+                    "countries": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Countries",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "areas",
+                    "countries"
+                ],
+                "title": "CoverageOut",
+                "type": "object"
+            },
+            "VoteOut": {
+                "properties": {
+                    "code": {
+                        "title": "Code",
+                        "type": "string"
+                    },
+                    "votes": {
+                        "title": "Votes",
+                        "type": "integer"
+                    },
+                    "voted": {
+                        "title": "Voted",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "code",
+                    "votes",
+                    "voted"
+                ],
+                "title": "VoteOut",
+                "type": "object"
+            },
+            "SubscribeOut": {
+                "properties": {
+                    "status": {
+                        "enum": [
+                            "pending",
+                            "confirmed"
+                        ],
+                        "title": "Status",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "status"
+                ],
+                "title": "SubscribeOut",
+                "type": "object"
+            },
+            "SubscribeIn": {
+                "properties": {
+                    "email": {
+                        "maxLength": 254,
+                        "title": "Email",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "email"
+                ],
+                "title": "SubscribeIn",
+                "type": "object"
+            },
+            "ConfirmOut": {
+                "properties": {
+                    "code": {
+                        "title": "Code",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "code"
+                ],
+                "title": "ConfirmOut",
+                "type": "object"
+            },
+            "TokenIn": {
+                "properties": {
+                    "token": {
+                        "maxLength": 64,
+                        "minLength": 20,
+                        "title": "Token",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "token"
+                ],
+                "title": "TokenIn",
+                "type": "object"
+            },
             "SystemCacheCount": {
                 "properties": {
                     "kind": {
@@ -6491,7 +7113,8 @@
                                 "enum": [
                                     "bike",
                                     "ebike",
-                                    "fast_ebike"
+                                    "fast_ebike",
+                                    "hike"
                                 ],
                                 "type": "string"
                             },

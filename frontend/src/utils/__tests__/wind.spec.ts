@@ -26,9 +26,9 @@ describe("wind presentation", () => {
         expect(groundWindText({ ...segment, windSpeed: null })).toContain("nicht verfügbar");
     });
     it("words and sizes the wind effort the server chose", () => {
-        expect(windPowerText("mittel")).toBe("Windaufwand mittel (geschätzt)");
-        expect(windPowerText("Wind hilft")).toBe("Wind hilft (geschätzt)");
-        expect(windPowerText("keiner")).toBe("Kein Windaufwand (geschätzt)");
+        expect(windPowerText("medium")).toBe("Windaufwand mittel (geschätzt)");
+        expect(windPowerText("tailwind")).toBe("Wind hilft (geschätzt)");
+        expect(windPowerText("none")).toBe("Kein Windaufwand (geschätzt)");
         expect(windPowerText(null)).toContain("nicht verfügbar");
         expect(windArrowSize(null)).toBe(20);
         expect(windArrowSize(0)).toBe(20);

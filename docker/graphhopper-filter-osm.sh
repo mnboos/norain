@@ -1,15 +1,16 @@
 #!/bin/bash
 #
-# Cut an OSM extract down to what the bike profiles use, so the graph builds faster and in
+# Cut an OSM extract down to what the routing profiles (bike and hike) use, so the graph builds faster and in
 # less memory. The entrypoint runs it before every build, and `just osm-filter-many-raw-pbf-into-one` runs it on
 # local files, so every graph is built from the same kind of data.
 #
 # osmium also keeps every node the kept ways use (with its tags, so barriers stay) and the
 # members of the kept relations.
-#   highways bikes might use: motorways are in import.osm.ignored_highways, the rest are not
+#   highways anyone may use:  motorways are in import.osm.ignored_highways, the rest are not
 #                             built yet or are gone
-#   ferries and piers:        GraphHopper's bike access takes both
+#   ferries and piers:        GraphHopper's bike and foot access take both
 #   cycle-route relations:    bike.json's priority reads the bike network from them
+#   hiking-route relations:   hike.json's priority reads the foot network from them
 # Turn restrictions are left out: no profile in graphhopper-config.yaml uses turn_costs.
 set -euo pipefail
 
@@ -22,7 +23,7 @@ bike_filter() {
         'w/highway!=motorway,motorway_link,proposed,construction,abandoned,razed' \
         w/route=ferry \
         w/man_made=pier \
-        'r/route=bicycle,mtb' \
+        'r/route=bicycle,mtb,hiking,foot' \
         --overwrite --output-format pbf -o "$2"
 }
 

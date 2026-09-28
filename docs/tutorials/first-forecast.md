@@ -1,6 +1,6 @@
 # Your first route forecast
 
-In this tutorial you will run Meteolane locally and save a weekday bike ride from
+In this tutorial you will run MeteoLane locally and save a weekday bike ride from
 Zihlschlacht to Frauenfeld. At the end, you will have a route with a scheduled
 forecast, a map, and weather charts.
 
@@ -116,7 +116,7 @@ Open <http://127.0.0.1:3000>.
 6. Choose **Speichern** and open the saved route.
 
 While the worker fetches routing data, the page shows **Route wird berechnet…**.
-Once geometry is ready, Meteolane requests weather for the next departure. A successful
+Once geometry is ready, MeteoLane requests weather for the next departure. A successful
 forecast displays a route map, weather summary, sections, and three charts.
 
 Check the departure time, temperature, precipitation, and wind. Positive headwind

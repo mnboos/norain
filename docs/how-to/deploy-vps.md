@@ -1,4 +1,4 @@
-# Deploy Meteolane to a Docker VPS
+# Deploy MeteoLane to a Docker VPS
 
 This deployment uses Caddy for automatic HTTPS, PostgreSQL/PostGIS for application data,
 Docker Compose for the application processes, GitHub Container Registry (GHCR)
@@ -6,22 +6,30 @@ for immutable images, and Restic for encrypted database backups.
 
 ## Requirements
 
-Use a domain whose A/AAAA records point to the VPS, and the same for its `www.` name:
-Caddy redirects `www.` to `DOMAIN` permanently (so `DJANGO_ALLOWED_HOSTS` and the other
-origin settings name `DOMAIN` only), and it needs the record to get that name's
-certificate. Open only SSH, HTTP (80), and
+The site sits behind Cloudflare. Point the domain's A/AAAA records and its `www.` name at
+the VPS, both **proxied**, with SSL/TLS mode **Full (strict)**. Caddy redirects `www.` to
+`DOMAIN` permanently (so `DJANGO_ALLOWED_HOSTS` and the other origin settings name `DOMAIN`
+only). It serves a Cloudflare Origin CA certificate for both names instead of getting its own:
+create one under SSL/TLS → Origin Server for `DOMAIN` and `*.DOMAIN`, and save it as
+`$APP_STORAGE_PATH/caddy/certs/origin.pem` and `origin.key` (mode 600). This stack's Caddy
+owns ports 80/443: no other proxy may run on the VPS. Caddy takes the
+rider's IP from `CF-Connecting-IP`, trusting only Cloudflare's published ranges, which are
+listed in `deploy/Caddyfile`: update them there when https://www.cloudflare.com/ips/ changes.
+Open only SSH, HTTP (80), and
 HTTPS (443) in the VPS firewall. Install Docker Engine, the Docker Compose plugin,
 Git, and Restic. Create a non-root `norain` deployment user in the `docker` group,
 then clone this repository at `/srv/norain`.
 
 GraphHopper never builds its routing graph by itself: before the first start, build it with
-`just build-graphhopper-graph-from FILE` ([path C: build on the VPS](build-routing-graph.md#4-import-without-interrupting-routing)), or
+`just build-graphhopper-graph-from FILE`
+([path C: build on the VPS](build-routing-graph.md#4-import-without-interrupting-routing)), or
 copy one in. Until then the container stops with an error. Building needs more memory than serving:
 Switzerland needs a build heap (`GRAPHHOPPER_BUILD_HEAP`) of about 6 GB, DACH 16–24 GB.
-Serving uses `GRAPHHOPPER_DATAACCESS=MMAP`, so a 3 GB serving heap is enough for either
-(with `RAM_STORE`, DACH would need 10–14 GB). `GRAPHHOPPER_MEM_LIMIT` must fit the build heap.
+Serving uses `GRAPHHOPPER_DATAACCESS=MMAP`, so a 3 GB serving heap is enough for either (with `RAM_STORE`, DACH would
+need 10–14 GB). `GRAPHHOPPER_MEM_LIMIT` must fit the build heap.
 If the VPS cannot hold the build, [build the graph on another
-machine](build-routing-graph.md#4-import-without-interrupting-routing) and copy it in. Prepare Photon with a manual import before first startup (see below), using
+machine](build-routing-graph.md#4-import-without-interrupting-routing) and copy it in. Prepare Photon with a manual
+import before first startup (see below), using
 `PHOTON_IMPORT_HEAP` (4 GB by default). The published images are built for
 both amd64 and arm64, so ARM hosts such as Oracle's Ampere A1 work. Do not expose
 GraphHopper, Photon, PostgreSQL, or Django directly.
@@ -30,8 +38,8 @@ GraphHopper, Photon, PostgreSQL, or Django directly.
 
 The application images support arm64, but
 [`postgis/postgis:18-3.6`](https://github.com/postgis/docker-postgis) is amd64-only.
-Production therefore sets `platform: linux/amd64` for `db`. On an ARM VPS
-(`uname -m` prints `aarch64`), register amd64 emulation before starting the database:
+Production therefore sets `platform: linux/amd64` for `db`. On an ARM VPS (`uname -m` prints `aarch64`), register amd64
+emulation before starting the database:
 
 ```bash
 docker run --privileged --rm tonistiigi/binfmt --install amd64
@@ -40,7 +48,8 @@ docker compose -f docker-compose.prod.yml up -d db
 ```
 
 The first command registers QEMU with the host kernel and needs privileged access,
-as described in [Docker's emulation setup](https://docs.docker.com/build/building/multi-platform/#install-qemu-manually).
+as described
+in [Docker's emulation setup](https://docs.docker.com/build/building/multi-platform/#install-qemu-manually).
 If `exec /usr/local/bin/docker-entrypoint.sh: exec format error` returns after a
 host reboot, repeat registration and the version check. Selecting a platform alone
 does not install an emulator. Emulation adds database CPU overhead.
@@ -263,25 +272,6 @@ builds.
 To roll back a published-image deployment, run the release command with the prior known-good immutable SHA. The
 configured bind-mount directories persist PostgreSQL, Caddy certificates, and
 imported geographic data across releases.
-
-## Shared hostname reverse proxy
-
-On a server hosting several apps, run one independent Caddy stack that owns ports
-80/443 and TLS certificates. Each app's frontend joins the external `server-proxy`
-network under a unique alias; databases and backend services remain private.
-See [the proxy setup and hostname activation guide](../../deploy/proxy/README.md).
-
-After creating the shared network, set this in Meteolane's production `.env`:
-
-```dotenv
-COMPOSE_FILE=docker-compose.prod.yml:docker-compose.proxy.yml
-```
-
-Then `docker compose up -d`, `just deploy-local`, and `deploy/release.sh` use both
-files. Commands that explicitly supply `-f` must include both files too. The Meteolane
-frontend listens internally at `norain-web:80`, with no host ports, and preserves
-the central proxy's forwarded HTTPS headers. Keep the Meteolane hostname template
-inactive until you choose a domain and configure its DNS and application origins.
 
 ## Backups and recovery
 

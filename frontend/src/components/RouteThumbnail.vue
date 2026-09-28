@@ -7,12 +7,13 @@
  * The ramp's pale good end (`#ffeda0`) all but disappears at this size, so the line sits on
  * the same theme-flipping casing the map uses (`CASING_*`). The glyph has no legend and no
  * hover, so the colour is never the only channel: the caption beside it
- * (`RouteListPanel.qualityLabel`) and the `aria-label` here say the quality in words.
+ * (`RouteListItem.qualityLabel`) and the `aria-label` here say the quality in words.
  *
  * Neutral grey means no usable forecast - a fact about the data, not a reading of the
  * weather - and it is deliberately off the warm ramp.
  */
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
 import {
     CASING_DARK,
@@ -22,11 +23,13 @@ import {
     scoreColor,
 } from "@/utils/rideQuality";
 import { liveThumbnail, pointsAttr, projectPath } from "@/utils/routeThumbnail";
+import { rideLabelText } from "@/utils/levels";
 import type { ThumbnailRoute } from "@/utils/routeThumbnail";
 
 export type { ThumbnailRoute };
 
 const props = withDefaults(defineProps<{ route: ThumbnailRoute; size?: number }>(), { size: 40 });
+const { t } = useI18n();
 
 /** The thumbnail when it still describes the ride that is coming; see `liveThumbnail`. */
 const thumbnail = computed(() => liveThumbnail(props.route));
@@ -45,9 +48,11 @@ const line = computed(() => {
 const color = computed(() => scoreColor(thumbnail.value?.rideScore));
 
 const label = computed(() => {
-    if (!props.route.hasGeometry) return "Route wird noch berechnet";
-    if (!thumbnail.value) return "Fahrqualität: Noch keine Prognose";
-    return `Fahrqualität: ${thumbnail.value.rideLabel ?? "Nicht verfügbar"}`;
+    if (!props.route.hasGeometry) return t("thumbnail.computing");
+    const quality = thumbnail.value
+        ? rideLabelText(thumbnail.value.rideLabel, thumbnail.value.rideCause) || t("common.notAvailable")
+        : t("thumbnail.noForecast");
+    return t("thumbnail.quality", { quality });
 });
 
 defineExpose({ label });

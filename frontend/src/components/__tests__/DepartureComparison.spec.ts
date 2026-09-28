@@ -1,6 +1,10 @@
 import { mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DepartureComparison as Comparison } from "@norain/api/models";
+import {
+    DepartureCandidateRideLabelEnum as Band,
+    DepartureComparisonExplanationEnum as Explanation,
+    type DepartureComparison as Comparison,
+} from "@norain/api/models";
 import DepartureComparison from "../DepartureComparison.vue";
 
 function comparison(): Comparison {
@@ -9,13 +13,13 @@ function comparison(): Comparison {
         windowStart: "2030-06-01T07:45:00+02:00",
         windowEnd: "2030-06-01T08:15:00+02:00",
         recommendedTime: "2030-06-01T08:15:00+02:00",
-        explanation: "Weniger Regen während deiner Fahrt.",
+        explanation: Explanation.LessRain,
         candidates: ["07:45", "08:00", "08:15"].map((time, i) => ({
             departureTime: `2030-06-01T${time}:00+02:00`,
             arrivalTime: `2030-06-01T${i === 0 ? "08:45" : i === 1 ? "09:00" : "09:15"}:00+02:00`,
             available: i > 0,
             rideScore: i === 0 ? null : 0.3 - i * 0.1,
-            rideLabel: "gut",
+            rideLabel: Band.Good,
         })),
     };
 }
@@ -103,7 +107,7 @@ describe("DepartureComparison", () => {
             arrivalTime: `2030-10-27T02:45:00${offset}`,
             available: true,
             rideScore: 0,
-            rideLabel: "sehr gut",
+            rideLabel: Band.VeryGood,
         }));
         const wrapper = mount(DepartureComparison, { props: { comparison: data } });
         const labels = wrapper.findAll(".departure-option strong").map(b => b.text());

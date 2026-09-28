@@ -1,7 +1,13 @@
 import { mount } from "@vue/test-utils";
 import { ref } from "vue";
 import { describe, expect, it, vi } from "vitest";
-import type { JourneyOut, JourneyDayOut, JourneyStageOut } from "@norain/api/models";
+import {
+    JourneyReasonOutKindEnum as Kind,
+    type JourneyOut,
+    type JourneyDayOut,
+    type JourneyReasonOut,
+    type JourneyStageOut,
+} from "@norain/api/models";
 import JourneyDayPanel from "../journey/JourneyDayPanel.vue";
 
 vi.mock("quasar", async importOriginal => ({
@@ -25,12 +31,23 @@ vi.mock("@/components/WeatherChart.vue", () => ({ default: { template: "<div />"
 
 describe("journey warnings", () => {
     it("keeps warnings visible and details follow variant selection, resetting on a new day", async () => {
-        const reasons = [
+        // The server sends reasons as data; the panel words them.
+        const reasons: JourneyReasonOut[] = [
+            { kind: Kind.DayLimit, minutes: 5 },
+            { kind: Kind.DayLimit, km: 2 },
+            { kind: Kind.LegLimit, leg: 2, minutes: 3 },
+            { kind: Kind.MissingStop, category: "drinking_water" },
+        ];
+        const warningTexts = [
             "Tageslimit: ~5 min zu lang",
-            "Tageslimit: ~2.0 km zu weit",
+            "Tageslimit: ~2 km zu weit",
             "Etappe 2: ~3 min zu lang",
             "Kein erreichbarer Stopp für Trinkwasser gefunden.",
         ];
+        const firstReason: JourneyReasonOut = { kind: Kind.Longer, percent: 12 };
+        const secondReason: JourneyReasonOut = { kind: Kind.Longer, percent: 34 };
+        const firstText = "12 % länger als die schnellste Variante";
+        const secondText = "34 % länger als die schnellste Variante";
         const journey: JourneyOut = {
             id: "j",
             name: "Test journey",
@@ -108,26 +125,26 @@ describe("journey warnings", () => {
             return button;
         };
         const warnings = wrapper.get('[data-testid="journey-limit-warnings"]');
-        for (const reason of reasons) expect(warnings.text()).toContain(reason);
+        for (const text of warningTexts) expect(warnings.text()).toContain(text);
         expect(wrapper.find(".variant-button").exists()).toBe(false);
         expect(wrapper.text()).not.toContain("Keine Pause nötig.");
-        const first = { ...stage, reasons: [...reasons, "Erste Route"], recommended: true };
-        const second = { ...first, id: "s2", recommended: false, reasons: ["Zweite Route"], forecastStatus: "failed" };
+        const first = { ...stage, reasons: [...reasons, firstReason], recommended: true };
+        const second = { ...first, id: "s2", recommended: false, reasons: [secondReason], forecastStatus: "failed" };
         await wrapper.setProps({ day: { ...day, stages: [first, second] } });
         expect(wrapper.get(".variant-button").attributes("aria-pressed")).toBe("true");
         expect(wrapper.text()).toContain("Wetter fehlgeschlagen");
         await wrapper.get('[data-testid="toggle-details"]').trigger("click");
-        expect(wrapper.text()).toContain("Erste Route");
+        expect(wrapper.text()).toContain(firstText);
         await variantButton(1).trigger("click");
-        expect(wrapper.text()).toContain("Zweite Route");
-        expect(wrapper.text()).not.toContain("Erste Route");
+        expect(wrapper.text()).toContain(secondText);
+        expect(wrapper.text()).not.toContain(firstText);
         expect(variantButton(1).attributes("aria-pressed")).toBe("true");
         await wrapper.setProps({ day: { ...day, id: "next-day", stages: [first, second] } });
-        expect(wrapper.text()).not.toContain("Erste Route");
+        expect(wrapper.text()).not.toContain(firstText);
         expect(wrapper.get(".variant-button").attributes("aria-pressed")).toBe("true");
         expect(wrapper.find('[data-testid="journey-charts"]').exists()).toBe(true);
-        for (const reason of reasons)
-            expect(wrapper.get('[data-testid="journey-limit-warnings"]').text()).toContain(reason);
+        for (const text of warningTexts)
+            expect(wrapper.get('[data-testid="journey-limit-warnings"]').text()).toContain(text);
         wrapper.unmount();
     });
 });

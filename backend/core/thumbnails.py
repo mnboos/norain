@@ -36,6 +36,8 @@ _SAMPLE_FIELDS = (
     "felt_temp",
     "headwind",
     "wind_power_w",
+    "wind_speed",
+    "wind_gust",
     "weather_code",
 )
 

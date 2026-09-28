@@ -1,6 +1,12 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 
+import {
+    RouteThumbnailRainLevelEnum as Rain,
+    RouteThumbnailRideCauseEnum as Cause,
+    RouteThumbnailRideLabelEnum as Band,
+} from "@norain/api/models";
+
 import RouteThumbnail, { type ThumbnailRoute } from "../RouteThumbnail.vue";
 import { NO_DATA_COLOR, scoreColor } from "@/utils/rideQuality";
 
@@ -19,13 +25,14 @@ const PATH = [
 function route(
     overrides: Partial<ThumbnailRoute> = {},
     rideScore: number | null = 0.1,
-    rideLabel: string | null = "sehr gut",
-    rainLevel: string | null = null,
+    rideLabel: Band | null = Band.VeryGood,
+    rainLevel: Rain | null = null,
+    rideCause: Cause | null = null,
 ): ThumbnailRoute {
     return {
         hasGeometry: true,
         nextDeparture: DEPARTURE,
-        thumbnail: { departure: DEPARTURE, path: PATH, rideScore, rideLabel, rainLevel },
+        thumbnail: { departure: DEPARTURE, path: PATH, rideScore, rideLabel, rideCause, rainLevel },
         ...overrides,
     };
 }
@@ -41,13 +48,13 @@ describe("RouteThumbnail", () => {
     });
 
     it("colours a dry ride, rather than greying it out as if there were no forecast", () => {
-        const wrapper = mount(RouteThumbnail, { props: { route: route({}, 0.1, "sehr gut", null) } });
+        const wrapper = mount(RouteThumbnail, { props: { route: route({}, 0.1, Band.VeryGood, null) } });
         expect(strokes(wrapper)).not.toEqual([NO_DATA_COLOR]);
     });
 
     it("distinguishes good from bad rides and keeps the overall quality label", () => {
-        const good = mount(RouteThumbnail, { props: { route: route({}, 0.1, "sehr gut") } });
-        const bad = mount(RouteThumbnail, { props: { route: route({}, 0.9, "sehr schlecht · v. a. Regen", "stark") } });
+        const good = mount(RouteThumbnail, { props: { route: route({}, 0.1, Band.VeryGood) } });
+        const bad = mount(RouteThumbnail, { props: { route: route({}, 0.9, Band.VeryPoor, Rain.Heavy, Cause.Rain) } });
         expect(strokes(bad)).not.toEqual(strokes(good));
         // The colour has no legend at this size, so the label must keep naming the quality.
         expect(bad.attributes("aria-label")).toBe("Fahrqualität: sehr schlecht · v. a. Regen");

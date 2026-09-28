@@ -37,6 +37,9 @@ several countries at once, or to build from files you already have, follow
 6. Search for a town within the new area and create a short route between covered
    locations. Confirm geometry is computed and a weather forecast loads.
 
+7. Mark the area covered on the [coverage page](coverage-page.md), which mails everyone
+   who asked to be told.
+
 Saved routes retain their old geometry. Re-enqueue geometry for routes you want to
 recompute using the [background-job guide](background-jobs.md); routes outside the
 new area may no longer be routable. Restart the backend and worker to clear their

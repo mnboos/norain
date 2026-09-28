@@ -100,7 +100,7 @@ describe("RandomVariantPicker", () => {
         expect(input?.scheduleCron).toBe("30 9 * * 6");
         expect(input?.scheduleDescription).toBe("Sa um 09:30");
         expect([input?.name(0), input?.name(1)]).toEqual(["Runde – Variante 1", "Runde – Variante 3"]);
-        expect(state.push).toHaveBeenCalledWith("/");
+        expect(state.push).toHaveBeenCalledWith("/routes");
     });
 
     it("says how much each variant climbs", () => {

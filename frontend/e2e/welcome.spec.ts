@@ -23,7 +23,7 @@ for (const width of [375, 1280]) {
                     const errors: string[] = [];
                     page.on("pageerror", error => errors.push(error.message));
                     await mockSession(page);
-                    await page.goto("/welcome");
+                    await page.goto("/");
                     const german = locale.startsWith("de");
                     await expect(page.locator("h1")).toHaveText(
                         german ? "Das Wetter entlang deiner Route." : "The weather along your route.",
@@ -100,14 +100,27 @@ for (const width of [375, 1280]) {
     }
 }
 
+test("legacy landing URL remains available", async ({ page }) => {
+    await mockSession(page);
+    await page.goto("/welcome");
+    await expect(page.locator(".welcome")).toBeVisible();
+    await expect(page.locator(".brand")).toHaveAttribute("href", "/");
+});
+
+test("route dashboard requires sign-in", async ({ page }) => {
+    await mockSession(page);
+    await page.goto("/routes");
+    await expect(page).toHaveURL(/\/account\?next=\/routes$/);
+});
+
 test("signed-in visitor can open the app", async ({ page }) => {
     await mockSession(page, true);
     await page.route("**/api/routes", route => route.fulfill({ json: [] }));
-    await page.goto("/welcome");
+    await page.goto("/");
     await page.getByRole("button", { name: "EN", exact: true }).click();
     const appLink = page.locator(".bar-right > a");
-    await expect(appLink).toHaveAttribute("href", "/");
+    await expect(appLink).toHaveAttribute("href", "/routes");
     await appLink.click();
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/routes$/);
     await expect(page.locator(".q-header")).toBeVisible();
 });

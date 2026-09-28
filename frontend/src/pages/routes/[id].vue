@@ -1,13 +1,14 @@
 <route lang="json5">
 {
     name: "route-detail",
-    meta: { title: "Route", requiresAuth: true },
+    meta: { titleKey: "pages.route", requiresAuth: true },
 }
 </route>
 
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useI18n } from "vue-i18n";
 import { symSharpArrowBack } from "@quasar/extras/material-symbols-sharp";
 import RouteDetailPanel from "@/components/RouteDetailPanel.vue";
 import { useSession } from "@/composables/useSession";
@@ -15,6 +16,7 @@ import { nextDepartureParts, useRecurringRoute } from "@/queries/recurringRoutes
 import { recordRouteOpened } from "@/utils/recentRoutes";
 import { nextRideId } from "@/utils/nextRide";
 
+const { t } = useI18n();
 const currentRoute = useRoute();
 const router = useRouter();
 const routeId = computed(() => String(currentRoute.params.id));
@@ -54,21 +56,21 @@ const departureTime = computed(() => departure.value.time);
 <template>
     <q-page class="q-pa-md column">
         <!-- Once the route is loaded, the back button moves into the panel's one-line header. -->
-        <q-btn v-if="!route" flat :icon="symSharpArrowBack" label="Zurück" to="/" class="self-start" />
+        <q-btn v-if="!route" flat :icon="symSharpArrowBack" :label="t('common.back')" to="/routes" class="self-start" />
 
         <div v-if="isLoading" class="text-center q-mt-xl">
             <q-spinner-dots size="3rem" />
         </div>
 
-        <q-banner v-else-if="error || !route" class="bg-tint-error q-mt-md" rounded>Route nicht gefunden.</q-banner>
+        <q-banner v-else-if="error || !route" class="bg-tint-error q-mt-md" rounded>{{ t("routes.notFound") }}</q-banner>
 
         <q-tabs v-if="route?.returnRouteId || route?.parentRouteId" dense align="left" class="q-mb-md">
             <q-route-tab
                 :to="{ path: `/routes/${route.parentRouteId ?? route.id}`, query: { direction: 'outbound' } }"
-                label="Hinfahrt"
+                :label="t('routes.outbound')"
                 exact
             />
-            <q-route-tab :to="`/routes/${route.returnRouteId ?? route.id}`" label="Rückfahrt" exact />
+            <q-route-tab :to="`/routes/${route.returnRouteId ?? route.id}`" :label="t('routes.return')" exact />
         </q-tabs>
         <RouteDetailPanel
             v-if="route && nextDirectionId === routeId"
@@ -79,7 +81,7 @@ const departureTime = computed(() => departure.value.time);
             class="col"
         >
             <template #back>
-                <q-btn flat round dense :icon="symSharpArrowBack" to="/" aria-label="Zurück" />
+                <q-btn flat round dense :icon="symSharpArrowBack" to="/routes" :aria-label="t('common.back')" />
             </template>
         </RouteDetailPanel>
     </q-page>

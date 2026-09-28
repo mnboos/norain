@@ -8,6 +8,7 @@ import httpx
 from asgiref.sync import sync_to_async
 from async_lru import alru_cache
 from django.http import HttpRequest
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
@@ -90,12 +91,12 @@ async def reverse(request: HttpRequest, lat: float, lon: float):
     """The place at a point, for "current location": a name to show and save instead of coordinates."""
     features = await retrieve_reverse(lat=round(lat, 5), lon=round(lon, 5))
     if not features:
-        raise HttpError(404, "Kein Ort an dieser Stelle.")
+        raise HttpError(404, gettext("Kein Ort an dieser Stelle."))
     properties = features[0].get("properties", {})
     street = " ".join(p for p in (properties.get("street"), properties.get("housenumber")) if p)
     name = properties.get("name") or street or properties.get("city")
     if not name:
-        raise HttpError(404, "Kein Ort an dieser Stelle.")
+        raise HttpError(404, gettext("Kein Ort an dieser Stelle."))
     # The point the user stands on, not the address Photon snapped it to.
     return {
         "properties": {**properties, "name": name, "show_canton": False},

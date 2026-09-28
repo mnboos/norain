@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { QIcon, QTooltip } from "quasar";
+import { useI18n } from "vue-i18n";
 import { symSharpInfo } from "@quasar/extras/material-symbols-sharp";
 
 import { NO_DATA_COLOR, YLORRD_8 } from "@/utils/rideQuality";
@@ -10,27 +11,27 @@ defineProps<{
     showNoData?: boolean;
 }>();
 
+const { t } = useI18n();
 const barGradient = computed(() => `linear-gradient(to right, ${YLORRD_8.join(", ")})`);
 </script>
 
 <template>
     <div class="wx-legend bg-tint-neutral">
         <div class="wx-legend__head">
-            <span class="wx-legend__caption">Fahrqualität</span>
+            <span class="wx-legend__caption">{{ t("legend.rideQuality") }}</span>
             <QIcon :name="symSharpInfo" size="14px" class="wx-legend__info" />
             <QTooltip anchor="top middle" self="bottom middle" max-width="240px">
-                Aus Regen (55 %), Gegenwind (25 %) und Temperatur (20 %) berechnet. Ein Richtwert ohne Einheit - die
-                genauen Werte stehen in den Wetterpunkten auf der Karte.
+                {{ t("legend.explanation") }}
             </QTooltip>
         </div>
         <div class="wx-legend__bar" :style="{ background: barGradient }"></div>
         <div class="wx-legend__scale">
-            <span>gut</span>
-            <span>schlecht</span>
+            <span>{{ t("legend.good") }}</span>
+            <span>{{ t("legend.poor") }}</span>
         </div>
         <div v-if="showNoData" class="wx-legend__nodata">
             <span class="wx-legend__swatch" :style="{ background: NO_DATA_COLOR }"></span>
-            <span>Keine Daten</span>
+            <span>{{ t("legend.noData") }}</span>
         </div>
     </div>
 </template>

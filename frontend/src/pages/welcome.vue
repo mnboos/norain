@@ -1,14 +1,17 @@
 <route lang="json5">
 {
     name: "welcome",
-    meta: { title: "Meteolane – Wetter entlang deiner Route", bare: true },
+    path: "/",
+    alias: "/welcome",
+    meta: { bare: true },
 }
 </route>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { symSharpAdd, symSharpRemove } from "@quasar/extras/material-symbols-sharp";
 import { useSession } from "@/composables/useSession";
+import { useLocale } from "@/composables/useLocale";
 
 type Lang = "de" | "en";
 
@@ -16,12 +19,14 @@ const copy = {
     de: {
         navFeatures: "Funktionen",
         navPricing: "Preise",
+        navCoverage: "Abdeckung",
         signIn: "Anmelden",
         toApp: "Route planen",
         cta: "Kostenlos starten",
         ctaNote: "Gratis für 2 Routen. Keine Kreditkarte.",
-        heroTitle: "Wetter entlang deiner Route.",
-        heroSub: "Regen, Temperatur und Wind für jeden Abschnitt deiner Strecke.",
+        heroTitle: "Das Wetter entlang deiner Route.",
+        heroSub:
+            "Regen, Temperatur und Wind für jeden Abschnitt deiner Strecke – genau dann, wenn du dort unterwegs bist. Inklusive Gegen- und Seitenwind.",
         howTitle: "So funktioniert’s",
         stepWord: "Schritt",
         steps: [
@@ -43,7 +48,7 @@ const copy = {
         ],
         windTitle: "Wind, gemessen an deiner Fahrtrichtung.",
         windBody:
-            "Eine Windangabe für den Ort sagt wenig. Meteolane rechnet Gegen- und Seitenwind entlang jeder Kurve deiner Route und zeigt den Windaufwand als Stufe – von niedrig bis sehr hoch.",
+            "Eine Windangabe für den Ort sagt wenig. MeteoLane rechnet Gegen- und Seitenwind entlang jeder Kurve deiner Route und zeigt den Windaufwand als Stufe – von niedrig bis sehr hoch.",
         pricingTitle: "Preise",
         perYear: "/ Jahr",
         orMonthly: "oder 3,90 € pro Monat",
@@ -57,8 +62,8 @@ const copy = {
         ],
         faq: [
             {
-                q: "Wo funktioniert Meteolane?",
-                a: "Routenplanung und Ortssuche decken derzeit die Schweiz ab, die Ortssuche zusätzlich Liechtenstein.",
+                q: "Wo funktioniert MeteoLane?",
+                a: "Routenplanung und Ortssuche decken derzeit die Schweiz ab, die Ortssuche zusätzlich Liechtenstein. Unter „Abdeckung“ kannst du für dein Land stimmen.",
             },
             {
                 q: "Was ist ein Briefing?",
@@ -82,11 +87,12 @@ const copy = {
     en: {
         navFeatures: "Features",
         navPricing: "Pricing",
+        navCoverage: "Coverage",
         signIn: "Sign in",
         toApp: "Start planning",
         cta: "Sign up free",
         ctaNote: "Free for 2 routes. No credit card.",
-        heroTitle: "Weather along your ride.",
+        heroTitle: "The weather along your route.",
         heroSub:
             "Rain, temperature and wind for every section of your ride – right when you’ll be there. Headwind and crosswind included.",
         howTitle: "How it works",
@@ -110,7 +116,7 @@ const copy = {
         ],
         windTitle: "Wind, measured against your direction.",
         windBody:
-            "A wind reading for a town tells you little. Meteolane works out headwind and crosswind along every bend of your route and shows the wind effort as a level – from low to very high.",
+            "A wind reading for a town tells you little. MeteoLane works out headwind and crosswind along every bend of your route and shows the wind effort as a level – from low to very high.",
         pricingTitle: "Pricing",
         perYear: "/ year",
         orMonthly: "or €3.90 per month",
@@ -124,8 +130,8 @@ const copy = {
         ],
         faq: [
             {
-                q: "Where does Meteolane work?",
-                a: "Routing and place search currently cover Switzerland; place search also includes Liechtenstein.",
+                q: "Where does MeteoLane work?",
+                a: "Routing and place search currently cover Switzerland; place search also includes Liechtenstein. Vote for your country under “Coverage”.",
             },
             {
                 q: "What is a briefing?",
@@ -148,8 +154,13 @@ const copy = {
     },
 } as const;
 
-const initialLang: Lang = navigator.language.toLowerCase().startsWith("de") ? "de" : "en";
-const lang = ref<Lang>(initialLang);
+// The page's own copy follows the app's language, and its switch is the app's switch: a
+// visitor who picks English here gets the English app after signing up.
+const { locale, setLocale } = useLocale();
+const lang = computed<Lang>({
+    get: () => locale.value,
+    set: value => void setLocale(value),
+});
 const t = computed(() => copy[lang.value]);
 
 const { isAuthenticated } = useSession();
@@ -159,14 +170,15 @@ const { isAuthenticated } = useSession();
     <q-page class="welcome bg-brand-page text-brand-ink" :lang="lang">
         <q-card tag="header" flat square :dark="false" class="hero bg-brand-gradient text-white">
             <q-toolbar class="landing-wrap row items-center justify-between q-py-xs">
-                <router-link to="/welcome" class="brand row items-center no-wrap text-white text-weight-bold q-pa-none">
-                    Meteolane
+                <router-link to="/" class="brand row items-center no-wrap text-white q-pa-none">
+                    <span class="text-weight-bold">MeteoLane</span>
                 </router-link>
                 <div class="bar-right row items-center justify-between q-gutter-x-md">
                     <nav class="links gt-sm row q-gutter-x-md">
                         <a class="text-brand-mist" href="#features">{{ t.navFeatures }}</a>
                         <a class="text-brand-mist" href="#pricing">{{ t.navPricing }}</a>
                         <a class="text-brand-mist" href="#faq">FAQ</a>
+                        <router-link class="text-brand-mist" to="/coverage">{{ t.navCoverage }}</router-link>
                     </nav>
                     <q-btn-group
                         flat
@@ -190,7 +202,7 @@ const { isAuthenticated } = useSession();
                     <q-btn
                         unelevated
                         no-caps
-                        :to="isAuthenticated ? '/' : '/account'"
+                        :to="isAuthenticated ? '/routes' : '/account'"
                         color="brand-gold"
                         text-color="brand-navy"
                         padding="9px 16px"
@@ -199,8 +211,8 @@ const { isAuthenticated } = useSession();
                 </div>
             </q-toolbar>
             <q-card-section class="landing-wrap hero-content">
-                <div class="row items-center q-col-gutter-xl">
-                    <div class="col-12 col-md-6">
+                <div class="hero-grid">
+                    <div>
                         <q-card flat :dark="false" class="bg-transparent text-white hero-copy">
                             <h1 class="text-display q-ma-none q-mb-lg">{{ t.heroTitle }}</h1>
                             <p class="hero-description text-subheading text-weight-regular text-brand-mist q-mb-lg">
@@ -220,7 +232,7 @@ const { isAuthenticated } = useSession();
                                 <q-btn
                                     outline
                                     no-caps
-                                    to="/account"
+                                    to="/routes"
                                     color="white"
                                     size="16px"
                                     padding="13px 22px"
@@ -229,7 +241,6 @@ const { isAuthenticated } = useSession();
                             </q-card-actions>
                         </q-card>
                     </div>
-                    <!-- The mark sits on the bottom edge so its road runs out of the section. -->
                     <div class="col-12 col-md-6 self-end row justify-center hero-mark">
                         <img src="/brand/mark-master%20-%20Copy.png" alt="" />
                     </div>
@@ -302,7 +313,7 @@ const { isAuthenticated } = useSession();
                                 <div class="row items-baseline justify-between q-col-gutter-sm q-mb-md">
                                     <div class="col-12 col-sm-auto text-h6 text-weight-bold">
                                         <q-badge v-if="plus" rounded color="brand-gold" class="q-mr-sm" />
-                                        Meteolane {{ plus ? "Plus" : "Free" }}
+                                        MeteoLane {{ plus ? "Plus" : "Free" }}
                                     </div>
                                     <div class="col-12 col-sm-auto price text-weight-bold">
                                         {{ plus ? "29 €" : "0 €" }}
@@ -382,7 +393,8 @@ const { isAuthenticated } = useSession();
 
         <q-card tag="footer" flat square :dark="false" class="bg-brand-navy text-brand-mist">
             <q-card-section class="landing-wrap row items-center justify-between q-gutter-y-md q-py-lg">
-                <span class="footer-brand text-weight-bold text-white">Meteolane</span>
+                <span class="footer-brand text-weight-bold text-white">MeteoLane</span>
+                <router-link class="text-caption text-brand-mist" to="/coverage">{{ t.navCoverage }}</router-link>
                 <span class="text-caption">{{ t.footer }}</span>
             </q-card-section>
         </q-card>
@@ -411,8 +423,27 @@ const { isAuthenticated } = useSession();
     padding-top: 72px;
     padding-bottom: 0;
 }
+.hero-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+    gap: 56px;
+    align-items: center;
+}
 .hero-copy {
+    max-width: 560px;
     padding-bottom: 72px;
+}
+.hero-visual {
+    align-self: end;
+    display: flex;
+    justify-content: center;
+    margin-top: -24px;
+}
+.hero-mark {
+    display: block;
+    width: 100%;
+    max-width: 500px;
+    height: auto;
 }
 .main-content {
     padding-top: 80px;
@@ -433,6 +464,8 @@ const { isAuthenticated } = useSession();
         font-family: ui-monospace, monospace;
     }
 }
+.footer-brand {
+    font-size: 17px;
 .hero-mark {
     margin-top: -24px;
     img {
@@ -441,9 +474,6 @@ const { isAuthenticated } = useSession();
         max-width: 500px;
         height: auto;
     }
-}
-.footer-brand {
-    font-size: 17px;
 }
 @media (max-width: 599px) {
     .hero .q-toolbar {

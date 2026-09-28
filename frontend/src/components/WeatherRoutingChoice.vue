@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { symSharpLock } from "@quasar/extras/material-symbols-sharp";
+import { useI18n } from "vue-i18n";
 import { useEntitlements } from "@/composables/useEntitlements";
 
 /**
@@ -9,37 +10,40 @@ import { useEntitlements } from "@/composables/useEntitlements";
  */
 const avoidRain = defineModel<boolean>("avoidRain", { required: true });
 const avoidHeadwind = defineModel<boolean>("avoidHeadwind", { required: true });
+/** Off for hiking: a headwind barely slows a walker, so the server never routes around one. */
+const { headwind } = defineProps<{ headwind: boolean }>();
 
+const { t } = useI18n();
 const { weatherRouting } = useEntitlements();
 </script>
 
 <template>
     <div data-testid="weather-routing-choice">
         <div class="row items-center q-gutter-x-sm">
-            <span class="text-caption">Um schlechtes Wetter herum fahren</span>
+            <span class="text-caption">{{ t("weatherRouting.title") }}</span>
             <q-badge v-if="!weatherRouting" color="accent" label="Plus" />
         </div>
         <q-toggle
             :model-value="weatherRouting && avoidRain"
             :disable="!weatherRouting"
-            label="Regen ausweichen"
+            :label="t('weatherRouting.avoidRain')"
             @update:model-value="avoidRain = $event"
         />
         <q-toggle
+            v-if="headwind"
             :model-value="weatherRouting && avoidHeadwind"
             :disable="!weatherRouting"
-            label="Starken Gegenwind meiden"
+            :label="t('weatherRouting.avoidHeadwind')"
             @update:model-value="avoidHeadwind = $event"
         />
         <div v-if="weatherRouting" class="text-caption text-muted">
-            Für Fahrten in den nächsten drei Tagen legt Meteolane die Strecke dorthin, wo es trocken ist und der Wind
-            weniger bläst, zur Zeit, zu der du dort bist. Aus: die Strecke folgt nur deinen Wünschen an die Strasse.
+            {{ t("weatherRouting.explanation") }}
         </div>
         <div v-else class="row items-center no-wrap q-gutter-x-xs text-caption text-muted">
             <q-icon :name="symSharpLock" />
             <span>
-                Mit Plus kann Meteolane die Strecke um Regen und Gegenwind herum legen.
-                <router-link to="/account">Plus ansehen</router-link>
+                {{ t("weatherRouting.plusOnly") }}
+                <router-link to="/account">{{ t("weatherRouting.seePlus") }}</router-link>
             </span>
         </div>
     </div>

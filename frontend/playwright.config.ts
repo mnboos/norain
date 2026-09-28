@@ -42,6 +42,9 @@ export default defineConfig({
 
     /* Only on CI systems run the tests headless */
     headless: true,
+
+    /* The app picks its language from the browser: the specs look for the German labels. */
+    locale: 'de-CH',
   },
 
   /* Configure projects for major browsers */

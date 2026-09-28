@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { useRoute } from "vue-router";
 import { formatDistanceToNow } from "date-fns";
-import { de } from "date-fns/locale";
+import { dateFnsLocale } from "@/i18n";
 import { symSharpDelete, symSharpEdit } from "@quasar/extras/material-symbols-sharp";
 import type { CommentOut } from "@norain/api/models";
 import { useSession } from "@/composables/useSession";
@@ -15,6 +16,7 @@ const slug = computed(() => props.slug);
 const currentRoute = useRoute();
 const { isAuthenticated } = useSession();
 const $q = useQuasar();
+const { t } = useI18n();
 
 const { data: comments, isLoading } = useRouteComments(slug);
 const { add, edit, remove } = useCommentMutations(slug);
@@ -26,7 +28,7 @@ const editDraft = ref("");
 async function failed(error: unknown) {
     $q.notify({
         type: "negative",
-        message: await apiErrorMessage(error, "Das hat nicht geklappt. Bitte nochmal versuchen."),
+        message: await apiErrorMessage(error, t("comments.failed")),
     });
 }
 
@@ -56,19 +58,20 @@ async function saveEdit() {
     }
 }
 
-const when = (date: Date) => formatDistanceToNow(date, { addSuffix: true, locale: de });
+const when = (date: Date) =>
+    formatDistanceToNow(date, { addSuffix: true, locale: dateFnsLocale() });
 </script>
 
 <template>
     <section aria-labelledby="comments-heading">
         <h2 id="comments-heading" class="text-subtitle1 text-weight-bold q-my-sm">
-            Kommentare
+            {{ t("comments.title") }}
             <span v-if="comments?.length">({{ comments.length }})</span>
         </h2>
 
         <q-skeleton v-if="isLoading" type="text" />
         <div v-else-if="!comments?.length" class="text-caption text-muted q-mb-sm">
-            Noch keine Kommentare. Warst du schon auf dieser Strecke?
+            {{ t("comments.empty") }}
         </div>
 
         <q-list v-else separator>
@@ -77,7 +80,7 @@ const when = (date: Date) => formatDistanceToNow(date, { addSuffix: true, locale
                     <q-item-label caption>
                         <strong>{{ comment.author }}</strong>
                         · {{ when(comment.createdAt) }}
-                        <span v-if="comment.editedAt">· bearbeitet</span>
+                        <span v-if="comment.editedAt">· {{ t("comments.edited") }}</span>
                     </q-item-label>
                     <template v-if="editingId === comment.id">
                         <q-input
@@ -87,18 +90,18 @@ const when = (date: Date) => formatDistanceToNow(date, { addSuffix: true, locale
                             dense
                             outlined
                             maxlength="2000"
-                            aria-label="Kommentar bearbeiten"
+                            :aria-label="t('comments.edit')"
                         />
                         <div class="row q-gutter-sm q-mt-xs">
                             <q-btn
                                 dense
                                 no-caps
                                 color="primary"
-                                label="Speichern"
+                                :label="t('common.save')"
                                 :loading="edit.isPending.value"
                                 @click="saveEdit"
                             />
-                            <q-btn dense flat no-caps label="Abbrechen" @click="editingId = null" />
+                            <q-btn dense flat no-caps :label="t('common.cancel')" @click="editingId = null" />
                         </div>
                     </template>
                     <q-item-label v-else class="comment-body">{{ comment.body }}</q-item-label>
@@ -112,7 +115,7 @@ const when = (date: Date) => formatDistanceToNow(date, { addSuffix: true, locale
                             dense
                             size="sm"
                             :icon="symSharpEdit"
-                            aria-label="Kommentar bearbeiten"
+                            :aria-label="t('comments.edit')"
                             @click="startEdit(comment)"
                         />
                         <q-btn
@@ -122,7 +125,7 @@ const when = (date: Date) => formatDistanceToNow(date, { addSuffix: true, locale
                             dense
                             size="sm"
                             :icon="symSharpDelete"
-                            aria-label="Kommentar löschen"
+                            :aria-label="t('comments.delete')"
                             :loading="remove.isPending.value && remove.variables.value?.id === comment.id"
                             @click="remove.mutate(comment, { onError: failed })"
                         />
@@ -139,13 +142,13 @@ const when = (date: Date) => formatDistanceToNow(date, { addSuffix: true, locale
                 outlined
                 dense
                 maxlength="2000"
-                label="Kommentar schreiben"
+                :label="t('comments.write')"
             />
             <q-btn
                 type="submit"
                 color="primary"
                 no-caps
-                label="Senden"
+                :label="t('comments.send')"
                 class="q-mt-sm"
                 :disable="!draft.trim()"
                 :loading="add.isPending.value"
@@ -156,7 +159,7 @@ const when = (date: Date) => formatDistanceToNow(date, { addSuffix: true, locale
             outline
             no-caps
             class="q-mt-md"
-            label="Anmelden, um zu kommentieren"
+            :label="t('comments.signIn')"
             :to="{ path: '/account', query: { next: currentRoute.fullPath } }"
         />
     </section>

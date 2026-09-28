@@ -3,12 +3,15 @@ import { computed, onBeforeUnmount, onMounted, ref, toRaw, toRefs, useTemplateRe
 import Plotly from "./plotly";
 import type { Config, Data, Layout, PlotMouseEvent } from "plotly.js";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
+import { intlLocale } from "@/i18n";
 import { seriesPointAt } from "@/utils/forecastSelection";
 
 // Plotly draws SVG text from layout.font and ignores CSS; keep in sync with --app-font in base.css.
 const FONT_FAMILY = '"Lexend Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
 const $q = useQuasar();
+const { t } = useI18n();
 const tooltip = ref<{ time: string; label: string; value: string } | null>(null);
 const tooltipPosition = ref({ left: "12px", top: "12px" });
 function showPoint(event: PlotMouseEvent) {
@@ -19,16 +22,16 @@ function showPoint(event: PlotMouseEvent) {
         trace.meta && typeof trace.meta === "object" ? Reflect.get(trace.meta, "tooltipTemplate") : undefined;
     const template = typeof original === "string" ? original : "";
     const unit = /%\{y[^}]*\}\s*([^<]*)/.exec(template)?.[1]?.trim() ?? "";
-    const label = (/<extra>(.*?)<\/extra>/.exec(template)?.[1] ?? trace.name ?? "Wetter")
-        .replace(/:\s*(Median|Einzelprognose|Prognose)/g, "")
+    const label = (/<extra>(.*?)<\/extra>/.exec(template)?.[1] ?? trace.name ?? t("charts.weather"))
+        .replace(/:\s*(Median|Einzelprognose|Prognose|Single run|Forecast)/g, "")
         .replace(/<[^>]*>/g, "");
     const custom = point.customdata;
     tooltip.value = {
         time: Array.isArray(custom)
-            ? `${custom[1]} Uhr`
-            : `${Number(point.x).toLocaleString("de-CH", { maximumFractionDigits: 2 })} ${props.xUnit ?? "min"}`,
+            ? t("common.clock", { time: String(custom[1]) })
+            : `${Number(point.x).toLocaleString(intlLocale(), { maximumFractionDigits: 2 })} ${props.xUnit ?? "min"}`,
         label,
-        value: `${point.y.toLocaleString("de-CH", { maximumFractionDigits: unit === "%" ? 0 : 1 })} ${unit}`,
+        value: `${point.y.toLocaleString(intlLocale(), { maximumFractionDigits: unit === "%" ? 0 : 1 })} ${unit}`,
     };
 }
 function moveTooltip(event: PointerEvent) {
@@ -163,8 +166,8 @@ function temperatureBands(ink: string, dark: boolean): Pick<Layout, "shapes" | "
             opacity: 0.6,
         });
     };
-    band(COMFORT_BAND[0], COMFORT_BAND[1], dark ? "rgba(26, 158, 143, 0.14)" : "rgba(26, 158, 143, 0.09)", "angenehm");
-    band(-Infinity, FROST_LIMIT, dark ? "rgba(47, 127, 216, 0.16)" : "rgba(47, 127, 216, 0.08)", "Frost");
+    band(COMFORT_BAND[0], COMFORT_BAND[1], dark ? "rgba(26, 158, 143, 0.14)" : "rgba(26, 158, 143, 0.09)", t("charts.comfortable"));
+    band(-Infinity, FROST_LIMIT, dark ? "rgba(47, 127, 216, 0.16)" : "rgba(47, 127, 216, 0.08)", t("badges.frost"));
     return { shapes, annotations };
 }
 
@@ -213,8 +216,8 @@ function buildLayout(): Partial<Layout> {
             yanchor: "bottom",
             font: { ...incoming.legend?.font, family: FONT_FAMILY, color: ink, size: 10 },
         },
-        // A figure may turn the vertical gridlines off (the elevation profile does).
-        xaxis: { ...incoming.xaxis, ...axisTheme, showgrid: incoming.xaxis?.showgrid ?? true },
+        // Horizontal gridlines only: the x axis draws none.
+        xaxis: { ...incoming.xaxis, ...axisTheme, showgrid: false },
         yaxis: {
             ...incoming.yaxis,
             ...axisTheme,

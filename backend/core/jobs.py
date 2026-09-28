@@ -22,7 +22,18 @@ from .entitlements import entitlements_for, forecast_params_for
 from .geo import simplify_line
 from .grid import MAX_CELL_AGE
 from .models import ForecastJob
-from .ride_quality import score_sample, wind_effort, wind_effort_level, worst_frost_level
+from .ride_quality import (
+    HIKE_WIND_CURVE,
+    RIDE_QUALITY,
+    RideQualityConfig,
+    config_for,
+    gust_kmh,
+    score_sample,
+    uses_wind_effort,
+    wind_effort,
+    wind_effort_level,
+    worst_frost_level,
+)
 from .stations import api_key, ride_in_window
 from .system_events import notify_system
 from .uncertainty import METRICS
@@ -164,12 +175,14 @@ def wind_arrows_at_detail(result: dict, detail: str) -> list[dict]:
     wind effort needs timing and stays None without it -- the arrow is still drawn.
     """
     spacing = WIND_ARROW_SPACING[detail]
+    # A hike has no wind effort: its arrows carry no watts or level, and are sized by the wind.
+    effort = uses_wind_effort(config_for(result.get("profile")))
     arrows: list[dict] = []
     next_start = float("-inf")
     for segment in result.get("wind_segments") or []:
         if not _complete_ground_wind(segment) or segment.get("start_m", 0) < next_start:
             continue
-        power = segment.get("wind_power_w")
+        power = segment.get("wind_power_w") if effort else None
         arrows.append(
             {
                 "lat": round(segment["lat"], 5),
@@ -179,12 +192,21 @@ def wind_arrows_at_detail(result: dict, detail: str) -> list[dict]:
                 "wind_dir": round(segment["wind_dir"], 1),
                 "wind_power_w": round(power) if power is not None else None,
                 "wind_effort_level": wind_effort_level(power),
-                "wind_effort": round(wind_effort(power), 3),
+                "wind_effort": round(wind_effort(power) if effort else _gust_share(segment), 3),
             }
         )
         if spacing is not None:
             next_start = segment.get("start_m", 0) + spacing
     return arrows
+
+
+def _gust_share(segment: dict) -> float:
+    """0..1 of the hike wind curve's range for a wind segment, for sizing its arrow."""
+    gust = gust_kmh(segment)
+    if gust is None:
+        return 0.0
+    (calm, _), *_, (worst, _) = HIKE_WIND_CURVE
+    return min(1.0, max(0.0, (gust - calm) / (worst - calm)))
 
 
 def uncertainty_partial(samples: list[dict]) -> bool:
@@ -202,7 +224,9 @@ def uncertainty_partial(samples: list[dict]) -> bool:
     return False
 
 
-def sections_with_frost(sections: list[dict], samples: list[dict]) -> list[dict]:
+def sections_with_frost(
+    sections: list[dict], samples: list[dict], config: RideQualityConfig = RIDE_QUALITY
+) -> list[dict]:
     """The stored sections with each one's frost level scored from the samples it covers.
 
     Scored here rather than in ``compute_sections`` so a change to ``RIDE_QUALITY`` shows on
@@ -214,7 +238,7 @@ def sections_with_frost(sections: list[dict], samples: list[dict]) -> list[dict]
     for section in sections:
         start, end = section.get("start_index"), section.get("end_index")
         covered = samples[start : end + 1] if isinstance(start, int) and isinstance(end, int) else []
-        out.append({**section, "frost_level": worst_frost_level(covered)})
+        out.append({**section, "frost_level": worst_frost_level(covered, config)})
     return out
 
 
@@ -234,6 +258,7 @@ def forecast_view(job: ForecastJob, result: dict | None = None) -> dict:
     # "figures": results stored before the frontend drew the charts itself still carry them.
     dropped = ("elevation_geometry", "figures", "wind_segments", "entitlements", "departure_inputs")
     view = {key: value for key, value in result.items() if key not in dropped}
+    config = config_for(result.get("profile"))
     if result.get("departure_inputs"):
         view["departure_comparison"] = comparison_view(result["departure_inputs"])
     view["line"] = line_at_detail(result, "coarse")
@@ -243,7 +268,7 @@ def forecast_view(job: ForecastJob, result: dict | None = None) -> dict:
     # request rather than after every stored job has been rebuilt.
     view["samples"] = [
         {
-            **score_sample(sample),
+            **score_sample(sample, config),
             "uncertainty": (
                 {k: v for k, v in sample["uncertainty"].items() if k not in ("models", "requested_models")}
                 if sample.get("uncertainty")
@@ -255,13 +280,15 @@ def forecast_view(job: ForecastJob, result: dict | None = None) -> dict:
     if isinstance(result.get("summary"), dict):
         view["summary"] = {
             **result["summary"],
-            "max_wind_effort_level": wind_effort_level(result["summary"].get("max_wind_power_w")),
-            "max_frost_level": worst_frost_level(samples),
+            "max_wind_effort_level": (
+                wind_effort_level(result["summary"].get("max_wind_power_w")) if uses_wind_effort(config) else None
+            ),
+            "max_frost_level": worst_frost_level(samples, config),
         }
     if result.get("sections"):
         # Only when the stored result has them: this trims the payload, it never adds a key
         # the job did not carry.
-        view["sections"] = sections_with_frost(result["sections"], samples)
+        view["sections"] = sections_with_frost(result["sections"], samples, config)
     view["uncertainty_partial"] = uncertainty_partial(samples)
     view["job_id"] = str(job.id)
     # The compute time, so the charts re-key when a fresh result replaces a stale one.

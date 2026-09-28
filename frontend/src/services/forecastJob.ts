@@ -1,7 +1,9 @@
 import { ForecastJobOutFromJSON, type ForecastJobOut, type RouteForecastOut } from "@norain/api/models";
 import { useWebSocket } from "@vueuse/core";
 
+import { t } from "@/i18n";
 import { milestone } from "@/services/telemetry";
+import { jobErrorText } from "@/utils/serverErrors";
 
 import { useBackendHost } from "@/utils";
 
@@ -32,11 +34,7 @@ function isTerminal(job: ForecastJobOut): boolean {
 function settle(job: ForecastJobOut): RouteForecastOut {
     if (job.status === "failed" || !job.result) {
         // An empty error string means the backend gave no reason, same as a missing one.
-        const reason =
-            job.error !== undefined && job.error !== ""
-                ? job.error
-                : "Die Wettervorhersage konnte nicht berechnet werden.";
-        throw new ForecastJobError(reason);
+        throw new ForecastJobError(jobErrorText(job.error));
     }
     return job.result;
 }
@@ -183,7 +181,7 @@ async function pollUntilDone(
             signal,
         });
         if (!response.ok) {
-            throw new ForecastJobError("Die Wettervorhersage konnte nicht abgerufen werden.");
+            throw new ForecastJobError(t("errors.job.fetchFailed"));
         }
         const update = ForecastJobOutFromJSON(await response.json());
         reportProgress(update, onProgress);

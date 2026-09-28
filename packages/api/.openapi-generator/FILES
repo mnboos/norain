@@ -1,3 +1,4 @@
+apis/CoverageApi.ts
 apis/ElevationApi.ts
 apis/GPXApi.ts
 apis/JourneysApi.ts
@@ -12,7 +13,10 @@ index.ts
 models/BreakOut.ts
 models/CommentIn.ts
 models/CommentOut.ts
+models/ConfirmOut.ts
 models/CopyIn.ts
+models/CoverageAreaOut.ts
+models/CoverageOut.ts
 models/DepartureCandidate.ts
 models/DepartureComparison.ts
 models/ElevationIn.ts
@@ -33,6 +37,7 @@ models/GpxPathOut.ts
 models/JourneyDayOut.ts
 models/JourneyIn.ts
 models/JourneyOut.ts
+models/JourneyReasonOut.ts
 models/JourneyStageOut.ts
 models/LegOverrunOut.ts
 models/LikeOut.ts
@@ -63,6 +68,8 @@ models/RoutingProfile.ts
 models/SaveVariantIn.ts
 models/SharingIn.ts
 models/SharingOut.ts
+models/SubscribeIn.ts
+models/SubscribeOut.ts
 models/SystemCacheCount.ts
 models/SystemCoverage.ts
 models/SystemCoveragePoint.ts
@@ -72,6 +79,8 @@ models/SystemJobsPage.ts
 models/SystemMapFilter.ts
 models/SystemMapPage.ts
 models/SystemSummary.ts
+models/TokenIn.ts
+models/VoteOut.ts
 models/WeatherPrefsIn.ts
 models/WindArrow.ts
 models/WindDistribution.ts

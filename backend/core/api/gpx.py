@@ -5,6 +5,7 @@ from uuid import UUID
 from django.core.cache import cache
 from django.http import HttpResponse
 from django.utils.text import slugify
+from django.utils.translation import gettext
 from ninja import File, Router, UploadedFile
 from ninja.errors import HttpError
 from pydantic import Field
@@ -36,7 +37,7 @@ def limit_request(request, action, limit=30):
     key = f"gpx:{action}:{hashlib.sha256(identity.encode()).hexdigest()}:{int(time.time() // 60)}"
     cache.add(key, 0, 90)
     if cache.incr(key) > limit:
-        raise HttpError(429, "Zu viele Anfragen. Bitte kurz warten.")
+        raise HttpError(429, gettext("Zu viele Anfragen. Bitte kurz warten."))
 
 
 class GpxPathOut(CamelSchema):
@@ -50,7 +51,7 @@ class GpxPathOut(CamelSchema):
 async def import_gpx(request, file: File[UploadedFile]):
     limit_request(request, "import")
     if file.size > MAX_GPX_BYTES:
-        raise HttpError(413, "Die GPX-Datei darf höchstens 10 MiB gross sein.")
+        raise HttpError(413, gettext("Die GPX-Datei darf höchstens 10 MiB gross sein."))
     try:
         return parse_gpx(file.read(MAX_GPX_BYTES + 1))
     except ValueError as exc:
@@ -58,7 +59,7 @@ async def import_gpx(request, file: File[UploadedFile]):
 
 
 class GpxExportIn(CamelSchema):
-    name: str = Field(default="Meteolane", max_length=200)
+    name: str = Field(default="MeteoLane", max_length=200)
     coordinates: list[list[float]] = Field(min_length=2, max_length=100000)
 
 
@@ -84,7 +85,7 @@ async def export_saved_gpx(request, route_id: UUID):
     route = await _owned_route(request, route_id)
     points = route.imported_coordinates if route.geometry_source == "imported" else route.polyline_coordinates
     if not points:
-        raise HttpError(409, "Die Strecke wird noch berechnet.")
+        raise HttpError(409, gettext("Die Strecke wird noch berechnet."))
     return gpx_response(route.name, points)
 
 
@@ -97,8 +98,8 @@ async def export_job_gpx(request, job_id: UUID):
         else (job.geometry or {}).get("polyline")
     )
     if not points:
-        raise HttpError(409, "Die Strecke wird noch berechnet.")
-    return gpx_response(job.params.get("name", "Meteolane"), points)
+        raise HttpError(409, gettext("Die Strecke wird noch berechnet."))
+    return gpx_response(job.params.get("name", "MeteoLane"), points)
 
 
 class RoutePlanOut(CamelSchema):
@@ -118,7 +119,7 @@ async def preview_gpx(request, data: RoutePlanIn):
             else await build_geometry(data.profile, tuple(tuple(p[:2]) for p in data.coordinates))
         )
     except (ValueError, *ROUTING_ERRORS) as exc:
-        raise HttpError(422, "Für diese Punkte wurde keine Route gefunden.") from exc
+        raise HttpError(422, gettext("Für diese Punkte wurde keine Route gefunden.")) from exc
     return {
         "coordinates": data.coordinates
         if data.geometry_source == "imported"
@@ -145,7 +146,7 @@ async def forecast_route_plan(request, data: RoutePlanForecastIn):
     if (data.departure_flex_before_minutes or data.departure_flex_after_minutes) and not (
         await entitlements_for(user)
     ).departure_comparison:
-        raise HttpError(402, "Departure comparison requires Plus.")
+        raise HttpError(402, gettext("Der Abfahrtsvergleich braucht Plus."))
     params = data.model_dump(exclude={"departure_flex_before_minutes", "departure_flex_after_minutes"})
     params.update(
         flexibility_params(data.departure_time, data.departure_flex_before_minutes, data.departure_flex_after_minutes)
