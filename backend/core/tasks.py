@@ -1,4 +1,4 @@
-"""django-tasks task definitions for Meteolane.
+"""django-tasks task definitions for MeteoLane.
 
 Background tasks for route geometry computation and forecast grid pre-warming.
 """
@@ -400,11 +400,12 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
             "vertex_elevations": route.vertex_elevations,
             "total_seconds": route.total_seconds,
             "total_distance_m": route.total_distance_m,
+            "profile": route.profile,
         }
 
     if job.kind == ForecastJob.Kind.JOURNEY_STAGE:
         # Written whole by plan_journey, never without geometry: nothing to wait for.
-        stage = await JourneyStage.objects.filter(id=params["journey_stage_id"]).afirst()
+        stage = await JourneyStage.objects.select_related("day__journey").filter(id=params["journey_stage_id"]).afirst()
         if stage is None:
             raise ValueError(f"Journey stage {params['journey_stage_id']} no longer exists")
         return {
@@ -414,6 +415,7 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
             "vertex_elevations": stage.vertex_elevations,
             "total_seconds": stage.total_seconds,
             "total_distance_m": stage.total_distance_m,
+            "profile": stage.day.journey.profile,
         }
 
     if job.kind == ForecastJob.Kind.PUBLIC_ROUTE:
@@ -424,14 +426,19 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
         geometry = public_geometry(route) if route else None
         if geometry is None:
             raise ValueError(f"Public route {params['public_route_id']} is not public any more")
-        return geometry
+        return {**geometry, "profile": route.profile}
 
     if params.get("geometry_source") == "imported":
-        return exact_geometry(
-            params["coordinates"], params["duration_seconds"], params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S)
-        )
+        return {
+            **exact_geometry(
+                params["coordinates"],
+                params["duration_seconds"],
+                params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S),
+            ),
+            "profile": params.get("profile", "bike"),
+        }
 
-    return await build_geometry(
+    geometry = await build_geometry(
         params["profile"],
         routing_points(
             params["start_lat"],
@@ -442,6 +449,7 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
         ),
         params.get("interval_seconds", SAMPLE_INTERVAL_DEFAULT_S),
     )
+    return {**geometry, "profile": params["profile"]}
 
 
 @task(queue_name="forecasts")
@@ -689,6 +697,7 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
                 )
                 candidates.append(departures.compact_candidate(departure, candidate, len(geometry["sample_points"])))
             comparison = {
+                "profile": geometry.get("profile", "bike"),
                 "requested_time": departures.local_iso(departures.instant(params["departure_time"])),
                 "window_start": departures.local_iso(times[0]),
                 "window_end": departures.local_iso(times[-1]),
@@ -752,6 +761,9 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
             key: (job.geometry or {}).get(key) for key in ("vertex_times", "vertex_elevations")
         }
         payload["departure_time"] = params["departure_time"]
+        # Which ride-quality config scores this result on read (ride_quality.config_for). Jobs
+        # stored before it was recorded are all bike profiles, which is what a missing key means.
+        payload["profile"] = (job.geometry or {}).get("profile", "bike")
         payload["entitlements"] = computed["entitlements"]
         if computed.get("departure_inputs"):
             payload["departure_inputs"] = computed["departure_inputs"]
@@ -1127,8 +1139,17 @@ def _day_departure(journey: Journey, day: date) -> datetime:
     return datetime.combine(day, journey.earliest_start, tzinfo=LOCAL_TZ)
 
 
+def _weather_prefs(journey: Journey) -> dict:
+    """The journey's weather preferences as planning applies them. A headwind barely slows a
+    walker, so a hike never routes around one, whatever the stored switch says."""
+    prefs = dict(journey.weather_prefs or {})
+    if journey.profile == "hike":
+        prefs["avoid_headwind"] = False
+    return prefs
+
+
 def _wants_weather_routing(journey: Journey, limits, day: date) -> bool:
-    prefs = journey.weather_prefs or {}
+    prefs = _weather_prefs(journey)
     if not limits.weather_routing or not (prefs.get("avoid_rain", False) or prefs.get("avoid_headwind", False)):
         return False
     return 0 <= (day - local_today()).days < WEATHER_ROUTING_DAYS
@@ -1152,7 +1173,7 @@ async def _plan_journey_async(journey_id: str, revision: int) -> None:
     if not await _set_plan_status(journey_id, revision, Journey.PlanStatus.ROUTING):
         return
     limits = await entitlements_for(journey.owner)
-    road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs)) or None
+    road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs), journey.profile) or None
     if journey.kind == Journey.Kind.RANDOM:
         await _plan_random_ride(journey, limits, road_model)
         return
@@ -1351,7 +1372,7 @@ async def _plan_journey_routes_async(journey_id: str, revision: int) -> None:
     if journey is None or not journey.plan_state:
         return
     limits = await entitlements_for(journey.owner)
-    road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs)) or None
+    road_model = road_prefs_model(RoadPrefs.from_json(journey.road_prefs), journey.profile) or None
     days = journey.plan_state["days"]
 
     # Wait for the corridor cells, within bounds: a cell that never arrives only costs its
@@ -1404,7 +1425,7 @@ async def _weather_field(journey: Journey, day: dict, road_model: dict | None) -
 
     GraphHopper reads it at the time the rider reaches each road (``core.weather_routing``), so
     one request replaces the old rounds of "route, read the etas, route again"."""
-    prefs = journey.weather_prefs or {}
+    prefs = _weather_prefs(journey)
     geometry, cells, departure, day_key, forecast_days = await _day_corridor(journey, day, road_model)
     return await weather_field(
         cells,
@@ -1536,7 +1557,7 @@ async def _random_ride_weather(journey: Journey) -> tuple[dict | None, bool]:
                 str(journey.id), journey.plan_revision
             )
         return None, True
-    prefs = journey.weather_prefs or {}
+    prefs = _weather_prefs(journey)
     field = await weather_field(
         cells,
         departure,

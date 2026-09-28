@@ -1,0 +1,5 @@
+<strings>
+    <string id="AppName">MeteoLane</string>
+    <string id="ServerLabel">MeteoLane server URL</string>
+    <string id="TokenLabel">Watch access token</string>
+</strings>

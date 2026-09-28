@@ -1,14 +1,14 @@
 # Maintain the translations (German and English)
 
-Meteolane has two languages: **German** and **English**. German is the main language. Every
+MeteoLane has two languages: **German** and **English**. German is the main language. Every
 text is written in German first, and then translated to English.
 
 The texts live in **two places**:
 
-| Part | What it contains | Where the texts are |
-| --- | --- | --- |
-| **Frontend** (the Vue app) | Everything you see in the app: buttons, labels, messages, map and chart texts | `frontend/src/locales/de.json` (German) and `frontend/src/locales/en.json` (English) |
-| **Backend** (Django) | Error messages from the API, e-mails, ride briefings | German: directly in the Python code and the mail templates. English: `backend/core/locale/en/LC_MESSAGES/django.po` |
+| Part                       | What it contains                                                              | Where the texts are                                                                                                 |
+|----------------------------|-------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------|
+| **Frontend** (the Vue app) | Everything you see in the app: buttons, labels, messages, map and chart texts | `frontend/src/locales/de.json` (German) and `frontend/src/locales/en.json` (English)                                |
+| **Backend** (Django)       | Error messages from the API, e-mails, ride briefings                          | German: directly in the Python code and the mail templates. English: `backend/core/locale/en/LC_MESSAGES/django.po` |
 
 There is also a third kind of text: **codes**. The backend sometimes sends a short code
 instead of a sentence, for example `"heavy"` for heavy rain or `"no_route"` for a planning
@@ -30,8 +30,7 @@ back in the same language. E-mails and briefings use the language saved in the a
 
 ## Where does my new text go?
 
-- **You see it in the app, and the frontend builds it** → frontend
-  ([how](#frontend-add-or-change-a-text)).
+- **You see it in the app, and the frontend builds it** → frontend ([how](#frontend-add-or-change-a-text)).
 - **It is an error message from the API** → backend ([how](#backend-add-or-change-a-text)).
 - **It is in an e-mail, a briefing or a push message** → backend.
 - **The backend calculates it, and it is saved, or shared by several users, or the frontend
@@ -59,28 +58,28 @@ the backend must send a code, not a sentence.
    Look for an existing key first. For example, `common.cancel`, `common.save` and
    `common.close` already exist.
 2. Use the key in the code:
-   - In a `.vue` file:
+    - In a `.vue` file:
 
-     ```ts
-     const { t } = useI18n();
-     ```
+      ```ts
+      const { t } = useI18n();
+      ```
 
-     ```vue
-     {{ t("routes.notFound") }}
-     <q-btn :label="t('common.save')" />
-     ```
+      ```vue
+      {{ t("routes.notFound") }}
+      <q-btn :label="t('common.save')" />
+      ```
 
-   - In a `.ts` file: `import { t } from "@/i18n";` and call `t(...)` **inside a function**.
-     Do not call it at the top level of the file. A text made when the file loads stays in the
-     old language when the user switches.
+    - In a `.ts` file: `import { t } from "@/i18n";` and call `t(...)` **inside a function**.
+      Do not call it at the top level of the file. A text made when the file loads stays in the
+      old language when the user switches.
 3. Special cases:
-   - **A value inside the text:** `"Route „{name}“ löschen?"` → `t("…", { name: route.name })`.
-   - **One or many:** `"{n} Tag | {n} Tage"` → `t("journeys.days", count)`.
-   - **The characters `{ } @ $ |`** have a special meaning. To show one of them as normal
-     text, write it like this: `{'@'}`. Example: `"deine{'@'}adresse.ch"`.
-   - **No HTML** inside the texts.
-   - **Dates and numbers:** use `intlLocale()` and `dateFnsLocale()` from `@/i18n`. Never
-     write `"de-CH"` in the code.
+    - **A value inside the text:** `"Route „{name}“ löschen?"` → `t("…", { name: route.name })`.
+    - **One or many:** `"{n} Tag | {n} Tage"` → `t("journeys.days", count)`.
+    - **The characters `{ } @ $ |`** have a special meaning. To show one of them as normal
+      text, write it like this: `{'@'}`. Example: `"deine{'@'}adresse.ch"`.
+    - **No HTML** inside the texts.
+    - **Dates and numbers:** use `intlLocale()` and `dateFnsLocale()` from `@/i18n`. Never
+      write `"de-CH"` in the code.
 4. Check your work (in the `frontend` folder):
 
    ```sh
@@ -106,11 +105,11 @@ German part and an English part. Change both parts.
 The backend command that updates the English file needs a free tool called **GNU gettext**.
 You install it once per computer. (The app itself runs without it.)
 
-| System | Command |
-| --- | --- |
-| Windows | `winget install mlocati.GetText` |
-| Debian / Ubuntu | `sudo apt install gettext` |
-| macOS | `brew install gettext` |
+| System          | Command                          |
+|-----------------|----------------------------------|
+| Windows         | `winget install mlocati.GetText` |
+| Debian / Ubuntu | `sudo apt install gettext`       |
+| macOS           | `brew install gettext`           |
 
 **Windows:** after the install, **close the terminal and open a new one** (also restart your
 IDE or Claude Code session). The new terminal knows where gettext is; the old one does not.
@@ -140,11 +139,11 @@ If this prints a version number, you are ready.
    ```
 
    Rules:
-   - Always write the **German** text in the code.
-   - Use `%(name)s` for values. **Do not use f-strings** (`f"…{x}"`): they cannot be
-     translated.
-   - Write `gettext`, not `_`.
-   - For a list of texts at the top of a file, use `gettext_lazy` instead of `gettext`.
+    - Always write the **German** text in the code.
+    - Use `%(name)s` for values. **Do not use f-strings** (`f"…{x}"`): they cannot be
+      translated.
+    - Write `gettext`, not `_`.
+    - For a list of texts at the top of a file, use `gettext_lazy` instead of `gettext`.
 2. In an e-mail template (in `backend/core/templates/`):
 
    ```django
@@ -200,16 +199,16 @@ again.
 
 Some values come from the backend as short codes, and the frontend shows them as words:
 
-| What | Example codes | Frontend keys |
-| --- | --- | --- |
-| Ride quality | `very_good`, `poor` | `levels.band.*`, `levels.cause.*` |
-| Rain or frost level | `light`, `moderate`, `heavy` | `levels.impact.*` |
-| Wind effort | `tailwind`, `high` | `levels.windEffort.*` |
-| Weather type (WMO code) | `61`, `95` | `weather.wmo.*` |
-| Why a departure is recommended | `less_rain` | `departures.explanation.*` |
-| Why a journey variant ranks where it does | `day_limit`, `detour` | `journeys.reason.*` |
-| Why a forecast failed | `weather_failed` | `errors.job.*` |
-| Why a journey could not be planned | `no_route` | `errors.plan.*` |
+| What                                      | Example codes                | Frontend keys                     |
+|-------------------------------------------|------------------------------|-----------------------------------|
+| Ride quality                              | `very_good`, `poor`          | `levels.band.*`, `levels.cause.*` |
+| Rain or frost level                       | `light`, `moderate`, `heavy` | `levels.impact.*`                 |
+| Wind effort                               | `tailwind`, `high`           | `levels.windEffort.*`             |
+| Weather type (WMO code)                   | `61`, `95`                   | `weather.wmo.*`                   |
+| Why a departure is recommended            | `less_rain`                  | `departures.explanation.*`        |
+| Why a journey variant ranks where it does | `day_limit`, `detour`        | `journeys.reason.*`               |
+| Why a forecast failed                     | `weather_failed`             | `errors.job.*`                    |
+| Why a journey could not be planned        | `no_route`                   | `errors.plan.*`                   |
 
 To add a new code:
 

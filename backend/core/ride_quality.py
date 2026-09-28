@@ -31,6 +31,10 @@ RideBand = Literal["very_good", "good", "fair", "poor", "very_poor"]
 WindEffortLevel = Literal["tailwind", "none", "low", "medium", "high", "very_high"]
 ImpactLevel = Literal["light", "moderate", "heavy"]
 FACTORS: tuple[RideFactor, ...] = ("rain", "wind", "temp", "frost")
+# What the wind factor reads: "power" is the cyclist's wind effort (watts to hold the planned
+# speed, falling back to the headwind); "gust" is the wind itself, for a walker whom a headwind
+# barely slows but a gale on a ridge can throw off balance.
+WindSource = Literal["power", "gust"]
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,7 @@ class RideQualityConfig:
     )
     sensitivity: float = 1.0
     rain_risk_aversion: float = 2.0
+    wind_source: WindSource = "power"
 
 
 # The one place to tune it. The score drives the map line, the list glyph and the
@@ -78,6 +83,18 @@ WIND_POWER_CURVE = ((0, 0), (50, 0.3), (130, 0.65), (230, 1))
 # Ground-relative headwind in km/h: the fallback when the effort is unknown - jobs and
 # thumbnails from before the metric, or a route without timing.
 WIND_CURVE = ((0, 0), (10, 0.3), (20, 0.65), (30, 1))
+
+# Hiking: gusts in km/h (the mean wind x 1.5 where the gust is unknown). Direction does not
+# matter on foot; what does is exposure - 50 km/h is unpleasant on a ridge, 80 km/h dangerous.
+HIKE_WIND_CURVE = ((30, 0), (50, 0.35), (70, 0.75), (85, 1))
+GUST_FACTOR = 1.5
+
+# The hike profile's judgement: rain, temperature and frost as for the bike (ice on a trail is
+# as dangerous as on a road), the wind from gusts instead of effort.
+HIKE_RIDE_QUALITY = RideQualityConfig(
+    weights={"rain": 0.75, "wind": 0.3, "temp": 0.2, "frost": 0.8},
+    wind_source="gust",
+)
 
 # Comfortable riding band is 14-22 °C *felt* - the wind chill at riding speed (`felt_temp`),
 # not the thermometer; it gets worse in both directions.
@@ -151,6 +168,25 @@ class RideScore:
         if self.band == 0 or self.worst_share < MIN_WORST_SHARE:
             return None
         return self.worst
+
+
+def config_for(profile: str | None) -> RideQualityConfig:
+    """The ride-quality config of a routing profile; every bike profile shares ``RIDE_QUALITY``."""
+    return HIKE_RIDE_QUALITY if profile == "hike" else RIDE_QUALITY
+
+
+def uses_wind_effort(config: RideQualityConfig) -> bool:
+    """Whether the wind effort (watts, its level and the arrow size from it) means anything here."""
+    return config.wind_source == "power"
+
+
+def gust_kmh(sample) -> float | None:
+    """The sample's gust, or its mean wind scaled up when the gust is unknown."""
+    gust = _get(sample, "wind_gust")
+    if _finite(gust):
+        return gust
+    speed = _get(sample, "wind_speed")
+    return speed * GUST_FACTOR if _finite(speed) else None
 
 
 def _clamp01(x: float) -> float:
@@ -271,14 +307,20 @@ def ride_score(sample, config: RideQualityConfig = RIDE_QUALITY) -> RideScore | 
     rain = rain_impact(sample, config)
     if rain is None:
         return None
-    power = _get(sample, "wind_power_w")
-    headwind = _get(sample, "headwind")
-    if _finite(power):
-        wind = _clamp01(_piecewise(power, WIND_POWER_CURVE))
-    elif _finite(headwind):
-        wind = _clamp01(_piecewise(headwind, WIND_CURVE))
+    if config.wind_source == "gust":
+        # A sample stored without wind speed (an old thumbnail) scores without wind rather than
+        # not at all: for a walker the wind is the smallest factor.
+        gust = gust_kmh(sample)
+        wind = _clamp01(_piecewise(gust, HIKE_WIND_CURVE)) if gust is not None else 0.0
     else:
-        return None
+        power = _get(sample, "wind_power_w")
+        headwind = _get(sample, "headwind")
+        if _finite(power):
+            wind = _clamp01(_piecewise(power, WIND_POWER_CURVE))
+        elif _finite(headwind):
+            wind = _clamp01(_piecewise(headwind, WIND_CURVE))
+        else:
+            return None
     temp_value = _get(sample, "felt_temp")
     if not _finite(temp_value):
         temp_value = _get(sample, "temp")
@@ -383,6 +425,6 @@ def score_sample(sample: dict, config: RideQualityConfig = RIDE_QUALITY) -> dict
         "ride_score": round(rq.score, 4) if rq else None,
         "ride_label": rq.label if rq else None,
         "ride_cause": rq.cause if rq else None,
-        "wind_effort_level": wind_effort_level(sample.get("wind_power_w")),
+        "wind_effort_level": wind_effort_level(sample.get("wind_power_w")) if uses_wind_effort(config) else None,
         "frost_level": frost_level(sample, config),
     }

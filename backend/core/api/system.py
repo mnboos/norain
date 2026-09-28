@@ -96,7 +96,7 @@ class SystemMapFilter(CamelSchema):
     source: Literal["all", "open-meteo", "openweathermap"] = "all"
     day: date | None = None
     active: bool | None = None
-    profile: Literal["bike", "ebike", "fast_ebike"] | None = None
+    profile: Literal["bike", "ebike", "fast_ebike", "hike"] | None = None
     alternatives: bool = False
 
 

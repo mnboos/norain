@@ -21,7 +21,7 @@ import { usePlaceSearch } from "@/queries/places";
 import { placeLabel } from "@/utils/placeLabel";
 import { POI_CATEGORIES } from "@/utils/poiCategories";
 import { headingOptions, paceHint } from "@/utils/randomRides";
-import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
+import { BIKE_PROFILE_OPTIONS, followProfileDefaults, hasWindEffort } from "@/utils/bikeProfiles";
 
 const props = defineProps<{
     modelValue: boolean;
@@ -68,6 +68,7 @@ const departure = ref(soon());
 const length = ref<Length>("time");
 const hours = ref(2);
 const kilometres = ref(40);
+followProfileDefaults(profile, [[kilometres, 40]]);
 const heading = ref<number | null>(null);
 const poiCategories = ref<string[]>([]);
 const surface = ref(Surface.Any);
@@ -229,7 +230,7 @@ function onSave() {
         },
         weatherPrefs: {
             avoidRain: weatherMode.value && avoidRain.value,
-            avoidHeadwind: weatherMode.value && avoidHeadwind.value,
+            avoidHeadwind: weatherMode.value && avoidHeadwind.value && hasWindEffort(profile.value),
         },
     };
     emit("save", data);
@@ -440,6 +441,7 @@ function onClose() {
                         v-if="weatherMode"
                         v-model:avoid-rain="avoidRain"
                         v-model:avoid-headwind="avoidHeadwind"
+                        :headwind="hasWindEffort(profile)"
                         class="q-mt-sm"
                     />
                 </div>

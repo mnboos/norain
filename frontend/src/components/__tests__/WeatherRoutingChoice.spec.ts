@@ -13,9 +13,9 @@ function toggles(wrapper: ReturnType<typeof mountChoice>) {
     return wrapper.findAllComponents(QToggle);
 }
 
-function mountChoice(avoidRain: boolean, avoidHeadwind: boolean) {
+function mountChoice(avoidRain: boolean, avoidHeadwind: boolean, headwind = true) {
     return mount(WeatherRoutingChoice, {
-        props: { avoidRain, avoidHeadwind },
+        props: { avoidRain, avoidHeadwind, headwind },
         global: { plugins: [Quasar], stubs: { RouterLink: { template: "<a><slot /></a>" } } },
     });
 }
@@ -44,5 +44,12 @@ describe("WeatherRoutingChoice", () => {
         expect(toggles(wrapper).map(t => t.props("modelValue") === true)).toEqual([false, false]);
         expect(toggles(wrapper).every(t => t.props("disable"))).toBe(true);
         expect(wrapper.text()).toContain("Plus ansehen");
+    });
+
+    it("offers no headwind switch for a hike", () => {
+        plus.value = true;
+        const wrapper = mountChoice(true, false, false);
+        expect(toggles(wrapper)).toHaveLength(1);
+        expect(toggles(wrapper)[0]?.props("modelValue")).toBe(true);
     });
 });

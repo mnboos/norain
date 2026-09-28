@@ -1,7 +1,7 @@
 {
     "openapi": "3.1.0",
     "info": {
-        "title": "Meteolane API",
+        "title": "MeteoLane API",
         "version": "1.0.0",
         "description": ""
     },
@@ -2295,7 +2295,8 @@
                                     "enum": [
                                         "bike",
                                         "ebike",
-                                        "fast_ebike"
+                                        "fast_ebike",
+                                        "hike"
                                     ],
                                     "type": "string"
                                 },
@@ -3214,6 +3215,11 @@
                         ],
                         "title": "Route Id"
                     },
+                    "profile": {
+                        "default": "bike",
+                        "title": "Profile",
+                        "type": "string"
+                    },
                     "departure_time": {
                         "title": "Departure Time",
                         "type": "string"
@@ -3699,7 +3705,7 @@
             "RoutePlanForecastIn": {
                 "properties": {
                     "name": {
-                        "default": "Meteolane",
+                        "default": "MeteoLane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"
@@ -3784,7 +3790,8 @@
                 "enum": [
                     "bike",
                     "ebike",
-                    "fast_ebike"
+                    "fast_ebike",
+                    "hike"
                 ],
                 "title": "RoutingProfile",
                 "type": "string"
@@ -4783,7 +4790,7 @@
             "GpxExportIn": {
                 "properties": {
                     "name": {
-                        "default": "Meteolane",
+                        "default": "MeteoLane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"
@@ -4853,7 +4860,7 @@
             "RoutePlanIn": {
                 "properties": {
                     "name": {
-                        "default": "Meteolane",
+                        "default": "MeteoLane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"
@@ -6718,7 +6725,8 @@
                                 "enum": [
                                     "bike",
                                     "ebike",
-                                    "fast_ebike"
+                                    "fast_ebike",
+                                    "hike"
                                 ],
                                 "type": "string"
                             },

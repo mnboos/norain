@@ -328,7 +328,7 @@ class PublicRouteApiTests(TestCase):
         self.assertEqual(job.params["privacy_zone_m"], 500)
 
         geometry = async_to_sync(_job_geometry)(job)
-        self.assertEqual(geometry, public_geometry(self.route))
+        self.assertEqual(geometry, {**public_geometry(self.route), "profile": self.route.profile})
         self.assertEqual(geometry["sample_points"][0]["elapsed_s"], 0)
         for sample in geometry["sample_points"]:
             self.assertGreaterEqual(haversine_m(sample["lon"], sample["lat"], 9.0, 47.0), 500)

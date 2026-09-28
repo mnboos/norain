@@ -30,7 +30,7 @@ graphhopper:
 
   custom_models.directory: "/custom_models"
 
-  # Bike-only: these three names are the whole set the backend accepts (core.weather.ROUTING_PROFILES).
+  # These four names are the whole set the backend accepts (core.api.route_weather.ROUTING_PROFILES).
   # The ride speed of each profile is set in the `speed` block of its model files (see
   # /custom_models, docs/reference/configuration.md). bike.json and bike_elevation.json come
   # from the jar; bike_speed.json holds our tuning and must stay *last*, so its factor applies
@@ -49,6 +49,12 @@ graphhopper:
 
     - name: fast_ebike
       custom_model_files: [fast_ebike.json]
+
+    # Hiking: the jar's hike.json (paths up to sac_scale T5, hiking networks preferred, walking
+    # speeds from foot_average_speed and hike_rating) plus its slope rules. It has no LM and no CH:
+    # hikes are short, so flexible routing is fast enough, and landmarks would cost ~200 MB.
+    - name: hike
+      custom_model_files: [hike.json, foot_elevation.json]
 #
 #    - name: racingbike
 #      custom_model_files: [racingbike.json, bike_elevation.json]
@@ -98,6 +104,7 @@ graphhopper:
   # profile for which an LM profile exists. Important: This only will give correct routing results if the weights
   # calculated for the profile are equal or larger (for every edge) than those calculated for the profile that was used
   # for the preparation (`my_other_profile`)
+  # Not hike: see its profile above.
   profiles_lm:
       - profile: bike
       - profile: ebike
@@ -137,7 +144,12 @@ graphhopper:
     smoothness,
     track_type,
     urban_density,
-    orientation
+    orientation,
+    foot_access,
+    foot_priority,
+    foot_network,
+    foot_average_speed,
+    foot_road_access
   # urban_density ("avoid towns", core/road_prefs.py) and orientation (edge bearing both ways, for
   # headwind zones in core/weather_routing.py) are read only by journey request custom models.
 

@@ -82,14 +82,16 @@ for (const width of [1400, 768, 390]) {
             expect(
                 await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth),
             ).toBe(true);
-            await expect(page.getByText("Meteolane", { exact: true })).toBeVisible();
-            expect(await page.locator('.q-toolbar__title').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+            await expect(page.getByText("MeteoLane", { exact: true })).toBeVisible();
+            expect(await page.locator(".q-toolbar__title").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
             await expect(page.getByRole("tab", { name: "Karte", exact: true })).toBeVisible();
             await page.getByRole("button", { name: "Kennzahlen erklärt" }).click();
             await expect(page.getByRole("dialog")).toContainText("höchsten Wert an einem Streckenpunkt");
             await page.getByRole("button", { name: "Schliessen" }).click();
             await expect(page.getByRole("dialog")).not.toBeVisible();
-            await page.evaluate(() => { window.scrollTo(0, 0); });
+            await page.evaluate(() => {
+                window.scrollTo(0, 0);
+            });
             await page.screenshot({ path: info.outputPath("forecast.png"), fullPage: true });
             expect(errors).toEqual([]);
             // Map-link navigation is intentionally unavailable for now.

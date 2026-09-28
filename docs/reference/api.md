@@ -114,7 +114,7 @@ ask Photon for up to five city/locality features.
 | --- | --- | --- |
 | `start_lat`, `start_lon` | number | Required |
 | `dest_lat`, `dest_lon` | number | Required |
-| `profile` | string | Required; `bike`, `ebike` or `fast_ebike`, otherwise 422 |
+| `profile` | string | Required; `bike`, `ebike`, `fast_ebike` or `hike`, otherwise 422 |
 | `departure_time` | string | Required; local ISO datetime |
 | `interval_seconds` | integer | Optional, 300; effective minimum 60 |
 

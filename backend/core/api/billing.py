@@ -276,10 +276,10 @@ def _send_trial_ending_email(subscription: Subscription, obj: dict) -> None:
                 end_text = formats.date_format(
                     timezone.localtime(datetime.fromtimestamp(trial_end, tz=UTC)), "SHORT_DATE_FORMAT"
                 )
-            subject = gettext("Dein Meteolane Plus-Testzeitraum endet bald")
+            subject = gettext("Dein MeteoLane Plus-Testzeitraum endet bald")
             body = gettext(
                 "Hallo %(name)s,\n\n"
-                "Dein Testzeitraum für Meteolane Plus endet am %(date)s. "
+                "Dein Testzeitraum für MeteoLane Plus endet am %(date)s. "
                 "Bitte prüfe dein Abo oder verwalte es hier:\n\n"
                 "%(url)s\n"
             ) % {"name": user.username, "date": end_text, "url": f"{settings.FRONTEND_URL.rstrip('/')}/account"}

@@ -68,7 +68,7 @@ function channels(current: string) {
 
 <template>
     <section :aria-label="t('plan.label')">
-        <h2 class="text-h6">{{ isPro ? "Meteolane Plus" : "Meteolane Free" }}</h2>
+        <h2 class="text-h6">{{ isPro ? "MeteoLane Plus" : "MeteoLane Free" }}</h2>
         <p>{{ t("plan.pitch") }}</p>
         <q-banner v-if="error" role="alert" class="bg-tint-error q-mb-md">{{ error }}</q-banner>
         <q-banner v-if="message" role="status" class="q-mb-md">{{ message }}</q-banner>
@@ -113,7 +113,13 @@ function channels(current: string) {
                     :loading="busy"
                     @click="run(() => checkout('annual'))"
                 />
-                <q-btn outline no-caps :label="t('plan.monthly')" :loading="busy" @click="run(() => checkout('monthly'))" />
+                <q-btn
+                    outline
+                    no-caps
+                    :label="t('plan.monthly')"
+                    :loading="busy"
+                    @click="run(() => checkout('monthly'))"
+                />
             </template>
             <q-btn
                 v-if="entitlements?.paidSubscription || entitlements?.status === 'past_due'"
@@ -198,8 +204,7 @@ function channels(current: string) {
                 :options="channels(route.channel)"
                 :disable="busy || !route.active"
                 @update:model-value="
-                    (value: string) =>
-                        run(() => briefingsApi.update(route.id, value), t('plan.briefingSaved'))
+                    (value: string) => run(() => briefingsApi.update(route.id, value), t('plan.briefingSaved'))
                 "
             />
             <span v-if="!route.available || (route.channel && !route.briefingActive)" class="text-caption">

@@ -22,6 +22,8 @@ SAMPLE_FIELDS = (
     "felt_temp",
     "headwind",
     "wind_power_w",
+    "wind_speed",
+    "wind_gust",
     "weather_code",
     "wind_coverage",
 )
@@ -151,9 +153,11 @@ def comparison_view(stored: dict, now: datetime | None = None) -> dict:
     now = now or datetime.now(UTC)
     requested = instant(stored["requested_time"])
     candidates, factors = [], {}
+    # Recorded by assembly; comparisons stored before it are all bike profiles.
+    config = ride_quality.config_for(stored.get("profile"))
     for item in stored["candidates"]:
         samples = item.get("samples", [])
-        scores = [ride_quality.ride_score(s, ride_quality.RIDE_QUALITY) for s in samples]
+        scores = [ride_quality.ride_score(s, config) for s in samples]
         available = (
             item.get("complete", False)
             and instant(item["departure_time"]) >= now
@@ -163,8 +167,7 @@ def comparison_view(stored: dict, now: datetime | None = None) -> dict:
         score = aggregate([s.score for s in scores], samples) if available else None
         if available:
             factors[item["departure_time"]] = {
-                factor: aggregate([getattr(s, factor) for s in scores], samples)
-                * ride_quality.RIDE_QUALITY.weights.get(factor, 0)
+                factor: aggregate([getattr(s, factor) for s in scores], samples) * config.weights.get(factor, 0)
                 for factor in ride_quality.FACTORS
             }
         candidates.append(

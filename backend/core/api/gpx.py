@@ -59,7 +59,7 @@ async def import_gpx(request, file: File[UploadedFile]):
 
 
 class GpxExportIn(CamelSchema):
-    name: str = Field(default="Meteolane", max_length=200)
+    name: str = Field(default="MeteoLane", max_length=200)
     coordinates: list[list[float]] = Field(min_length=2, max_length=100000)
 
 
@@ -99,7 +99,7 @@ async def export_job_gpx(request, job_id: UUID):
     )
     if not points:
         raise HttpError(409, gettext("Die Strecke wird noch berechnet."))
-    return gpx_response(job.params.get("name", "Meteolane"), points)
+    return gpx_response(job.params.get("name", "MeteoLane"), points)
 
 
 class RoutePlanOut(CamelSchema):

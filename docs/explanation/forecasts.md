@@ -1,6 +1,6 @@
 # How to interpret route forecasts
 
-Meteolane estimates conditions along a timed route. Its summary, charts, and sections
+MeteoLane estimates conditions along a timed route. Its summary, charts, and sections
 answer related questions using different parts of the provider data. Understanding
 those differences helps explain apparently conflicting results.
 
@@ -20,7 +20,8 @@ can represent a different time from the requested arrival.
 
 Forecast requests are capped at 16 days. The scheduled-route availability indicator
 checks whether the departure date falls between today and today + 15 days; it does
-not verify each provider's returned coverage. Ensemble uncertainty declines timestamps outside its returned range; unavailable
+not verify each provider's returned coverage. Ensemble uncertainty declines timestamps outside its returned range;
+unavailable
 regional-model values are excluded rather than extrapolated.
 
 ## Probability and precipitation amount
@@ -82,11 +83,11 @@ variables do not trigger repeated refetches. Retrieval age is not the model-run 
 
 Sections group consecutive samples by deterministic precipitation:
 
-| Condition | Sample precipitation |
-| --- | --- |
-| `dry` | Below 0.1 mm |
-| `rain` | At least 0.1 mm and below 2.5 mm |
-| `heavy_rain` | At least 2.5 mm |
+| Condition    | Sample precipitation             |
+|--------------|----------------------------------|
+| `dry`        | Below 0.1 mm                     |
+| `rain`       | At least 0.1 mm and below 2.5 mm |
+| `heavy_rain` | At least 2.5 mm                  |
 
 A section can be dry while the probabilistic summary predicts rain, because the
 ensemble expresses uncertainty beyond one deterministic prediction.
@@ -100,7 +101,7 @@ gaps between samples, and a single-sample section has zero displayed length.
 ## Wind is relative to travel direction
 
 Wind direction describes where wind comes from. For travel bearing `b`, wind
-source direction `d`, and speed `v`, Meteolane calculates:
+source direction `d`, and speed `v`, MeteoLane calculates:
 
 ```text
 headwind  = v × cos(d − b)
@@ -113,11 +114,11 @@ sign. Wind speed and gusts are in km/h; OWM values are converted from m/s.
 
 ## Wind effort: the same wind costs more the faster you ride
 
-The map arrows show the real wind: where it blows, over ground. They do not show the felt
-(apparent) wind. At riding speed that is mostly your own airflow, so felt-wind arrows would
+The map arrows show the real wind: where it blows, over ground. They do not show the felt (apparent) wind. At riding
+speed that is mostly your own airflow, so felt-wind arrows would
 point at the rider almost everywhere.
 
-How hard a wind hits depends on the rider's speed, so Meteolane estimates the **wind effort**:
+How hard a wind hits depends on the rider's speed, so MeteoLane estimates the **wind effort**:
 the extra power needed to hold the routing profile's planned speed `v` against headwind `h`
 and crosswind `c`, compared with calm air:
 

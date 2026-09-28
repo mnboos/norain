@@ -1,6 +1,6 @@
-# Meteolane documentation
+# MeteoLane documentation
 
-Meteolane connects the time and location of a journey to weather forecasts. These
+MeteoLane connects the time and location of a journey to weather forecasts. These
 pages cover using the local application, operating its services, and contributing
 changes.
 

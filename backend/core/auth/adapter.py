@@ -1,4 +1,4 @@
-"""django-allauth adapters: Meteolane's rules on top of allauth's defaults."""
+"""django-allauth adapters: MeteoLane's rules on top of allauth's defaults."""
 
 import secrets
 from types import SimpleNamespace
@@ -39,8 +39,8 @@ class AccountAdapter(DefaultAccountAdapter):
 
     def send_mail(self, template_prefix: str, email: str, context: dict) -> None:
         # Without django.contrib.sites allauth names the site after the request host, which
-        # is the backend's; the mails should say Meteolane and point at the app.
-        site = SimpleNamespace(name="Meteolane", domain=urlparse(settings.FRONTEND_URL).netloc)
+        # is the backend's; the mails should say MeteoLane and point at the app.
+        site = SimpleNamespace(name="MeteoLane", domain=urlparse(settings.FRONTEND_URL).netloc)
         frontend_url = settings.FRONTEND_URL.rstrip("/")
         # In the recipient's language when the address has an account ("account exists" goes
         # to its owner, whoever asked); a new address gets the language of the request.
