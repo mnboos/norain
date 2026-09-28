@@ -1,0 +1,1015 @@
+{
+    "errors": {
+        "requestFailed": "The request failed.",
+        "unexpectedReply": "Unexpected reply from the server.",
+        "job": {
+            "fallback": "The weather forecast could not be calculated.",
+            "fetchFailed": "The weather forecast could not be fetched.",
+            "route_paused": "Your plan has paused this route.",
+            "stage_gone": "This stage no longer exists.",
+            "route_private": "This route is no longer public.",
+            "route_failed": "The route could not be calculated.",
+            "geometry_failed": "The route geometry could not be calculated.",
+            "no_weather_yet": "No weather data available yet.",
+            "weather_failed": "The weather data could not be calculated.",
+            "entitlements_changed": "Your plan changed. Please load the weather again.",
+            "assembly_failed": "The weather data could not be put together."
+        },
+        "plan": {
+            "fallback": "The journey could not be planned.",
+            "no_route": "No route was found for this journey.",
+            "planning_failed": "The journey could not be planned.",
+            "too_many_days": "Too many days: please choose longer daily stages.",
+            "day_limit_too_short": "The day limit allows no riding.",
+            "day_failed": "A daily stage could not be calculated.",
+            "ride_failed": "The ride could not be planned.",
+            "no_round_found": "No suitable loop was found from this start."
+        }
+    },
+    "levels": {
+        "band": {
+            "very_good": "very good",
+            "good": "good",
+            "fair": "fair",
+            "poor": "poor",
+            "very_poor": "very poor"
+        },
+        "cause": {
+            "rain": "rain",
+            "wind": "wind",
+            "temp": "temperature",
+            "frost": "frost"
+        },
+        "rideLabel": "{band} · mainly {cause}",
+        "impact": {
+            "light": "light",
+            "moderate": "moderate",
+            "heavy": "heavy"
+        },
+        "windEffort": {
+            "tailwind": "wind helps",
+            "none": "none",
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "very_high": "very high"
+        }
+    },
+    "weather": {
+        "wmo": {
+            "0": "Clear",
+            "1": "Mostly clear",
+            "2": "Partly cloudy",
+            "3": "Overcast",
+            "45": "Fog",
+            "48": "Rime fog",
+            "51": "Light drizzle",
+            "53": "Drizzle",
+            "55": "Heavy drizzle",
+            "56": "Freezing drizzle",
+            "57": "Heavy freezing drizzle",
+            "61": "Light rain",
+            "63": "Rain",
+            "65": "Heavy rain",
+            "66": "Freezing rain",
+            "67": "Heavy freezing rain",
+            "71": "Light snowfall",
+            "73": "Snowfall",
+            "75": "Heavy snowfall",
+            "77": "Snow grains",
+            "80": "Light rain showers",
+            "81": "Rain showers",
+            "82": "Violent rain showers",
+            "85": "Light snow showers",
+            "86": "Heavy snow showers",
+            "95": "Thunderstorm",
+            "96": "Thunderstorm with hail",
+            "99": "Severe thunderstorm with hail"
+        }
+    },
+    "forecast": {
+        "headline": {
+            "noData": "No weather data",
+            "rainExpected": "Rain expected",
+            "rainPossible": "Rain possible",
+            "rainPossibleFrom": "Rain possible from about {time}",
+            "dry": "Probably dry",
+            "dryLightIce": "Dry, slight risk of ice",
+            "dryIce": "Dry, but risk of ice",
+            "dryWind": {
+                "very_high": "Dry, very strong headwind",
+                "high": "Dry, strong headwind",
+                "medium": "Dry, some headwind",
+                "tailwind": "Dry with a tailwind"
+            }
+        },
+        "notAvailable": "Not available",
+        "metric": {
+            "precipitation": "Precipitation",
+            "temperature": "Temperature",
+            "windSpeed": "Wind",
+            "windGust": "Gusts",
+            "headwind": "Head-/tailwind",
+            "crosswind": "Crosswind"
+        },
+        "loading": "Loading weather data…"
+    },
+    "wind": {
+        "relative": {
+            "0": "from ahead",
+            "1": "from ahead right",
+            "2": "from the right",
+            "3": "from behind right",
+            "4": "from behind",
+            "5": "from behind left",
+            "6": "from the left",
+            "7": "from ahead left"
+        },
+        "compass": {
+            "0": "N",
+            "1": "NE",
+            "2": "E",
+            "3": "SE",
+            "4": "S",
+            "5": "SW",
+            "6": "W",
+            "7": "NW"
+        },
+        "notAvailable": "Wind not available",
+        "noDirection": "{speed} km/h, no direction",
+        "from": "{speed} km/h from {dir}",
+        "effort": {
+            "notAvailable": "Wind effort not available",
+            "tailwind": "Wind helps (estimated)",
+            "none": "No wind effort (estimated)",
+            "level": "Wind effort {level} (estimated)"
+        },
+        "distribution": {
+            "headwind": "Headwind",
+            "crosswind": "Crosswind",
+            "tailwind": "Tailwind",
+            "calm": "Calm",
+            "unknown": "Unknown"
+        }
+    },
+    "app": {
+        "logoAlt": "Meteolane logo",
+        "system": "System overview",
+        "account": "Account",
+        "lightTheme": "Light theme",
+        "darkTheme": "Dark theme",
+        "title": "{page} – Meteolane",
+        "defaultTitle": "Meteolane – Weather along your route"
+    },
+    "nav": {
+        "dashboard": "Dashboard",
+        "map": "Map",
+        "explore": "Explore"
+    },
+    "language": {
+        "label": "Language",
+        "saveFailed": "The language could not be saved to your account."
+    },
+    "pages": {
+        "about": "About",
+        "account": "Account",
+        "explore": "Explore",
+        "dashboard": "Dashboard",
+        "journeys": "Journeys",
+        "journey": "Journey",
+        "map": "Map",
+        "publicRoute": "Public route",
+        "randomRides": "Random rides",
+        "route": "Route",
+        "system": "System overview"
+    },
+    "account": {
+        "passwordMismatch": "The passwords do not match.",
+        "saveFailed": "The setting could not be saved.",
+        "signOutFailed": "Signing out failed.",
+        "signOut": "Sign out",
+        "signedIn": "Signed in",
+        "codeOnly": "You sign in with a code sent by email. You can set a password with “Forgot password?”.",
+        "defaultProfile": "Default bike type"
+    },
+    "routes": {
+        "empty": "Pick a route or create a new one to see the weather forecast.",
+        "createFailed": "The route could not be created.",
+        "delete": {
+            "title": "Delete route",
+            "message": "Do you really want to delete the route “{name}”?"
+        },
+        "notFound": "Route not found.",
+        "outbound": "Outbound",
+        "return": "Return"
+    },
+    "timing": {
+        "speed": "Ø speed",
+        "duration": "Riding time"
+    },
+    "random": {
+        "heading": {
+            "any": "Any",
+            "0": "North",
+            "45": "Northeast",
+            "90": "East",
+            "135": "Southeast",
+            "180": "South",
+            "225": "Southwest",
+            "270": "West",
+            "315": "Northwest"
+        },
+        "paceHint": "≈ {value} at about {speed} km/h",
+        "createFailed": "The ride could not be created.",
+        "delete": {
+            "title": "Delete ride",
+            "message": "Do you really want to delete the ride “{name}”?"
+        },
+        "loopFrom": "Loop from {start} · {length}",
+        "new": "New ride",
+        "empty": "No random ride yet.",
+        "emptyHint": "No idea where to go? Say whether you want to ride a loop or to a destination, and for how long or how far. Meteolane rolls the dice for a route and shows the weather on it."
+    },
+    "weatherRouting": {
+        "title": "Ride around bad weather",
+        "avoidRain": "Avoid rain",
+        "avoidHeadwind": "Avoid strong headwind",
+        "explanation": "For rides in the next three days, Meteolane routes you where it is dry and the wind blows less, at the time you are there. Off: the route follows only your road preferences.",
+        "plusOnly": "With Plus, Meteolane can route you around rain and headwind.",
+        "seePlus": "See Plus"
+    },
+    "windBar": {
+        "meanFelt": "Felt on average {speed} km/h (estimated)",
+        "coveredOn": "available on {km} km",
+        "approxPace": "riding pace approximated",
+        "feltUnavailable": "Felt wind not available.",
+        "noRoute": "No route"
+    },
+    "journeys": {
+        "status": {
+            "pending": "Being planned",
+            "routing": "Being planned",
+            "weather": "Weather along the route",
+            "done": "Planned",
+            "failed": "Failed"
+        },
+        "gapWithout": "{excess} without",
+        "createFailed": "The journey could not be created.",
+        "delete": {
+            "title": "Delete journey",
+            "message": "Do you really want to delete the journey “{name}”?"
+        },
+        "new": "New journey",
+        "empty": "No journey yet.",
+        "emptyHint": "Enter start, destination and how far you want to ride each day. Meteolane suggests stages, breaks with water and toilets, overnight stays and the best departure time.",
+        "days": "{n} day | {n} days",
+        "reason": {
+            "tooLong": "~{minutes} min too long",
+            "tooFar": "~{km} km too far",
+            "missingStop": "No reachable stop found for {category}.",
+            "detour": "Detour ~{km} km to {name}",
+            "longer": "{percent} % longer than the fastest variant",
+            "dayLimit": "Day limit: {overrun}",
+            "legLimit": "Leg {leg}: {overrun}"
+        }
+    },
+    "common": {
+        "cancel": "Cancel",
+        "apply": "Apply",
+        "save": "Save",
+        "delete": "Delete",
+        "close": "Close",
+        "retry": "Try again",
+        "notAvailable": "Not available",
+        "loading": "Loading …",
+        "edit": "Edit",
+        "back": "Back",
+        "clock": "{time}",
+        "required": "Required"
+    },
+    "flexibility": {
+        "none": "Not flexible",
+        "advanced": "Advanced",
+        "caption": "Flexible: {before} min earlier · {after} min later",
+        "plusPitch": "Find a better departure time with Plus. Your regular forecast stays free.",
+        "title": "Flexible departure",
+        "intro": "Compare the weather for earlier or later departures.",
+        "earlier": "Earlier by up to",
+        "later": "Later by up to"
+    },
+    "plan": {
+        "tryPlus": "Try Plus free for 14 days",
+        "tryAgain": "Please try again.",
+        "email": "Email",
+        "label": "Meteolane plans",
+        "pitch": "Find a better departure time and get your forecast before the ride.",
+        "activeRoutes": "{count} / {max} active routes",
+        "complimentary": "Plus as a gift until {date}. No automatic payment.",
+        "trialUntil": "Trial until {date}. Then automatically Free, without payment.",
+        "endsOn": "Your subscription ends on {date}.",
+        "feature": {
+            "twoWay": "Outbound and return count together as one route.",
+            "free": "Free: 2 routes, weather maps, rain risk, temperature and wind.",
+            "plus": "Plus: 20 routes, automatic departure comparison and weather details.",
+            "briefings": "Plus: briefings for up to 5 routes, by email or push."
+        },
+        "perYear": "€29 per year",
+        "or": "or",
+        "perMonth": "€3.90 per month",
+        "startTrial": "Try free for 14 days",
+        "trialStarted": "Plus is now active. Enjoy your rides!",
+        "yearly": "€29 / year",
+        "monthly": "€3.90 / month",
+        "manage": "Manage subscription",
+        "noCard": "No credit card. The trial does not renew automatically.",
+        "beta": "Beta: buying Plus is not enabled yet.",
+        "freeRoutes": "Your two Free routes",
+        "freeRoutesHint": "These routes stay active after Plus. Other routes stay saved and are paused.",
+        "pickFreeRoutes": "Choose up to two routes",
+        "saveSelection": "Save selection",
+        "selectionSaved": "Selection saved.",
+        "briefingsTitle": "Informed before the ride",
+        "briefingsHint": "One briefing per outbound and return ride about 60 minutes before the earliest departure in your time window. Up to 10 briefings per day. No running weather warnings.",
+        "briefingsNeedPlus": "Activate Plus to set up briefings.",
+        "noPush": "This browser does not support push here. Use email. On an iPhone, first install Meteolane with “Add to Home Screen”.",
+        "pushOn": "Turn on push on this device",
+        "pushOnDone": "Device connected. Now choose push for your route.",
+        "pushOff": "Turn off push on this device",
+        "pushOffDone": "Push turned off on this device.",
+        "briefingsLoadFailed": "The briefing settings could not be loaded.",
+        "deliveryMissing": "Delivery is not set up yet. Your forecasts are still available in the app.",
+        "briefingSaved": "Briefing setting saved.",
+        "paused": "Paused by your plan.",
+        "recentBriefings": "Recent briefings",
+        "notDelivered": "Delivery not confirmed. Available here in the app."
+    },
+    "charts": {
+        "loading": "Chart is loading",
+        "noData": "No chart data available.",
+        "axis": {
+            "distanceKm": "Distance (km)",
+            "rideMinutes": "Riding time (min)",
+            "elevation": "Elevation (m a.s.l.)"
+        },
+        "weather": "Weather",
+        "comfortable": "comfortable",
+        "temperature": "Temperature",
+        "felt": "Feels like",
+        "feltLong": "Feels like (riding wind)",
+        "precipitation": "Precipitation",
+        "headwindTailwind": "Headwind (+) / tailwind (−)",
+        "headwindTailwindShort": "Head-(+)/tailwind(−)",
+        "headwind": "Headwind"
+    },
+    "location": {
+        "denied": "Access to your location was not allowed.",
+        "timeout": "Your location could not be determined in time.",
+        "failed": "Your location could not be determined.",
+        "current": "Current location"
+    },
+    "places": {
+        "unknown": "Unknown"
+    },
+    "poi": {
+        "category": {
+            "drinking_water": "Drinking water",
+            "toilets": "Toilet",
+            "shelter": "Shelter",
+            "food": "Food",
+            "groceries": "Groceries",
+            "vending_food": "Vending: food",
+            "vending_drinks": "Vending: drinks",
+            "vending_sweets": "Vending: sweets",
+            "vending_coffee": "Vending: coffee",
+            "bbq": "Barbecue spot",
+            "bike_repair": "Bike repair",
+            "ebike_charging": "E-bike charging",
+            "train_station": "Train station",
+            "lodging": "Lodging",
+            "photo": "Photo"
+        },
+        "lodging": {
+            "camp_site": "Campsite",
+            "hostel": "Hostel",
+            "guest_house": "Guest house",
+            "hotel": "Hotel",
+            "alpine_hut": "Mountain hut",
+            "wilderness_hut": "Unstaffed hut"
+        }
+    },
+    "locationPicker": {
+        "open": "Pick start and destination on the map",
+        "title": "Pick the route on the map",
+        "pickStart": "Pick start (blue)",
+        "pickDest": "Pick destination (pink)",
+        "tapStart": "Tap the map to set the start.",
+        "tapDest": "Tap the map to set the destination.",
+        "start": "Start: {name}",
+        "dest": "Destination: {name}",
+        "notChosen": "Not chosen yet"
+    },
+    "quota": {
+        "title": "Plan limit reached",
+        "routes": "Your plan allows one active route. Plus includes 20 routes. | Your plan allows {n} active routes. Plus includes 20 routes.",
+        "later": "Later",
+        "upgrade": "Upgrade",
+        "journeys": "Your plan allows one journey. Delete an old one or switch to Plus for up to 10 journeys.",
+        "randomRides": "Your plan allows three random rides. Delete an old one or switch to Plus for up to 20."
+    },
+    "summaryCard": {
+        "title": "Forecast",
+        "explain": "Figures explained",
+        "noData": "There is no weather data for this ride yet.",
+        "riskUnavailable": "The rain risk is not available right now.",
+        "peakRisk": "Highest rain risk along the route: {percent} %",
+        "note": "The rain risk shows the highest value at one point of the route, not for the whole ride. Rain and headwind show the highest expected values. When rain is expected, rain shows how much it will probably rain if it rains. The wind effort shows as a level (low to very high) how much extra power you need for your pace. It is estimated. Frost shows as a level (light to heavy) how slippery the road is likely to get at its coldest point — from temperature, wetness and weather code together."
+    },
+    "legend": {
+        "rideQuality": "Ride quality",
+        "explanation": "Calculated from rain (55 %), headwind (25 %) and temperature (20 %). A guide value without a unit - the exact values are in the weather points on the map.",
+        "good": "good",
+        "poor": "poor",
+        "noData": "No data"
+    },
+    "thumbnail": {
+        "computing": "Route is still being calculated",
+        "noForecast": "No forecast yet",
+        "quality": "Ride quality: {quality}"
+    },
+    "gpx": {
+        "requestFailed": "The GPX request failed.",
+        "ready": "GPX is ready.",
+        "share": "Share",
+        "download": "Download",
+        "tooLarge": "The GPX file may be at most 10 MiB.",
+        "import": "Import GPX",
+        "chooseFile": "Choose a GPX file or drop it here",
+        "track": "Track or segment",
+        "keepOriginal": "Keep the original route",
+        "recalculate": "Recalculate for bikes",
+        "importedHint": "The weather forecast uses your new departure time and this riding time.",
+        "recalculatedHint": "Orange: original. Blue: recalculated route. The route may differ from the original.",
+        "adjustVias": "Adjust via points",
+        "previewLabel": "Preview of the imported route"
+    },
+    "badges": {
+        "rainRisk": "Rain risk",
+        "rain": "Rain",
+        "frost": "Frost"
+    },
+    "briefings": {
+        "pushUnavailable": "Push is not available here. Use email or install Meteolane on your home screen.",
+        "allowNotifications": "Please allow notifications in your browser settings."
+    },
+    "details": {
+        "title": "Details",
+        "bandExplained": "The band shows how much the weather could vary. Values outside it are possible too.",
+        "uncertaintyLocked": "See how much the weather could vary with Plus. The weather forecast and the rain risk are free.",
+        "uncertaintyPartial": "Parts of the route have no information on how much the weather could vary.",
+        "point": "Route point · {time} · {minutes} min riding",
+        "pointLabel": "Route point",
+        "pointRisk": "Rain risk at this point: {risk}",
+        "noRange": "No weather range is available for this point.",
+        "rain": "Rain: {rate} mm/h ({mm} mm in {minutes} min).",
+        "probablyDry": "Probably dry.",
+        "ifWet": "If it rains: about {rate} mm/h.",
+        "headwindSign": "Positive headwind slows you down, negative values mean tailwind.",
+        "noData": "No weather data available for this route."
+    },
+    "routeForm": {
+        "name": "Name",
+        "start": "Start",
+        "dest": "Destination",
+        "date": "Date",
+        "departure": "Departure",
+        "timeFormat": "As HH:MM",
+        "nameOptional": "Name (optional)",
+        "importedName": "Imported route",
+        "newTitle": "New route",
+        "originalFromGpx": "Original route from GPX",
+        "descriptionOptional": "Description (optional)",
+        "days": "Days",
+        "departureTime": "Departure time",
+        "timeAsHhMm": "Time as HH:MM",
+        "twoWay": "Save outbound and return as one route",
+        "returnTime": "Departure time of the return",
+        "validTime": "Enter a valid time",
+        "returnHint": "The return runs on the same days as the outbound ride and is calculated separately from the destination to the start. Both rides count together as one route."
+    },
+    "departures": {
+        "compare": "Compare departure times",
+        "title": "Best departure time",
+        "window": "Time window: {from} – {to}",
+        "recommended": "Depart around {departure} · arrive {arrival}",
+        "nothing": "Not enough weather data or no future departure in the time window.",
+        "compared": "Compared departure times",
+        "requested": "Requested",
+        "recommendedBadge": "Recommended",
+        "shown": "Shown",
+        "backToRequested": "Back to the requested departure",
+        "steps": "Compared in 15-minute steps. The weather forecast may be coarser.",
+        "explanation": {
+            "insufficient_data": "Not enough weather data to compare departure times.",
+            "best_in_window": "Probably the best conditions in the chosen time window.",
+            "requested_equivalent": "Similar conditions – your requested departure already works.",
+            "requested_best": "Your requested departure already has the best conditions.",
+            "less_rain": "Less rain during your ride.",
+            "less_wind": "Less headwind during your ride.",
+            "milder": "More pleasant temperatures during your ride.",
+            "less_frost": "Lower risk of frost during your ride."
+        }
+    },
+    "signup": {
+        "completeFailed": "The account could not be set up.",
+        "almostDone": "Almost done",
+        "verifiedIntro": "Your email address is confirmed. Now set up your account.",
+        "username": "Username",
+        "usernameHint": "You can sign in with it too. Others can see it.",
+        "profileQuestion": "What do you usually ride?",
+        "profileHint": "The default for new routes and tours. You can change it any time.",
+        "passwordOptional": "Password (optional)",
+        "passwordHint": "Without a password you sign in with a code sent by email.",
+        "passwordRepeat": "Repeat password",
+        "submit": "Set up account"
+    },
+    "profiles": {
+        "bike": "Bike",
+        "ebike": "E-bike",
+        "fast_ebike": "S-pedelec"
+    },
+    "randomForm": {
+        "length": {
+            "label": "Length",
+            "time": "Time",
+            "distance": "Distance",
+            "hoursLabel": "Riding time in hours",
+            "kmLabel": "Distance in kilometres"
+        },
+        "shape": {
+            "label": "Kind of ride",
+            "loop": "Loop",
+            "toDestination": "To a destination"
+        },
+        "defaultNameLoop": "Loop from {start}",
+        "defaultNameTo": "To {dest}",
+        "editTitle": "Edit ride",
+        "newTitle": "New random ride",
+        "intro": "Say how long or how far you want to ride. Meteolane rolls the dice for a route and checks the weather on it.",
+        "profile": "Profile (sets the pace)",
+        "headingLoop": "Direction first",
+        "headingDetour": "Detour to the side",
+        "pois": "On the way I would like to pass",
+        "poisHint": "Optional: Meteolane puts a stop on the route",
+        "weather": "Weather",
+        "considerWeather": "Consider the weather",
+        "weatherOn": "Meteolane calculates the forecast for every variant and recommends the one with the best weather.",
+        "weatherOff": "You get three variants without weather and choose which to save as routes. Every saved route then gets its forecast.",
+        "saveAndReplan": "Save and replan",
+        "roll": "Roll variants"
+    },
+    "roadPrefs": {
+        "title": "Road",
+        "any": "Any",
+        "surface": {
+            "label": "Surface",
+            "avoidUnpaved": "Little unpaved",
+            "pavedOnly": "Paved only"
+        },
+        "climbing": {
+            "label": "Terrain",
+            "flat": "Flat",
+            "hilly": "Hilly",
+            "flatHint": "As few climbs as possible.",
+            "hillyHint": "Up and down, as hilly as the area allows.",
+            "anyHint": "The terrain does not matter.",
+            "avoid": "Avoid climbs",
+            "preferHilly": "Prefer hilly",
+            "climbs": "Climbs"
+        },
+        "traffic": {
+            "label": "Traffic",
+            "avoidMain": "Avoid main roads",
+            "preferNetwork": "Prefer the cycle network"
+        },
+        "towns": {
+            "label": "Towns",
+            "avoid": "Avoid towns"
+        }
+    },
+    "journeyForm": {
+        "hours": "Hours",
+        "windowLater": "up to {minutes} min later",
+        "windowFixed": "Fixed",
+        "editTitle": "Edit journey",
+        "intro": "Meteolane suggests daily stages, breaks and departure times, based on the weather and your wishes.",
+        "profile": "Profile",
+        "firstDay": "First day",
+        "earliestStart": "Earliest start",
+        "latestArrival": "Latest arrival",
+        "arrivalError": "Arrival after the start, as HH:MM",
+        "perDay": "At most per day",
+        "perLeg": "In one go (until the next break)",
+        "pois": "On every leg I need",
+        "poisHint": "Every choice must be on every leg",
+        "lodging": "Stay overnight in",
+        "lodgingHint": "Empty: any kind",
+        "plusPitch": "With Plus, Meteolane compares up to three variants per day and suggests the best departure time.",
+        "shiftDeparture": "Shift departure",
+        "plan": "Plan journey"
+    },
+    "journeyDay": {
+        "variant": "Variant {n}",
+        "breakIn": "Break in variant {n}",
+        "detourIn": "Detour in variant {n}",
+        "day": "Day {n}",
+        "weatherRouted": "Planned around rain and headwind",
+        "pickRoute": "Choose a route",
+        "weatherFailed": "Weather failed",
+        "weatherLoading": "Weather is loading",
+        "recommendedDeparture": "Recommended departure: {time}",
+        "departure": "Departure: {time}",
+        "stops": "{n} stops | {n} stop | {n} stops",
+        "lodging": "Overnight: {name} · {offset} off the route",
+        "noLodging": "No suitable lodging found near the route. The day ends where the day limit is reached.",
+        "stopsAndDetours": "Stops & detours",
+        "noBreak": "No break needed.",
+        "nothingWanted": "Nothing you asked for here.",
+        "detourTo": "Detour to {poi}",
+        "noForecastRandom": "There is no forecast for this day yet. Roll the ride again closer to the date, and Meteolane recommends the route with the best weather.",
+        "noForecastJourney": "There is no forecast for this day yet. Replan the journey closer to the date, and Meteolane fits route and departure to the weather.",
+        "weatherLoadFailed": "The weather data could not be loaded.",
+        "chosen": "{label} (chosen)",
+        "otherVariants": "other variants",
+        "showMorePois": "Show more places around the routes (grey)",
+        "coloured": "Coloured: planned",
+        "tapToPick": "other variants, tap to choose"
+    },
+    "map": {
+        "notPlanned": "not planned",
+        "selectedPoint": "Selected point",
+        "selectedPointAt": "Selected point: {time}",
+        "windAnimation": "Animation",
+        "windArrows": "Arrows",
+        "groundWind": "Wind over ground",
+        "frost": "Frost: {level}",
+        "windArrow": "Wind: {wind} · {effort}",
+        "selectWeatherAt": "Select the weather at {time}",
+        "webglError": "WebGL could not be initialised. Please turn on hardware acceleration in your browser.",
+        "loadFailed": "The map could not be loaded",
+        "windMode": "Wind display",
+        "particlesHint": "Particles show the wind's direction and strength at riding time",
+        "arrowsHint": "Arrows show direction and strength",
+        "popup": {
+            "windDirUnavailable": "Wind direction relative to the route not available",
+            "headwind": "{speed} km/h headwind",
+            "tailwind": "{speed} km/h tailwind",
+            "crosswindUnavailable": "Crosswind not available",
+            "crosswind": "{speed} km/h crosswind (section average)",
+            "felt": "feels like {temp}°C",
+            "rainRisk": "Rain risk: {risk}",
+            "groundSpeed": "{speed} km/h over ground",
+            "gusts": "gusts {speed}",
+            "windPartial": "Wind data is missing for parts of this section."
+        },
+        "wind": "Wind"
+    },
+    "routeList": {
+        "noDeparture": "No departure",
+        "past": "Past",
+        "inMinutes": "in {n} min",
+        "inHours": "in {n}h",
+        "tomorrow": "tomorrow",
+        "computing": "Route is being calculated …",
+        "add": "Add route",
+        "randomRide": "Random ride",
+        "empty": "No routes yet — get going!",
+        "create": "Create route",
+        "orJourney": "Or plan a journey",
+        "orRandom": "Or roll a ride",
+        "full": "{n} of {n} routes in use — Plus includes 20 active routes.",
+        "seePlan": "See plans",
+        "return": "Return: {schedule}"
+    },
+    "keyData": {
+        "label": "Key figures of the ride",
+        "felt": "Feels like Ø",
+        "windEffort": "Wind effort max.",
+        "noFrost": "none",
+        "rainMax": "Rain max.",
+        "headwindMax": "Headwind max.",
+        "duration": "Duration",
+        "riskPartial": "The rain risk is missing for parts of the route.",
+        "note": "The rain risk shows the highest value at one point of the route, not for the whole ride. Rain and headwind show the highest expected values. When rain is expected, rain shows how much it will probably rain if it rains. The wind effort shows as a level (low to very high) how much extra power you need for your pace. It is estimated. Feels like is the temperature you feel in the wind of riding (wind chill at your pace), averaged over the riding time. Frost shows as a level (light to heavy) how slippery the road is likely to get at its coldest point — from temperature, wetness and weather code together."
+    },
+    "sections": {
+        "dry": "Dry",
+        "rain": "Rain",
+        "heavy_rain": "Heavy rain",
+        "rainMm": "Rain: {mm} mm",
+        "headwind": "Headwind: {speed} km/h"
+    },
+    "system": {
+        "mapLabel": "System map with routes and weather cells",
+        "selectRoute": "Select a route first.",
+        "selectCell": "Select a cell first.",
+        "coverage": {
+            "usable": "Usable",
+            "stale": "Stale",
+            "missing": "Missing",
+            "insufficient": "Insufficient"
+        },
+        "summary": {
+            "recurringRoutes": "Recurring routes",
+            "stages": "Stages incl. alternatives",
+            "missingGeometry": "Without geometry",
+            "cacheLocations": "Stored cell locations"
+        },
+        "filter": {
+            "allProfiles": "All profiles",
+            "bothProviders": "Both providers",
+            "allRoutes": "All routes",
+            "activeRoutes": "Active routes",
+            "inactiveRoutes": "Inactive routes",
+            "forecasts": "Forecasts",
+            "ensemble": "Ensemble",
+            "profile": "Routing profile",
+            "kind": "Cell type / coverage",
+            "provider": "Provider",
+            "cacheDate": "Cache date (optional)"
+        },
+        "age": {
+            "minutes": "{m} min",
+            "hours": "{h} h {m} min"
+        },
+        "subtitle": "Stored data · all users · read only",
+        "refresh": "Refresh",
+        "needAdmin": "This overview requires a verified administrator sign-in.",
+        "adminLogin": "Administrator sign-in",
+        "afterLogin": "After signing in, click “Refresh” here.",
+        "partialFailure": "The data could not be fully refreshed. Data already loaded stays visible.",
+        "live": "Live: changes appear within a few seconds.",
+        "notLive": "No live connection. “Refresh” reloads the data.",
+        "lastLoaded": "Overview last loaded: {time} (Zurich).",
+        "loading": "System data is loading",
+        "layer": {
+            "alternatives": "Journey alternatives",
+            "cells": "Weather cells"
+        },
+        "filterHint": "The newest entry per location after filtering. The cache date is the stored day key, not the departure time.",
+        "legend": {
+            "label": "Map legend",
+            "fresh": "Fresh (< {h} h)",
+            "aging": "Aging (up to {h} h)",
+            "stale": "Stale (> {h} h)"
+        },
+        "mapLoaded": "Map area: {loaded} / {total} objects loaded.",
+        "noMatches": "No matching data.",
+        "gridHint": "Meteolane cache grid: 0.01° × 0.01°. Click routes or cells for details.",
+        "diagnostics": "System diagnostics",
+        "cell": "Weather cell",
+        "selection": "Selection",
+        "selectionHint": "A route shows the cache coverage of its next departure. A cell shows stored entries of all providers and days.",
+        "fetched": "Fetched: {time} · age: {age}",
+        "horizon": "Requested horizon: {days} days. Freshness alone does not mean a departure is covered.",
+        "days": "{n} days",
+        "cacheDay": "Cache: {day}",
+        "entries": "{n} entries",
+        "next": "Next",
+        "geometry": "Geometry: {time}",
+        "departure": "Departure: {time} (Zurich)",
+        "fixedDeparture": "Cell locations for the fixed departure, without flexible alternative times.",
+        "table": {
+            "status": "Status",
+            "forecast": "Forecast"
+        },
+        "pointsHint": "Map points show {kind} coverage. Insufficient: horizon, data or version do not fit.",
+        "cacheTotal": "Cache stock (whole system)",
+        "noCells": "No weather cells stored yet.",
+        "locations": "{n} locations",
+        "freshStale": "{fresh} fresh · {stale} stale",
+        "locationHint": "A location can hold several days, providers and cell types.",
+        "jobs": {
+            "title": "Forecast jobs",
+            "hint": "All open jobs plus finished/failed jobs of the last 24 hours.",
+            "none": "No jobs in this period.",
+            "stalled": "Possibly stalled",
+            "cells": "{settled} / {total} cells done · {failed} failed",
+            "created": "Created: {time}",
+            "updated": "Updated: {time}",
+            "count": "{n} jobs"
+        },
+        "mapPartial": "Part of the map could not be loaded."
+    },
+    "freshness": {
+        "failed": "Update failed",
+        "refreshing": "Updating…",
+        "refreshingPercent": "Updating ({percent} %)…",
+        "asOf": "As of {time}"
+    },
+    "schedule": {
+        "weekday": {
+            "1": "Mon",
+            "2": "Tue",
+            "3": "Wed",
+            "4": "Thu",
+            "5": "Fri",
+            "6": "Sat",
+            "7": "Sun"
+        },
+        "daysAt": "{days} at {time}"
+    },
+    "explore": {
+        "intro": "Routes others share. Open one and see the weather for your own departure.",
+        "search": "Search",
+        "searchLabel": "Search routes",
+        "sort": "Sort order",
+        "new": "New",
+        "popular": "Popular",
+        "loadFailed": "The routes could not be loaded.",
+        "noMatch": "No public route matches your search.",
+        "none": "No public routes yet.",
+        "shareHint": "Share one of your routes with “Share” in the route view.",
+        "by": "by {author}"
+    },
+    "journeyPage": {
+        "heading": "heading {heading}",
+        "rideSaveFailed": "The ride could not be saved.",
+        "journeySaveFailed": "The journey could not be saved.",
+        "reroll": "Roll again",
+        "replan": "Replan",
+        "notFound": "Not found.",
+        "rolling": "Rolling… Meteolane is looking for routes of the length you asked for.",
+        "planning": "{status}… looking for stages, breaks and lodging."
+    },
+    "routeEditor": {
+        "removeVia": "Remove via point {n}",
+        "viaHint": "Drag to move, tap to remove",
+        "title": "Adjust the route",
+        "intro": "Drag the line to set a via point. Via points can be moved, or removed with a tap.",
+        "vias": "{n} via points | {n} via point | {n} via points",
+        "reset": "Reset"
+    },
+    "elevation": {
+        "title": "Elevation profile",
+        "height": "Elevation",
+        "axis": "Axis of the elevation profile",
+        "distance": "Distance",
+        "loading": "Elevation profile is loading",
+        "loadFailed": "The elevation data could not be loaded.",
+        "noData": "No elevation data available for this route.",
+        "selectedLoadFailed": "The elevation data for the chosen route could not be loaded.",
+        "selectedLoading": "Loading the elevation profile for the chosen route…",
+        "selectedNoData": "No elevation data available for the chosen route.",
+        "approximateTiming": "riding time estimated from the distance",
+        "partial": "elevation data partly unavailable"
+    },
+    "routeDetail": {
+        "shapeSaveFailed": "The route could not be saved.",
+        "shareGpx": "Share GPX",
+        "downloadGpx": "Download GPX",
+        "publicPhotos": "Public · photos",
+        "sharePhotos": "Share & photos",
+        "saveDuration": "Save riding time",
+        "saveForRoute": "Save for this route",
+        "windowSaveFailed": "The time window could not be saved.",
+        "windAlong": "Wind along the route",
+        "weatherFailedPaused": "The weather data could not be loaded. Was this route paused after Plus ended?",
+        "manageRoutes": "Manage active routes and plan",
+        "tooEarly": "No forecast possible yet. The weather forecast becomes available closer to the departure."
+    },
+    "variants": {
+        "saved": "No route saved. | Route saved. | {n} routes saved.",
+        "quota": "Not all variants fit your plan. What fitted has been saved. With Plus you have up to 20 routes.",
+        "toMyRoutes": "To my routes",
+        "saveFailed": "The routes could not be saved.",
+        "title": "Choose your variants",
+        "intro": "Every variant you choose becomes a route of its own. You then see its forecast with the route.",
+        "missing": "missing: {categories}",
+        "when": "When do you ride?",
+        "save": "Save as route | Save as route | Save {n} routes",
+        "mapLabel": "Map of the variants"
+    },
+    "comments": {
+        "failed": "That did not work. Please try again.",
+        "title": "Comments",
+        "empty": "No comments yet. Have you ridden this route?",
+        "edited": "edited",
+        "edit": "Edit comment",
+        "delete": "Delete comment",
+        "write": "Write a comment",
+        "send": "Send",
+        "signIn": "Sign in to comment"
+    },
+    "mapPage": {
+        "pickRoute": "Please choose a route.",
+        "saveRoute": "Save route",
+        "planNew": "Plan a new route",
+        "from": "From",
+        "to": "To",
+        "pickDestination": "Choose a destination for the weather forecast along the route.",
+        "loadFailed": "The route or the weather could not be loaded. Are start and destination inside the loaded OSM region?"
+    },
+    "publicRoute": {
+        "linkCopied": "Link copied.",
+        "copied": "Saved to your routes. Adjust the schedule there.",
+        "notFound": "This route does not exist, or it is no longer public.",
+        "unlike": "Unlike",
+        "like": "Like",
+        "copy": "Add to my routes",
+        "photos": "Photos",
+        "weatherTitle": "Weather for your ride",
+        "weatherIntro": "When do you set off? The weather comes for every section at the time you are there, up to 16 days ahead.",
+        "go": "Go"
+    },
+    "share": {
+        "zoneOff": "Off",
+        "saveFailed": "The sharing setting could not be saved.",
+        "uploadFailed": "{name} could not be uploaded.",
+        "captionFailed": "Caption not saved.",
+        "title": "Share route",
+        "public": "Public: anyone with the link can see the route, and it is listed under “Explore”",
+        "zoneTitle": "Privacy zone around start and destination",
+        "zone": "Privacy zone",
+        "zoneHint": "Others only see the route outside this zone. Start and destination, their names and your schedule are never public.",
+        "visible": "Visible: {km} km.",
+        "tooLittle": "With this zone too little of the route is left.",
+        "link": "Public link",
+        "copyLink": "Copy link",
+        "photosHint": "Photos are saved without metadata. With their location they appear on the map, except inside the privacy zone.",
+        "addPhotos": "Add photos",
+        "usePosition": "Use where it was taken",
+        "caption": "Caption",
+        "onMap": "on the map",
+        "remove": "remove",
+        "deletePhoto": "Delete photo",
+        "deleteFailed": "Photo not deleted.",
+        "viewPublic": "View public page",
+        "done": "Done"
+    },
+    "auth": {
+        "title": {
+            "newPassword": "New password",
+            "login": "Sign in",
+            "signup": "Create account",
+            "verify": "Confirm email",
+            "code": "Sign in with a code",
+            "reset": "Reset password"
+        },
+        "verifyFirst": "Please confirm your email address first.",
+        "loginFailed": "Sign-in failed.",
+        "codeSentTo": "We have sent a code to {email}. Enter it here.",
+        "codeSent": "We have sent you a code. Enter it here.",
+        "almostThere": "Almost there.",
+        "signupFailed": "Sign-up failed.",
+        "codeExpired": "The code has expired or was entered wrongly too often. Request a sign-in code.",
+        "codeWrong": "The code is not right.",
+        "verifyFailed": "The email could not be confirmed.",
+        "waitBeforeResend": "Please wait a few seconds before you request a new code.",
+        "noMoreCodes": "We cannot send another code. Request a sign-in code.",
+        "newCodeSent": "We have sent you a new code. The old one no longer works.",
+        "codeSendFailed": "The code could not be sent.",
+        "loginCodeSent": "If there is an account for {email}, a code is on its way.",
+        "codeInvalid": "The code is invalid or has expired.",
+        "resetSent": "If there is an account for this address, we have sent you a link.",
+        "requestFailed": "The request failed.",
+        "resetLinkInvalid": "The link is invalid or has expired. Request a new one.",
+        "passwordChanged": "Password changed. You can sign in now.",
+        "passwordChangeFailed": "The password could not be changed.",
+        "submit": {
+            "login": "Sign in",
+            "sendCode": "Send code",
+            "next": "Continue",
+            "confirm": "Confirm",
+            "requestLink": "Request link"
+        },
+        "oldLink": "This link no longer works. Sign in with a code we send you by email.",
+        "savePassword": "Save password",
+        "emailOrUsername": "Email or username",
+        "email": "Email address",
+        "signupHint": "We send you a code. You choose a username and password afterwards.",
+        "password": "Password",
+        "codeFromMail": "Code from the email",
+        "resend": "Send a new code",
+        "toLogin": "Back to sign-in",
+        "withCode": "Sign in with a code by email",
+        "forgot": "Forgot password?"
+    },
+    "feedback": {
+        "triggerLabel": "Feedback",
+        "triggerAriaLabel": "Give feedback",
+        "formTitle": "Give feedback",
+        "nameLabel": "Name",
+        "namePlaceholder": "Your name",
+        "emailLabel": "Email",
+        "emailPlaceholder": "you{'@'}example.com",
+        "messageLabel": "Description",
+        "messagePlaceholder": "What happened? What did you expect?",
+        "isRequiredLabel": "(required)",
+        "addScreenshotButtonLabel": "Add a screenshot",
+        "removeScreenshotButtonLabel": "Remove screenshot",
+        "cancelButtonLabel": "Cancel",
+        "submitButtonLabel": "Send",
+        "confirmButtonLabel": "Confirm",
+        "successMessageText": "Thank you for your feedback!"
+    }
+}

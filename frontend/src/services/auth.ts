@@ -1,4 +1,5 @@
 import { type AllauthReply, allauthRequest, isRecord, type Parse, request } from "@/services/http";
+import { type AppLocale, isAppLocale } from "@/i18n";
 
 export interface SessionUser {
     /** Optional while older backend instances finish rolling out. */
@@ -11,6 +12,8 @@ export interface SessionUser {
     hasPassword: boolean;
     /** Pre-selected in the route, journey and map forms. */
     defaultProfile: BikeProfile;
+    /** The account's language: the app's, the API's messages and every mail. */
+    language: AppLocale | null;
 }
 
 export type BikeProfile = "bike" | "ebike" | "fast_ebike" | "hike";
@@ -34,7 +37,7 @@ export interface SessionState {
 
 const parseUser: Parse<SessionUser> = value => {
     if (!isRecord(value)) return null;
-    const { id, email, username, signup_complete, has_password, default_profile } = value;
+    const { id, email, username, signup_complete, has_password, default_profile, language } = value;
     return typeof email === "string" && typeof username === "string"
         ? {
               email,
@@ -43,6 +46,7 @@ const parseUser: Parse<SessionUser> = value => {
               signupComplete: typeof signup_complete === "boolean" ? signup_complete : true,
               hasPassword: typeof has_password === "boolean" ? has_password : true,
               defaultProfile: isBikeProfile(default_profile) ? default_profile : "bike",
+              language: isAppLocale(language) ? language : null,
               ...(typeof id === "string" ? { id } : {}),
           }
         : null;
@@ -85,11 +89,12 @@ export const authApi = {
     /** Our own endpoint: the session as the app needs it, and the CSRF cookie. */
     session: () => request<SessionState>("/api/auth/session", parseSession),
     /** Step 2 of sign-up: the username, the default bike profile and, optionally, a password. */
-    completeSignup: (username: string, password: string, defaultProfile: BikeProfile) =>
+    completeSignup: (username: string, password: string, defaultProfile: BikeProfile, language?: AppLocale) =>
         request<SessionState>("/api/auth/complete-signup", parseSession, "POST", {
             username,
             password,
             default_profile: defaultProfile,
+            ...(language ? { language } : {}),
         }),
     /** Would step 2 accept this username? The same rules as the save. */
     usernameAvailable: (username: string) =>
@@ -97,8 +102,12 @@ export const authApi = {
             `/api/auth/username-available?username=${encodeURIComponent(username)}`,
             parseUsernameCheck,
         ),
-    updateProfile: (defaultProfile: BikeProfile) =>
-        request<SessionState>("/api/auth/profile", parseSession, "POST", { default_profile: defaultProfile }),
+    /** Either setting alone; the other stays as it is. */
+    updateProfile: (changes: { defaultProfile?: BikeProfile; language?: AppLocale }) =>
+        request<SessionState>("/api/auth/profile", parseSession, "POST", {
+            ...(changes.defaultProfile ? { default_profile: changes.defaultProfile } : {}),
+            ...(changes.language ? { language: changes.language } : {}),
+        }),
 
     /** Step 1 of sign-up: allauth creates the account and mails a code. */
     signup: (email: string) => allauthRequest("/auth/signup", "POST", { email }),

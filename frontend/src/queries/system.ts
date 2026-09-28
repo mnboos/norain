@@ -7,6 +7,7 @@ import {
     type SystemApiCoreApiSystemMapFeaturesRequest,
 } from "@norain/api/apis";
 import type { SystemFeature } from "@norain/api/models";
+import { t } from "@/i18n";
 import { useBackendHost } from "@/utils";
 import { systemQueryAffected } from "@/utils/systemOverview";
 
@@ -61,7 +62,7 @@ export function useSystemCoverage(
         retry: false,
         queryFn: ({ signal }) => {
             const item = toValue(selected);
-            if (!item) throw new Error("Select a route first.");
+            if (!item) throw new Error(t("system.selectRoute"));
             return api.coreApiSystemCoverage(
                 {
                     kind:
@@ -93,7 +94,7 @@ export function useSystemCellHistory(
         retry: false,
         queryFn: ({ signal }) => {
             const item = toValue(selected);
-            if (item?.lat == null || item.lon == null) throw new Error("Select a cell first.");
+            if (item?.lat == null || item.lon == null) throw new Error(t("system.selectCell"));
             return api.coreApiSystemCellHistory({ lat: item.lat, lon: item.lon, offset: toValue(offset) }, { signal });
         },
     });

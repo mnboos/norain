@@ -13,6 +13,7 @@
  * weather - and it is deliberately off the warm ramp.
  */
 import { computed } from "vue";
+import { useI18n } from "vue-i18n";
 
 import {
     CASING_DARK,
@@ -22,11 +23,13 @@ import {
     scoreColor,
 } from "@/utils/rideQuality";
 import { liveThumbnail, pointsAttr, projectPath } from "@/utils/routeThumbnail";
+import { rideLabelText } from "@/utils/levels";
 import type { ThumbnailRoute } from "@/utils/routeThumbnail";
 
 export type { ThumbnailRoute };
 
 const props = withDefaults(defineProps<{ route: ThumbnailRoute; size?: number }>(), { size: 40 });
+const { t } = useI18n();
 
 /** The thumbnail when it still describes the ride that is coming; see `liveThumbnail`. */
 const thumbnail = computed(() => liveThumbnail(props.route));
@@ -45,9 +48,11 @@ const line = computed(() => {
 const color = computed(() => scoreColor(thumbnail.value?.rideScore));
 
 const label = computed(() => {
-    if (!props.route.hasGeometry) return "Route wird noch berechnet";
-    if (!thumbnail.value) return "Fahrqualität: Noch keine Prognose";
-    return `Fahrqualität: ${thumbnail.value.rideLabel ?? "Nicht verfügbar"}`;
+    if (!props.route.hasGeometry) return t("thumbnail.computing");
+    const quality = thumbnail.value
+        ? rideLabelText(thumbnail.value.rideLabel, thumbnail.value.rideCause) || t("common.notAvailable")
+        : t("thumbnail.noForecast");
+    return t("thumbnail.quality", { quality });
 });
 
 defineExpose({ label });

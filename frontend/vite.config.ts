@@ -6,6 +6,7 @@ import vueDevTools from "vite-plugin-vue-devtools";
 import { quasar, transformAssetUrls } from "@quasar/vite-plugin";
 import VueRouter from "vue-router/vite";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
+import VueI18nPlugin from "@intlify/unplugin-vue-i18n/vite";
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -65,6 +66,15 @@ export default defineConfig(({ command, mode }) => {
             }),
             vue({
                 template: { transformAssetUrls },
+            }),
+            // Precompiles the catalogs: no message compiler ships, and a malformed message
+            // fails the build instead of the page.
+            VueI18nPlugin({
+                include: [fileURLToPath(new URL("./src/locales/*.json", import.meta.url))],
+                runtimeOnly: true,
+                compositionOnly: true,
+                fullInstall: true,
+                strictMessage: false,
             }),
             // Dev-only tooling; it has no place in a production bundle.
             ...(command === "serve"

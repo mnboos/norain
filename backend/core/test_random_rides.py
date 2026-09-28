@@ -252,7 +252,7 @@ class RandomRideTaskTests(TestCase):
     def test_no_candidate_fails_the_plan_with_a_reason(self):
         self._plan(loop=AsyncMock(side_effect=ValueError("no route")))
         self.assertEqual(self.ride.plan_status, Journey.PlanStatus.FAILED)
-        self.assertIn("keine passende Runde", self.ride.plan_error)
+        self.assertEqual(self.ride.plan_error, "no_round_found")
         self.assertFalse(self.ride.days.exists())
 
 

@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { duration, km } from "@/utils/journeys";
 
 /**
@@ -7,26 +8,21 @@ import { duration, km } from "@/utils/journeys";
  */
 export const NOMINAL_SPEED_KMH: Record<string, number> = { bike: 18, ebike: 22, fast_ebike: 32 };
 
-export const HEADING_OPTIONS: { label: string; value: number | null }[] = [
-    { label: "Egal", value: null },
-    { label: "Norden", value: 0 },
-    { label: "Nordosten", value: 45 },
-    { label: "Osten", value: 90 },
-    { label: "Südosten", value: 135 },
-    { label: "Süden", value: 180 },
-    { label: "Südwesten", value: 225 },
-    { label: "Westen", value: 270 },
-    { label: "Nordwesten", value: 315 },
-];
+const HEADINGS = [null, 0, 45, 90, 135, 180, 225, 270, 315] as const;
+
+/** The direction choices of the random-ride form, labelled in the current language. */
+export function headingOptions(): { label: string; value: number | null }[] {
+    return HEADINGS.map(value => ({ label: t(`random.heading.${value ?? "any"}`), value }));
+}
 
 export function headingLabel(heading: number | null | undefined): string {
-    return HEADING_OPTIONS.find(o => o.value === (heading ?? null))?.label ?? `${heading}°`;
+    return headingOptions().find(o => o.value === (heading ?? null))?.label ?? `${heading}°`;
 }
 
 /** What the other measure of a length target is, roughly, at the profile's pace. */
 export function paceHint(profile: string, target: { hours?: number; km?: number }): string {
     const speed = NOMINAL_SPEED_KMH[profile] ?? 18;
-    if (target.hours != null) return `≈ ${km(target.hours * speed * 1000)} bei ca. ${speed} km/h`;
-    if (target.km != null) return `≈ ${duration((target.km / speed) * 3600)} bei ca. ${speed} km/h`;
+    if (target.hours != null) return t("random.paceHint", { value: km(target.hours * speed * 1000), speed });
+    if (target.km != null) return t("random.paceHint", { value: duration((target.km / speed) * 3600), speed });
     return "";
 }

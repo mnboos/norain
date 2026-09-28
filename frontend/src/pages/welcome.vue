@@ -1,14 +1,17 @@
 <route lang="json5">
 {
     name: "welcome",
-    meta: { title: "Meteolane – Wetter entlang deiner Route", bare: true },
+    path: "/",
+    alias: "/welcome",
+    meta: { bare: true },
 }
 </route>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { symSharpAdd, symSharpRemove } from "@quasar/extras/material-symbols-sharp";
 import { useSession } from "@/composables/useSession";
+import { useLocale } from "@/composables/useLocale";
 
 type Lang = "de" | "en";
 
@@ -20,8 +23,9 @@ const copy = {
         toApp: "Route planen",
         cta: "Kostenlos starten",
         ctaNote: "Gratis für 2 Routen. Keine Kreditkarte.",
-        heroTitle: "Wetter entlang deiner Route.",
-        heroSub: "Regen, Temperatur und Wind für jeden Abschnitt deiner Strecke.",
+        heroTitle: "Das Wetter entlang deiner Route.",
+        heroSub:
+            "Regen, Temperatur und Wind für jeden Abschnitt deiner Strecke – genau dann, wenn du dort unterwegs bist. Inklusive Gegen- und Seitenwind.",
         howTitle: "So funktioniert’s",
         stepWord: "Schritt",
         steps: [
@@ -77,7 +81,7 @@ const copy = {
                 a: "Aus Open-Meteo, mit OpenWeatherMap als Rückfallebene. Fehlende oder unvollständige Daten werden immer als solche gekennzeichnet.",
             },
         ],
-        footer: "Velowetter für die Schweiz",
+        footer: "Wetter für unterwegs",
     },
     en: {
         navFeatures: "Features",
@@ -86,7 +90,7 @@ const copy = {
         toApp: "Start planning",
         cta: "Sign up free",
         ctaNote: "Free for 2 routes. No credit card.",
-        heroTitle: "Weather along your ride.",
+        heroTitle: "The weather along your route.",
         heroSub:
             "Rain, temperature and wind for every section of your ride – right when you’ll be there. Headwind and crosswind included.",
         howTitle: "How it works",
@@ -144,12 +148,17 @@ const copy = {
                 a: "From Open-Meteo, with OpenWeatherMap as a fallback. Missing or incomplete data is always labelled as such.",
             },
         ],
-        footer: "Ride weather for Switzerland",
+        footer: "Weather for the way ahead",
     },
 } as const;
 
-const initialLang: Lang = navigator.language.toLowerCase().startsWith("de") ? "de" : "en";
-const lang = ref<Lang>(initialLang);
+// The page's own copy follows the app's language, and its switch is the app's switch: a
+// visitor who picks English here gets the English app after signing up.
+const { locale, setLocale } = useLocale();
+const lang = computed<Lang>({
+    get: () => locale.value,
+    set: value => void setLocale(value),
+});
 const t = computed(() => copy[lang.value]);
 
 const { isAuthenticated } = useSession();
@@ -159,8 +168,7 @@ const { isAuthenticated } = useSession();
     <q-page class="welcome bg-brand-page text-brand-ink" :lang="lang">
         <q-card tag="header" flat square :dark="false" class="hero bg-brand-gradient text-white">
             <q-toolbar class="landing-wrap row items-center justify-between q-py-xs">
-                <router-link to="/welcome" class="brand row items-center no-wrap text-white q-pa-none">
-                    <img src="/brand/mark-master%20-%20Copy.png" alt="" />
+                <router-link to="/" class="brand row items-center no-wrap text-white q-pa-none">
                     <span class="text-weight-bold">Meteolane</span>
                 </router-link>
                 <div class="bar-right row items-center justify-between q-gutter-x-md">
@@ -191,7 +199,7 @@ const { isAuthenticated } = useSession();
                     <q-btn
                         unelevated
                         no-caps
-                        :to="isAuthenticated ? '/' : '/account'"
+                        :to="isAuthenticated ? '/routes' : '/account'"
                         color="brand-gold"
                         text-color="brand-navy"
                         padding="9px 16px"
@@ -200,8 +208,8 @@ const { isAuthenticated } = useSession();
                 </div>
             </q-toolbar>
             <q-card-section class="landing-wrap hero-content">
-                <div class="row items-center q-col-gutter-xl">
-                    <div class="col-12 col-md-6">
+                <div class="hero-grid">
+                    <div>
                         <q-card flat :dark="false" class="bg-transparent text-white hero-copy">
                             <h1 class="text-display q-ma-none q-mb-lg">{{ t.heroTitle }}</h1>
                             <p class="hero-description text-subheading text-weight-regular text-brand-mist q-mb-lg">
@@ -230,15 +238,8 @@ const { isAuthenticated } = useSession();
                             </q-card-actions>
                         </q-card>
                     </div>
-                    <div class="col-12 col-md-6 self-end">
-                        <!-- Replace the placeholder with a product screenshot when available. -->
-                        <q-responsive :ratio="4 / 3" class="shot hero-shot shadow-10">
-                            <div class="flex flex-center">
-                                <span class="text-caption bg-white text-brand-faint rounded-borders q-px-sm q-py-xs">
-                                    product shot — route detail
-                                </span>
-                            </div>
-                        </q-responsive>
+                    <div class="hero-visual">
+                        <img class="hero-mark" src="/brand/mark-master%20-%20Copy.png" alt="" fetchpriority="high" />
                     </div>
                 </div>
             </q-card-section>
@@ -389,7 +390,7 @@ const { isAuthenticated } = useSession();
 
         <q-card tag="footer" flat square :dark="false" class="bg-brand-navy text-brand-mist">
             <q-card-section class="landing-wrap row items-center justify-between q-gutter-y-md q-py-lg">
-                <img class="footer-logo" src="/brand/logo-light.png" alt="Meteolane" />
+                <span class="footer-brand text-weight-bold text-white">Meteolane</span>
                 <span class="text-caption">{{ t.footer }}</span>
             </q-card-section>
         </q-card>
@@ -413,17 +414,32 @@ const { isAuthenticated } = useSession();
 .brand {
     height: 56px;
     font-size: 17px;
-    img {
-        height: 64px;
-        translate: -10px 3px;
-    }
 }
 .hero-content {
     padding-top: 72px;
     padding-bottom: 0;
 }
+.hero-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+    gap: 56px;
+    align-items: center;
+}
 .hero-copy {
+    max-width: 560px;
     padding-bottom: 72px;
+}
+.hero-visual {
+    align-self: end;
+    display: flex;
+    justify-content: center;
+    margin-top: -24px;
+}
+.hero-mark {
+    display: block;
+    width: 100%;
+    max-width: 500px;
+    height: auto;
 }
 .main-content {
     padding-top: 80px;
@@ -444,11 +460,8 @@ const { isAuthenticated } = useSession();
         font-family: ui-monospace, monospace;
     }
 }
-.hero-shot {
-    border-radius: 12px 12px 0 0;
-}
-.footer-logo {
-    height: 28px;
+.footer-brand {
+    font-size: 17px;
 }
 @media (max-width: 599px) {
     .hero .q-toolbar {

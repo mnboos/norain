@@ -11,6 +11,8 @@ backend/          Django 6 + Channels (async ASGI via daphne)
   backend/settings/  base.py + development.py / production.py (a package, not settings.py)
   backend/asgi.py    ProtocolTypeRouter: the Django app for http, consumers for websocket
   core/
+    middleware.py    UserLanguageMiddleware: the account's language over Accept-Language
+    locale/en/       django.po + compiled .mo (msgids are German); `just messages`
     weather.py       routing + sampling + wind logic, compute_route_weather, build_geometry
     grid.py          forecast grid cache (ForecastCell, EnsembleCell) + API fetch + extraction
     stations.py      Weather Underground stations: budgeted fetch, cache, near-now correction
@@ -50,7 +52,11 @@ frontend/         Vue 3 + Quasar + @tanstack/vue-query
     services/        http.ts (shared fetch+CSRF, allauthRequest), auth.ts, billing.ts — the
                      plain-Django and allauth endpoints; the ninja API goes through the
                      generated @norain/api client
-    composables/     useSession, useEntitlements
+    composables/     useSession, useEntitlements, useLocale (detect, switch and save the language)
+    i18n/index.ts    vue-i18n instance, t/te for .ts modules, intlLocale(), dateFnsLocale()
+    locales/         de.json (source) + en.json; __tests__ checks both have the same keys
+    utils/levels.ts  the server's band/level/weather codes -> words
+    utils/serverErrors.ts  stored job/plan error codes -> words
     utils/rideQuality.ts   score -> YlOrRd colour + its casing, line placement; no scoring
                            (that is core/ride_quality.py, server-only)
     utils/routeThumbnail.ts  geographic path -> square viewBox projection

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, toRefs } from "vue";
+import { useI18n } from "vue-i18n";
 import {
     symSharpAcUnit,
     symSharpAir,
@@ -14,6 +15,7 @@ import type { RouteForecastOut } from "@norain/api/models";
 import { meanFeltTemp, peakRain } from "@/utils/forecastDetails";
 import { hasWindEffort } from "@/utils/bikeProfiles";
 import { headwindColor, temperatureColor } from "@/utils/statColors";
+import { impactText, windEffortText } from "@/utils/levels";
 
 const props = withDefaults(
     defineProps<{
@@ -27,6 +29,7 @@ const props = withDefaults(
     { columns: 3 },
 );
 const { forecast } = toRefs(props);
+const { t } = useI18n();
 const showExplanation = ref(false);
 
 /** The colour of a tile with nothing to flag. */
@@ -41,14 +44,14 @@ const maxGust = computed(() => {
 });
 const stats = computed(() => [
     {
-        label: "Gefühlt Ø",
+        label: t("keyData.felt"),
         icon: symSharpThermostat,
         color: temperatureColor(feltTemp.value) ?? NEUTRAL,
         value: feltTemp.value == null ? null : Math.round(feltTemp.value),
         unit: "°C",
     },
     {
-        label: "Regenrisiko",
+        label: t("badges.rainRisk"),
         icon: symSharpRainy,
         color: "blue-grey-6",
         value:
@@ -73,7 +76,7 @@ const stats = computed(() => [
               unit: "km/h",
           },
     {
-        label: "Distanz",
+        label: t("randomForm.length.distance"),
         icon: symSharpStraighten,
         color: "blue-grey-6",
         value: (forecast.value.totalDistanceM / 1000).toFixed(1),
@@ -83,16 +86,18 @@ const stats = computed(() => [
     {
         // "kein" and "Nicht verfügbar" are different answers: the first is the forecast
         // saying the road is fine, the second is having no forecast to read.
-        label: "Frost",
+        label: t("badges.frost"),
         icon: symSharpAcUnit,
         // Blue only when the server found a frost risk somewhere on the ride.
         color: forecast.value.summary.maxFrostLevel != null ? "light-blue-6" : NEUTRAL,
-        value: forecast.value.samples.length ? (forecast.value.summary.maxFrostLevel ?? "kein") : null,
+        value: forecast.value.samples.length
+            ? impactText(forecast.value.summary.maxFrostLevel) || t("keyData.noFrost")
+            : null,
         unit: "",
     },
 
     {
-        label: "Regen max.",
+        label: t("keyData.rainMax"),
         icon: symSharpWaterDrop,
         color: Number(peakRate.value) > 0 ? "light-blue-7" : NEUTRAL,
         value: peakRate.value,
@@ -100,14 +105,14 @@ const stats = computed(() => [
     },
 
     {
-        label: "Gegenwind max.",
+        label: t("keyData.headwindMax"),
         icon: symSharpAir,
         color: headwindColor(forecast.value.summary.maxHeadwind) ?? NEUTRAL,
         value: forecast.value.summary.maxHeadwind,
         unit: "km/h",
     },
     {
-        label: "Dauer",
+        label: t("keyData.duration"),
         icon: symSharpSchedule,
         color: "blue-grey-6",
         value: Math.round(forecast.value.totalSeconds / 60),
@@ -120,21 +125,13 @@ const rows = computed(() =>
         stats.value.slice(i * props.columns, (i + 1) * props.columns),
     ),
 );
-const note =
-    "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Fahrt. " +
-    "Regen und Gegenwind zeigen die höchsten erwarteten Werte. " +
-    "Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. " +
-    "Der Windaufwand zeigt als Stufe (niedrig bis sehr hoch), wie viel zusätzliche Kraft du für dein Tempo brauchst. Er ist geschätzt. " +
-    "Gefühlt ist die Temperatur, die du im Fahrtwind spürst (Windchill bei deinem Tempo), " +
-    "gemittelt über die Fahrzeit. " +
-    "Frost zeigt als Stufe (leicht bis stark), wie glatt die Strasse an der kältesten Stelle werden dürfte — " +
-    "aus Temperatur, Nässe und Wettercode zusammen.";
+
 </script>
 
 <template>
     <q-card>
         <!-- The grid runs to the card's edges; separators draw the lines between the cells. -->
-        <q-card-section aria-label="Kennzahlen der Fahrt" class="q-pa-none">
+        <q-card-section :aria-label="t('keyData.label')" class="q-pa-none">
             <template v-for="(row, r) in rows" :key="r">
                 <div class="row no-wrap">
                     <template v-for="(stat, c) in row" :key="stat.label">
@@ -153,7 +150,7 @@ const note =
                                     {{ stat.value }}
                                     <span v-if="stat.unit">{{ stat.unit }}</span>
                                 </template>
-                                <template v-else>Nicht verfügbar</template>
+                                <template v-else>{{ t("common.notAvailable") }}</template>
                             </q-item-label>
                         </q-item>
                     </template>
@@ -168,14 +165,14 @@ const note =
         <template v-if="forecast.samples.some(s => s.pop == null)">
             <q-separator />
             <q-card-section class="text-caption text-muted">
-                Für Teile der Strecke fehlt das Regenrisiko.
+                {{ t("keyData.riskPartial") }}
             </q-card-section>
         </template>
         <q-dialog v-model="showExplanation">
             <q-card>
-                <q-card-section class="text-body2">{{ note }}</q-card-section>
+                <q-card-section class="text-body2">{{ t("keyData.note") }}</q-card-section>
                 <q-card-actions align="right">
-                    <q-btn v-close-popup flat label="Schliessen" color="primary" />
+                    <q-btn v-close-popup flat :label="t('common.close')" color="primary" />
                 </q-card-actions>
             </q-card>
         </q-dialog>

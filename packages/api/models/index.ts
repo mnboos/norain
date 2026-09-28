@@ -25,6 +25,7 @@ export * from './GpxPathOut';
 export * from './JourneyDayOut';
 export * from './JourneyIn';
 export * from './JourneyOut';
+export * from './JourneyReasonOut';
 export * from './JourneyStageOut';
 export * from './LegOverrunOut';
 export * from './LikeOut';

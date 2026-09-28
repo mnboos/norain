@@ -462,7 +462,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     if job.kind == ForecastJob.Kind.ROUTE and str(job.params.get("route_id")) not in {
         str(i) for i in await sync_to_async(allowed_route_ids)(job.owner)
     }:
-        await _fail_not_allowed(job, "Diese Route ist durch deinen Tarif pausiert.")
+        await _fail_not_allowed(job, "route_paused")
         return
     if (
         job.kind == ForecastJob.Kind.JOURNEY_STAGE
@@ -470,7 +470,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
             id=job.params.get("journey_stage_id"), day__journey__owner_id=job.owner_id
         ).aexists()
     ):
-        await _fail_not_allowed(job, "Diese Etappe gibt es nicht mehr.")
+        await _fail_not_allowed(job, "stage_gone")
         return
     if (
         job.kind == ForecastJob.Kind.PUBLIC_ROUTE
@@ -478,7 +478,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
             id=job.params.get("public_route_id"), visibility=RecurringRoute.Visibility.PUBLIC
         ).aexists()
     ):
-        await _fail_not_allowed(job, "Diese Route ist nicht mehr öffentlich.")
+        await _fail_not_allowed(job, "route_private")
         return
     await telemetry.bind_job(job)
     await set_status(job, ForecastJob.Status.PLANNING)
@@ -487,7 +487,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         geometry = await _job_geometry(job)
     except ROUTING_ERRORS as exc:  # ValueError also covers a saved route that no longer exists
         logger.error(f"Forecast job {job.id} could not resolve geometry: {exc}")
-        await set_status(job, ForecastJob.Status.FAILED, error="Route konnte nicht berechnet werden.")
+        await set_status(job, ForecastJob.Status.FAILED, error="route_failed")
         return
 
     if geometry is None:
@@ -496,7 +496,7 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         # would have its plan task re-deferring itself forever.
         job.attempts += 1
         if job.attempts >= MAX_PLAN_ATTEMPTS:
-            await set_status(job, ForecastJob.Status.FAILED, error="Routen-Geometrie konnte nicht berechnet werden.")
+            await set_status(job, ForecastJob.Status.FAILED, error="geometry_failed")
             return
         await job.asave(update_fields=["attempts", "updated_at"])
         await plan_forecast_job.using(run_after=datetime.now(tz=UTC) + PLAN_RETRY_DELAY).aenqueue(str(job.id))
@@ -702,7 +702,7 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
             strip_uncertainty(forecast.samples)
 
         if not forecast.samples and job.cells_total:
-            await _fail_forecast_stage(job, "Noch keine Wetterdaten verfügbar.")
+            await _fail_forecast_stage(job, "no_weather_yet")
             return
         await sync_to_async(_store_computed_weather)(
             job,
@@ -713,7 +713,7 @@ async def _compute_route_weather_job_async(job_id: str) -> None:
             },
         )
     except Exception:
-        await _fail_forecast_stage(job, "Wetterdaten konnten nicht berechnet werden.")
+        await _fail_forecast_stage(job, "weather_failed")
         raise
 
 
@@ -737,7 +737,7 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
             raise TypeError("Forecast assembly requires computed weather")
         limits = await entitlements_for(job.owner)
         if computed["entitlements"] != limits.result_marker():
-            await _fail_forecast_stage(job, "Berechtigungen geändert. Bitte Wetter erneut laden.")
+            await _fail_forecast_stage(job, "entitlements_changed")
             return
         forecast = RouteWeatherOut.model_validate(computed["forecast"])
         payload = forecast.model_dump(mode="json")
@@ -768,7 +768,7 @@ async def _assemble_forecast_job_async(job_id: str) -> None:
             updated_at=now,
         )
     except Exception:
-        await _fail_forecast_stage(job, "Wetterdaten konnten nicht zusammengestellt werden.")
+        await _fail_forecast_stage(job, "assembly_failed")
         raise
 
     if won:
@@ -1165,14 +1165,10 @@ async def _plan_journey_async(journey_id: str, revision: int) -> None:
         return
     except ROUTING_ERRORS as exc:
         logger.info(f"Journey {journey_id}: no route: {exc}")
-        await _set_plan_status(
-            journey_id, revision, Journey.PlanStatus.FAILED, "Für diese Reise wurde keine Route gefunden."
-        )
+        await _set_plan_status(journey_id, revision, Journey.PlanStatus.FAILED, "no_route")
         return
     except Exception:
-        await _set_plan_status(
-            journey_id, revision, Journey.PlanStatus.FAILED, "Die Reise konnte nicht geplant werden."
-        )
+        await _set_plan_status(journey_id, revision, Journey.PlanStatus.FAILED, "planning_failed")
         raise
     finally:
         _log_journey_routing(journey_id, budget, began)
@@ -1201,7 +1197,11 @@ async def _plan_journey_async(journey_id: str, revision: int) -> None:
 
 
 class JourneyPlanningError(Exception):
-    """A valid request for which no progressing day plan can be made."""
+    """A valid request for which no progressing day plan can be made.
+
+    The message is a code stored in ``Journey.plan_error`` and worded by the SPA, like every
+    job and plan error written by a worker (see "Internationalisation" in CLAUDE.md).
+    """
 
 
 def _planner(journey, model, budget):
@@ -1236,7 +1236,7 @@ async def _plan_day_ends(journey, entitlements, model, budget):
         if not await _journey_is_current(journey.id, journey.plan_revision).aexists():
             return None
         if len(days) >= MAX_JOURNEY_DAYS:
-            raise JourneyPlanningError(f"Mehr als {MAX_JOURNEY_DAYS} Tage: bitte längere Tagesetappen wählen.")
+            raise JourneyPlanningError("too_many_days")
         measure = LineMeasure(remainder)
         last = day_limits.scaled(1 + LAST_DAY_SLACK).allows(*measure.between(0, -1))
         lodging, lodging_detour = None, None
@@ -1245,7 +1245,7 @@ async def _plan_day_ends(journey, entitlements, model, budget):
         else:
             boundary = measure.boundary(0, day_limits)
             if measure.meters[boundary] < 1:
-                raise JourneyPlanningError("Das Tageslimit erlaubt keine Fahrt.")
+                raise JourneyPlanningError("day_limit_too_short")
             events = [
                 {"index": idx, "point": point, "mandatory": True}
                 for point, idx in zip(pending, indices[1:-1], strict=True)
@@ -1292,7 +1292,7 @@ async def _plan_day_ends(journey, entitlements, model, budget):
                     lodging_detour = {"s": lodging["detour_s"], "m": lodging["detour_m"]}
                 break
             if accepted is None:
-                raise JourneyPlanningError("Das Tageslimit erlaubt keine Fahrt.")
+                raise JourneyPlanningError("day_limit_too_short")
             end, day_vias, next_pending, next_geometry, next_indices = accepted
         day_date = journey.start_date + timedelta(days=len(days))
         days.append(
@@ -1387,14 +1387,10 @@ async def _plan_journey_routes_async(journey_id: str, revision: int) -> None:
             )
     except ROUTING_ERRORS as exc:
         logger.info(f"Journey {journey_id}: a day could not be routed: {exc}")
-        await _set_plan_status(
-            journey_id, revision, Journey.PlanStatus.FAILED, "Eine Tagesetappe konnte nicht berechnet werden."
-        )
+        await _set_plan_status(journey_id, revision, Journey.PlanStatus.FAILED, "day_failed")
         return
     except Exception:
-        await _set_plan_status(
-            journey_id, revision, Journey.PlanStatus.FAILED, "Die Reise konnte nicht geplant werden."
-        )
+        await _set_plan_status(journey_id, revision, Journey.PlanStatus.FAILED, "planning_failed")
         raise
     finally:
         _log_journey_routing(journey_id, budget, began)
@@ -1509,9 +1505,7 @@ async def _plan_random_ride(journey: Journey, limits, road_model: dict | None) -
         await _set_plan_status(journey.id, revision, Journey.PlanStatus.FAILED, str(exc))
         return
     except Exception:
-        await _set_plan_status(
-            journey.id, revision, Journey.PlanStatus.FAILED, "Die Runde konnte nicht geplant werden."
-        )
+        await _set_plan_status(journey.id, revision, Journey.PlanStatus.FAILED, "ride_failed")
         raise
     finally:
         _log_journey_routing(journey.id, budget, began)
@@ -1590,7 +1584,7 @@ async def _random_ride_day(
                 with suppress(*ROUTING_ERRORS):
                     paths.append(await candidate())
     if not paths:
-        raise JourneyPlanningError("Von diesem Start aus wurde keine passende Runde gefunden.")
+        raise JourneyPlanningError("no_round_found")
 
     planner = _planner(journey, road_model, budget)
     stages, seen = [], set()

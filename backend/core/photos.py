@@ -8,6 +8,7 @@ comments alike; the orientation is applied to the pixels first so nothing is los
 from dataclasses import dataclass
 from io import BytesIO
 
+from django.utils.translation import gettext
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 MAX_EDGE_PX = 2048
@@ -44,13 +45,13 @@ def process_photo(data: bytes) -> ProcessedPhoto:
     try:
         with Image.open(BytesIO(data)) as probe:
             if probe.format not in ACCEPTED_FORMATS:
-                raise PhotoError("Nur JPEG-, PNG- oder WebP-Fotos.")
+                raise PhotoError(gettext("Nur JPEG-, PNG- oder WebP-Fotos."))
             if probe.width * probe.height > MAX_PIXELS:
-                raise PhotoError("Das Foto ist zu gross.")
+                raise PhotoError(gettext("Das Foto ist zu gross."))
             probe.load()
             image = ImageOps.exif_transpose(probe).convert("RGB")
     except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError) as exc:
-        raise PhotoError("Die Datei ist kein lesbares Foto.") from exc
+        raise PhotoError(gettext("Die Datei ist kein lesbares Foto.")) from exc
     full = _encode(image, MAX_EDGE_PX, 85)
     with Image.open(BytesIO(full)) as encoded:
         width, height = encoded.size

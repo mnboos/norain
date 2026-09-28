@@ -45,6 +45,20 @@ they have separate in-memory caches and must share the same persistent database.
 
 [Documentation index](../README.md)
 
+## `just messages` fails: gettext is missing
+
+`just messages` says "GNU gettext is not installed", or `makemessages` says
+`Can't find msguniq`. Install GNU gettext once per computer: `winget install mlocati.GetText`
+(Windows), `sudo apt install gettext` (Debian/Ubuntu) or `brew install gettext` (macOS). Then
+close the terminal and open a new one, and check with `msguniq --version`. Details:
+[Maintain the translations](translations.md#problems).
+
+## `No module named '_cffi_backend'` (or another missing module)
+
+The backend's Python environment is broken. On Windows this happens when `uv` updates
+packages while the backend or a worker is running. Stop them, then in `backend/` run
+`uv pip install --reinstall cffi` (or `uv sync --reinstall` for everything).
+
 ## Sign-in answers "Zu viele fehlgeschlagene Anmeldeversuche"
 
 Ten failed sign-ins from one address (app or admin) lock that address for 30 minutes.

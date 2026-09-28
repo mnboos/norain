@@ -3,7 +3,10 @@
 from datetime import UTC, datetime, timedelta
 from math import isfinite
 
+from django.utils.translation import gettext
+
 from . import ride_quality
+from .forecast_schemas import DepartureExplanation
 from .schedule import LOCAL_TZ
 
 STEP_MINUTES = 15
@@ -26,9 +29,17 @@ SAMPLE_FIELDS = (
 )
 
 
+LESS_OF: dict[ride_quality.RideFactor, DepartureExplanation] = {
+    "rain": "less_rain",
+    "wind": "less_wind",
+    "temp": "milder",
+    "frost": "less_frost",
+}
+
+
 def check_flexibility(value: int) -> int:
     if value < 0 or value > MAX_FLEX_MINUTES or value % STEP_MINUTES:
-        raise ValueError("Flexibility must be 0–120 minutes in 15-minute steps.")
+        raise ValueError(gettext("Die Flexibilität muss 0–120 Minuten in 15-Minuten-Schritten sein."))
     return value
 
 
@@ -38,7 +49,7 @@ def instant(value: str | datetime) -> datetime:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=LOCAL_TZ)
         if dt.astimezone(UTC).astimezone(LOCAL_TZ).replace(tzinfo=None) != dt.replace(tzinfo=None):
-            raise ValueError("Departure falls in a daylight-saving clock gap.")
+            raise ValueError(gettext("Die Abfahrt fällt in die Zeitumstellung."))
     return dt.astimezone(UTC)
 
 
@@ -165,14 +176,13 @@ def comparison_view(stored: dict, now: datetime | None = None) -> dict:
                 "arrival_time": item["arrival_time"],
                 "available": bool(available),
                 "ride_score": score,
-                "ride_label": ride_quality.BAND_LABELS[ride_quality.score_band(score)]
-                if score is not None
-                else "Keine vollständigen Wetterdaten",
+                "ride_label": ride_quality.BAND_LABELS[ride_quality.score_band(score)] if score is not None else None,
             }
         )
     valid = [c for c in candidates if c["available"]]
     recommended = None
-    explanation = "Nicht genügend Wetterdaten zum Vergleichen der Abfahrtszeiten."
+    # A code the SPA (and the briefing) words; see DepartureExplanation.
+    explanation: DepartureExplanation = "insufficient_data"
     if valid:
         best = min(c["ride_score"] for c in valid)
         tied = [c for c in valid if c["ride_score"] <= best + EQUIVALENT_SCORE]
@@ -180,13 +190,9 @@ def comparison_view(stored: dict, now: datetime | None = None) -> dict:
             tied, key=lambda c: (abs(instant(c["departure_time"]) - requested), instant(c["departure_time"]))
         )
         baseline = next((c for c in valid if instant(c["departure_time"]) == requested), None)
-        explanation = "Voraussichtlich die günstigsten Bedingungen im gewählten Zeitfenster."
+        explanation = "best_in_window"
         if baseline and baseline in tied:
-            explanation = (
-                "Ähnliche Bedingungen – deine gewünschte Abfahrtszeit passt bereits."
-                if len(tied) > 1
-                else "Deine gewünschte Abfahrtszeit bietet bereits die günstigsten Bedingungen."
-            )
+            explanation = "requested_equivalent" if len(tied) > 1 else "requested_best"
         elif baseline:
             improvements = {
                 f: factors[baseline["departure_time"]][f] - factors[recommended["departure_time"]][f]
@@ -195,12 +201,7 @@ def comparison_view(stored: dict, now: datetime | None = None) -> dict:
             factor = max(improvements, key=lambda name: improvements[name])
             positive = sum(max(0, x) for x in improvements.values())
             if positive and improvements[factor] / positive >= ride_quality.MIN_WORST_SHARE:
-                explanation = {
-                    "rain": "Weniger Regen während deiner Fahrt.",
-                    "wind": "Weniger Gegenwind während deiner Fahrt.",
-                    "temp": "Angenehmere Temperaturen während deiner Fahrt.",
-                    "frost": "Geringeres Frostrisiko während deiner Fahrt.",
-                }[factor]
+                explanation = LESS_OF[factor]
     return {
         "requested_time": stored["requested_time"],
         "window_start": stored["window_start"],

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import type { PlacesSearchResult } from "@norain/api/models";
 import NiceMap from "./NiceMap.vue";
 const start = defineModel<PlacesSearchResult | null>("start", { default: null });
 const dest = defineModel<PlacesSearchResult | null>("dest", { default: null });
+const { t } = useI18n();
 const open = ref(false);
 const target = ref("start");
 const draftStart = ref<PlacesSearchResult | null>();
@@ -38,26 +40,30 @@ function apply() {
 }
 </script>
 <template>
-    <q-btn outline no-caps label="Start und Ziel auf Karte wählen" @click="show" />
+    <q-btn outline no-caps :label="t('locationPicker.open')" @click="show" />
     <q-dialog v-model="open">
         <q-card style="width: 800px; max-width: 96vw">
             <q-card-section>
-                <div class="text-h6">Route auf der Karte wählen</div>
+                <div class="text-h6">{{ t("locationPicker.title") }}</div>
                 <q-btn-toggle
                     v-model="target"
                     class="q-my-sm"
                     no-caps
                     spread
                     :options="[
-                        { label: 'Start wählen (blau)', value: 'start' },
-                        { label: 'Ziel wählen (rosa)', value: 'dest' },
+                        { label: t('locationPicker.pickStart'), value: 'start' },
+                        { label: t('locationPicker.pickDest'), value: 'dest' },
                     ]"
                 />
                 <div aria-live="polite">
-                    {{ target === "start" ? "Startpunkt" : "Zielpunkt" }} durch Tippen auf die Karte setzen.
+                    {{ target === "start" ? t("locationPicker.tapStart") : t("locationPicker.tapDest") }}
                 </div>
-                <div class="text-caption">Start: {{ draftStart?.properties.name ?? "Noch nicht gewählt" }}</div>
-                <div class="text-caption">Ziel: {{ draftDest?.properties.name ?? "Noch nicht gewählt" }}</div>
+                <div class="text-caption">
+                    {{ t("locationPicker.start", { name: draftStart?.properties.name ?? t("locationPicker.notChosen") }) }}
+                </div>
+                <div class="text-caption">
+                    {{ t("locationPicker.dest", { name: draftDest?.properties.name ?? t("locationPicker.notChosen") }) }}
+                </div>
             </q-card-section>
             <NiceMap
                 v-if="open"
@@ -69,8 +75,8 @@ function apply() {
                 @select-location="select"
             />
             <q-card-actions align="right">
-                <q-btn v-close-popup flat no-caps label="Abbrechen" />
-                <q-btn color="primary" no-caps label="Übernehmen" :disable="!draftStart || !draftDest" @click="apply" />
+                <q-btn v-close-popup flat no-caps :label="t('common.cancel')" />
+                <q-btn color="primary" no-caps :label="t('common.apply')" :disable="!draftStart || !draftDest" @click="apply" />
             </q-card-actions>
         </q-card>
     </q-dialog>

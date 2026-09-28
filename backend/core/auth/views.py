@@ -8,6 +8,7 @@ import json
 from datetime import UTC, datetime
 
 from allauth.account.adapter import get_adapter
+from django.conf import settings
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser
@@ -17,6 +18,8 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.urls import reverse
+from django.utils import translation
+from django.utils.translation import gettext
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 from loguru import logger
@@ -50,6 +53,7 @@ def _account_payload(user: AbstractBaseUser | AnonymousUser | None) -> dict:
                 "signup_complete": user.signup_completed,
                 "has_password": user.has_usable_password(),
                 "default_profile": user.default_profile,
+                "language": user.language,
             },
         }
     return {"authenticated": False, "user": None}
@@ -77,7 +81,7 @@ def _clean_username(user: User, username: object) -> str:
     """The username rules of sign-up. Raises ValidationError."""
     username = username.strip() if isinstance(username, str) else ""
     if not username:
-        raise ValidationError("A username is required.")
+        raise ValidationError(gettext("Ein Benutzername ist erforderlich."))
     # The generated username is the user's own, so keeping it is allowed.
     if username.lower() == user.username.lower():
         return username
@@ -88,7 +92,13 @@ def _clean_profile(value: object) -> str:
     try:
         return RoutingProfile(value).value
     except ValueError:
-        raise ValidationError("Unknown bike profile.") from None
+        raise ValidationError(gettext("Unbekannter Velotyp.")) from None
+
+
+def _clean_language(value: object) -> str:
+    if value not in dict(settings.LANGUAGES):
+        raise ValidationError(gettext("Unbekannte Sprache."))
+    return str(value)
 
 
 def _username_check_allowed(user_id: int) -> bool:
@@ -115,9 +125,9 @@ def complete_signup_view(request: HttpRequest) -> HttpResponse:
     """
     user = _signed_in(request)
     if user is None:
-        return JsonResponse({"detail": "Sign in first."}, status=401)
+        return JsonResponse({"detail": gettext("Bitte zuerst anmelden.")}, status=401)
     if user.signup_completed:
-        return JsonResponse({"detail": "This account is already set up."}, status=409)
+        return JsonResponse({"detail": gettext("Dieses Konto ist schon eingerichtet.")}, status=409)
 
     data = _json_body(request)
     password = data.get("password")
@@ -125,12 +135,13 @@ def complete_signup_view(request: HttpRequest) -> HttpResponse:
     try:
         user.username = _clean_username(user, data.get("username"))
         user.default_profile = _clean_profile(data.get("default_profile", user.default_profile))
+        user.language = _clean_language(data.get("language", user.language))
         if password:
             validate_password(password, user)
     except ValidationError as exc:
         return JsonResponse({"detail": " ".join(exc.messages)}, status=400)
 
-    fields = ["username", "default_profile", "signup_completed"]
+    fields = ["username", "default_profile", "language", "signup_completed"]
     if password:
         user.set_password(password)
         fields.append("password")
@@ -140,7 +151,7 @@ def complete_signup_view(request: HttpRequest) -> HttpResponse:
             user.save(update_fields=fields)
     except IntegrityError:
         # Another account took the name between the check and the save.
-        return JsonResponse({"detail": "This username is already taken."}, status=400)
+        return JsonResponse({"detail": gettext("Dieser Benutzername ist schon vergeben.")}, status=400)
     if password:
         # A new password rotates the session hash; without this the user is signed out.
         update_session_auth_hash(request, user)
@@ -156,9 +167,9 @@ def username_available_view(request: HttpRequest) -> HttpResponse:
     """
     user = _signed_in(request)
     if user is None:
-        return JsonResponse({"detail": "Sign in first."}, status=401)
+        return JsonResponse({"detail": gettext("Bitte zuerst anmelden.")}, status=401)
     if not _username_check_allowed(user.pk):
-        return JsonResponse({"detail": "Too many checks. Please wait a moment."}, status=429)
+        return JsonResponse({"detail": gettext("Zu viele Prüfungen. Bitte einen Moment warten.")}, status=429)
     try:
         _clean_username(user, request.GET.get("username"))
     except ValidationError as exc:
@@ -169,13 +180,27 @@ def username_available_view(request: HttpRequest) -> HttpResponse:
 @require_POST
 @csrf_protect
 def profile_view(request: HttpRequest) -> HttpResponse:
-    """Change what step 2 set that is not a sign-in identity: the default bike profile."""
+    """Change settings that are not sign-in identities: the default bike profile, the language.
+
+    Each is optional, so the language switcher saves without sending the profile.
+    """
     user = _signed_in(request)
     if user is None:
-        return JsonResponse({"detail": "Sign in first."}, status=401)
+        return JsonResponse({"detail": gettext("Bitte zuerst anmelden.")}, status=401)
+    data = _json_body(request)
+    fields = []
     try:
-        user.default_profile = _clean_profile(_json_body(request).get("default_profile"))
+        if "default_profile" in data:
+            user.default_profile = _clean_profile(data["default_profile"])
+            fields.append("default_profile")
+        if "language" in data:
+            user.language = _clean_language(data["language"])
+            fields.append("language")
     except ValidationError as exc:
         return JsonResponse({"detail": " ".join(exc.messages)}, status=400)
-    user.save(update_fields=["default_profile"])
+    if not fields:
+        return JsonResponse({"detail": gettext("Nichts zu ändern.")}, status=400)
+    user.save(update_fields=fields)
+    # The reply is in the language just chosen.
+    translation.activate(user.language)
     return JsonResponse(_account_payload(user))

@@ -9,6 +9,7 @@ from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest
+from django.utils.translation import gettext
 from loguru import logger
 from ninja import Router
 from ninja.errors import HttpError
@@ -22,7 +23,14 @@ from ..entitlements import allowed_route_ids, entitlements_for, entitlements_for
 from ..forecast_schemas import ForecastJobOut
 from ..gpx import MAX_DURATION_SECONDS, validate_track
 from ..models import ForecastJob, RecurringRoute, RideBriefing, User, route_point
-from ..ride_quality import worst_frost_level, worst_rain_level, worst_ride_score
+from ..ride_quality import (
+    ImpactLevel,
+    RideBand,
+    RideFactor,
+    worst_frost_level,
+    worst_rain_level,
+    worst_ride_score,
+)
 from ..road_prefs import RoadPrefs, road_prefs_model
 from ..route_input import GeometrySource
 from ..schedule import check_schedule_cron, forecast_available_at, next_departure
@@ -42,13 +50,13 @@ def check_coordinates(points: list[list[float]]) -> list[list[float]]:
     """[[lon, lat], ...], as lists: the stored JSON compares equal to it only in that shape."""
     for point in points:
         if len(point) != 2 or not (-180 <= point[0] <= 180 and -90 <= point[1] <= 90):
-            raise ValueError("each point is [lon, lat]")
+            raise ValueError(gettext("Jeder Punkt ist [lon, lat]."))
     return [[float(lon), float(lat)] for lon, lat in points]
 
 
 def check_via_points(points: list[list[float]]) -> list[list[float]]:
     if len(points) > MAX_VIA_POINTS:
-        raise ValueError(f"at most {MAX_VIA_POINTS} via points")
+        raise ValueError(gettext("Höchstens %(n)s Zwischenpunkte.") % {"n": MAX_VIA_POINTS})
     return check_coordinates(points)
 
 
@@ -107,11 +115,12 @@ class RouteThumbnail(CamelSchema):
     path: list[list[float]] = Field(default_factory=list)
     computed_at: str | None = None
     ride_score: float | None = Field(default=None, ge=0, le=1)  # None: no sample could be scored
-    ride_label: str | None = None
+    ride_label: RideBand | None = None
+    ride_cause: RideFactor | None = None
     # None means "no rain / no frost worth naming". Nothing to show at all is a missing
     # thumbnail or one whose `departure` no longer matches, which the list already handles.
-    rain_level: str | None = None
-    frost_level: str | None = None
+    rain_level: ImpactLevel | None = None
+    frost_level: ImpactLevel | None = None
     rain_probability: float | None = Field(default=None, ge=0, le=1)  # peak chance of rain
     max_rain_rate_mm_h: float | None = None  # shown instead when there is no probability
     temp_min: float | None = None  # coldest point of the ride, °C
@@ -131,6 +140,7 @@ def _thumbnail_out(blob: dict | None) -> RouteThumbnail | None:
         computed_at=blob.get("computed_at"),
         ride_score=round(worst.score, 4) if worst else None,
         ride_label=worst.label if worst else None,
+        ride_cause=worst.cause if worst else None,
         rain_level=worst_rain_level(samples),
         frost_level=worst_frost_level(samples),
         rain_probability=round(max(pops), 2) if pops else None,
@@ -181,7 +191,7 @@ async def _current_user(request: HttpRequest) -> User:
     """Return the authenticated session user established by the router."""
     user = getattr(request, "auth", None)
     if not isinstance(user, User) or not user.is_authenticated:
-        raise HttpError(401, "Authentication required.")
+        raise HttpError(401, gettext("Anmeldung erforderlich."))
     return user
 
 
@@ -191,7 +201,7 @@ async def _owned_route(request: HttpRequest, route_id: UUID) -> RecurringRoute:
     try:
         return await RecurringRoute.objects.select_related("return_journey").aget(id=route_id, owner=user)
     except RecurringRoute.DoesNotExist:
-        raise HttpError(404, "Route not found.") from None
+        raise HttpError(404, gettext("Route nicht gefunden.")) from None
 
 
 def _route_to_out(route: RecurringRoute, *, detail=False) -> RecurringRouteOut:
@@ -283,8 +293,8 @@ async def _assert_route_quota(user, *, exclude_id: UUID | None = None) -> None:
         )
         raise HttpError(
             402,
-            f"Der {limits.plan}-Tarif erlaubt {limits.max_routes} aktive Routen. "
-            "Upgrade auf Pro für unbegrenzte Routen.",
+            gettext("Der %(plan)s-Tarif erlaubt %(n)s aktive Routen. Mit Plus hast du mehr.")
+            % {"plan": limits.plan, "n": limits.max_routes},
         )
 
 
@@ -295,9 +305,9 @@ async def create_route(request: HttpRequest, data: RecurringRouteIn):
     if (data.departure_flex_before_minutes or data.departure_flex_after_minutes) and not (
         await entitlements_for(user)
     ).departure_comparison:
-        raise HttpError(402, "Departure comparison requires Plus.")
+        raise HttpError(402, gettext("Der Abfahrtsvergleich braucht Plus."))
     if data.geometry_source == "imported" and (not data.imported_coordinates or not data.duration_seconds):
-        raise HttpError(422, "Bitte Strecke und Fahrzeit angeben.")
+        raise HttpError(422, gettext("Bitte Strecke und Fahrzeit angeben."))
     if data.geometry_source == "graphhopper":
         data.imported_coordinates = []
         data.duration_seconds = None
@@ -389,13 +399,13 @@ async def route_preview(request: HttpRequest, data: RoutePreviewIn):
     comes from ``refresh_route_geometry``.
     """
     if not _preview_allowed(request.auth.pk):
-        raise HttpError(429, "Zu viele Routenberechnungen. Bitte kurz warten.")
+        raise HttpError(429, gettext("Zu viele Routenberechnungen. Bitte kurz warten."))
     try:
         model = road_prefs_model(data.road_prefs.prefs()) if data.road_prefs else None
         return await preview_route(data.profile, tuple((lon, lat) for lon, lat in data.points), model)
     except ROUTING_ERRORS as exc:
         logger.info(f"Route preview failed: {exc}")
-        raise HttpError(422, "Für diese Punkte wurde keine Route gefunden.") from None
+        raise HttpError(422, gettext("Für diese Punkte wurde keine Route gefunden.")) from None
 
 
 @router.get("/routes/{route_id}", response=RecurringRouteOut)
@@ -418,7 +428,7 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
         )
         and not (await entitlements_for(user)).departure_comparison
     ):
-        raise HttpError(402, "Departure comparison requires Plus.")
+        raise HttpError(402, gettext("Der Abfahrtsvergleich braucht Plus."))
     # Reactivating a route consumes a slot just as creating one does.
     if data.active and not route.active:
         await _assert_route_quota(await _current_user(request), exclude_id=route_id)
@@ -430,7 +440,7 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
         if "duration_seconds" not in data.model_fields_set:
             data.duration_seconds = route.duration_seconds
         if not data.imported_coordinates or not data.duration_seconds:
-            raise HttpError(422, "Bitte Strecke und Fahrzeit angeben.")
+            raise HttpError(422, gettext("Bitte Strecke und Fahrzeit angeben."))
         data.imported_coordinates = validate_track(data.imported_coordinates)
         data.start_lon, data.start_lat = data.imported_coordinates[0][:2]
         data.dest_lon, data.dest_lat = data.imported_coordinates[-1][:2]
@@ -555,12 +565,12 @@ async def route_forecast(
 
     user = await _current_user(request)
     if route.id not in await sync_to_async(allowed_route_ids)(user):
-        raise HttpError(402, "This route is paused. Choose your active routes in your account or try Plus.")
+        raise HttpError(402, gettext("Diese Route ist pausiert. Wähle deine aktiven Routen im Konto oder teste Plus."))
     limits = await entitlements_for(user)
     if not limits.departure_comparison and (departure_flex_before_minutes or departure_flex_after_minutes):
-        raise HttpError(402, "Departure comparison requires Plus.")
+        raise HttpError(402, gettext("Der Abfahrtsvergleich braucht Plus."))
     if not route.sample_points:
-        raise HttpError(409, "Route geometry not yet computed. Try again in a few seconds.")
+        raise HttpError(409, gettext("Die Strecke wird noch berechnet. Bitte in ein paar Sekunden erneut versuchen."))
 
     if request.headers.get(PREFETCH_HEADER) != "1":
         await _record_view(route)
@@ -592,7 +602,7 @@ def _create_with_quota(user, return_schedule_cron=None, return_schedule_descript
             >= limits.max_routes
         ):
             telemetry.event("route.action", action="quota", outcome="rejected", **telemetry.user_context(user))
-            raise HttpError(402, "Your active route limit is reached. Plus includes 20 routes.")
+            raise HttpError(402, gettext("Du hast die Grenze deiner aktiven Routen erreicht. Plus umfasst 20 Routen."))
         route = RecurringRoute.objects.create(owner=user, **values)
         _save_return(route, return_schedule_cron, return_schedule_description)
         return route
@@ -608,7 +618,7 @@ def _save_with_quota(user, route, return_schedule_cron=None, return_schedule_des
                 RecurringRoute.objects.filter(owner=user, active=True, return_of__isnull=True).count()
                 >= limits.max_routes
             ):
-                raise HttpError(402, "Your active route limit is reached.")
+                raise HttpError(402, gettext("Du hast die Grenze deiner aktiven Routen erreicht."))
         route.save()
         _save_return(route, return_schedule_cron, return_schedule_description)
 
@@ -624,16 +634,19 @@ def _on_outbound_days(cron, outbound):
 
 def _return_description(cron, outbound, fallback):
     minute, hour = (int(field) if field.isdigit() else None for field in cron.split()[:2])
-    days, sep, _ = outbound.schedule_description.rpartition(" um ")
-    if not sep or minute is None or hour is None:
-        return fallback or cron
-    return f"{days} um {hour:02d}:{minute:02d}"
+    # The outbound's description is the owner's text, "Mo, Di um 07:30" or "Mon, Tue at 07:30"
+    # depending on the language it was saved in; the return keeps its days and wording.
+    for separator in (" um ", " at "):
+        days, sep, _ = outbound.schedule_description.rpartition(separator)
+        if sep and minute is not None and hour is not None:
+            return f"{days}{separator}{hour:02d}:{minute:02d}"
+    return fallback or cron
 
 
 def _save_return(route, cron, description):
     if route.return_of_id:
         if cron:
-            raise HttpError(422, "A return journey cannot have another return journey.")
+            raise HttpError(422, gettext("Eine Rückfahrt kann keine eigene Rückfahrt haben."))
         return
     returning = RecurringRoute.objects.filter(return_of=route).first()
     if cron is None and returning is None:
@@ -647,7 +660,7 @@ def _save_return(route, cron, description):
     description = _return_description(cron, route, description or (returning.schedule_description if returning else ""))
     values = {
         "owner": route.owner,
-        "name": f"{route.name[:188]} – Rückfahrt",
+        "name": gettext("%(name)s – Rückfahrt") % {"name": route.name[:188]},
         "description": route.description,
         "start_point": route.destination_point,
         "start_name": route.dest_name,

@@ -1,12 +1,13 @@
 <route lang="json5">
 {
     name: "explore",
-    meta: { title: "Entdecken" },
+    meta: { titleKey: "pages.explore" },
 }
 </route>
 
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { refDebounced } from "@vueuse/core";
 import {
     symSharpChatBubble,
@@ -19,6 +20,7 @@ import type { PublicRouteSummary } from "@norain/api/models";
 import { mediaUrl, PublicRouteSort, usePublicRoutes } from "@/queries/publicRoutes";
 import { pointsAttr, projectPath } from "@/utils/routeThumbnail";
 
+const { t } = useI18n();
 const GLYPH_SIZE = 100;
 
 const sort = ref(PublicRouteSort.New);
@@ -38,19 +40,17 @@ const minutes = (s: number) => {
     <q-page class="q-pa-md">
         <div class="row items-center q-col-gutter-sm q-mb-md">
             <div class="col-12 col-sm">
-                <h1 class="text-h5 text-weight-bold q-my-none">Entdecken</h1>
-                <div class="text-caption text-muted">
-                    Strecken, die andere teilen. Öffne eine und sieh das Wetter für deine eigene Abfahrt.
-                </div>
+                <h1 class="text-h5 text-weight-bold q-my-none">{{ t("nav.explore") }}</h1>
+                <div class="text-caption text-muted">{{ t("explore.intro") }}</div>
             </div>
             <q-input
                 v-model="search"
                 dense
                 outlined
                 clearable
-                placeholder="Suchen"
+                :placeholder="t('explore.search')"
                 class="col-12 col-sm-4"
-                aria-label="Routen suchen"
+                :aria-label="t('explore.searchLabel')"
             >
                 <template #prepend><q-icon :name="symSharpSearch" /></template>
             </q-input>
@@ -59,21 +59,21 @@ const minutes = (s: number) => {
                 no-caps
                 unelevated
                 toggle-color="primary"
-                aria-label="Sortierung"
+                :aria-label="t('explore.sort')"
                 :options="[
-                    { label: 'Neu', value: PublicRouteSort.New },
-                    { label: 'Beliebt', value: PublicRouteSort.Popular },
+                    { label: t('explore.new'), value: PublicRouteSort.New },
+                    { label: t('explore.popular'), value: PublicRouteSort.Popular },
                 ]"
             />
         </div>
 
         <div v-if="isLoading" class="text-center q-mt-xl"><q-spinner-dots size="3rem" /></div>
-        <q-banner v-else-if="isError" class="bg-tint-warn" rounded>Die Routen konnten nicht geladen werden.</q-banner>
+        <q-banner v-else-if="isError" class="bg-tint-warn" rounded>{{ t("explore.loadFailed") }}</q-banner>
         <div v-else-if="!routes?.length" class="text-center text-grey q-mt-xl">
             <q-icon :name="symSharpRoute" size="4rem" />
             <p class="q-mt-md text-body1">
-                {{ q ? "Keine öffentliche Route passt zu deiner Suche." : "Noch keine öffentlichen Routen." }}
-                Teile eine deiner Routen über „Teilen“ in der Routenansicht.
+                {{ q ? t("explore.noMatch") : t("explore.none") }}
+                {{ t("explore.shareHint") }}
             </p>
         </div>
 
@@ -102,7 +102,7 @@ const minutes = (s: number) => {
                         <div class="text-caption text-muted">
                             {{ km(route.distanceM) }} · {{ minutes(route.durationS) }}
                             <template v-if="route.ascentM != null">· {{ route.ascentM }} m ↑</template>
-                            · von {{ route.author }}
+                            · {{ t("explore.by", { author: route.author }) }}
                         </div>
                         <div class="row q-gutter-sm q-mt-xs text-caption text-muted">
                             <span>

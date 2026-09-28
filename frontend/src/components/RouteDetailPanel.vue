@@ -4,6 +4,8 @@ import ElevationChart from "@/components/ElevationChart.vue";
 import { GeometrySource } from "@norain/api/models";
 import { computed, ref, toRefs, watch } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
+import { te } from "@/i18n";
 import {
     symSharpCloudOff,
     symSharpPedalBike,
@@ -29,11 +31,6 @@ import { canShareFiles, gpxApi, shareGpx, gpxError } from "@/services/gpx";
 import { toLonLat, type LonLat } from "@/utils/routeEditing";
 import { useRecurringRoute, useRecurringRouteForecast, useUpdateRecurringRoute } from "@/queries/recurringRoutes";
 
-const PROFILE_LABELS: Record<string, string> = {
-    bike: "Velo",
-    ebike: "E-Bike",
-    fast_ebike: "S-Pedelec",
-};
 
 const props = defineProps<{
     route: RecurringRouteOut;
@@ -43,11 +40,15 @@ const props = defineProps<{
 
 const { route, departureDate, departureTime } = toRefs(props);
 const $q = useQuasar();
+const { t } = useI18n();
 const { isPro } = useEntitlements();
 
 const routeId = computed(() => route.value.id);
 const hasGeometry = computed(() => !!route.value.hasGeometry);
-const profileLabel = computed(() => PROFILE_LABELS[route.value.profile] ?? route.value.profile);
+const profileLabel = computed(() => {
+    const key = `profiles.${route.value.profile}`;
+    return te(key) ? t(key) : route.value.profile;
+});
 
 // Polls until the geometry is built. The page reads the same query key, so `route` updates with it.
 useRecurringRoute(routeId, () => (hasGeometry.value ? false : 3000));
@@ -156,7 +157,7 @@ const viaPoints = computed(() => (route.value.viaPoints ?? []).map(toLonLat));
 function saveViaPoints(points: LonLat[]) {
     saveShape.mutate(
         { id: route.value.id, data: { ...route.value, viaPoints: points } },
-        { onError: () => $q.notify({ type: "negative", message: "Die Strecke konnte nicht gespeichert werden." }) },
+        { onError: () => $q.notify({ type: "negative", message: t("routeDetail.shapeSaveFailed") }) },
     );
 }
 
@@ -217,7 +218,7 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                             no-caps
                             :icon="symSharpEditRoad"
                             color="primary"
-                            label="Strecke anpassen"
+                            :label="t('routeEditor.title')"
                             class="q-mt-sm"
                             :loading="saveShape.isPending.value"
                             @click="editing = true"
@@ -227,7 +228,7 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                             dense
                             no-caps
                             :icon="sharing ? symSharpShare : symSharpDownload"
-                            :label="sharing ? 'GPX teilen' : 'GPX herunterladen'"
+                            :label="sharing ? t('routeDetail.shareGpx') : t('routeDetail.downloadGpx')"
                             :disable="!hasGeometry && route.geometrySource !== 'imported'"
                             :loading="exporting"
                             @click="exportRoute"
@@ -237,18 +238,18 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                             dense
                             no-caps
                             :icon="route.visibility === 'public' ? symSharpPublic : symSharpShare"
-                            :label="route.visibility === 'public' ? 'Öffentlich · Fotos' : 'Teilen & Fotos'"
+                            :label="route.visibility === 'public' ? t('routeDetail.publicPhotos') : t('routeDetail.sharePhotos')"
                             :color="route.visibility === 'public' ? 'primary' : undefined"
                             @click="sharingOpen = true"
                         />
                         <RouteShareDialog v-if="sharingOpen" v-model="sharingOpen" :route-id="route.id" :route-name="route.name" />
                         <template v-if="route.geometrySource === 'imported' && !route.parentRouteId">
-                            <div class="q-my-sm">Originalstrecke aus GPX</div>
+                            <div class="q-my-sm">{{ t("routeForm.originalFromGpx") }}</div>
                             <RouteTimingFields v-model="duration" :distance-m="route.totalDistanceM ?? 0" />
                             <q-btn
                                 flat
                                 no-caps
-                                label="Fahrzeit speichern"
+                                :label="t('routeDetail.saveDuration')"
                                 :disable="duration <= 0 || duration > 1382400 || duration === route.durationSeconds"
                                 :loading="saveShape.isPending.value"
                                 @click="saveDuration"
@@ -270,12 +271,12 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                             v-if="windowChanged"
                             flat
                             no-caps
-                            label="Für diese Route speichern"
+                            :label="t('routeDetail.saveForRoute')"
                             :loading="saveWindow.isPending.value"
                             @click="saveFlexibility"
                         />
                         <div v-if="saveWindow.isError.value" role="alert">
-                            Zeitfenster konnte nicht gespeichert werden.
+                            {{ t("routeDetail.windowSaveFailed") }}
                         </div>
                     </DepartureFlexibility>
                     <q-card-section v-if="departureComparison">
@@ -310,7 +311,7 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                 <div class="col-12 col-sm-6 col-md-3">
                     <q-card class="full-height">
                         <q-card-section class="q-pb-none">
-                            <div class="text-subtitle2 q-mb-xs">Wind entlang der Strecke</div>
+                            <div class="text-subtitle2 q-mb-xs">{{ t("routeDetail.windAlong") }}</div>
                             <WindDistributionBar
                                 v-if="forecast.summary.windDistribution"
                                 :distribution="forecast.summary.windDistribution"
@@ -359,17 +360,17 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                     <template #avatar>
                         <q-spinner-dots size="1.5rem" color="accent" />
                     </template>
-                    Route wird berechnet...
+                    {{ t("routeList.computing") }}
                 </q-banner>
                 <q-banner v-else-if="forecastError && !forecast" rounded class="bg-tint-error">
-                    Wetterdaten konnten nicht geladen werden. Ist diese Route nach Ablauf von Plus pausiert?
-                    <q-btn flat to="/account" label="Aktive Routen und Tarif verwalten" no-caps />
+                    {{ t("routeDetail.weatherFailedPaused") }}
+                    <q-btn flat to="/account" :label="t('routeDetail.manageRoutes')" no-caps />
                 </q-banner>
                 <q-banner v-else rounded class="bg-tint-neutral">
                     <template #avatar>
                         <q-icon :name="symSharpCloudOff" class="text-muted" />
                     </template>
-                    Noch keine Vorhersage möglich. Die Wettervorhersage ist erst näher am Abfahrtstermin verfügbar.
+                    {{ t("routeDetail.tooEarly") }}
                 </q-banner>
             </div>
         </div>
@@ -399,7 +400,7 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                 track-color="grey-3"
             />
             <q-spinner-dots v-else size="3rem" color="primary" />
-            <div class="text-muted q-mt-sm">Wetterdaten werden geladen…</div>
+            <div class="text-muted q-mt-sm">{{ t("forecast.loading") }}</div>
         </q-inner-loading>
     </div>
 </template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { symSharpMyLocation } from "@quasar/extras/material-symbols-sharp";
 import type { PlacesSearchResult } from "@norain/api/models";
 import { geolocationAvailable, useCurrentLocation } from "@/composables/useCurrentLocation";
@@ -8,6 +9,7 @@ defineProps<{ disable?: boolean }>();
 const emit = defineEmits<{ select: [place: PlacesSearchResult] }>();
 
 const $q = useQuasar();
+const { t } = useI18n();
 const { locating, locate } = useCurrentLocation();
 
 async function onClick() {
@@ -29,9 +31,9 @@ async function onClick() {
         :icon="symSharpMyLocation"
         :loading="locating"
         :disable="disable"
-        aria-label="Aktueller Standort"
+        :aria-label="t('location.current')"
         @click.stop="onClick"
     >
-        <q-tooltip>Aktueller Standort</q-tooltip>
+        <q-tooltip>{{ t("location.current") }}</q-tooltip>
     </q-btn>
 </template>

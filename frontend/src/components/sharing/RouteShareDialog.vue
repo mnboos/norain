@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { copyToClipboard, useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import {
     symSharpAddPhotoAlternate,
     symSharpContentCopy,
@@ -24,6 +25,7 @@ import { readExifGps } from "@/utils/exifGps";
 const props = defineProps<{ routeId: string; routeName: string }>();
 const open = defineModel<boolean>({ required: true });
 const $q = useQuasar();
+const { t } = useI18n();
 const routeId = computed(() => props.routeId);
 
 const { data: sharing } = useSharing(routeId);
@@ -31,13 +33,13 @@ const update = useUpdateSharing(routeId);
 const { data: photos } = useRoutePhotos(routeId);
 const { upload, update: updatePhoto, remove } = usePhotoMutations(routeId);
 
-const ZONES = [
-    { label: "Aus", value: 0 },
+const ZONES = computed(() => [
+    { label: t("share.zoneOff"), value: 0 },
     { label: "250 m", value: 250 },
     { label: "500 m", value: 500 },
     { label: "1 km", value: 1000 },
     { label: "2 km", value: 2000 },
-];
+]);
 
 const isPublic = computed(() => sharing.value?.visibility === SharingOutVisibilityEnum.Public);
 const link = computed(() =>
@@ -51,7 +53,7 @@ async function notifyError(error: unknown, fallback: string) {
 function save(visibility: Visibility, privacyZoneM: number) {
     update.mutate(
         { visibility, privacyZoneM },
-        { onError: error => void notifyError(error, "Die Freigabe konnte nicht gespeichert werden.") },
+        { onError: error => void notifyError(error, t("share.saveFailed")) },
     );
 }
 
@@ -63,12 +65,12 @@ async function share() {
         return;
     }
     await copyToClipboard(link.value);
-    $q.notify({ type: "positive", message: "Link kopiert." });
+    $q.notify({ type: "positive", message: t("publicRoute.linkCopied") });
 }
 
 async function copyLink() {
     await copyToClipboard(link.value);
-    $q.notify({ type: "positive", message: "Link kopiert." });
+    $q.notify({ type: "positive", message: t("publicRoute.linkCopied") });
 }
 
 // -- photos -----------------------------------------------------------------------
@@ -87,7 +89,7 @@ async function uploadFiles(selected: File[] | File | null) {
             const position = usePosition.value ? readExifGps(await file.arrayBuffer()) : null;
             await upload.mutateAsync({ file, ...position });
         } catch (error) {
-            await notifyError(error, `${file.name} konnte nicht hochgeladen werden.`);
+            await notifyError(error, t("share.uploadFailed", { name: file.name }));
         } finally {
             uploading.value--;
         }
@@ -103,7 +105,7 @@ function saveCaption(photo: PhotoOut) {
     if (caption === photo.caption) return;
     updatePhoto.mutate(
         { id: photo.id, caption, lat: photo.lat, lon: photo.lon },
-        { onError: error => void notifyError(error, "Bildunterschrift nicht gespeichert.") },
+        { onError: error => void notifyError(error, t("share.captionFailed")) },
     );
 }
 function forgetPosition(photo: PhotoOut) {
@@ -115,20 +117,20 @@ function forgetPosition(photo: PhotoOut) {
     <q-dialog v-model="open">
         <q-card style="width: 640px; max-width: 95vw">
             <q-card-section>
-                <div class="text-h6">Route teilen</div>
+                <div class="text-h6">{{ t("share.title") }}</div>
             </q-card-section>
 
             <q-card-section class="q-pt-none">
                 <q-toggle
                     :model-value="isPublic"
-                    label="Öffentlich: jeder mit dem Link kann die Route sehen, sie erscheint unter „Entdecken“"
+                    :label="t('share.public')"
                     :disable="!sharing || update.isPending.value"
                     @update:model-value="
                         save($event ? Visibility.Public : Visibility.Private, sharing?.privacyZoneM ?? 500)
                     "
                 />
 
-                <div class="q-mt-md text-subtitle2">Privatsphäre-Zone um Start und Ziel</div>
+                <div class="q-mt-md text-subtitle2">{{ t("share.zoneTitle") }}</div>
                 <q-btn-toggle
                     :model-value="sharing?.privacyZoneM ?? 500"
                     :options="ZONES"
@@ -136,47 +138,43 @@ function forgetPosition(photo: PhotoOut) {
                     unelevated
                     toggle-color="primary"
                     :disable="!sharing || update.isPending.value"
-                    aria-label="Privatsphäre-Zone"
+                    :aria-label="t('share.zone')"
                     @update:model-value="save(isPublic ? Visibility.Public : Visibility.Private, $event)"
                 />
                 <p class="text-caption text-muted q-mt-sm q-mb-none">
-                    Andere sehen nur die Strecke ausserhalb dieser Zone. Start- und Zielort, ihre Namen und dein
-                    Fahrplan sind nie öffentlich.
+                    {{ t("share.zoneHint") }}
                     <template v-if="sharing?.publicDistanceM">
-                        Sichtbar: {{ (sharing.publicDistanceM / 1000).toFixed(1) }} km.
+                        {{ t("share.visible", { km: (sharing.publicDistanceM / 1000).toFixed(1) }) }}
                     </template>
-                    <strong v-else-if="sharing">Mit dieser Zone bleibt zu wenig Strecke übrig.</strong>
+                    <strong v-else-if="sharing">{{ t("share.tooLittle") }}</strong>
                 </p>
                 <GpxPreviewMap v-if="sharing?.publicLine" :original="sharing.publicLine" class="q-mt-sm" />
 
                 <div v-if="link" class="row items-center q-gutter-sm q-mt-md">
-                    <q-input :model-value="link" readonly dense outlined class="col" aria-label="Öffentlicher Link" />
-                    <q-btn flat round :icon="symSharpContentCopy" aria-label="Link kopieren" @click="copyLink" />
-                    <q-btn flat round :icon="symSharpShare" aria-label="Teilen" @click="share" />
+                    <q-input :model-value="link" readonly dense outlined class="col" :aria-label="t('share.link')" />
+                    <q-btn flat round :icon="symSharpContentCopy" :aria-label="t('share.copyLink')" @click="copyLink" />
+                    <q-btn flat round :icon="symSharpShare" :aria-label="t('gpx.share')" @click="share" />
                 </div>
             </q-card-section>
 
             <q-separator />
 
             <q-card-section>
-                <div class="text-subtitle2">Fotos</div>
-                <p class="text-caption text-muted q-mb-sm">
-                    Fotos werden ohne Metadaten gespeichert. Mit Aufnahmeort erscheinen sie auf der Karte, ausser in der
-                    Privatsphäre-Zone.
-                </p>
+                <div class="text-subtitle2">{{ t("publicRoute.photos") }}</div>
+                <p class="text-caption text-muted q-mb-sm">{{ t("share.photosHint") }}</p>
                 <q-file
                     v-model="files"
                     multiple
                     accept="image/jpeg,image/png,image/webp"
                     outlined
                     dense
-                    label="Fotos hinzufügen"
+                    :label="t('share.addPhotos')"
                     :loading="uploading > 0"
                     @update:model-value="uploadFiles"
                 >
                     <template #prepend><q-icon :name="symSharpAddPhotoAlternate" /></template>
                 </q-file>
-                <q-checkbox v-model="usePosition" dense label="Aufnahmeort übernehmen" class="q-mt-xs" />
+                <q-checkbox v-model="usePosition" dense :label="t('share.usePosition')" class="q-mt-xs" />
 
                 <q-list v-if="photos?.length" separator class="q-mt-sm">
                     <q-item v-for="photo in photos" :key="photo.id" class="q-px-none">
@@ -189,16 +187,16 @@ function forgetPosition(photo: PhotoOut) {
                                 dense
                                 borderless
                                 maxlength="500"
-                                placeholder="Bildunterschrift"
-                                aria-label="Bildunterschrift"
+                                :placeholder="t('share.caption')"
+                                :aria-label="t('share.caption')"
                                 @update:model-value="captions[photo.id] = String($event ?? '')"
                                 @blur="saveCaption(photo)"
                                 @keyup.enter="saveCaption(photo)"
                             />
                             <q-item-label v-if="photo.lat != null" caption>
                                 <q-icon :name="symSharpLocationOn" />
-                                auf der Karte ·
-                                <a href="#" @click.prevent="forgetPosition(photo)">entfernen</a>
+                                {{ t("share.onMap") }} ·
+                                <a href="#" @click.prevent="forgetPosition(photo)">{{ t("share.remove") }}</a>
                             </q-item-label>
                         </q-item-section>
                         <q-item-section side>
@@ -207,10 +205,10 @@ function forgetPosition(photo: PhotoOut) {
                                 round
                                 dense
                                 :icon="symSharpDelete"
-                                aria-label="Foto löschen"
+                                :aria-label="t('share.deletePhoto')"
                                 @click="
                                     remove.mutate(photo.id, {
-                                        onError: e => void notifyError(e, 'Foto nicht gelöscht.'),
+                                        onError: e => void notifyError(e, t('share.deleteFailed')),
                                     })
                                 "
                             />
@@ -220,8 +218,8 @@ function forgetPosition(photo: PhotoOut) {
             </q-card-section>
 
             <q-card-actions align="right">
-                <q-btn v-if="link" flat no-caps label="Öffentliche Seite ansehen" :to="`/r/${sharing?.publicSlug}`" />
-                <q-btn v-close-popup flat no-caps label="Fertig" color="primary" />
+                <q-btn v-if="link" flat no-caps :label="t('share.viewPublic')" :to="`/r/${sharing?.publicSlug}`" />
+                <q-btn v-close-popup flat no-caps :label="t('share.done')" color="primary" />
             </q-card-actions>
         </q-card>
     </q-dialog>

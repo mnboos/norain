@@ -1,14 +1,19 @@
 import type { FeatureCollection, Feature } from "geojson";
 import type { SystemFeature, SystemCoveragePoint } from "@norain/api/models";
 
+import { t } from "@/i18n";
+
 export const CACHE_COLORS = { fresh: "#15956a", aging: "#c78300", stale: "#dc4954" };
 export const COVERAGE_COLORS = { usable: "#15956a", stale: "#dc4954", missing: "#7b8090", insufficient: "#a065d1" };
-export const COVERAGE_LABELS = {
-    usable: "Nutzbar",
-    stale: "Veraltet",
-    missing: "Fehlend",
-    insufficient: "Nicht ausreichend",
-};
+/** The coverage states with their labels, in the current language. */
+export function coverageLabels(): Record<keyof typeof COVERAGE_COLORS, string> {
+    return {
+        usable: t("system.coverage.usable"),
+        stale: t("system.coverage.stale"),
+        missing: t("system.coverage.missing"),
+        insufficient: t("system.coverage.insufficient"),
+    };
+}
 
 export function cacheFreshness(fetchedAt: Date, now: number, maxAgeSeconds: number): keyof typeof CACHE_COLORS {
     const age = Math.max(0, (now - fetchedAt.getTime()) / 1000);

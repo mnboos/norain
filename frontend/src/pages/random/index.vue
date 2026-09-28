@@ -1,13 +1,14 @@
 <route lang="json5">
 {
     name: "random-rides",
-    meta: { title: "Zufallsrunden", requiresAuth: true },
+    meta: { titleKey: "pages.randomRides", requiresAuth: true },
 }
 </route>
 
 <script setup lang="ts">
 import { ref } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { symSharpAdd, symSharpArrowBack, symSharpCasino, symSharpDelete } from "@quasar/extras/material-symbols-sharp";
 import type { JourneyIn, JourneyOut } from "@norain/api/models";
@@ -17,6 +18,7 @@ import { JourneyKind, useCreateJourney, useDeleteJourney, useJourneys } from "@/
 import { dayLabel, duration, km, planStatusLabel } from "@/utils/journeys";
 
 const $q = useQuasar();
+const { t } = useI18n();
 const router = useRouter();
 const showForm = ref(false);
 
@@ -30,25 +32,24 @@ function onSave(data: JourneyIn) {
         onError: (err: unknown) => {
             if (isQuotaExceeded(err)) {
                 $q.dialog({
-                    title: "Tarifgrenze erreicht",
-                    message:
-                        "Dein Tarif erlaubt drei Zufallsrunden. Lösche eine alte oder wechsle zu Plus für bis zu 20.",
-                    cancel: { label: "Später", flat: true },
-                    ok: { label: "Upgrade", color: "primary", unelevated: true },
+                    title: t("quota.title"),
+                    message: t("quota.randomRides"),
+                    cancel: { label: t("quota.later"), flat: true },
+                    ok: { label: t("quota.upgrade"), color: "primary", unelevated: true },
                 }).onOk(() => void router.push("/account"));
                 return;
             }
-            $q.notify({ type: "negative", message: "Runde konnte nicht erstellt werden." });
+            $q.notify({ type: "negative", message: t("random.createFailed") });
         },
     });
 }
 
 function onDelete(ride: JourneyOut) {
     $q.dialog({
-        title: "Runde löschen",
-        message: `Möchtest du die Runde „${ride.name}“ wirklich löschen?`,
-        cancel: { label: "Abbrechen", flat: true },
-        ok: { label: "Löschen", color: "negative", unelevated: true },
+        title: t("random.delete.title"),
+        message: t("random.delete.message", { name: ride.name }),
+        cancel: { label: t("common.cancel"), flat: true },
+        ok: { label: t("common.delete"), color: "negative", unelevated: true },
         persistent: true,
     }).onOk(() => {
         deleteMutation.mutate(ride.id);
@@ -58,7 +59,7 @@ function onDelete(ride: JourneyOut) {
 function target(ride: JourneyOut): string {
     const length = ride.maxDaySeconds ? duration(ride.maxDaySeconds) : km(ride.maxDayDistanceM ?? 0);
     return (ride.randomPrefs?.roundTrip ?? true)
-        ? `Rundkurs ab ${ride.startName} · ${length}`
+        ? t("random.loopFrom", { start: ride.startName, length })
         : `${ride.startName} → ${ride.destName} · ${length}`;
 }
 </script>
@@ -67,14 +68,14 @@ function target(ride: JourneyOut): string {
     <q-page class="row justify-center q-pa-md">
         <div class="col-12 col-md-8 col-lg-6">
             <div class="row items-center q-mb-md">
-                <q-btn flat round dense :icon="symSharpArrowBack" to="/" aria-label="Zurück" />
-                <h1 class="text-h6 text-weight-bold q-my-none q-ml-sm col">Zufallsrunden</h1>
+                <q-btn flat round dense :icon="symSharpArrowBack" to="/routes" :aria-label="t('common.back')" />
+                <h1 class="text-h6 text-weight-bold q-my-none q-ml-sm col">{{ t("pages.randomRides") }}</h1>
                 <q-btn
                     color="primary"
                     unelevated
                     no-caps
                     :icon="symSharpAdd"
-                    label="Neue Runde"
+                    :label="t('random.new')"
                     @click="showForm = true"
                 />
             </div>
@@ -83,11 +84,8 @@ function target(ride: JourneyOut): string {
 
             <div v-else-if="!rides?.length" class="text-center text-muted q-mt-xl">
                 <q-icon :name="symSharpCasino" size="4rem" />
-                <p class="q-mt-md text-body1">Noch keine Zufallsrunde.</p>
-                <p class="text-body2">
-                    Keine Idee, wohin? Sag, ob du im Kreis oder zu einem Ziel fahren willst und wie lange oder wie weit.
-                    Meteolane würfelt die Strecke und zeigt das Wetter darauf.
-                </p>
+                <p class="q-mt-md text-body1">{{ t("random.empty") }}</p>
+                <p class="text-body2">{{ t("random.emptyHint") }}</p>
             </div>
 
             <q-list v-else bordered separator class="rounded-borders">
@@ -115,7 +113,7 @@ function target(ride: JourneyOut): string {
                             round
                             dense
                             :icon="symSharpDelete"
-                            aria-label="Runde löschen"
+                            :aria-label="t('random.delete.title')"
                             @click.prevent.stop="onDelete(ride)"
                         />
                     </q-item-section>

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { useI18n } from "vue-i18n";
 import { symSharpClose } from "@quasar/extras/material-symbols-sharp";
 import type { PhotoOut } from "@norain/api/models";
 import { mediaUrl } from "@/queries/publicRoutes";
 
 const props = defineProps<{ photos: PhotoOut[] }>();
+const { t } = useI18n();
 const open = ref(false);
 const current = ref("");
 
@@ -23,7 +25,7 @@ defineExpose({
 </script>
 
 <template>
-    <div v-if="photos.length" class="photo-grid" role="list" aria-label="Fotos">
+    <div v-if="photos.length" class="photo-grid" role="list" :aria-label="t('publicRoute.photos')">
         <button
             v-for="photo in photos"
             :key="photo.id"
@@ -41,7 +43,7 @@ defineExpose({
         <q-card class="bg-black text-white column no-wrap">
             <q-bar class="bg-black">
                 <q-space />
-                <q-btn v-close-popup dense flat round :icon="symSharpClose" aria-label="Schliessen" />
+                <q-btn v-close-popup dense flat round :icon="symSharpClose" :aria-label="t('common.close')" />
             </q-bar>
             <q-carousel
                 v-model="current"

@@ -2614,15 +2614,28 @@
                         "title": "Ride Score"
                     },
                     "ride_label": {
-                        "title": "Ride Label",
-                        "type": "string"
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Label"
                     }
                 },
                 "required": [
                     "departure_time",
                     "arrival_time",
-                    "available",
-                    "ride_label"
+                    "available"
                 ],
                 "title": "DepartureCandidate",
                 "type": "object"
@@ -2660,6 +2673,16 @@
                         "title": "Recommended Time"
                     },
                     "explanation": {
+                        "enum": [
+                            "insufficient_data",
+                            "best_in_window",
+                            "requested_equivalent",
+                            "requested_best",
+                            "less_rain",
+                            "less_wind",
+                            "milder",
+                            "less_frost"
+                        ],
                         "title": "Explanation",
                         "type": "string"
                     }
@@ -2979,10 +3002,6 @@
                         ],
                         "title": "Weather Code"
                     },
-                    "weather_desc": {
-                        "title": "Weather Desc",
-                        "type": "string"
-                    },
                     "station_count": {
                         "anyOf": [
                             {
@@ -3023,6 +3042,13 @@
                     "ride_label": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3031,9 +3057,34 @@
                         ],
                         "title": "Ride Label"
                     },
+                    "ride_cause": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "rain",
+                                    "wind",
+                                    "temp",
+                                    "frost"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Cause"
+                    },
                     "wind_effort_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "tailwind",
+                                    "none",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "very_high"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3045,6 +3096,11 @@
                     "frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3060,8 +3116,7 @@
                     "elapsed_s",
                     "eta",
                     "rain_mm",
-                    "temp",
-                    "weather_desc"
+                    "temp"
                 ],
                 "title": "ForecastSampleOut",
                 "type": "object"
@@ -3310,6 +3365,11 @@
                     "frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3404,6 +3464,14 @@
                     "max_wind_effort_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "tailwind",
+                                    "none",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "very_high"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3415,6 +3483,11 @@
                     "max_frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3489,6 +3562,14 @@
                     "wind_effort_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "tailwind",
+                                    "none",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "very_high"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -4189,6 +4270,13 @@
                     "ride_label": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -4197,9 +4285,31 @@
                         ],
                         "title": "Ride Label"
                     },
+                    "ride_cause": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "rain",
+                                    "wind",
+                                    "temp",
+                                    "frost"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Cause"
+                    },
                     "rain_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -4211,6 +4321,11 @@
                     "frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -5141,6 +5256,94 @@
                 "title": "JourneyOut",
                 "type": "object"
             },
+            "JourneyReasonOut": {
+                "description": "Why a variant ranks where it does, as data the SPA words (``journeys.rank_day``).\n\n``missing_stop``: no reachable stop for ``category``. ``gap``: ``minutes`` / ``km`` of a leg\nwithout ``category``. ``detour``: ``km`` off the line to ``name`` (or ``category``).\n``longer``: ``percent`` longer than the fastest variant. ``day_limit`` / ``leg_limit``\n(with ``leg``): ``minutes`` too long or ``km`` too far.",
+                "properties": {
+                    "kind": {
+                        "enum": [
+                            "missing_stop",
+                            "gap",
+                            "detour",
+                            "longer",
+                            "day_limit",
+                            "leg_limit"
+                        ],
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "category": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Category"
+                    },
+                    "name": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Name"
+                    },
+                    "leg": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Leg"
+                    },
+                    "minutes": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Minutes"
+                    },
+                    "km": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Km"
+                    },
+                    "percent": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Percent"
+                    }
+                },
+                "required": [
+                    "kind"
+                ],
+                "title": "JourneyReasonOut",
+                "type": "object"
+            },
             "JourneyStageOut": {
                 "properties": {
                     "id": {
@@ -5287,6 +5490,13 @@
                     "ride_label": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -5294,6 +5504,23 @@
                             }
                         ],
                         "title": "Ride Label"
+                    },
+                    "ride_cause": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "rain",
+                                    "wind",
+                                    "temp",
+                                    "frost"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Cause"
                     },
                     "recommended_departure": {
                         "anyOf": [
@@ -5313,7 +5540,7 @@
                     },
                     "reasons": {
                         "items": {
-                            "type": "string"
+                            "$ref": "#/components/schemas/JourneyReasonOut"
                         },
                         "title": "Reasons",
                         "type": "array"

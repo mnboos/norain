@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { symSharpSave } from "@quasar/extras/material-symbols-sharp";
 import type { JourneyOut, JourneyStageOut } from "@norain/api/models";
@@ -11,7 +12,7 @@ import { isQuotaExceeded } from "@/services/http";
 import { duration, km } from "@/utils/journeys";
 import { type MapPoi, poiCategory } from "@/utils/poiCategories";
 import { alternativeColor } from "@/utils/rideQuality";
-import { WEEKDAY_LABELS, cronWeekday, weeklyCron, weeklyDescription } from "@/utils/weeklySchedule";
+import { cronWeekday, weekdayLabels, weeklyCron, weeklyDescription } from "@/utils/weeklySchedule";
 
 /**
  * A random ride without the weather mode: its variants, no forecast. The rider picks one or more
@@ -20,6 +21,7 @@ import { WEEKDAY_LABELS, cronWeekday, weeklyCron, weeklyDescription } from "@/ut
 const props = defineProps<{ ride: JourneyOut }>();
 
 const $q = useQuasar();
+const { t } = useI18n();
 const router = useRouter();
 const save = useSaveVariantsAsRoutes();
 
@@ -44,7 +46,7 @@ const mainProfile = computed(() => {
         ? {
               stageId: stage.id,
               color: alternativeColor(mainIndex.value, $q.dark.isActive),
-              label: `Variante ${mainIndex.value + 1}`,
+              label: t("journeyDay.variant", { n: mainIndex.value + 1 }),
           }
         : null;
 });
@@ -52,7 +54,7 @@ const otherProfiles = computed(() =>
     stages.value.flatMap((stage, index) =>
         index === mainIndex.value
             ? []
-            : [{ stageId: stage.id, color: alternativeColor(index, $q.dark.isActive), label: `Variante ${index + 1}` }],
+            : [{ stageId: stage.id, color: alternativeColor(index, $q.dark.isActive), label: t("journeyDay.variant", { n: index + 1 }) }],
     ),
 );
 
@@ -70,7 +72,7 @@ const pois = computed<MapPoi[]>(() => {
             category: poi.category,
             name: poi.name,
             planned: !anyPicked || picked.value[index] === true,
-            note: `Variante ${index + 1}`,
+            note: t("journeyDay.variant", { n: index + 1 }),
         })),
     );
     // One marker per OSM object, a picked variant's first.
@@ -106,7 +108,7 @@ function routeName(index: number): string {
     const base = name.value.trim() || props.ride.name;
     if (pickedIds.value.length === 1) return base;
     const variant = stages.value.findIndex(stage => stage.id === pickedIds.value[index]);
-    return `${base} – Variante ${variant + 1}`;
+    return `${base} – ${t("journeyDay.variant", { n: variant + 1 })}`;
 }
 
 const canSave = computed(() => pickedIds.value.length > 0 && !!scheduleCron.value && !save.isPending.value);
@@ -123,24 +125,22 @@ async function onSave() {
         });
         $q.notify({
             type: "positive",
-            message: routes.length === 1 ? "Route gespeichert." : `${routes.length} Routen gespeichert.`,
+            message: t("variants.saved", routes.length),
         });
-        await router.push(routes.length === 1 && routes[0] ? `/routes/${routes[0].id}` : "/");
+        await router.push(routes.length === 1 && routes[0] ? `/routes/${routes[0].id}` : "/routes");
     } catch (err: unknown) {
         if (isQuotaExceeded(err)) {
             $q.dialog({
-                title: "Tarifgrenze erreicht",
-                message:
-                    "Nicht alle Varianten passen in deinen Tarif. Was Platz hatte, ist gespeichert. " +
-                    "Mit Plus hast du bis zu 20 Routen.",
-                cancel: { label: "Zu meinen Routen", flat: true },
-                ok: { label: "Upgrade", color: "primary", unelevated: true },
+                title: t("quota.title"),
+                message: t("variants.quota"),
+                cancel: { label: t("variants.toMyRoutes"), flat: true },
+                ok: { label: t("quota.upgrade"), color: "primary", unelevated: true },
             })
                 .onOk(() => void router.push("/account"))
-                .onCancel(() => void router.push("/"));
+                .onCancel(() => void router.push("/routes"));
             return;
         }
-        $q.notify({ type: "negative", message: "Die Routen konnten nicht gespeichert werden." });
+        $q.notify({ type: "negative", message: t("variants.saveFailed") });
     }
 }
 </script>
@@ -162,10 +162,8 @@ async function onSave() {
         </div>
         <div class="col-12 col-md-5 q-gutter-md">
             <div>
-                <div class="text-subtitle2">Wähle deine Varianten</div>
-                <div class="text-caption text-muted">
-                    Jede gewählte Variante wird eine eigene Route. Die Vorhersage siehst du dann bei der Route.
-                </div>
+                <div class="text-subtitle2">{{ t("variants.title") }}</div>
+                <div class="text-caption text-muted">{{ t("variants.intro") }}</div>
             </div>
             <q-list bordered separator class="rounded-borders">
                 <q-item v-for="(stage, index) in stages" :key="stage.id" tag="label" clickable>
@@ -179,12 +177,12 @@ async function onSave() {
                                 :style="{ background: alternativeColor(index, $q.dark.isActive) }"
                                 aria-hidden="true"
                             />
-                            <span class="text-weight-medium">Variante {{ index + 1 }}</span>
+                            <span class="text-weight-medium">{{ t("journeyDay.variant", { n: index + 1 }) }}</span>
                         </q-item-label>
                         <q-item-label caption>
                             {{ km(stage.distanceM) }} · {{ duration(stage.totalSeconds) }}
                             <template v-if="stage.ascentM != null">· {{ stage.ascentM }} m ↑</template>
-                            <template v-if="stage.breaks?.length">· {{ stage.breaks.length }} Stopps</template>
+                            <template v-if="stage.breaks?.length">· {{ t("journeyDay.stops", stage.breaks.length) }}</template>
                         </q-item-label>
                         <q-item-label v-if="wanted.length" caption data-testid="variant-stops">
                             <span
@@ -198,11 +196,12 @@ async function onSave() {
                                 {{ poiCategory(category).emoji }}
                             </span>
                             <span v-if="stopSummary(stage).missing.length" class="text-warning">
-                                fehlt:
                                 {{
-                                    stopSummary(stage)
-                                        .missing.map(c => poiCategory(c).label)
-                                        .join(", ")
+                                    t("variants.missing", {
+                                        categories: stopSummary(stage)
+                                            .missing.map(c => poiCategory(c).label)
+                                            .join(", "),
+                                    })
                                 }}
                             </span>
                         </q-item-label>
@@ -210,13 +209,13 @@ async function onSave() {
                 </q-item>
             </q-list>
 
-            <q-input v-model="name" label="Name" outlined dense />
+            <q-input v-model="name" :label="t('routeForm.name')" outlined dense />
 
             <div>
-                <div class="text-caption q-mb-xs">Wann fährst du?</div>
+                <div class="text-caption q-mb-xs">{{ t("variants.when") }}</div>
                 <div class="row q-gutter-xs">
                     <q-btn
-                        v-for="(label, i) in WEEKDAY_LABELS"
+                        v-for="(label, i) in weekdayLabels()"
                         :key="label"
                         :label="label"
                         size="sm"
@@ -232,7 +231,7 @@ async function onSave() {
                 <q-input
                     v-model="time"
                     class="q-mt-sm"
-                    label="Abfahrt"
+                    :label="t('routeForm.departure')"
                     outlined
                     dense
                     mask="##:##"
@@ -247,7 +246,7 @@ async function onSave() {
                 unelevated
                 no-caps
                 :icon="symSharpSave"
-                :label="pickedIds.length > 1 ? `${pickedIds.length} Routen speichern` : 'Als Route speichern'"
+                :label="t('variants.save', pickedIds.length)"
                 :disable="!canSave"
                 :loading="save.isPending.value"
                 data-testid="save-variants"
