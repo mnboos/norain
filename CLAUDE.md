@@ -326,6 +326,11 @@ rain and frost (`rain_level`, `frost_level`, `rain_probability`, `max_rain_rate_
 ride, not the worst-scoring sample: "will it rain on my ride" is a different question from
 "what spoils it".
 
+It is rebuilt after a geometry change, after each background scan (only briefing routes
+departing within 4 h get one) and after every finished `ROUTE` forecast job, whose cells are
+warm then. Without that last one, most routes would say "Noch keine Prognose" in the list
+right after their forecast was shown.
+
 Two rules hold this together:
 
 - **Never fetch from the list path.** `compute_route_thumbnail` calls
