@@ -75,6 +75,14 @@ frontend:
 manage +args:
     uv run python manage.py {{ args }}
 
+[doc("Update the backend's English catalog (core/locale/en) from the German msgids, then compile it. Needs GNU gettext (apt install gettext, winget install mlocati.GetText). Commit the .po and the .mo.")]
+[group('tasks')]
+[working-directory("backend")]
+messages:
+    uv run python -c "import shutil, sys; shutil.which('msguniq') or sys.exit('GNU gettext is not installed (or not on PATH). Windows: winget install mlocati.GetText, then open a new terminal. Debian/Ubuntu: apt install gettext. macOS: brew install gettext.')"
+    uv run python manage.py makemessages --locale en --ignore ".venv/*" --ignore "core/test*" --no-obsolete
+    uv run python manage.py compilemessages --locale en --ignore ".venv/*"
+
 [doc("Process background tasks locally; defaults to all queues. Optionally pass default, cells, compute or forecasts.")]
 [group('tasks')]
 [working-directory("backend")]
@@ -136,6 +144,9 @@ routing-ship-candidate:
 [group('geodata')]
 routing-validate-candidate points:
     CONTAINER={{ quote(container) }} uv run --no-project python scripts/routing-candidate.py {{ quote(points) }}
+
+routing-validate:
+    just routing-validate-candidate '[[9.252563780995018,47.52192433810265],[9.117005261038337,47.563715465507286]]'
 
 [doc("Activate the validated candidate with the currently configured GraphHopper image. Preserve the old image/config for rollback before the first 10.2 migration.")]
 [group('geodata')]
@@ -263,6 +274,7 @@ deploy-local:
     {{ container }} compose --env-file .env pull db redis
     {{ container }} compose --env-file .env run --rm --pull never backend python manage.py migrate --noinput
     {{ container }} compose --env-file .env run --rm --pull never --user root backend python manage.py collectstatic --noinput
+    {{ container }} compose --env-file .env run --rm --pull never --no-deps --user root --entrypoint chown backend app:app /app/backend/media
     {{ container }} compose --env-file .env up -d --pull never --remove-orphans
 
 # Mirrors the deploy job in .github/workflows/release.yml; the images must already be published.
@@ -318,3 +330,10 @@ lint-frontend:
     npm run lint
 
 lint: lint-backend lint-frontend
+
+install-stripe-cli:
+    npm i -g @stripe/cli@latest
+
+[working-directory("backend")]
+migrate:
+    uv run python manage.py migrate

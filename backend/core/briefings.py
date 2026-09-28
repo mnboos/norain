@@ -8,6 +8,8 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.db import transaction
 from django.tasks import task
+from django.utils import translation
+from django.utils.translation import gettext, gettext_lazy
 from pywebpush import WebPushException, webpush
 
 from core import departures, telemetry
@@ -18,45 +20,75 @@ from core.schedule import LOCAL_TZ, next_departure
 from core.tasks import start_forecast_job
 from core.weather import mean_felt_temp
 
+# The departure comparison's reason is a code (core.forecast_schemas.DepartureExplanation); the
+# SPA words it in its catalogs, the briefing here.
+EXPLANATIONS = {
+    "insufficient_data": gettext_lazy("Nicht genügend Wetterdaten zum Vergleichen der Abfahrtszeiten."),
+    "best_in_window": gettext_lazy("Voraussichtlich die günstigsten Bedingungen im gewählten Zeitfenster."),
+    "requested_equivalent": gettext_lazy("Ähnliche Bedingungen – deine gewünschte Abfahrtszeit passt bereits."),
+    "requested_best": gettext_lazy("Deine gewünschte Abfahrtszeit bietet bereits die günstigsten Bedingungen."),
+    "less_rain": gettext_lazy("Weniger Regen während deiner Fahrt."),
+    "less_wind": gettext_lazy("Weniger Gegenwind während deiner Fahrt."),
+    "milder": gettext_lazy("Angenehmere Temperaturen während deiner Fahrt."),
+    "less_frost": gettext_lazy("Geringeres Frostrisiko während deiner Fahrt."),
+}
+
 LEAD = timedelta(minutes=60)
 PREPARE = timedelta(minutes=10)
 DELIVERY_GRACE = timedelta(minutes=10)
 
 
 def briefing_body(job, route):
-    """Never turn missing or incomplete weather into an assurance of a dry ride."""
+    """Never turn missing or incomplete weather into an assurance of a dry ride.
+
+    Worded in the active language; ``deliver`` activates the owner's.
+    """
     if not job or job.status != ForecastJob.Status.DONE or not job.result:
-        return f"{route.name}: Wetterdaten sind derzeit nicht verfügbar. Bitte prüfe die Vorhersage vor der Abfahrt."
+        return gettext(
+            "%(route)s: Wetterdaten sind derzeit nicht verfügbar. Bitte prüfe die Vorhersage vor der Abfahrt."
+        ) % {"route": route.name}
     result = job.result
     samples = result.get("samples") or []
     expected = len((job.geometry or {}).get("sample_points") or [])
     if not samples or job.cells_failed or (expected and len(samples) < expected):
-        return f"{route.name}: Die Wetterdaten sind unvollständig. Bitte prüfe die Vorhersage vor der Abfahrt."
-    lines = [f"Deine Fahrt: {route.name}"]
+        return gettext("%(route)s: Die Wetterdaten sind unvollständig. Bitte prüfe die Vorhersage vor der Abfahrt.") % {
+            "route": route.name
+        }
+    lines = [gettext("Deine Fahrt: %(route)s") % {"route": route.name}]
     comparison = result.get("departure_inputs")
     if comparison:
         view = departures.comparison_view(comparison)
         recommended = view.get("recommended_time")
         if recommended:
             time = departures.instant(recommended).astimezone(LOCAL_TZ).strftime("%H:%M")
-            lines.append(f"Empfohlene Abfahrt: {time}. {view.get('explanation', '')}")
+            explanation = EXPLANATIONS.get(view.get("explanation", ""), "")
+            lines.append(
+                gettext("Empfohlene Abfahrt: %(time)s. %(explanation)s") % {"time": time, "explanation": explanation}
+            )
     pops = [s.get("pop") for s in samples]
     rates = [s.get("rain_rate_mm_h") for s in samples]
     if all(isinstance(v, (int, float)) for v in pops):
-        lines.append(f"Höchstes Regenrisiko an einem Punkt: {round(max(pops) * 100)} %.")
+        lines.append(
+            gettext("Höchstes Regenrisiko an einem Punkt: %(percent)s %%.") % {"percent": round(max(pops) * 100)}
+        )
     elif all(isinstance(v, (int, float)) for v in rates):
         lines.append(
-            f"Prognostizierte maximale Regenintensität: {max(rates):.1f} mm/h. Regenrisiko nicht vollständig verfügbar."
+            gettext(
+                "Prognostizierte maximale Regenintensität: %(rate).1f mm/h. Regenrisiko nicht vollständig verfügbar."
+            )
+            % {"rate": max(rates)}
         )
     else:
-        lines.append("Regenrisiko nicht vollständig verfügbar.")
+        lines.append(gettext("Regenrisiko nicht vollständig verfügbar."))
     temps = [s.get("temp") for s in samples if isinstance(s.get("temp"), (int, float))]
     if temps:
-        lines.append(f"Temperatur entlang der Route: {min(temps):.0f}–{max(temps):.0f} °C.")
+        lines.append(
+            gettext("Temperatur entlang der Route: %(low).0f–%(high).0f °C.") % {"low": min(temps), "high": max(temps)}
+        )
     felt = mean_felt_temp(samples)
     if felt is not None:
-        lines.append(f"Gefühlt im Schnitt: {felt:.0f} °C.")
-    lines.append("Die Vorhersage kann sich ändern; dies ist keine laufende Wetterwarnung.")
+        lines.append(gettext("Gefühlt im Schnitt: %(felt).0f °C.") % {"felt": felt})
+    lines.append(gettext("Die Vorhersage kann sich ändern; dies ist keine laufende Wetterwarnung."))
     return "\n".join(lines)
 
 
@@ -68,7 +100,7 @@ def _send_push(user, body, url, tag):
         try:
             webpush(
                 subscription_info={"endpoint": device.endpoint, "keys": device.keys},
-                data=json.dumps({"title": "NoRain – Deine Fahrt", "body": body, "url": url, "tag": tag}),
+                data=json.dumps({"title": gettext("Meteolane – Deine Fahrt"), "body": body, "url": url, "tag": tag}),
                 vapid_private_key=settings.VAPID_PRIVATE_KEY,
                 vapid_claims={"sub": settings.VAPID_SUBJECT},
                 ttl=600,
@@ -114,7 +146,9 @@ def deliver(briefing_id, now=None):
             briefing.job is None or briefing.job.status not in {ForecastJob.Status.DONE, ForecastJob.Status.FAILED}
         ) and now < briefing.due_at + DELIVERY_GRACE:
             return
-        briefing.body = briefing_body(briefing.job, route)
+        # Stored and sent as it is, so it is worded once, in the owner's language.
+        with translation.override(user.language):
+            briefing.body = briefing_body(briefing.job, route)
         briefing.status = "sending"
         briefing.delivery_started_at = now
         briefing.save(update_fields=["body", "status", "delivery_started_at"])
@@ -125,17 +159,21 @@ def deliver(briefing_id, now=None):
         # Preferences or entitlements may have changed while preparing the message.
         route.refresh_from_db()
         if route.id in briefing_route_ids(user) and route.briefing_channel == briefing.channel:
-            if briefing.channel == "email" and settings.BRIEFING_EMAIL_ENABLED:
-                sent = bool(
-                    send_mail(
-                        "NoRain – Deine Fahrt",
-                        f"{briefing.body}\n\n{url}\n\nBriefings verwalten: {settings.FRONTEND_URL.rstrip('/')}/account",
-                        settings.DEFAULT_FROM_EMAIL,
-                        [user.email],
+            with translation.override(user.language):
+                if briefing.channel == "email" and settings.BRIEFING_EMAIL_ENABLED:
+                    manage = gettext("Briefings verwalten: %(url)s") % {
+                        "url": f"{settings.FRONTEND_URL.rstrip('/')}/account"
+                    }
+                    sent = bool(
+                        send_mail(
+                            gettext("Meteolane – Deine Fahrt"),
+                            f"{briefing.body}\n\n{url}\n\n{manage}",
+                            settings.DEFAULT_FROM_EMAIL,
+                            [user.email],
+                        )
                     )
-                )
-            elif briefing.channel == "push":
-                sent = _send_push(user, briefing.body, url, f"ride-{briefing.id}")
+                elif briefing.channel == "push":
+                    sent = _send_push(user, briefing.body, url, f"ride-{briefing.id}")
     except Exception:  # noqa: BLE001 -- ambiguous external delivery must not be retried
         telemetry.event("briefing.delivery", channel=briefing.channel, outcome="error")
     RideBriefing.objects.filter(pk=briefing.pk).update(

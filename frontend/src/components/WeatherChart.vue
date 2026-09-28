@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, toRefs } from "vue";
 import { QSkeleton } from "quasar";
+import { useI18n } from "vue-i18n";
 import { forecastChart, type ChartKind, type ChartSample } from "@/utils/forecastCharts";
 
-defineEmits<{ selectSample: [index: number] }>();
+defineEmits<{ selectMinutes: [minutes: number] }>();
 
 /** Holds a chart's place while the Plotly chunk downloads. Takes only the tile's class, not the chart props. */
 const ChartSkeleton = defineComponent({
     inheritAttrs: false,
     setup(_, { attrs }) {
+        const { t } = useI18n();
         return () =>
             h(
                 "div",
                 { class: attrs.class },
-                h(QSkeleton, { square: true, height: "100%", "aria-label": "Diagramm wird geladen" }),
+                h(QSkeleton, { square: true, height: "100%", "aria-label": t("charts.loading") }),
             );
     },
 });
@@ -29,12 +31,15 @@ const NiceChart = defineAsyncComponent({
 const props = defineProps<{
     kind: ChartKind;
     version: string;
-    selectedSample: number;
+    /** The selected route position as ride time (min). */
+    cursorMinutes?: number;
     samples: ChartSample[];
 }>();
 
-const { kind, version, selectedSample, samples } = toRefs(props);
+const { kind, version, cursorMinutes, samples } = toRefs(props);
+const { t, locale } = useI18n();
 
+// forecastChart words its traces and axes with t(), so a language switch redraws the chart.
 const figure = computed(() => forecastChart(kind.value, samples.value));
 </script>
 
@@ -42,13 +47,12 @@ const figure = computed(() => forecastChart(kind.value, samples.value));
     <!-- NiceChart fills its parent, so the parent gives this a height. -->
     <NiceChart
         v-if="figure"
-        :key="`${version}:${kind}`"
+        :key="`${version}:${kind}:${locale}`"
         class="fit"
         :figure="figure"
-        :selected-sample="selectedSample"
-        :samples="samples"
+        :cursor-x="cursorMinutes"
         :temperature="kind === 'temperature'"
-        @select-sample="$emit('selectSample', $event)"
+        @cursor="$emit('selectMinutes', $event)"
     />
-    <div v-else class="text-muted">Keine Diagrammdaten verfügbar.</div>
+    <div v-else class="text-muted">{{ t("charts.noData") }}</div>
 </template>

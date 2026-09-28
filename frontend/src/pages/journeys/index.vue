@@ -1,26 +1,28 @@
 <route lang="json5">
 {
     name: "journeys",
-    meta: { title: "Reisen", requiresAuth: true },
+    meta: { titleKey: "pages.journeys", requiresAuth: true },
 }
 </route>
 
 <script setup lang="ts">
 import { ref } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import { symSharpAdd, symSharpArrowBack, symSharpDelete, symSharpLuggage } from "@quasar/extras/material-symbols-sharp";
 import type { JourneyIn, JourneyOut } from "@norain/api/models";
 import JourneyFormDialog from "@/components/journey/JourneyFormDialog.vue";
 import { isQuotaExceeded } from "@/services/http";
-import { useCreateJourney, useDeleteJourney, useJourneys } from "@/queries/journeys";
+import { JourneyKind, useCreateJourney, useDeleteJourney, useJourneys } from "@/queries/journeys";
 import { journeyDates, planStatusLabel } from "@/utils/journeys";
 
 const $q = useQuasar();
+const { t } = useI18n();
 const router = useRouter();
 const showForm = ref(false);
 
-const { data: journeys, isLoading } = useJourneys();
+const { data: journeys, isLoading } = useJourneys(JourneyKind.Tour);
 const createMutation = useCreateJourney();
 const deleteMutation = useDeleteJourney();
 
@@ -30,24 +32,24 @@ function onSave(data: JourneyIn) {
         onError: (err: unknown) => {
             if (isQuotaExceeded(err)) {
                 $q.dialog({
-                    title: "Tarifgrenze erreicht",
-                    message: "Dein Tarif erlaubt eine Reise. Lösche eine alte oder wechsle zu Plus für bis zu 10 Reisen.",
-                    cancel: { label: "Später", flat: true },
-                    ok: { label: "Upgrade", color: "primary", unelevated: true },
+                    title: t("quota.title"),
+                    message: t("quota.journeys"),
+                    cancel: { label: t("quota.later"), flat: true },
+                    ok: { label: t("quota.upgrade"), color: "primary", unelevated: true },
                 }).onOk(() => void router.push("/account"));
                 return;
             }
-            $q.notify({ type: "negative", message: "Reise konnte nicht erstellt werden." });
+            $q.notify({ type: "negative", message: t("journeys.createFailed") });
         },
     });
 }
 
 function onDelete(journey: JourneyOut) {
     $q.dialog({
-        title: "Reise löschen",
-        message: `Möchtest du die Reise „${journey.name}“ wirklich löschen?`,
-        cancel: { label: "Abbrechen", flat: true },
-        ok: { label: "Löschen", color: "negative", unelevated: true },
+        title: t("journeys.delete.title"),
+        message: t("journeys.delete.message", { name: journey.name }),
+        cancel: { label: t("common.cancel"), flat: true },
+        ok: { label: t("common.delete"), color: "negative", unelevated: true },
         persistent: true,
     }).onOk(() => {
         deleteMutation.mutate(journey.id);
@@ -59,20 +61,17 @@ function onDelete(journey: JourneyOut) {
     <q-page class="row justify-center q-pa-md">
         <div class="col-12 col-md-8 col-lg-6">
             <div class="row items-center q-mb-md">
-                <q-btn flat round dense :icon="symSharpArrowBack" to="/" aria-label="Zurück" />
-                <h1 class="text-h6 text-weight-bold q-my-none q-ml-sm col">Reisen</h1>
-                <q-btn color="primary" unelevated no-caps :icon="symSharpAdd" label="Neue Reise" @click="showForm = true" />
+                <q-btn flat round dense :icon="symSharpArrowBack" to="/routes" :aria-label="t('common.back')" />
+                <h1 class="text-h6 text-weight-bold q-my-none q-ml-sm col">{{ t("pages.journeys") }}</h1>
+                <q-btn color="primary" unelevated no-caps :icon="symSharpAdd" :label="t('journeys.new')" @click="showForm = true" />
             </div>
 
             <div v-if="isLoading" class="text-center q-mt-xl"><q-spinner-dots size="3rem" /></div>
 
             <div v-else-if="!journeys?.length" class="text-center text-muted q-mt-xl">
                 <q-icon :name="symSharpLuggage" size="4rem" />
-                <p class="q-mt-md text-body1">Noch keine Reise.</p>
-                <p class="text-body2">
-                    Gib Start, Ziel und wie weit du am Tag fahren willst an. NoRain schlägt Etappen, Pausen mit
-                    Wasser und Toiletten, Übernachtungen und die beste Abfahrtszeit vor.
-                </p>
+                <p class="q-mt-md text-body1">{{ t("journeys.empty") }}</p>
+                <p class="text-body2">{{ t("journeys.emptyHint") }}</p>
             </div>
 
             <q-list v-else bordered separator class="rounded-borders">
@@ -85,7 +84,7 @@ function onDelete(journey: JourneyOut) {
                         <q-item-label caption>{{ journey.startName }} → {{ journey.destName }}</q-item-label>
                         <q-item-label caption>
                             {{ journeyDates(journey) }}
-                            <template v-if="journey.dayCount"> · {{ journey.dayCount }} Tag{{ journey.dayCount === 1 ? "" : "e" }}</template>
+                            <template v-if="journey.dayCount"> · {{ t("journeys.days", journey.dayCount) }}</template>
                         </q-item-label>
                     </q-item-section>
                     <q-item-section side>
@@ -101,7 +100,7 @@ function onDelete(journey: JourneyOut) {
                             round
                             dense
                             :icon="symSharpDelete"
-                            aria-label="Reise löschen"
+                            :aria-label="t('journeys.delete.title')"
                             @click.prevent.stop="onDelete(journey)"
                         />
                     </q-item-section>

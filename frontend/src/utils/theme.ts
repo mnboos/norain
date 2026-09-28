@@ -3,6 +3,23 @@ import { watch } from "vue";
 
 const STORAGE_KEY = "norain-theme";
 
+// Fixed brand colors for branded surfaces, independent of the app's light/dark mode.
+const BRAND = {
+    navy: "#1b365d",
+    blue: "#2d5a8e",
+    gold: "#e5b95c",
+    ink: "#2c3e50",
+    muted: "#56677d",
+    faint: "#6c7e92",
+    page: "#e6ebf1",
+    mist: "#c8d5e5",
+    placeholder: "#f5f7fa",
+    stripe: "#eaeef3",
+    glass: "rgba(255, 255, 255, 0.12)",
+};
+
+for (const [name, value] of Object.entries(BRAND)) setCssVar(`brand-${name}`, value);
+
 /**
  * Brand and semantic colors per mode, applied with Quasar's setCssVar. That writes them inline
  * on <body>, so they beat the `:root` defaults in quasar.css no matter which stylesheet loads
@@ -14,7 +31,7 @@ const STORAGE_KEY = "norain-theme";
 const PALETTE: Record<"light" | "dark", Record<string, string>> = {
     light: {
         // Steel navy, the colour of the header.
-        primary: "#2d5a8e",
+        primary: BRAND.blue,
         secondary: "#0f766e",
         accent: "#1a9e8f",
         positive: "#2a9d8f",

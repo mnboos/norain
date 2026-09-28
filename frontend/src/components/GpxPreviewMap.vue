@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, useTemplateRef, watch } from "vue";
+import { useI18n } from "vue-i18n";
 import { Map, LngLatBounds, GeoJSONSource, config } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
 import styleUrl from "@/assets/map-styles/positron.json?url";
+
+const { t } = useI18n();
 const props = defineProps<{ original: number[][]; calculated?: number[][] }>();
 const container = useTemplateRef<HTMLDivElement>("container");
 let map: Map | undefined;
@@ -34,4 +37,4 @@ onMounted(() => {
 watch(() => [props.original, props.calculated], draw);
 onBeforeUnmount(() => map?.remove());
 </script>
-<template><div ref="container" style="height: 300px; min-height: 220px" aria-label="Vorschau der importierten Strecke" /></template>
+<template><div ref="container" style="height: 300px; min-height: 220px" :aria-label="t('gpx.previewLabel')" /></template>

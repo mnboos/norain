@@ -1,6 +1,7 @@
 """Hooks for django-axes, which locks out a client after too many failed sign-ins."""
 
 from django.http import HttpRequest, JsonResponse
+from django.utils.translation import gettext
 
 
 def client_ip(request: HttpRequest) -> str | None:
@@ -8,8 +9,8 @@ def client_ip(request: HttpRequest) -> str | None:
 
     daphne runs without proxy headers, so ``REMOTE_ADDR`` is always Caddy. Caddy sets
     ``X-Real-IP`` from ``{client_ip}`` and overwrites any value the client sent, so it is
-    the only header trusted here. ``X-Forwarded-For`` is not: its shape differs between
-    the direct and the outer-proxy setup. Without Caddy (development) it falls back to
+    the only header trusted here. ``X-Forwarded-For`` is not: behind Cloudflare it is a
+    chain of addresses. Caddy takes the client from ``CF-Connecting-IP``. Without Caddy (development) it falls back to
     ``REMOTE_ADDR``.
     """
     return request.META.get("HTTP_X_REAL_IP") or request.META.get("REMOTE_ADDR")
@@ -34,6 +35,6 @@ def lockout_response(request: HttpRequest, *args) -> JsonResponse:
     ``(request, credentials)`` depending on the path; neither is needed here.
     """
     return JsonResponse(
-        {"detail": "Zu viele fehlgeschlagene Anmeldeversuche. Bitte in 30 Minuten erneut versuchen."},
+        {"detail": gettext("Zu viele fehlgeschlagene Anmeldeversuche. Bitte in 30 Minuten erneut versuchen.")},
         status=429,
     )

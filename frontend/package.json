@@ -29,10 +29,13 @@
         "plotly.js": "^4.1.0",
         "quasar": "2.32.3",
         "vue": "3.5.42",
+        "vue-i18n": "^11.4.12",
         "vue-router": "5.3.1"
     },
     "devDependencies": {
         "@eslint/js": "10.0.1",
+        "@intlify/eslint-plugin-vue-i18n": "^4.5.1",
+        "@intlify/unplugin-vue-i18n": "^11.2.5",
         "@playwright/test": "1.63.0",
         "@quasar/vite-plugin": "2.0.2",
         "@sentry/vite-plugin": "5.4.0",

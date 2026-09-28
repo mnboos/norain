@@ -7,6 +7,7 @@
 !packages/api/
 !docker/
 !deploy/Caddyfile
+!deploy/auth-ratelimit.caddy
 !import-photon-dump.sh
 
 **/*.jsonl.zst
@@ -18,6 +19,7 @@
 **/__pycache__
 **/.pytest_cache
 **/*.sqlite3
+backend/media
 **/.env
 **/.env.*
 frontend/dist

@@ -1,6 +1,6 @@
 # How to interpret route forecasts
 
-NoRain estimates conditions along a timed route. Its summary, charts, and sections
+Meteolane estimates conditions along a timed route. Its summary, charts, and sections
 answer related questions using different parts of the provider data. Understanding
 those differences helps explain apparently conflicting results.
 
@@ -100,7 +100,7 @@ gaps between samples, and a single-sample section has zero displayed length.
 ## Wind is relative to travel direction
 
 Wind direction describes where wind comes from. For travel bearing `b`, wind
-source direction `d`, and speed `v`, NoRain calculates:
+source direction `d`, and speed `v`, Meteolane calculates:
 
 ```text
 headwind  = v × cos(d − b)
@@ -117,7 +117,7 @@ The map arrows show the real wind: where it blows, over ground. They do not show
 (apparent) wind. At riding speed that is mostly your own airflow, so felt-wind arrows would
 point at the rider almost everywhere.
 
-How hard a wind hits depends on the rider's speed, so NoRain estimates the **wind effort**:
+How hard a wind hits depends on the rider's speed, so Meteolane estimates the **wind effort**:
 the extra power needed to hold the routing profile's planned speed `v` against headwind `h`
 and crosswind `c`, compared with calm air:
 

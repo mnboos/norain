@@ -8,13 +8,16 @@ import httpx
 from asgiref.sync import sync_to_async
 from async_lru import alru_cache
 from django.http import HttpRequest
+from django.utils.translation import gettext
 from ninja import Router
+from ninja.errors import HttpError
 
 from .. import telemetry
-from ..auth.backend import optional_session_auth
+from ..auth.backend import session_auth
 from ..schemas import CamelSchema
 
-router = Router(auth=optional_session_auth, tags=["Places"])
+# Place search serves the planner and the route forms, both for signed-in accounts only.
+router = Router(auth=session_auth, tags=["Places"])
 
 
 class GeometrySchema(CamelSchema):
@@ -83,15 +86,54 @@ async def search(request: HttpRequest, query: str, zoom: float, lat: float, lon:
         )
 
 
-@alru_cache(maxsize=32)
-@telemetry.provider("photon")
-async def retrieve_places(*, query: str, lat: float, lon: float, zoom: float) -> list:
-    assert query
+@router.get("/reverse", response=PlacesSearchResult)
+async def reverse(request: HttpRequest, lat: float, lon: float):
+    """The place at a point, for "current location": a name to show and save instead of coordinates."""
+    features = await retrieve_reverse(lat=round(lat, 5), lon=round(lon, 5))
+    if not features:
+        raise HttpError(404, gettext("Kein Ort an dieser Stelle."))
+    properties = features[0].get("properties", {})
+    street = " ".join(p for p in (properties.get("street"), properties.get("housenumber")) if p)
+    name = properties.get("name") or street or properties.get("city")
+    if not name:
+        raise HttpError(404, gettext("Kein Ort an dieser Stelle."))
+    # The point the user stands on, not the address Photon snapped it to.
+    return {
+        "properties": {**properties, "name": name, "show_canton": False},
+        "geometry": {"coordinates": [lon, lat]},
+    }
+
+
+def _geocoder_url() -> str:
     # Required, with no default: without it there is nothing to search against, and the
     # named error is far easier to act on than whatever httpx makes of None.
     geocoder_url = os.environ.get("GEOCODER_API_URL")
     if not geocoder_url:
         raise RuntimeError("GEOCODER_API_URL is not set; place search is unavailable.")
+    return geocoder_url
+
+
+def reverse_url(geocoder_url: str) -> str:
+    """Photon serves reverse geocoding at /reverse, beside the /api search endpoint."""
+    return geocoder_url.rstrip("/").removesuffix("/api") + "/reverse"
+
+
+@alru_cache(maxsize=32)
+@telemetry.provider("photon")
+async def retrieve_reverse(*, lat: float, lon: float) -> list:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            reverse_url(_geocoder_url()), params={"lat": lat, "lon": lon, "limit": 1}, timeout=30
+        )
+    response.raise_for_status()
+    return response.json().get("features", [])
+
+
+@alru_cache(maxsize=32)
+@telemetry.provider("photon")
+async def retrieve_places(*, query: str, lat: float, lon: float, zoom: float) -> list:
+    assert query
+    geocoder_url = _geocoder_url()
     async with httpx.AsyncClient() as client:
         response = await client.get(
             geocoder_url,

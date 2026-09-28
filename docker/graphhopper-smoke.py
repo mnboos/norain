@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the NoRain routing contract against a running candidate graph."""
+"""Exercise the Meteolane routing contract against a running candidate graph."""
 
 import argparse
 import json
@@ -41,6 +41,34 @@ def validate_path(path):
     return coords
 
 
+def weather_field(points, rain, east_wind):
+    """A ``weather`` hint (core/weather_routing.py) over the test route: the same rain
+    multiplier and wind (km/h, blowing east) everywhere, for four hours from now."""
+    step = 0.05
+    lat0 = min(p[1] for p in points) - step
+    lon0 = min(p[0] for p in points) - step
+    rows = round((max(p[1] for p in points) + step - lat0) / step) + 1
+    cols = round((max(p[0] for p in points) + step - lon0) / step) + 1
+    hours = 4
+    size = rows * cols * hours
+    now = int(time.time() * 1000)
+    return {
+        "departure": now,
+        "lat0": lat0,
+        "lon0": lon0,
+        "step": step,
+        "rows": rows,
+        "cols": cols,
+        "t0": now,
+        "dt": 3_600_000,
+        "hours": hours,
+        "rain": [rain] * size,
+        "wind_u": [east_wind] * size,
+        "wind_v": [0.0] * size,
+        "headwind": [[0, 1], [18, 1.18], [30, 1.67]],
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -80,40 +108,7 @@ def main():
             {"if": "urban_density == CITY", "multiply_by": "0.5"},
         ]
     }
-    # Same area/heading constructs as journey wind routing; penalty-only for LM.
-    w, e = sorted(p[0] for p in points)
-    s, n = sorted(p[1] for p in points)
-    area = {
-        "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "id": "wind_test",
-                "properties": {},
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [
-                        [
-                            [w - 0.01, s - 0.01],
-                            [e + 0.01, s - 0.01],
-                            [e + 0.01, n + 0.01],
-                            [w - 0.01, n + 0.01],
-                            [w - 0.01, s - 0.01],
-                        ]
-                    ],
-                },
-            }
-        ],
-    }
-    wind = {
-        "areas": area,
-        "priority": [
-            {
-                "if": "in_wind_test && orientation >= 0 && orientation < 180",
-                "multiply_by": "0.8",
-            }
-        ],
-    }
+    dry, wet = weather_field(points, 1.0, 0.0), weather_field(points, 4.0, 15.0)
     for profile in ("bike", "ebike", "fast_ebike"):
         base = {
             "profile": profile,
@@ -133,17 +128,31 @@ def main():
                 **{"alternative_route.max_paths": 2},
             ),
             dict(base, custom_model=prefs),
-            dict(base, custom_model=wind),
+            dict(base, weather=wet),
+            dict(base, weather=wet, custom_model=prefs),
+            dict(base, points=[points[0], via, points[1]], weather=wet),
         ]
         for body in variants:
             for path in request(args.url + "/route", body)["paths"]:
                 validate_path(path)
+        # Weather routing (docker/graphhopper/weather): a dry field changes nothing, and a
+        # bidirectional search, which cannot know the time, is refused rather than guessed.
+        if request(args.url + "/route", dict(base, weather=dry))["paths"][0]["points"] != (
+            request(args.url + "/route", base)["paths"][0]["points"]
+        ):
+            raise ValueError("A dry weather field changed the route.")
+        try:
+            request(args.url + "/route", dict(base, weather=wet, algorithm="alternative_route"))
+            raise ValueError("Weather with alternative_route was not refused.")
+        except urllib.error.HTTPError as error:
+            if error.code != 400:
+                raise
         # The existing application requests 2D; it must remain compatible until the chart step.
         plain = request(args.url + "/route", dict(base, elevation=False))["paths"][0]
         if not all(len(p) == 2 for p in plain["points"]["coordinates"]):
             raise ValueError("Existing 2D routing response changed.")
         print(
-            f"{profile}: 3D elevations, timing, via points, alternatives, road and wind models passed.",
+            f"{profile}: 3D elevations, timing, via points, alternatives, road models and weather passed.",
             flush=True,
         )
     if args.artifact:

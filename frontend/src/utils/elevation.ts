@@ -1,6 +1,8 @@
 import type { Data, Layout } from "plotly.js";
 import type { ElevationPoint } from "@norain/api/models";
 
+import { t } from "@/i18n";
+
 export interface ElevationSeries {
     points: ElevationPoint[];
     color: string;
@@ -40,6 +42,8 @@ export function smoothElevation(points: ElevationPoint[], radiusM = ELEVATION_SM
     });
 }
 
+export const ELEVATION_PRIMARY_GROUP = "primary";
+
 export function elevationFigure(
     series: ElevationSeries[],
     axis: "distance" | "time",
@@ -50,6 +54,8 @@ export function elevationFigure(
             type: "scatter",
             mode: "lines",
             name: s.label,
+            // The selected position is marked on the route itself, not at the same km of another.
+            legendgroup: s.primary ? ELEVATION_PRIMARY_GROUP : undefined,
             x: s.points.map(p => (axis === "distance" ? p.distanceM / 1000 : p.elapsedS / 60)),
             y: smoothElevation(s.points),
             connectgaps: false,
@@ -61,11 +67,10 @@ export function elevationFigure(
             showlegend: false,
             uirevision: `elevation-${axis}`,
             xaxis: {
-                title: { text: axis === "distance" ? "Strecke (km)" : "Fahrzeit (min)" },
+                title: { text: axis === "distance" ? t("charts.axis.distanceKm") : t("charts.axis.rideMinutes") },
                 rangemode: "tozero",
-                showgrid: false,
             },
-            yaxis: { title: { text: "Höhe (m ü. M.)" }, autorange: true },
+            yaxis: { title: { text: t("charts.axis.elevation") }, autorange: true },
         },
     };
 }

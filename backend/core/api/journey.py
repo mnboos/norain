@@ -1,4 +1,4 @@
-"""Journeys: one-off rides over one or more days, planned by NoRain.
+"""Journeys: one-off rides over one or more days, planned by Meteolane.
 
 The endpoints never route or fetch: create and update enqueue ``plan_journey``, and a stage's
 weather is an ordinary forecast job (``JOURNEY_STAGE``). Reading a journey starts or joins
@@ -6,12 +6,15 @@ those jobs, like opening a saved route does, and ranks each day's alternatives f
 has finished. The ranking is computed on read (``core.journeys.rank_day``), never stored.
 """
 
+from dataclasses import replace
 from datetime import UTC, date, datetime, time, timedelta
+from typing import Literal
 from uuid import UUID
 
 from asgiref.sync import sync_to_async
 from django.db.models import Count, F
 from django.http import HttpRequest
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 from pydantic import Field, field_validator, model_validator
@@ -23,10 +26,21 @@ from ..geo import simplify_line, vertex_distances
 from ..journeys import FILL_CORRIDOR_M, LODGING_CORRIDOR_M, LODGING_WINDOW, lodging_candidates, rank_day
 from ..models import ForecastJob, Journey, JourneyDay, JourneyStage, route_point
 from ..pois import LODGING_KINDS, POI_CATEGORIES, pois_along_sync
+from ..public_routes import ascent_m
+from ..random_rides import RandomPrefs, new_seed
+from ..ride_quality import RideBand, RideFactor
 from ..schedule import LOCAL_TZ, forecast_available_at
 from ..schemas import CamelSchema
+from ..system_events import notify_system
 from ..tasks import plan_journey, start_forecast_job
-from .recurring_route import RoadPrefsIn, _current_user, check_via_points
+from .recurring_route import (
+    RecurringRouteIn,
+    RecurringRouteOut,
+    RoadPrefsIn,
+    _current_user,
+    check_via_points,
+    create_route,
+)
 from .route_weather import check_routing_profile, job_out
 
 router = Router(tags=["Journeys"])
@@ -39,26 +53,48 @@ OVERVIEW_TOLERANCE_M = 50.0
 def check_categories(values: list[str]) -> list[str]:
     unknown = set(values) - set(POI_CATEGORIES)
     if unknown:
-        raise ValueError(f"unknown categories: {', '.join(sorted(unknown))}")
+        raise ValueError(gettext("Unbekannte Kategorien: %(names)s") % {"names": ", ".join(sorted(unknown))})
     return list(dict.fromkeys(values))
 
 
 def check_lodging_kinds(values: list[str]) -> list[str]:
     unknown = set(values) - set(LODGING_KINDS)
     if unknown:
-        raise ValueError(f"unknown lodging kinds: {', '.join(sorted(unknown))}")
+        raise ValueError(gettext("Unbekannte Unterkunftsarten: %(names)s") % {"names": ", ".join(sorted(unknown))})
     return list(dict.fromkeys(values))
 
 
 class WeatherPrefsIn(CamelSchema):
-    avoid_rain: bool = True
-    avoid_headwind: bool = True
+    """Whether to ride around bad weather: the rider's choice, off unless they make it, and only
+    kept for accounts with ``weather_routing`` (Plus). See ``_values``."""
+
+    avoid_rain: bool = False
+    avoid_headwind: bool = False
     # How far after the earliest start the departure may move, for the comparison (Plus).
     departure_window_minutes: int = Field(default=60, ge=0, le=120, multiple_of=15)
 
 
+class RandomPrefsIn(CamelSchema):
+    """A random ride's shape. The dice (``seed``) are the server's: a re-plan throws them again."""
+
+    round_trip: bool = True
+    heading: int | None = Field(default=None, ge=0, lt=360, description="Preferred direction, degrees from north")
+    consider_weather: bool = Field(
+        default=False,
+        description="Plus: forecast and rank the candidates (and route around the weather if chosen). "
+        "Off: variants to pick from and save as routes, no forecast.",
+    )
+
+
+class RandomPrefsOut(RandomPrefsIn):
+    seed: int = 0
+
+
 class JourneyIn(CamelSchema):
     name: str = Field(min_length=1, max_length=200)
+    kind: Literal["tour", "random"] = Field(
+        default="tour", description="A random ride is one day of generated candidates; fixed at creation"
+    )
     start_lat: float = Field(ge=-90, le=90)
     start_lon: float = Field(ge=-180, le=180)
     start_name: str
@@ -78,6 +114,7 @@ class JourneyIn(CamelSchema):
     lodging_kinds: list[str] = Field(default_factory=list)
     road_prefs: RoadPrefsIn = Field(default_factory=RoadPrefsIn)
     weather_prefs: WeatherPrefsIn = Field(default_factory=WeatherPrefsIn)
+    random_prefs: RandomPrefsIn = Field(default_factory=RandomPrefsIn)
 
     _profile = field_validator("profile")(check_routing_profile)
     _via_points = field_validator("via_points")(check_via_points)
@@ -87,9 +124,14 @@ class JourneyIn(CamelSchema):
     @model_validator(mode="after")
     def check_limits(self):
         if not (self.max_day_seconds or self.max_day_distance_m):
-            raise ValueError("a day needs a time or distance limit")
+            raise ValueError(gettext("Ein Tag braucht ein Zeit- oder Distanzlimit."))
         if self.latest_arrival <= self.earliest_start:
-            raise ValueError("the latest arrival must be after the earliest start")
+            raise ValueError(gettext("Die späteste Ankunft muss nach dem frühesten Start liegen."))
+        if self.kind == "random":
+            # One day of candidates: no lodging, no vias, and a loop ends where it starts.
+            self.via_points, self.lodging_kinds = [], []
+            if self.random_prefs.round_trip:
+                self.dest_lat, self.dest_lon, self.dest_name = self.start_lat, self.start_lon, self.start_name
         return self
 
 
@@ -132,6 +174,24 @@ class LimitOverrunsOut(CamelSchema):
     legs: list[LegOverrunOut] = Field(default_factory=list)
 
 
+class JourneyReasonOut(CamelSchema):
+    """Why a variant ranks where it does, as data the SPA words (``journeys.rank_day``).
+
+    ``missing_stop``: no reachable stop for ``category``. ``gap``: ``minutes`` / ``km`` of a leg
+    without ``category``. ``detour``: ``km`` off the line to ``name`` (or ``category``).
+    ``longer``: ``percent`` longer than the fastest variant. ``day_limit`` / ``leg_limit``
+    (with ``leg``): ``minutes`` too long or ``km`` too far.
+    """
+
+    kind: Literal["missing_stop", "gap", "detour", "longer", "day_limit", "leg_limit"]
+    category: str | None = None
+    name: str | None = None
+    leg: int | None = None
+    minutes: int | None = None
+    km: float | None = None
+    percent: int | None = None
+
+
 class JourneyStageOut(CamelSchema):
     id: UUID
     rank: int
@@ -146,15 +206,17 @@ class JourneyStageOut(CamelSchema):
     limit_overruns: LimitOverrunsOut = Field(default_factory=LimitOverrunsOut)
     detours: list[PoiOut] = Field(default_factory=list)
     detour_m: float = 0
+    ascent_m: float | None = Field(default=None, description="Total climb of the line, metres")
     # The forecast, started or joined when the journey is read; None outside the forecast window.
     forecast_job_id: UUID | None = None
     forecast_status: str | None = None
     departure_time: str | None = Field(default=None, description="Planned departure the forecast is for")
     ride_score: float | None = Field(default=None, ge=0, le=1)
-    ride_label: str | None = None
+    ride_label: RideBand | None = None
+    ride_cause: RideFactor | None = None
     recommended_departure: str | None = None
     recommended: bool = False
-    reasons: list[str] = Field(default_factory=list)
+    reasons: list[JourneyReasonOut] = Field(default_factory=list)
 
 
 class JourneyDayOut(CamelSchema):
@@ -174,6 +236,8 @@ class JourneyDayOut(CamelSchema):
 class JourneyOut(CamelSchema):
     id: UUID
     name: str
+    kind: str = "tour"
+    random_prefs: RandomPrefsOut = Field(default_factory=RandomPrefsOut)
     start_lat: float
     start_lon: float
     start_name: str
@@ -204,6 +268,8 @@ def _journey_out(journey: Journey, days: list[JourneyDayOut] | None = None, day_
     return JourneyOut(
         id=journey.id,
         name=journey.name,
+        kind=journey.kind,
+        random_prefs=RandomPrefsOut(**RandomPrefs.from_json(journey.random_prefs).as_json()),
         start_lat=journey.start_point.y,
         start_lon=journey.start_point.x,
         start_name=journey.start_name,
@@ -231,12 +297,27 @@ def _journey_out(journey: Journey, days: list[JourneyDayOut] | None = None, day_
     )
 
 
-def _values(data: JourneyIn) -> dict:
-    values = data.model_dump(exclude={"start_lat", "start_lon", "dest_lat", "dest_lon", "road_prefs", "weather_prefs"})
+def _values(data: JourneyIn, limits) -> dict:
+    values = data.model_dump(
+        exclude={
+            "start_lat",
+            "start_lon",
+            "dest_lat",
+            "dest_lon",
+            "road_prefs",
+            "weather_prefs",
+            "random_prefs",
+            "kind",
+        }
+    )
     values["start_point"] = route_point(data.start_lat, data.start_lon)
     values["destination_point"] = route_point(data.dest_lat, data.dest_lon)
     values["road_prefs"] = data.road_prefs.prefs().as_json()
     values["weather_prefs"] = data.weather_prefs.model_dump()
+    if not limits.weather_routing:
+        # Stored off, not just ignored: after an upgrade nothing routes around weather that the
+        # rider did not switch on with Plus.
+        values["weather_prefs"] |= {"avoid_rain": False, "avoid_headwind": False}
     return values
 
 
@@ -245,11 +326,28 @@ async def _owned_journey(request: HttpRequest, journey_id: UUID) -> Journey:
     try:
         return await Journey.objects.aget(id=journey_id, owner=user)
     except Journey.DoesNotExist:
-        raise HttpError(404, "Journey not found.") from None
+        raise HttpError(404, gettext("Reise nicht gefunden.")) from None
 
 
-async def _replan(journey: Journey) -> Journey:
-    """Start a new plan. Any running one sees the new revision and stops writing."""
+def _random_prefs(data: JourneyIn, seed: int, limits) -> dict:
+    """A random ride's prefs as stored. The weather mode is Plus: stored off without it, like the
+    weather routing choice (``_values``)."""
+    return RandomPrefs(
+        round_trip=data.random_prefs.round_trip,
+        heading=data.random_prefs.heading,
+        seed=seed,
+        consider_weather=data.random_prefs.consider_weather and limits.weather_routing,
+    ).as_json()
+
+
+async def _replan(journey: Journey, *, reroll: bool = False) -> Journey:
+    """Start a new plan. Any running one sees the new revision and stops writing.
+
+    ``reroll`` throws a random ride's dice again, so the plan brings new candidates.
+    """
+    if reroll and journey.kind == Journey.Kind.RANDOM:
+        prefs = RandomPrefs.from_json(journey.random_prefs)
+        await Journey.objects.filter(id=journey.id).aupdate(random_prefs=replace(prefs, seed=new_seed()).as_json())
     await Journey.objects.filter(id=journey.id).aupdate(
         plan_revision=F("plan_revision") + 1,
         plan_status=Journey.PlanStatus.PENDING,
@@ -263,9 +361,12 @@ async def _replan(journey: Journey) -> Journey:
 
 
 @router.get("/journeys", response=list[JourneyOut])
-async def list_journeys(request: HttpRequest):
+async def list_journeys(request: HttpRequest, kind: Literal["tour", "random"] | None = None):
     user = await _current_user(request)
-    query = Journey.objects.filter(owner=user).annotate(day_total=Count("days")).defer("plan_state")
+    query = Journey.objects.filter(owner=user)
+    if kind:
+        query = query.filter(kind=kind)
+    query = query.annotate(day_total=Count("days")).defer("plan_state")
     return [_journey_out(journey, day_count=journey.day_total) async for journey in query]
 
 
@@ -274,36 +375,59 @@ async def create_journey(request: HttpRequest, data: JourneyIn):
     """Create a journey and start planning it. The plan arrives on ``GET /journeys/{id}``."""
     user = await _current_user(request)
     limits = await entitlements_for(user)
-    if await Journey.objects.filter(owner=user).acount() >= limits.max_journeys:
+    count = await Journey.objects.filter(owner=user, kind=data.kind).acount()
+    if data.kind == Journey.Kind.RANDOM and count >= limits.max_random_rides:
         raise HttpError(
-            402, f"Der {limits.plan}-Tarif erlaubt {limits.max_journeys} Reisen. Lösche eine oder wechsle zu Plus."
+            402,
+            gettext("Der %(plan)s-Tarif erlaubt %(n)s Runden. Lösche eine oder wechsle zu Plus.")
+            % {"plan": limits.plan, "n": limits.max_random_rides},
         )
-    journey = await Journey.objects.acreate(owner=user, **_values(data))
+    if data.kind == Journey.Kind.TOUR and count >= limits.max_journeys:
+        raise HttpError(
+            402,
+            gettext("Der %(plan)s-Tarif erlaubt %(n)s Reisen. Lösche eine oder wechsle zu Plus.")
+            % {"plan": limits.plan, "n": limits.max_journeys},
+        )
+    extra = (
+        {"kind": data.kind, "random_prefs": _random_prefs(data, new_seed(), limits)} if data.kind == "random" else {}
+    )
+    journey = await Journey.objects.acreate(owner=user, **_values(data, limits), **extra)
+    await notify_system("journeys")
     await plan_journey.aenqueue(str(journey.id), journey.plan_revision)
     return 201, _journey_out(journey)
 
 
 @router.put("/journeys/{journey_id}", response=JourneyOut)
 async def update_journey(request: HttpRequest, journey_id: UUID, data: JourneyIn):
-    """Change a journey. Every change re-plans it: the days depend on all of the inputs."""
+    """Change a journey. Every change re-plans it: the days depend on all of the inputs.
+
+    The kind stays what it was created as; a random ride keeps its dice."""
     journey = await _owned_journey(request, journey_id)
-    for field, value in _values(data).items():
+    if data.kind != journey.kind:
+        raise HttpError(422, gettext("Eine Reise kann ihre Art nicht ändern."))
+    limits = await entitlements_for(await _current_user(request))
+    for field, value in _values(data, limits).items():
         setattr(journey, field, value)
+    if journey.kind == Journey.Kind.RANDOM:
+        journey.random_prefs = _random_prefs(data, RandomPrefs.from_json(journey.random_prefs).seed, limits)
     await journey.asave()
+    await notify_system("journeys")
     return _journey_out(await _replan(journey))
 
 
 @router.post("/journeys/{journey_id}/plan", response={202: JourneyOut})
 async def replan_journey(request: HttpRequest, journey_id: UUID):
-    """Plan again with the same inputs: newer weather, POIs or graph."""
+    """Plan again with the same inputs: newer weather, POIs or graph. A random ride gets new
+    candidates: its dice are thrown again."""
     journey = await _owned_journey(request, journey_id)
-    return 202, _journey_out(await _replan(journey))
+    return 202, _journey_out(await _replan(journey, reroll=True))
 
 
 @router.delete("/journeys/{journey_id}", response={204: None})
 async def delete_journey(request: HttpRequest, journey_id: UUID):
     journey = await _owned_journey(request, journey_id)
     await journey.adelete()
+    await notify_system("journeys")
     return 204, None
 
 
@@ -341,10 +465,14 @@ async def get_journey(request: HttpRequest, journey_id: UUID):
     user = await _current_user(request)
     limits = await entitlements_for(user)
 
+    # Variants to pick from are not forecast: the rider saves the ones they want as routes.
+    picking = journey.kind == Journey.Kind.RANDOM and not RandomPrefs.from_json(journey.random_prefs).weather_mode(
+        limits
+    )
     days_out = []
     async for day in journey.days.prefetch_related("stages"):
         stages = list(day.stages.all())
-        available = any(_in_forecast_window(journey, day, stage) for stage in stages)
+        available = not picking and any(_in_forecast_window(journey, day, stage) for stage in stages)
         rows, jobs = [], {}
         for stage in stages:
             if available and _in_forecast_window(journey, day, stage):
@@ -388,11 +516,13 @@ async def get_journey(request: HttpRequest, journey_id: UUID):
                     limit_overruns=LimitOverrunsOut(**stage.limit_overruns),
                     detours=[PoiOut(**d) for d in stage.detours],
                     detour_m=stage.detour_m,
+                    ascent_m=ascent_m(stage.vertex_elevations),
                     forecast_job_id=job.id if job else None,
                     forecast_status=job.status if job else None,
                     departure_time=job.params.get("departure_time") if job else None,
                     ride_score=ranked.get("ride_score"),
                     ride_label=ranked.get("ride_label"),
+                    ride_cause=ranked.get("ride_cause"),
                     recommended_departure=ranked.get("departure"),
                     recommended=bool(ranked.get("recommended")) and len(stages) > 1,
                     reasons=ranked.get("reasons", []),
@@ -420,7 +550,7 @@ async def _owned_stage(request: HttpRequest, journey_id: UUID, stage_id: UUID) -
     journey = await _owned_journey(request, journey_id)
     stage = await JourneyStage.objects.select_related("day").filter(id=stage_id, day__journey=journey).afirst()
     if stage is None:
-        raise HttpError(404, "Stage not found.")
+        raise HttpError(404, gettext("Etappe nicht gefunden."))
     return journey, stage
 
 
@@ -429,13 +559,56 @@ async def journey_stage_forecast(request: HttpRequest, journey_id: UUID, stage_i
     """The full forecast of one stage, as a saved route's: 200 when fresh, else 202 and a job."""
     journey, stage = await _owned_stage(request, journey_id, stage_id)
     if not _in_forecast_window(journey, stage.day, stage):
-        raise HttpError(409, "Diese Etappe liegt ausserhalb des Vorhersagezeitraums.")
+        raise HttpError(409, gettext("Diese Etappe liegt ausserhalb des Vorhersagezeitraums."))
     user = await _current_user(request)
     limits = await entitlements_for(user)
+    if journey.kind == Journey.Kind.RANDOM and not RandomPrefs.from_json(journey.random_prefs).weather_mode(limits):
+        raise HttpError(409, gettext("Speichere die Variante als Route, dann gibt es ihre Vorhersage."))
     job = await start_forecast_job(
         ForecastJob.Kind.JOURNEY_STAGE, user, _stage_params(journey, stage.day, stage, limits)
     )
     return (200 if job.status == ForecastJob.Status.DONE else 202), job_out(job)
+
+
+class SaveVariantIn(CamelSchema):
+    name: str = Field(default="", max_length=200)
+    schedule_cron: str
+    schedule_description: str
+
+
+@router.post("/journeys/{journey_id}/stages/{stage_id}/route", response=RecurringRouteOut)
+async def save_variant_as_route(request: HttpRequest, journey_id: UUID, stage_id: UUID, data: SaveVariantIn):
+    """Save one variant of a random ride as a route of the rider's, with their own schedule.
+
+    It is an imported path, so the route rides exactly the variant's line, and it goes through
+    ``create_route``: the route quota (402), the geometry task and, from then on, the route's
+    own forecast. Call it once per variant the rider picked.
+    """
+    journey, stage = await _owned_stage(request, journey_id, stage_id)
+    if journey.kind != Journey.Kind.RANDOM:
+        raise HttpError(422, gettext("Nur Varianten einer Zufallsrunde lassen sich als Route speichern."))
+    line = stage.polyline_coordinates
+    heights = stage.vertex_elevations or []
+    if len(heights) == len(line):
+        line = [[lon, lat, h] if h is not None else [lon, lat] for (lon, lat), h in zip(line, heights, strict=True)]
+    route_in = RecurringRouteIn(
+        # The owner's own text from here on, so it is worded in the language they saved it in.
+        name=data.name.strip() or gettext("%(name)s – Variante %(n)s") % {"name": journey.name, "n": stage.rank + 1},
+        description=gettext("Aus einer Zufallsrunde"),
+        start_lat=line[0][1],
+        start_lon=line[0][0],
+        start_name=journey.start_name,
+        dest_lat=line[-1][1],
+        dest_lon=line[-1][0],
+        dest_name=journey.dest_name,
+        geometry_source="imported",
+        imported_coordinates=line,
+        duration_seconds=max(1, stage.total_seconds),
+        profile=journey.profile,
+        schedule_cron=data.schedule_cron,
+        schedule_description=data.schedule_description,
+    )
+    return await create_route(request, route_in)
 
 
 @router.get("/journeys/{journey_id}/stages/{stage_id}/pois", response=list[PoiOut])

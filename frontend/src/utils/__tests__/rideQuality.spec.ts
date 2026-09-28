@@ -23,7 +23,6 @@ function sample(over: Partial<ForecastSampleOut> = {}): ForecastSampleOut {
         windDir: 180,
         headwind: 0,
         crosswind: 0,
-        weatherDesc: "Klar",
         ...over,
     };
 }

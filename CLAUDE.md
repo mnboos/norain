@@ -1,4 +1,4 @@
-# NoRain — Bike-route weather forecaster
+# Meteolane — Bike-route weather forecaster
 
 Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo
 (primary, free) with OpenWeatherMap One Call 3.0 as fallback. Multi-user with
@@ -11,29 +11,35 @@ backend/          Django 6 + Channels (async ASGI via daphne)
   backend/settings/  base.py + development.py / production.py (a package, not settings.py)
   backend/asgi.py    ProtocolTypeRouter: the Django app for http, consumers for websocket
   core/
+    middleware.py    UserLanguageMiddleware: the account's language over Accept-Language
+    locale/en/       django.po + compiled .mo (msgids are German); `just messages`
     weather.py       routing + sampling + wind logic, compute_route_weather, build_geometry
     grid.py          forecast grid cache (ForecastCell, EnsembleCell) + API fetch + extraction
     stations.py      Weather Underground stations: budgeted fetch, cache, near-now correction
     models.py        User (custom, AUTH_USER_MODEL), Subscription, ProcessedStripeEvent,
                      RecurringRoute, ForecastCell, EnsembleCell, StationLookup,
-                     StationObservation, ForecastJob
+                     StationObservation, ForecastJob, RoutePhoto, RouteComment, RouteLike
     jobs.py          forecast-job identity, lifecycle and channel-layer publishing
     claims.py        cache-backed in-flight claim for grid-cell fetches
-    consumers.py     ForecastJobConsumer (websocket), routing.py maps it to a URL
+    consumers.py     ForecastJobConsumer, SystemEventsConsumer (websocket); routing.py maps URLs
+    system_events.py notify_system: change notices for the admin system dashboard
     forecast_schemas.py  the forecast payload (RouteWeatherOut, WeatherSample, ForecastJobOut, …)
     api/             ninja routers: route_weather.py, recurring_route.py (route CRUD),
-                     billing.py, places.py
+                     billing.py, places.py, community.py (sharing, photos, comments, likes)
+    public_routes.py the public view of a route: privacy zones, public_geometry
+    photos.py        upload re-encoding (no EXIF/GPS); signals.py deletes the files with the row
     auth/            backend.py (session_auth), adapter.py (allauth rules), signals.py,
-                     views.py (session + sign-up step 2), lockout.py
+                     views.py (session, sign-up step 2, profile), lockout.py
     entitlements.py  every tier limit, in one place
     thumbnails.py    route-list glyph: path simplification + cache-only weather
     ride_quality.py  ride-quality curves + RIDE_QUALITY config (secret; scored on read)
     journeys.py      journey constants, lodging filter, ranking on read
     journey_planner.py  routed insertions: gap fixes, breaks, lodging (RoutingBudget)
     journey_geometry.py measured lines: Limits, LineMeasure, check_limits, gaps
+    random_rides.py  random rides: candidate generation (loop / long way round) and sizing
     pois.py          POI categories (POI_RULES) + corridor query pois_along_sync
     road_prefs.py    road preferences -> penalty-only GraphHopper custom model
-    weather_routing.py  rain/headwind zones -> custom-model areas
+    weather_routing.py  corridor cells by the hour -> the `weather` field GraphHopper routes around
     schedule.py      croniter-based next_departure / forecast_available_at
     tasks.py         every heavy operation: geometry, cells, job planning/assembly, scans
     sections.py      route sectioning by weather condition
@@ -46,7 +52,11 @@ frontend/         Vue 3 + Quasar + @tanstack/vue-query
     services/        http.ts (shared fetch+CSRF, allauthRequest), auth.ts, billing.ts — the
                      plain-Django and allauth endpoints; the ninja API goes through the
                      generated @norain/api client
-    composables/     useSession, useEntitlements
+    composables/     useSession, useEntitlements, useLocale (detect, switch and save the language)
+    i18n/index.ts    vue-i18n instance, t/te for .ts modules, intlLocale(), dateFnsLocale()
+    locales/         de.json (source) + en.json; __tests__ checks both have the same keys
+    utils/levels.ts  the server's band/level/weather codes -> words
+    utils/serverErrors.ts  stored job/plan error codes -> words
     utils/rideQuality.ts   score -> YlOrRd colour + its casing, line placement; no scoring
                            (that is core/ride_quality.py, server-only)
     utils/routeThumbnail.ts  geographic path -> square viewBox projection
@@ -69,26 +79,49 @@ user permits duplicate and blank emails (`unique=False, blank=True`) and its `us
 index is case-sensitive, so "one account per email address, however capitalised" cannot be
 expressed there — and you cannot add constraints to a model the project does not own. The
 model also overrides `email` to `blank=False` (an account with no email could never verify
-itself or reset its password) and adds `signup_completed`.
+itself or reset its password) and adds `signup_completed`, `default_profile` (the bike
+profile the route, journey and map forms start with; `useSession().defaultProfile`) and
+`language` (see "Internationalisation").
 
 **Sign-up, sign-in, verification and password reset are django-allauth, headless.** allauth
 serves JSON under `/api/allauth/browser/v1/`; the Vue app draws every form
 (`components/account/SignInForms.vue`). Our own endpoints are only `/api/auth/session`
-(the session as the app needs it, plus the CSRF cookie) and `/api/auth/complete-signup`.
-Sign-up has two steps:
+(the session as the app needs it, plus the CSRF cookie), `/api/auth/complete-signup`,
+`/api/auth/username-available` (step 2's live check, signed-in only, limited per account)
+and `/api/auth/profile` (changes `default_profile` and/or `language`, each optional). Sign-up has
+two steps:
 
-1. The form takes only the email. allauth creates the user with a generated username and
-   no usable password, and mails `/account?verify_key=…`. A known address gets the same
-   reply (allauth mails its owner instead), so the form reveals nothing.
-2. Opened in the same browser, the link signs the user in. Opened anywhere else, allauth
-   only verifies the address and does **not** sign in (on purpose, see
-   `login_on_verification`), so sign-in by emailed code (`ACCOUNT_LOGIN_BY_CODE_ENABLED`)
-   is the way back in. The signed-in user then picks username and password in
-   `complete_signup_view`. `User.signup_completed` marks that, and the router keeps the
-   user on `/account` until it is true. That guard is the UI's only: the API does not
-   check `signup_completed` (the email is verified and every tier limit applies, so there is
-   nothing to protect), so don't describe it as a server-side rule. It is a separate flag, not "has a usable password":
-   a password reset sets a password without the user ever picking a username.
+1. The form takes only the email. allauth creates the user with a placeholder username
+   (`fahrer-<hex>`, `AccountAdapter.populate_username`: never the email's local part,
+   because usernames are public) and no usable password, and mails a **code**
+   (`ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED`), never a link. The user types it into the
+   same tab, which verifies the address and signs in, whichever device read the mail. The
+   pending verification lives in the session: the code is useless in another browser
+   (409), 3 wrong codes end it, and two resends are allowed at least 10 s apart (allauth
+   answers 429 before that, and to a second sign-up of one address within 10 s). A known
+   address gets the same reply (allauth mails its owner a pointer to sign-in by code
+   instead), so the form reveals nothing. When the pending verification is gone, sign-in
+   by emailed code (`ACCOUNT_LOGIN_BY_CODE_ENABLED`) is the way in; it verifies the address too.
+2. The signed-in user picks a username (the form suggests the email's local part, which
+   only the owner sees there), the default bike profile and, **optionally**, a password in
+   `complete_signup_view`. Without a password the account signs in by emailed code, and
+   "Passwort vergessen?" sets one later. `User.signup_completed` marks step 2 done, and
+   the router keeps the user on `/account` until it is true. That guard is the UI's only:
+   the API does not check `signup_completed` (the email is verified and every tier limit
+   applies, so there is nothing to protect), so don't describe it as a server-side rule. It
+   is a separate flag, not "has a usable password": a password is optional, and a password
+   reset sets one without the user ever picking a username.
+
+The mails of this flow (sign-up code, "account exists", sign-in code) are German templates
+in `core/templates/account/email/`, which win over allauth's because `core` comes first in
+`INSTALLED_APPS`; the others are still allauth's English ones. Mails get `frontend_url` in
+their context (`AccountAdapter.send_mail`).
+
+Every step 1 makes a `User` before the mailbox is proven, so the hourly pass
+(`refresh_upcoming_forecasts`) runs `_purge_abandoned_signups`: accounts older than
+`ABANDONED_SIGNUP_RETENTION` (7 days) with no verified address, no usable password, sign-up
+not completed and not staff. The password condition is what spares an account made by hand
+in the admin before `verify_user` ran — keep it.
 
 Whether an email is verified lives only in allauth's `EmailAddress`. `create_superuser`
 adds a verified one, so a superuser can sign in to the app at once; an account made by hand
@@ -101,7 +134,7 @@ Both the email and the username are sign-in identities. The SPA sends whatever w
 username. Do **not** branch on whether the identifier contains `@` —
 `UnicodeUsernameValidator` permits `@` in usernames. `core.auth.adapter.AccountAdapter`
 refuses a username that matches any existing email (and vice versa), or one sign-in would
-match two accounts. The adapter also names the site "NoRain" in allauth's mails and counts
+match two accounts. The adapter also names the site "Meteolane" in allauth's mails and counts
 allauth's rate limits by `core.auth.lockout.client_ip` (allauth's own
 `TRUSTED_CLIENT_IP_HEADER` has no fallback, so without Caddy every request would get a
 403). Links in the mails come from `HeadlessAdapter.get_frontend_url`, which puts
@@ -124,8 +157,18 @@ axes counts to 10, with a different reply. Axes does **not** cover sign-in by co
 password is checked, so a locked-out address can still get in by code). That is on
 purpose: a code proves the mailbox, and guessing one is capped by allauth (3 tries per
 code, `request_login_code` 3 a minute per address). A test pins this. The IP comes only from `X-Real-IP`, which Caddy sets from `{client_ip}`
-(`core/auth/lockout.py`); daphne has no proxy headers and `X-Forwarded-For` differs between
-the two Caddyfiles. The lockout reply is JSON because the SPA's `request()` parses every body.
+(`core/auth/lockout.py`); daphne has no proxy headers, and behind Cloudflare
+`X-Forwarded-For` is a chain, not the client. The lockout reply is JSON because the SPA's `request()` parses every body.
+
+**Caddy rate-limits the auth endpoints in front of all that** (`deploy/auth-ratelimit.caddy`,
+imported by `deploy/Caddyfile`; the image builds Caddy with the `caddy-ratelimit` plugin, which
+needs `order rate_limit before basic_auth`). Per `{client_ip}`: password sign-in (app and
+admin), sign-up, the mail-sending calls and code/key checks. Per user (the `sessionid` cookie)
+*and* per IP: the username check and the step-2/profile saves. These are floods stopped before
+Django, not a replacement for axes or allauth's per-address limits, which still decide the
+normal cases; counters live in Caddy's memory. A 429 is answered as JSON with `detail`, like
+the axes lockout. A new auth endpoint that sends mail, checks a secret or answers "is this
+taken" belongs in that file. The development server has no Caddy, so none of this applies there.
 
 **Migration ordering.** `core.User` is created in `0002`, not `0001`, because `0001` was
 already released. Django resolves `swappable_dependency(AUTH_USER_MODEL)` to
@@ -137,7 +180,16 @@ exists and fail with "Related model 'core.user' cannot be resolved" — so `0002
 
 Every limit lives in `core/entitlements.py`: free = 2 active routes, no ensemble
 spread and no station correction; journeys: free = 1 journey, 1 alternative per day and no
-weather-aware routing (enforced in `create_journey` and `plan_journey`). The route and forecast
+weather-aware routing (enforced in `create_journey` and `plan_journey`).
+
+**Riding around bad weather is the rider's choice and a Plus feature** (`weather_routing`), for
+journeys and random rides alike. `weather_prefs.avoid_rain` / `avoid_headwind` are off unless
+the rider switches them on (`WeatherPrefsIn` defaults, and `prefs.get(..., False)` for rows
+without them). `_values` in `api/journey.py` stores them off for an account without Plus, so an
+upgrade never starts routing around weather nobody chose. `_wants_weather_routing` checks the
+tier and the choice again at planning time, so a downgrade stops it on the next plan. The
+entitlements payload carries `weatherRouting`; the SPA's `WeatherRoutingChoice` shows the
+switches locked for free accounts. The route and forecast
 limits are enforced at **three** places, and a limit is only real if all three hold:
 
 1. `create_route` / `update_route` (`api/recurring_route.py`) — the route count, 402 when full.
@@ -182,6 +234,14 @@ Use `client.v1.*` for every Stripe call (`v1.customers`, `v1.checkout`, `v1.bill
 the accessors without `v1` are deprecated. `stripe.Webhook.construct_event` is deliberately
 *not* the client method — the webhook needs only `STRIPE_WEBHOOK_SECRET`, and
 `client.construct_event` would make it need a secret key too.
+
+### Planning needs an account
+
+Every endpoint that plans a ride is `session_auth` (401 without a session): the ad-hoc forecast
+(`GET`/`POST /api/route_weather`), a public route's forecast, `POST /api/routes/preview`,
+`POST /api/elevation`, place search and the whole GPX router. Each spends provider or
+GraphHopper budget. The SPA's `/map` planner is `requiresAuth`. What stays open to anyone is
+reading: a public route, its photos and comments, and a forecast job by its unguessable id.
 
 ### Every heavy operation is a task
 
@@ -274,6 +334,11 @@ rain and frost (`rain_level`, `frost_level`, `rain_probability`, `max_rain_rate_
 ride, not the worst-scoring sample: "will it rain on my ride" is a different question from
 "what spoils it".
 
+It is rebuilt after a geometry change, after each background scan (only briefing routes
+departing within 4 h get one) and after every finished `ROUTE` forecast job, whose cells are
+warm then. Without that last one, most routes would say "Noch keine Prognose" in the list
+right after their forecast was shown.
+
 Two rules hold this together:
 
 - **Never fetch from the list path.** `compute_route_thumbnail` calls
@@ -310,7 +375,11 @@ how fast the score climbs the colour ramp). It is the app's own judgement and st
   `temp_min`. `frontend/src/utils/rideQuality.ts` only maps a score to a colour and places
   samples along the line. Never add a curve, weight or breakpoint to the frontend — a threshold
   in the bundle gives the curve away. A *level* is a word, never a number the curve can be read
-  back out of; that is how `wind_effort_level` has always worked.
+  back out of; that is how `wind_effort_level` has always worked. The words are **codes**
+  (`RideBand`, `WindEffortLevel`, `ImpactLevel` in `ride_quality.py`: `very_good`…`very_poor`,
+  `tailwind`…`very_high`, `light`/`moderate`/`heavy`), and `ride_cause` names the factor that
+  dominates, if one does. The SPA words them (`utils/levels.ts`) and branches on them; see
+  "Internationalisation".
 - **Score on read, never store.** `core.jobs.forecast_view` (samples, summary *and* sections),
   `wind_arrows_at_detail` and `recurring_route._thumbnail_out` score the stored raw weather when
   serving, so a change to `RIDE_QUALITY` shows on the next request without rebuilding jobs or
@@ -509,6 +578,14 @@ absolute range, which the details panel still shows. Don't add a median line bac
 a chart that needs a new value needs it on the sample, not a figures endpoint. Results
 stored before this still carry a `figures` key; `forecast_view` drops it.
 
+**The selection is a route position, not a sample.** `composables/useRoutePosition.ts` holds one
+share (0..1) of the route's distance per page; the map, the elevation profile and the forecast
+charts each convert it to their own axis (line point, km or minutes) and write it back on hover,
+anywhere along the route, not only at samples. `selectedSample` is just the sample nearest to it,
+for the details panel. Sample places are measured on the forecast's own `line`; the map pins a
+finer detail line to the same samples (`remapProgress`), so don't measure positions on whichever
+line happens to be drawn.
+
 ### Routing graph
 
 GraphHopper is bike-only (`bike`, `ebike`, `fast_ebike`, each with CH); `ROUTING_PROFILES`
@@ -568,7 +645,9 @@ and every eta still come from GraphHopper. Changing the via points in `update_ro
 geometry and enqueues `refresh_route_geometry`, like a changed start or profile. The new
 `geometry_fetched_at` is in the job params (`start_forecast_job`), so no old forecast is reused.
 The return journey gets the via points reversed, set in `_save_return` like its swapped
-endpoints. To edit it, the user reshapes the outbound route; the UI offers no editor on a
+endpoints. It always rides on the outbound days (a restriction on purpose): only minute and hour
+come from its own schedule (`_on_outbound_days`), in `_save_return` and in `update_route` on a
+return route alike, so a change to the outbound days carries over. To edit it, the user reshapes the outbound route; the UI offers no editor on a
 return route.
 
 The editor (`components/RouteEditorDialog.vue`) draws its line from `POST /api/routes/preview`,
@@ -596,6 +675,9 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   `docker/osm-extract-pois.sh` (`just poi-extract-from-unfiltered-osm-pbf`) extracts them from the *raw* extract and
   `manage.py import_pois` (`just poi-import-into-db`, which runs in `worker-default` under a prod
   `COMPOSE_FILE` because the VPS host has no GDAL) replaces the `Poi` table in one transaction.
+  It is a bulk load: drop the secondary indexes (read from the catalog, so their names survive),
+  `TRUNCATE`, `COPY`, rebuild. POI readers wait on its lock until it commits. Don't add
+  `db_index` to `Poi` fields: the unique (osm_ref, category) and the location GIST cover every query.
   `POI_RULES` in `core/pois.py` is the one tag map; a test checks the script filters every tag
   in it. Journeys store the POIs they use as JSON, never as FKs, so a re-import is free.
   An object gets one `Poi` row per matching category (unique on `osm_ref` + `category`): a
@@ -604,7 +686,8 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   Postgres jsonb arrives as text on a raw cursor (Django's loader): parse it.
 - **Request custom models only penalise** (`multiply_by` ≤ 1). GraphHopper runs LM without CH,
   and LM is only correct for a model that makes edges more expensive. "Prefer the cycle
-  network" is therefore `avoid_off_network`. Every GraphHopper request still goes through
+  network" is therefore `avoid_off_network`, and "prefer it hilly" (`climbing="hilly"`, the
+  random-ride form's "Gelände") makes the flat dearer in both directions instead of climbs cheaper. Every GraphHopper request still goes through
   `weather._route_body`; `_route` keeps a request without a model at `(profile, points)`.
 - **POIs steer the route by via points, not by the custom model.** "Water once per leg" is a
   rule about the whole path and GraphHopper weighs edges. Every chosen POI (lodging, gap fix,
@@ -642,11 +725,13 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   vias still ahead. A day with a via gets one path: alternatives take two points only.
 - **Alternatives are per day.** `alternative_route` takes two points only and exceeds the
   2 M node cap beyond ~130 km, so a failure falls back to one path.
-- **Weather-aware routing** (Pro, days within `WEATHER_ROUTING_DAYS`): rain zones as request
-  `areas`, headwind as `in_<zone> && orientation …` (`urban_density` and `orientation` were
-  added to `graph.encoded_values`). Corridor cells are ordinary `ForecastCell`s on a 0.05°
-  lattice fetched by `refresh_forecast_cell`; `plan_journey_routes` re-defers until they are
-  warm (bounded), then reads `cache_only`. The multipliers are `ride_quality.ROUTING_*`.
+- **Weather-aware routing** (Pro, days within `WEATHER_ROUTING_DAYS`) is GraphHopper's own,
+  see "Weather routing in GraphHopper" below: the day's corridor cells by the hour go with the
+  request as a `weather` field (`weather_routing.weather_field`). Corridor cells are ordinary
+  `ForecastCell`s on a 0.05° lattice fetched by `refresh_forecast_cell`; `plan_journey_routes`
+  re-defers until they are warm (bounded), then reads `cache_only`. A weather day's first stage
+  is the way around the weather, then GraphHopper's plain alternatives to compare it with
+  (`alternative_route` cannot route by time); a refused weather request routes plainly.
 - **Stage weather is a normal forecast job** (`ForecastJob.Kind.JOURNEY_STAGE`, geometry from
   the stage row, ownership checked in `plan_forecast_job`, never station calls). Reading a
   journey starts or joins its stage jobs; the departure window reuses the departure
@@ -654,6 +739,111 @@ alternative, fills POI gaps and chooses breaks (`journey_planner.JourneyPlanner.
   and reasons only, never the weights.
 - **Revisions.** Every edit or re-plan bumps `plan_revision`; a planning task writes only
   while its revision is current, and replaces the days in one transaction.
+
+### Weather routing in GraphHopper
+
+The Dockerfile patches GraphHopper (`docker/graphhopper/weather/`, installed by a `grep`-guarded
+`sed` in `GraphHopper.doCreateRouter`, like the elevation patch): `WeatherRouter` solves a request
+that carries a `weather` hint with `WeatherAStar`, a time-dependent forward A*, and every other
+request exactly as before. An edge costs its weight times the weather where the rider is halfway
+along it, *when* they are there: rain by the cell and headwind along the edge's own bearing,
+interpolated in space and time. Rules that hold this together:
+
+- **GraphHopper never fetches weather.** The backend builds the field from the cache
+  (`weather_routing.weather_field`) and sends it with each request, so the provider budget and
+  the fetch lease stay in one place. A null is a cell without data and counts as no weather.
+- **The judgement stays in Python.** The field carries weight multipliers (`rain_curve`,
+  `headwind_table`, both from `ride_quality.ROUTING_*`), never the raw curves; Java only
+  interpolates. Every multiplier is ≥ 1, which keeps the landmark lower bound valid, so the A*
+  still uses LM. CH can never serve it: weather changes by the hour.
+- **Time runs forward, leg by leg.** A bidirectional search cannot know when it arrives, so a
+  weather request with `alternative_route` is refused (400). Via and round-trip legs start at the
+  departure plus the riding time of the legs before (`LegClockPathCalculator`). The riding times
+  in the reply stay the profile's: weather changes the choice of road, never the eta.
+- **Weather requests are uncached** (`weather._route`): the field is large and asked for once.
+  `JourneyPlanner.route` sends it only for a whole-day request; local POI insertions and the
+  separate-leg fallback route without it, because the field's clock starts at the departure.
+- `WeatherAStarTest` runs in the Docker build before packaging, and the smoke test checks that
+  a dry field changes nothing and that `alternative_route` is refused.
+
+### Random rides
+
+The third mode, next to commute routes and journeys: the user gives a start, loop or not (then a
+destination), a length (riding time or distance), a profile, an optional direction and a date,
+and Meteolane generates the ride (`core/random_rides.py`). A random ride is a `Journey` with
+`kind="random"` and `random_prefs` (`round_trip`, `heading`, `seed`, `consider_weather`): one
+day whose stages are the generated candidates. The SPA lists them at `/random` and opens them on
+the journey page. It has two modes:
+
+- **Picking (every tier, the default).** `PICK_VARIANTS` (3) variants, no forecast at all:
+  `get_journey` starts no stage job and the stage forecast endpoint answers 409. The page shows
+  `RandomVariantPicker`: the variants on a map (`VariantsMap`) with the stops the planner routed
+  them through for the wanted POI categories (and which each one misses), their elevation
+  profiles in one chart (`ElevationChart` with the stages as alternatives, stored heights, no
+  routing) and each one's climb (`JourneyStageOut.ascent_m`). Each variant the rider ticks is saved with
+  `POST /journeys/{id}/stages/{stage_id}/route` as an imported route on the variant's exact line
+  (heights included, the stage's riding time as its duration) with a weekly schedule prefilled
+  from the ride's day and departure. That goes through `create_route`, so the route quota (402)
+  and the geometry task apply, and the forecast is the route's own from then on.
+- **Considering the weather (Plus, `weather_routing`).** The tier's alternatives, each forecast
+  (`JOURNEY_STAGE` jobs) and ranked on read (`rank_day`), optionally routed around the weather
+  (`weather_prefs`). `_random_prefs` stores `consider_weather` off without Plus, and
+  `RandomPrefs.weather_mode(limits)` checks it again when planning and reading, so a downgraded
+  ride falls back to picking.
+
+Rules that hold this together:
+
+- **Planned in `plan_journey`.** `_plan_random_ride` branches off before the day cutting, with
+  no `plan_journey_routes`. When the rider chose weather routing (Plus, within
+  `WEATHER_ROUTING_DAYS`), it first warms the ride's area (`random_rides.area_cells`: the box
+  around both ends widened by a quarter of the length) and re-enqueues `plan_journey` until the
+  cells are warm, bounded by `MAX_CORRIDOR_ATTEMPTS`; then every candidate routes through the
+  field, and one GraphHopper refuses is routed plainly instead.
+- **A loop is a GraphHopper round trip** (`weather.build_round_trip`, through `_route_body`,
+  uncached): GraphHopper picks the waypoints and avoids riding a road twice. It needs LM or
+  flexible mode, never CH. **Point to point** routes start → one via → destination, the via on an
+  ellipse around both ends sized to the missing length (`detour_via`).
+- **Time means the profile's pace.** The length is the day limit (`max_day_seconds` /
+  `max_day_distance_m`), and a time target is compared with GraphHopper's riding time, the same
+  one every eta uses. `NOMINAL_SPEED_KMH` is only the first guess (and the form's "≈" hint);
+  `size` routes, measures and rescales, at most `MAX_SIZING_ATTEMPTS` times.
+- **Candidates differ by seed and heading** (`headings`, `candidate_seed`), deterministic in the
+  seed: an edit re-plans with the same dice, `POST /journeys/{id}/plan` throws new ones. The seed
+  is the server's; the client never sends it.
+- **Tiers:** picking gives everyone `PICK_VARIANTS`; the weather mode gives as many candidates
+  as `max_journey_alternatives`. Random rides have a count of their own, `max_random_rides`,
+  separate from `max_journeys`. The kind is fixed at creation.
+
+### Public routes, photos and comments
+
+A route can be published (`RecurringRoute.visibility`, `public_slug`, `privacy_zone_m`) and is
+then readable by anyone at `/r/<slug>` and listed under "Entdecken" (`pages/explore.vue`). The
+owner's side is `core/api/community.py` `owner_router` (session auth), the visitor's side is
+`public_router` (optional session auth for reading; commenting, liking, copying and the
+weather need a session). Rules that hold this together:
+
+- **Nothing public reads `polyline`.** A commute starts at someone's door and its schedule says
+  when they leave. Every public answer (detail, list, card path, elevation, a visitor's
+  forecast, a copy into the visitor's routes) is built from `public_routes.public_geometry`: the
+  line between two circles of `privacy_zone_m` round start and destination (circles, so a round
+  trip or a route that doubles back past home is trimmed past its last pass). The start and
+  destination, their names, the via points, the schedule and the route's UUID never leave in a
+  public reply; a test greps for each. Less than `MIN_PUBLIC_DISTANCE_M` left is a 422 on publish
+  and a 404 on read. The list's `bbox` filter is checked against the public line too.
+- **A visitor's weather is an ordinary forecast job** (`ForecastJob.Kind.PUBLIC_ROUTE`): owner =
+  the signed-in visitor, so it is shaped for the visitor's tier; geometry from `public_geometry`,
+  with `privacy_zone_m` and the geometry revision in the params; planning fails once the route is
+  private again. Never station calls: any number of visitors can open one route.
+- **Photos are re-encoded from pixels** (`core/photos.py`): no EXIF, no GPS, at most 2048 px, and
+  only JPEG/PNG/WebP. A photo's position is only what the uploader sends (the SPA reads it from
+  EXIF in the browser, `utils/exifGps.ts`, when "Aufnahmeort übernehmen" is on), and the public
+  page drops it inside a privacy zone. Files are never under a static URL: `/api/photos/{id}/…`
+  checks that the route is public or the viewer owns it. `core/signals.py` removes the files after
+  the row is deleted (photo, route or account). `max_route_photos` is in `entitlements.py`.
+- **Comments** are the author's to edit and the author's or the route owner's to delete; staff
+  moderate in the admin. Posting is limited per account per minute (fails open).
+- **Copy** ("In meine Routen") saves the public line as an *imported* route of the visitor's, so it
+  goes through `create_route` and its quota and never contains the hidden ends.
 
 ### Recurring routes
 
@@ -684,6 +874,83 @@ departure is within 48 h. Rules that hold this together:
   own forecast would otherwise queue behind every build.
 - The dashboard's own prefetch sends `X-NoRain-Prefetch: 1`, which does not count as a view.
 
+### System dashboard (admin)
+
+`/system` (`pages/system.vue`, `core/api/system.py`) reads everything over REST and does not
+poll. `ws/system/` (`SystemEventsConsumer`) sends change notices only, never data:
+`{"type": "hello" | "changed", "topics": [...]}`, and the page invalidates the queries that read
+those topics (`systemQueryAffected` in `utils/systemOverview.ts`). Rules that hold this together:
+
+- **Every write the dashboard shows calls `core.system_events.notify_system`** with its topic
+  (`cells`, `jobs`, `routes`, `journeys`), after the write is committed. Today that is the grid
+  cell stores, `jobs.publish` plus job creation, restart and purge, route geometry and route
+  CRUD, and journey CRUD plus the stored plan. A new writer that skips it leaves the dashboard
+  stale without any error.
+- **The consumer throttles per topic** (`THROTTLE`: jobs 1 s, the rest 5 s, and the last change
+  is always delivered). A job's fan-out stores a cell on every settle, and the cell layer
+  refetches every page. The client invalidates with `cancelRefetch: false` for the same reason.
+- **Access is `core.auth.admin_access.has_system_access`**, for the REST auth, the socket and
+  the session's `system.allowed` alike. It applies `ADMIN_OTP` itself and never goes through
+  `admin.site.has_permission`: the `OTPAdminSite` swap happens when `backend/urls.py` is first
+  imported, and a socket can reach a fresh daphne process before any HTTP request does.
+  A refused socket is accepted and then closed with 4003: if it were closed before `accept()`,
+  the browser would see only 1006 and could not tell a refusal from a dropped connection.
+- **Values that change only with time get no notice.** A stalled job writes nothing, so the page
+  works out "possibly stalled" from `updatedAt` and the jobs page's `stall_timeout_seconds`.
+  Cache freshness in the summary and coverage updates on the next notice or on "Aktualisieren".
+
+## Internationalisation
+
+The step-by-step workflow (adding a text on either side, adding a code, adding a language,
+the pre-commit checklist) is `docs/how-to/translations.md`; keep it in step with this section.
+
+German is the source language, English the second one. The frontend is vue-i18n
+(`src/i18n/index.ts`, catalogs in `src/locales/`), the backend Django's gettext with **German
+msgids** (`gettext("Route nicht gefunden.")`), so German needs no catalog and wrapping a string
+never changes what German users see. Rules that hold this together:
+
+- **One rule for server text.** Anything the SPA branches on, or that is stored, cached, reused
+  across readers or written by a worker, is a **code** the SPA words: the ride band and cause,
+  the rain/frost/wind-effort levels, the departure `explanation`, journey `reasons`
+  (`{kind, …}` from `rank_day`), `ForecastJob.error` and `Journey.plan_error` (rows from before
+  hold German prose, which `utils/serverErrors.ts` shows as it is), and the weather description
+  (the SPA words `weather_code`; `WMO_DE` is gone). **Language never enters a job key,
+  `job.result` or `forecast_view`**: one job serves readers in both languages, and the WebSocket
+  needs no locale. `gettext` is only for prose built inside a request (`HttpError`, `detail`,
+  validator messages, default names written on create such as "– Rückfahrt") and for mails and
+  briefings.
+- **Which language.** Signed in: `User.language` (`core.middleware.UserLanguageMiddleware`, after
+  `AuthenticationMiddleware`). Before that: `Accept-Language` through `LocaleMiddleware`; the SPA
+  sends its own locale in that header on every request (`services/http.ts` and the generated
+  client's middleware in `main.ts`). The SPA's order is the account's language, then the last
+  choice in this browser (localStorage), then the browser, then German (`useLocale.detectLocale`).
+  The switcher (`LanguageSwitcher.vue`, header and `/account`) saves to the account when signed
+  in. allauth creates the account in the request's language (`AccountAdapter.save_user`).
+- **Mails and briefings have no request.** `AccountAdapter.send_mail` renders in the
+  recipient's language when the address has an account ("account exists" goes to its owner,
+  whoever asked). Briefings and the trial mail use `translation.override(user.language)`. The
+  briefing body is stored, so it is worded once, in the owner's language.
+- **Never `t()` at import time.** A label built at module scope keeps the language the page
+  loaded with. Constants that carry labels are getters (`POI_CATEGORIES`, `LODGING_KINDS`,
+  `BIKE_PROFILE_OPTIONS`) or functions (`headingOptions()`, `weekdayLabels()`,
+  `metricLabels()`, `coverageLabels()`). `Intl`/`toLocale*` take `intlLocale()` (de-CH, en-GB),
+  date-fns takes `dateFnsLocale()`, both read inside a computed so a switch reformats. Charts
+  are keyed on the locale; NiceMap rebuilds its chips, arrows and stops on a switch.
+- **Catalogs.** `src/locales/de.json` is the source; `en.json` must have exactly the same keys,
+  placeholders and plural forms (`src/locales/__tests__/catalogs.spec.ts`). The Vite plugin
+  (`@intlify/unplugin-vue-i18n`) precompiles them, so a malformed message fails the build; its
+  `include` must stay `src/locales/*.json` (a broader glob swallows the spec). Escape literal
+  `{ } @ $ |` as `{'@'}`; plurals are `|`-separated (`t(key, n)`). ESLint's
+  `@intlify/vue-i18n/no-missing-keys` is an error, `no-raw-text` a warning. `welcome.vue` keeps
+  its own de/en copy object, switched by the app locale.
+- **Backend catalog.** `backend/core/locale/en/LC_MESSAGES/django.po` and the compiled `.mo`
+  are both committed, so neither the image nor a Windows dev box needs GNU gettext at runtime.
+  After adding or changing a `gettext` string or a `{% translate %}`, run `just messages`
+  (needs gettext) and translate the new `msgstr`s. `core/test_i18n.py` fails when the `.mo` is
+  missing or stale. Mail templates in `core/templates/account/email/` use `{% translate %}` /
+  `{% blocktranslate with site_name=current_site.name %}` (blocktranslate takes no attribute
+  lookups).
+
 ## Testing
 
 - `SimpleTestCase` for pure functions (no DB)
@@ -695,6 +962,8 @@ departure is within 48 h. Rules that hold this together:
   test needs a live worker
 - Run: `cd backend && python manage.py test core`
 - Frontend: `cd frontend && npm run test:unit` and `npm run type-check`
+- Unit tests render in German: `src/test/setup.ts` registers i18n for every mount; Playwright's
+  default locale is `de-CH`. Backend tests run in German unless they set a language.
 
 **Patch at the binding site, which differs by module.** When asserting that a path spends no
 API request, patch `core.weather.get_or_fetch_forecast_cell` *and*

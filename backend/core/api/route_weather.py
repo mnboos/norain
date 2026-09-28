@@ -2,10 +2,11 @@ from typing import Literal
 from uuid import UUID
 
 from django.http import HttpRequest
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
-from ..auth.backend import optional_session_auth
+from ..auth.backend import optional_session_auth, session_auth
 from ..departures import candidate_times, check_flexibility
 from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut, ForecastMapDetailOut, ForecastUncertainty
@@ -22,7 +23,10 @@ ROUTING_PROFILES = ("bike", "ebike", "fast_ebike")
 
 def check_routing_profile(profile: str) -> str:
     if profile not in ROUTING_PROFILES:
-        raise ValueError(f"unknown profile {profile!r}; expected one of {', '.join(ROUTING_PROFILES)}")
+        raise ValueError(
+            gettext("Unbekanntes Profil %(profile)r; erwartet: %(choices)s")
+            % {"profile": profile, "choices": ", ".join(ROUTING_PROFILES)}
+        )
     return profile
 
 
@@ -45,7 +49,9 @@ def flexibility_params(departure: str, before: int, after: int) -> dict:
         return params
 
 
-@router.get("/route_weather", response={200: ForecastJobOut, 202: ForecastJobOut})
+# Planning (starting a forecast) is for signed-in accounts only: every job spends provider
+# budget. Reading a job by its id stays open below.
+@router.get("/route_weather", response={200: ForecastJobOut, 202: ForecastJobOut}, auth=session_auth)
 async def route_weather(
     request: HttpRequest,
     start_lat: float,
@@ -72,10 +78,10 @@ async def route_weather(
     if (departure_flex_before_minutes or departure_flex_after_minutes) and not (
         await entitlements_for(getattr(request, "auth", None))
     ).departure_comparison:
-        raise HttpError(402, "Departure comparison requires Plus. Try Plus free for 14 days.")
+        raise HttpError(402, gettext("Der Abfahrtsvergleich braucht Plus. Teste Plus 14 Tage kostenlos."))
     job = await start_forecast_job(
         ForecastJob.Kind.ADHOC,
-        request.auth if request.auth.is_authenticated else None,
+        request.auth,
         {
             "start_lat": start_lat,
             "start_lon": start_lon,
@@ -120,7 +126,7 @@ async def forecast_job_sample_uncertainty(request: HttpRequest, job_id: UUID, in
     """
     samples = _shown_result(await _readable_job(request, job_id, finished=True)).get("samples") or []
     if not 0 <= index < len(samples):
-        raise HttpError(404, "Sample not found.")
+        raise HttpError(404, gettext("Messpunkt nicht gefunden."))
     if not (await entitlements_for(getattr(request, "auth", None))).ensemble_uncertainty:
         return None
     return samples[index].get("uncertainty")
@@ -140,17 +146,17 @@ async def _readable_job(request: HttpRequest, job_id: UUID, *, finished: bool = 
     """
     job = await ForecastJob.objects.filter(id=job_id).afirst()
     if job is None:
-        raise HttpError(404, "Forecast job not found.")
+        raise HttpError(404, gettext("Vorhersage-Auftrag nicht gefunden."))
 
     # Ad-hoc jobs are guarded by the unguessable id alone; a saved route's forecast is
     # private to its owner.
     if job.owner_id is not None:
         user = getattr(request, "auth", None)
         if not user or not user.is_authenticated or user.id != job.owner_id:
-            raise HttpError(404, "Forecast job not found.")
+            raise HttpError(404, gettext("Vorhersage-Auftrag nicht gefunden."))
 
     if finished and not _shown_result(job):
-        raise HttpError(404, "Forecast job is not finished.")
+        raise HttpError(404, gettext("Der Vorhersage-Auftrag ist noch nicht fertig."))
     from ..jobs import restrict_job_result
 
     restrict_job_result(job, await entitlements_for(getattr(request, "auth", None)))

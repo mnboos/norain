@@ -1,11 +1,12 @@
 <route lang="json5">
 {
     name: "map",
-    meta: { title: "Karte" },
+    meta: { titleKey: "pages.map", requiresAuth: true },
 }
 </route>
 
 <script setup lang="ts">
+import { useRoutePosition } from "@/composables/useRoutePosition";
 import ElevationChart from "@/components/ElevationChart.vue";
 import { GeometrySource } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
@@ -18,17 +19,29 @@ import WindDistributionBar from "@/components/WindDistributionBar.vue";
 import ForecastDetails from "@/components/ForecastDetails.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
+import CurrentLocationButton from "@/components/CurrentLocationButton.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import { QSelect, useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
 import { useSession } from "@/composables/useSession";
 import GpxImportDialog from "@/components/GpxImportDialog.vue";
 import RouteTimingFields from "@/components/RouteTimingFields.vue";
 import RouteFormDialog from "@/components/RouteFormDialog.vue";
-import { gpxApi, gpxError, exportDraft, routePlace, savedRoutePlan, routingProfile, parseDraft, type RouteDraft } from "@/services/gpx";
+import {
+    canShareFiles,
+    gpxApi,
+    gpxError,
+    exportDraft,
+    routePlace,
+    savedRoutePlan,
+    routingProfile,
+    type RouteDraft,
+} from "@/services/gpx";
 import type { RoutePlanIn, RecurringRouteIn } from "@norain/api/models";
 import { computed, ref, watchEffect, watch } from "vue";
-import { symSharpElectricBike, symSharpElectricMoped, symSharpPedalBike } from "@quasar/extras/material-symbols-sharp";
+import { symSharpShare, symSharpDownload } from "@quasar/extras/material-symbols-sharp";
+import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
 import type { PlacesSearchResult } from "@norain/api/models";
 import { useRoute, useRouter } from "vue-router";
 import { usePlaceSearch } from "@/queries/places";
@@ -38,18 +51,20 @@ import { useRouteWeather } from "@/queries/routeWeather";
 const route = useRoute();
 const router = useRouter();
 const $q = useQuasar();
-const { isAuthenticated } = useSession();
+const { t } = useI18n();
+const { defaultProfile } = useSession();
 const importing = ref(false);
 const showSave = ref(false);
 const draft = ref<RouteDraft | null>(null);
 const duration = ref(0);
 const viaPoints = ref<number[][]>([]);
 const exporting = ref(false);
-const createRoute = useCreateRecurringRoute();
+const sharing = canShareFiles();
+const { mutateAsync: createRoute } = useCreateRecurringRoute();
 const exact = computed(() => draft.value?.plan.geometrySource === GeometrySource.Imported);
 const { isPro } = useEntitlements();
 
-const profile = ref("bike");
+const profile = ref<string>(defaultProfile.value);
 const departureTime = ref<string>(defaultDepartureTime());
 const flexBefore = ref(0);
 const flexAfter = ref(0);
@@ -63,11 +78,7 @@ function defaultDepartureTime(): string {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:00`;
 }
 
-const profiles = [
-    { label: "Velo", value: "bike", icon: symSharpPedalBike },
-    { label: "E-Bike", value: "ebike", icon: symSharpElectricBike },
-    { label: "S-Pedelec", value: "fast_ebike", icon: symSharpElectricMoped },
-];
+const profiles = BIKE_PROFILE_OPTIONS;
 
 const routeIdParam = computed(() => (typeof route.query.route === "string" ? route.query.route : null));
 
@@ -88,7 +99,14 @@ watchEffect(() => {
         profile.value = r.profile;
         viaPoints.value = r.viaPoints ?? [];
         if (r.geometrySource === GeometrySource.Imported && r.importedCoordinates?.length) {
-            draft.value = { plan: savedRoutePlan(r), preview: { coordinates: r.importedCoordinates, distanceM: r.totalDistanceM ?? 0, timeS: r.durationSeconds ?? 1 } };
+            draft.value = {
+                plan: savedRoutePlan(r),
+                preview: {
+                    coordinates: r.importedCoordinates,
+                    distanceM: r.totalDistanceM ?? 0,
+                    timeS: r.durationSeconds ?? 1,
+                },
+            };
             duration.value = r.durationSeconds ?? 1;
         } else draft.value = null;
         flexBefore.value = r.departureFlexBeforeMinutes ?? 0;
@@ -123,63 +141,85 @@ const ready = computed(() => !!zielort.value);
 
 const plan = computed<RoutePlanIn | null>(() => {
     if (!zielort.value) return null;
-    return { name: draft.value?.plan.name ?? "NoRain", geometrySource: exact.value ? GeometrySource.Imported : GeometrySource.Graphhopper,
-        coordinates: exact.value ? draft.value?.plan.coordinates ?? [] : [abfahrtsort.value.geometry.coordinates, ...viaPoints.value, zielort.value.geometry.coordinates],
-        profile: routingProfile(profile.value), durationSeconds: exact.value ? duration.value : null };
+    return {
+        name: draft.value?.plan.name ?? "Meteolane",
+        geometrySource: exact.value ? GeometrySource.Imported : GeometrySource.Graphhopper,
+        coordinates: exact.value
+            ? (draft.value?.plan.coordinates ?? [])
+            : [abfahrtsort.value.geometry.coordinates, ...viaPoints.value, zielort.value.geometry.coordinates],
+        profile: routingProfile(profile.value),
+        durationSeconds: exact.value ? duration.value : null,
+    };
 });
 const validPlan = computed(() => !!plan.value && (!exact.value || (duration.value > 0 && duration.value <= 1382400)));
-const previewQuery = useQuery({
+const { data: preview, error: previewError } = useQuery({
     queryKey: computed(() => ["routePlanPreview", plan.value]),
     enabled: validPlan,
     queryFn: ({ signal }) => {
-        if (!plan.value) throw new Error("Bitte eine Strecke wählen.");
+        if (!plan.value) throw new Error(t("mapPage.pickRoute"));
         return gpxApi.coreApiGpxPreviewGpx({ routePlanIn: plan.value }, { signal });
     },
     staleTime: 5 * 60 * 1000,
     retry: false,
 });
-const currentDraft = computed<RouteDraft | null>(() => plan.value && previewQuery.data.value ? { plan: plan.value, preview: previewQuery.data.value } : null);
+const currentDraft = computed<RouteDraft | null>(() =>
+    plan.value && preview.value ? { plan: plan.value, preview: preview.value } : null,
+);
 function applyImport(value: RouteDraft) {
     const points = value.plan.coordinates;
-    const first = points[0], last = points.at(-1);
+    const first = points[0],
+        last = points.at(-1);
     if (!first || !last) return;
     draft.value = value;
-    abfahrtsort.value = routePlace(first, "Start");
-    zielort.value = routePlace(last, "Ziel");
+    abfahrtsort.value = routePlace(first, t("routeForm.start"));
+    zielort.value = routePlace(last, t("routeForm.dest"));
     viaPoints.value = value.plan.geometrySource === GeometrySource.Graphhopper ? points.slice(1, -1) : [];
     duration.value = value.plan.durationSeconds ?? value.preview.timeS;
-    profile.value = value.plan.profile ?? "bike";
+    profile.value = value.plan.profile ?? defaultProfile.value;
 }
-function clearImport() { draft.value = null; viaPoints.value = []; }
-async function saveDraft() {
-    if (!currentDraft.value) return;
-    if (!isAuthenticated.value) {
-        sessionStorage.setItem("norain.plannerDraft", JSON.stringify(currentDraft.value));
-        await router.push({ path: "/account", query: { next: "/map?restoreDraft=1" } });
-    } else showSave.value = true;
+function clearImport() {
+    draft.value = null;
+    viaPoints.value = [];
 }
-if (route.query.restoreDraft === "1") {
-    try {
-        const value = parseDraft(sessionStorage.getItem("norain.plannerDraft"));
-        if (value) { applyImport(value); showSave.value = isAuthenticated.value; }
-    } catch { /* A stale browser draft can be discarded. */ }
-    sessionStorage.removeItem("norain.plannerDraft");
+// The planner is for signed-in accounts only (the router guard), so a draft saves at once.
+function saveDraft() {
+    if (currentDraft.value) showSave.value = true;
 }
 async function saveRoute(data: RecurringRouteIn) {
     try {
-        const saved = await createRoute.mutateAsync(data);
+        const saved = await createRoute(data);
         await router.push({ path: "/routes/" + saved.id });
-    } catch (e) { $q.notify({ type: "negative", message: await gpxError(e) }); showSave.value = true; }
+    } catch (e) {
+        $q.notify({ type: "negative", message: await gpxError(e) });
+        showSave.value = true;
+    }
 }
 async function exportRoute() {
     if (!currentDraft.value) return;
     exporting.value = true;
-    try { await exportDraft(currentDraft.value); }
-    catch (e) { $q.notify({ type: "negative", message: await gpxError(e) }); }
-    finally { exporting.value = false; }
+    try {
+        await exportDraft(currentDraft.value);
+    } catch (e) {
+        $q.notify({ type: "negative", message: await gpxError(e) });
+    } finally {
+        exporting.value = false;
+    }
 }
-const comparisonQuery = useRouteWeather(abfahrtsort, zielort, profile, departureTime, () => isPro.value ? flexBefore.value : 0, () => isPro.value ? flexAfter.value : 0, validPlan, plan);
-const selectedQuery = useRouteWeather(
+const {
+    data: comparisonWeather,
+    isFetching: isFetchingComparison,
+    error: comparisonError,
+} = useRouteWeather(
+    abfahrtsort,
+    zielort,
+    profile,
+    departureTime,
+    () => (isPro.value ? flexBefore.value : 0),
+    () => (isPro.value ? flexAfter.value : 0),
+    validPlan,
+    plan,
+);
+const { data: selectedWeather, isFetching: isFetchingSelected, error: selectedError } = useRouteWeather(
     abfahrtsort,
     zielort,
     profile,
@@ -189,14 +229,12 @@ const selectedQuery = useRouteWeather(
     () => selectedDeparture.value !== null && validPlan.value,
     plan,
 );
-const routeWeather = computed(() => (selectedDeparture.value ? selectedQuery.data.value : comparisonQuery.data.value));
+const routeWeather = computed(() => (selectedDeparture.value ? selectedWeather.value : comparisonWeather.value));
 const isFetchingWeather = computed(() =>
-    selectedDeparture.value ? selectedQuery.isFetching.value : comparisonQuery.isFetching.value,
+    selectedDeparture.value ? isFetchingSelected.value : isFetchingComparison.value,
 );
-const weatherError = computed(() =>
-    selectedDeparture.value ? selectedQuery.error.value : comparisonQuery.error.value,
-);
-const departureComparison = computed(() => comparisonQuery.data.value?.departureComparison);
+const weatherError = computed(() => (selectedDeparture.value ? selectedError.value : comparisonError.value));
+const departureComparison = computed(() => comparisonWeather.value?.departureComparison);
 watch(
     [abfahrtsort, zielort, profile, departureTime, flexBefore, flexAfter, plan],
     () => {
@@ -205,10 +243,7 @@ watch(
     { deep: true, flush: "sync" },
 );
 
-const selectedSample = ref(0);
-watch(routeWeather, () => {
-    selectedSample.value = 0;
-});
+const { position, selectedSample, selectSample, selectPosition } = useRoutePosition(() => routeWeather.value);
 
 function makeOnFilter(filter: ReturnType<typeof ref<string>>) {
     return (val: string, doneFn: (cb: () => void, after?: (ref: QSelect) => void) => void) => {
@@ -244,11 +279,11 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
         <RouteFormDialog v-model="showSave" :initial-draft="currentDraft ?? draft" @save="saveRoute" />
         <NiceMap
             :route-weather="routeWeather"
-            :preview-line="previewQuery.data.value?.coordinates"
+            :preview-line="preview?.coordinates"
             :abfahrtsort="abfahrtsort"
             :zielort="zielort"
-            :selected-sample="selectedSample"
-            @select-sample="selectedSample = $event"
+            :position="position"
+            @select-position="selectPosition"
             @map-view="onMapView"
         >
             <template #search>
@@ -258,20 +293,30 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                 >
                     <q-card class="q-pa-md q-mt-md q-gutter-y-sm">
                         <div class="row q-gutter-xs">
-                            <q-btn flat no-caps label="GPX importieren" @click="importing = true" />
-                            <q-btn flat no-caps label="GPX exportieren" :disable="!currentDraft" :loading="exporting" @click="exportRoute" />
-                            <q-btn flat no-caps label="Route speichern" :disable="!currentDraft" @click="saveDraft" />
+                            <q-btn flat no-caps :label="t('gpx.import')" @click="importing = true" />
+                            <q-btn
+                                flat
+                                no-caps
+                                :icon="sharing ? symSharpShare : symSharpDownload"
+                                :label="sharing ? t('routeDetail.shareGpx') : t('routeDetail.downloadGpx')"
+                                :disable="!currentDraft"
+                                :loading="exporting"
+                                @click="exportRoute"
+                            />
+                            <q-btn flat no-caps :label="t('mapPage.saveRoute')" :disable="!currentDraft" @click="saveDraft" />
                         </div>
                         <template v-if="draft">
                             <div class="text-subtitle2">{{ draft.plan.name }}</div>
                             <RouteTimingFields v-if="exact" v-model="duration" :distance-m="draft.preview.distanceM" />
-                            <q-btn flat dense no-caps label="Neue Route planen" @click="clearImport" />
+                            <q-btn flat dense no-caps :label="t('mapPage.planNew')" @click="clearImport" />
                         </template>
-                        <div v-if="previewQuery.error.value" class="text-negative" role="alert">Die Strecke konnte nicht berechnet werden.</div>
+                        <div v-if="previewError" class="text-negative" role="alert">
+                            {{ t("errors.job.route_failed") }}
+                        </div>
                         <q-select
                             v-model="abfahrtsort"
                             :disable="exact"
-                            label="Abfahrtsort"
+                            :label="t('mapPage.from')"
                             dense
                             outlined
                             rounded
@@ -286,6 +331,9 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             @filter="onFilterStart"
                             @focus="selectInputText"
                         >
+                            <template #append>
+                                <CurrentLocationButton :disable="exact" @select="abfahrtsort = $event" />
+                            </template>
                             <template #option="props">
                                 <PlaceSearchItem
                                     :feature="props.opt"
@@ -299,7 +347,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         <q-select
                             v-model="zielort"
                             :disable="exact"
-                            label="Zielort"
+                            :label="t('mapPage.to')"
                             dense
                             outlined
                             rounded
@@ -314,6 +362,9 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             @filter="onFilterDest"
                             @focus="selectInputText"
                         >
+                            <template #append>
+                                <CurrentLocationButton :disable="exact" @select="zielort = $event" />
+                            </template>
                             <template #option="props">
                                 <PlaceSearchItem
                                     :feature="props.opt"
@@ -325,7 +376,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         </q-select>
 
                         <RouteLocationPicker
-v-if="!exact"
+                            v-if="!exact"
                             :start="abfahrtsort"
                             :dest="zielort"
                             @update:start="
@@ -342,16 +393,19 @@ v-if="!exact"
                         <q-input
                             v-model="departureTime"
                             type="datetime-local"
-                            label="Abfahrtszeit"
+                            :label="t('routeForm.departureTime')"
                             dense
                             outlined
                             stack-label
                         />
                         <ElevationChart
-v-if="previewQuery.data.value"
-                            :coordinates="previewQuery.data.value.coordinates"
-                            :total-seconds="previewQuery.data.value.timeS"
-                            :vertex-times="previewQuery.data.value.vertexTimes" />
+                            v-if="preview"
+                            :coordinates="preview.coordinates"
+                            :total-seconds="preview.timeS"
+                            :vertex-times="preview.vertexTimes"
+                            :position="position"
+                            @select-position="selectPosition"
+                        />
                         <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
 
                         <q-btn-toggle
@@ -380,22 +434,25 @@ v-if="previewQuery.data.value"
                         />
 
                         <q-banner v-if="weatherError" dense class="bg-tint-warn rounded-borders">
-                            Route oder Wetter konnte nicht geladen werden. Liegen Start und Ziel innerhalb der geladenen
-                            OSM-Region?
+                            {{ t("mapPage.loadFailed") }}
                         </q-banner>
 
                         <template v-else-if="routeWeather">
                             <ForecastSummaryCard flat :forecast="routeWeather" />
                             <KeyRideDataCard flat :forecast="routeWeather" :columns="2" />
                             <template v-if="routeWeather.summary.windDistribution">
-                                <div class="text-subtitle2">Wind entlang der Strecke</div>
+                                <div class="text-subtitle2">{{ t("routeDetail.windAlong") }}</div>
                                 <WindDistributionBar :distribution="routeWeather.summary.windDistribution" />
                             </template>
-                            <ForecastDetails v-model:selected-sample="selectedSample" :forecast="routeWeather" />
+                            <ForecastDetails
+                                :selected-sample="selectedSample"
+                                :forecast="routeWeather"
+                                @update:selected-sample="selectSample"
+                            />
                         </template>
 
                         <div v-else-if="!ready" class="text-caption text-muted">
-                            Ziel wählen für die Wetterprognose entlang der Route.
+                            {{ t("mapPage.pickDestination") }}
                         </div>
                     </q-card>
                 </div>

@@ -24,6 +24,12 @@ from itertools import pairwise
 from typing import Literal
 
 RideFactor = Literal["rain", "wind", "temp", "frost"]
+# What the API serves instead of numbers the curves could be read back from. Codes, not
+# words: the SPA translates them (and branches on them), and a job result is read in either
+# language. See "Internationalisation" in CLAUDE.md.
+RideBand = Literal["very_good", "good", "fair", "poor", "very_poor"]
+WindEffortLevel = Literal["tailwind", "none", "low", "medium", "high", "very_high"]
+ImpactLevel = Literal["light", "moderate", "heavy"]
 FACTORS: tuple[RideFactor, ...] = ("rain", "wind", "temp", "frost")
 
 
@@ -59,7 +65,7 @@ class RideQualityConfig:
 # "sehr gut … sehr schlecht" wording alike, so colour and text stay in agreement.
 RIDE_QUALITY = RideQualityConfig()
 
-# Rain dominates - the app is called NoRain. Drizzle is a nuisance, 5 mm/h is the worst it
+# Rain dominates - it spoils a ride more than anything else. Drizzle is a nuisance, 5 mm/h is the worst it
 # gets for scoring purposes.
 RAIN_CURVE = ((0, 0), (0.2, 0.15), (1, 0.5), (2.5, 0.8), (5, 1))
 
@@ -113,13 +119,7 @@ FROST_CODES = {
 ROUTING_RAIN_ZONES = ((0.5, 0.25), (0.2, 0.6))  # (rain_impact at least, multiplier)
 ROUTING_WIND_ZONES = ((30.0, 0.6), (18.0, 0.85))  # (wind km/h at least, multiplier on headwind roads)
 
-BAND_LABELS = ("sehr gut", "gut", "mässig", "schlecht", "sehr schlecht")
-FACTOR_LABELS: dict[RideFactor, str] = {
-    "rain": "Regen",
-    "wind": "Wind",
-    "temp": "Temperatur",
-    "frost": "Frost",
-}
+BAND_LABELS: tuple[RideBand, ...] = ("very_good", "good", "fair", "poor", "very_poor")
 
 # Naming a single cause is only honest when one factor actually dominates. Below this share
 # of the total the ride is simply "mixed", and the label stays silent about why.
@@ -141,12 +141,16 @@ class RideScore:
         return score_band(self.score)
 
     @property
-    def label(self) -> str:
-        """German wording, e.g. "mässig · v. a. Regen"."""
-        text = BAND_LABELS[self.band]
+    def label(self) -> RideBand:
+        """The band as a code, e.g. "fair"; the SPA words it."""
+        return BAND_LABELS[self.band]
+
+    @property
+    def cause(self) -> RideFactor | None:
+        """The factor that spoils the ride, when one clearly dominates ("fair, mainly rain")."""
         if self.band == 0 or self.worst_share < MIN_WORST_SHARE:
-            return text
-        return f"{text} · v. a. {FACTOR_LABELS[self.worst]}"
+            return None
+        return self.worst
 
 
 def _clamp01(x: float) -> float:
@@ -303,7 +307,7 @@ def worst_ride_score(samples, config: RideQualityConfig = RIDE_QUALITY) -> RideS
     return max(scored, key=lambda rq: rq.score, default=None)
 
 
-def wind_effort_level(watts) -> str | None:
+def wind_effort_level(watts) -> WindEffortLevel | None:
     """The wind effort as a word instead of watts, which nobody can place and which would claim
     a precision the estimate does not have. The steps are the breakpoints of the wind curve, so
     the word and the map colour agree about the same point.
@@ -312,27 +316,27 @@ def wind_effort_level(watts) -> str | None:
         return None
     rounded = round(watts)
     if rounded < 0:
-        return "Wind hilft"
+        return "tailwind"
     if rounded == 0:
-        return "keiner"
+        return "none"
     (_, _), (low, _), (medium, _), (high, _) = WIND_POWER_CURVE
     if rounded < low:
-        return "niedrig"
+        return "low"
     if rounded < medium:
-        return "mittel"
+        return "medium"
     if rounded < high:
-        return "hoch"
-    return "sehr hoch"
+        return "high"
+    return "very_high"
 
 
-# The rain and frost words the list and the map show. A level is a *result*, like
+# The rain and frost levels the list and the map show. A level is a *result*, like
 # `wind_effort_level`: it says how bad the app thinks it is, without handing the browser the
 # penalty it came from. `None` means "nothing worth naming" - not "unknown"; callers that have
 # no data at all must say so themselves.
-IMPACT_LEVELS = ((0.15, "leicht"), (0.45, "mässig"), (1.01, "stark"))
+IMPACT_LEVELS: tuple[tuple[float, ImpactLevel], ...] = ((0.15, "light"), (0.45, "moderate"), (1.01, "heavy"))
 
 
-def impact_level(value: float | None) -> str | None:
+def impact_level(value: float | None) -> ImpactLevel | None:
     """A rain or frost penalty (0..1) as a word, or ``None`` when there is nothing to name."""
     if not _finite(value) or value < IMPACT_LEVELS[0][0]:
         return None
@@ -342,23 +346,23 @@ def impact_level(value: float | None) -> str | None:
     return IMPACT_LEVELS[-1][1]
 
 
-def rain_level(sample, config: RideQualityConfig = RIDE_QUALITY) -> str | None:
+def rain_level(sample, config: RideQualityConfig = RIDE_QUALITY) -> ImpactLevel | None:
     """How much rain this sample means, as a word."""
     return impact_level(rain_impact(sample, config))
 
 
-def frost_level(sample, config: RideQualityConfig = RIDE_QUALITY) -> str | None:
+def frost_level(sample, config: RideQualityConfig = RIDE_QUALITY) -> ImpactLevel | None:
     """How icy this sample is, as a word."""
     return impact_level(frost_impact(sample, config=config))
 
 
-def worst_rain_level(samples, config: RideQualityConfig = RIDE_QUALITY) -> str | None:
+def worst_rain_level(samples, config: RideQualityConfig = RIDE_QUALITY) -> ImpactLevel | None:
     """The wettest point of a ride as a word. ``None`` entries (cold cells) are skipped."""
     values = [v for s in samples if s is not None and (v := rain_impact(s, config)) is not None]
     return impact_level(max(values)) if values else None
 
 
-def worst_frost_level(samples, config: RideQualityConfig = RIDE_QUALITY) -> str | None:
+def worst_frost_level(samples, config: RideQualityConfig = RIDE_QUALITY) -> ImpactLevel | None:
     """The iciest point of a ride as a word. ``None`` entries (cold cells) are skipped."""
     values = [frost_impact(s, config=config) for s in samples if s is not None]
     return impact_level(max(values)) if values else None
@@ -378,6 +382,7 @@ def score_sample(sample: dict, config: RideQualityConfig = RIDE_QUALITY) -> dict
         **sample,
         "ride_score": round(rq.score, 4) if rq else None,
         "ride_label": rq.label if rq else None,
+        "ride_cause": rq.cause if rq else None,
         "wind_effort_level": wind_effort_level(sample.get("wind_power_w")),
         "frost_level": frost_level(sample, config),
     }

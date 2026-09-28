@@ -103,7 +103,7 @@ async def terrain_heights(samples):
         point["elevation_m"] = height if isinstance(height, (int, float)) and math.isfinite(height) else None
 
 
-async def elevation_profile(coordinates, total_seconds, vertex_times=None, source="GraphHopper / Mapterhorn"):
+async def elevation_profile(coordinates, total_seconds, vertex_times=None, source=""):
     if len(coordinates) < 2 or not total_seconds:
         return {"points": [], "source": source, "approximate_timing": True}
     # Old cached jobs may lack vertex times. Use distance-based timing rather than inventing precision.

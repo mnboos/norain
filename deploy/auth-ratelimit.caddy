@@ -1,0 +1,98 @@
+# Rate limits for the sign-in and account endpoints, imported by both Caddyfiles.
+# Needs the caddy-ratelimit plugin (built into the image, see the Dockerfile) and
+# `order rate_limit before basic_auth` in the global options.
+#
+# These sit in front of the backend's own limits and never replace them: django-axes locks an
+# IP out after 10 wrong passwords, allauth caps codes and mails per address, and the username
+# check is limited per account. Caddy stops a flood before it reaches Django, and it keeps
+# working when Redis (which the Django limits count in) is down. Counters live in this Caddy
+# process's memory: a restart resets them.
+#
+# Every IP key is {client_ip}, the same address Django trusts via X-Real-IP, so behind
+# Cloudflare it is the real client (trusted_proxies + CF-Connecting-IP), never Cloudflare.
+(auth_rate_limits) {
+	rate_limit {
+		# Password sign-in, app and admin. Axes counts wrong passwords; this caps attempts.
+		zone sign_in {
+			match {
+				path /api/allauth/browser/v1/auth/login /{$DJANGO_ADMIN_PATH}/login/
+				method POST
+			}
+			key {client_ip}
+			events 20
+			window 1m
+		}
+		# Every sign-up creates an account row and sends a mail.
+		zone sign_up {
+			match {
+				path /api/allauth/browser/v1/auth/signup
+			}
+			key {client_ip}
+			events 5
+			window 10m
+		}
+		# Everything else that sends a mail: sign-in code, new sign-up code, password reset.
+		# Keeps one address from mail-bombing many inboxes.
+		zone send_mail {
+			match {
+				path /api/allauth/browser/v1/auth/code/request /api/allauth/browser/v1/auth/email/verify/resend /api/allauth/browser/v1/auth/password/request
+			}
+			key {client_ip}
+			events 10
+			window 10m
+		}
+		# Codes and reset keys: allauth allows 3 tries per code, this caps how many codes
+		# one address can try across accounts. GET counts too: it checks a key.
+		zone check_code {
+			match {
+				path /api/allauth/browser/v1/auth/code/confirm /api/allauth/browser/v1/auth/email/verify /api/allauth/browser/v1/auth/password/reset
+			}
+			key {client_ip}
+			events 30
+			window 10m
+		}
+		# Step 2's live check answers "is this username taken", so it is limited per user
+		# (the session) and, across the accounts one address may hold, per IP.
+		zone username_check_user {
+			match {
+				path /api/auth/username-available
+				expression {http.request.cookie.sessionid} != ""
+			}
+			key {http.request.cookie.sessionid}
+			events 30
+			window 1m
+		}
+		zone username_check_ip {
+			match {
+				path /api/auth/username-available
+			}
+			key {client_ip}
+			events 60
+			window 1m
+		}
+		# Saving step 2 or the profile: a handful a minute is plenty for a person.
+		zone account_write_user {
+			match {
+				path /api/auth/complete-signup /api/auth/profile
+				expression {http.request.cookie.sessionid} != ""
+			}
+			key {http.request.cookie.sessionid}
+			events 10
+			window 1m
+		}
+		zone account_write_ip {
+			match {
+				path /api/auth/complete-signup /api/auth/profile
+			}
+			key {client_ip}
+			events 30
+			window 1m
+		}
+	}
+
+	# JSON, because the SPA parses every reply body as JSON (like the axes lockout).
+	handle_errors 429 {
+		header Content-Type application/json
+		respond `{"detail": "Zu viele Anfragen. Bitte warte einen Moment und versuche es dann erneut."}` 429
+	}
+}

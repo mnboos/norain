@@ -1,13 +1,13 @@
 name: Release production images
 
 on:
+  pull_request:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write
 
 env:
   REGISTRY: ghcr.io
@@ -17,6 +17,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
+      redis:
+        image: redis:8
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       postgis:
         image: postgis/postgis:18-3.6
         env:
@@ -31,6 +40,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      REDIS_URL: redis://localhost:6379
       DB_NAME: norain
       DB_HOST: localhost
       DB_PORT: 5432
@@ -49,7 +59,11 @@ jobs:
       - run: cd frontend && npm ci && npm run build
 
   publish:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: test
+    permissions:
+      contents: read
+      packages: write
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -84,6 +98,7 @@ jobs:
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
 
   deploy:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     needs: publish
     runs-on: ubuntu-latest
     environment: production

@@ -101,14 +101,14 @@ class DepartureRankingTests(SimpleTestCase):
         stored["candidates"][1]["samples"][1]["rain_rate_mm_h"] = 5
         result = comparison_view(stored)
         self.assertEqual(result["recommended_time"], stored["window_start"])
-        self.assertIn("Weniger Regen", result["explanation"])
+        self.assertEqual(result["explanation"], "less_rain")
         DepartureComparison.model_validate(result)
 
     def test_equivalent_conditions_prefer_requested_departure(self):
         stored = stored_comparison((0, 0.01, 0))
         result = comparison_view(stored)
         self.assertEqual(result["recommended_time"], stored["requested_time"])
-        self.assertIn("Ähnliche", result["explanation"])
+        self.assertEqual(result["explanation"], "requested_equivalent")
 
     def test_missing_weather_is_never_good_weather(self):
         stored = stored_comparison((3, 0, 3))

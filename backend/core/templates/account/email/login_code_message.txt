@@ -1,0 +1,12 @@
+{% load i18n %}{% autoescape off %}{% blocktranslate with site_name=current_site.name %}Hallo
+
+Dein Anmeldecode für {{ site_name }}:{% endblocktranslate %}
+
+{{ code }}
+
+{% translate "Gib ihn im Fenster ein, in dem du ihn angefordert hast." %}
+
+{% translate "Warst du das nicht? Dann kannst du diese E-Mail ignorieren." %}
+
+{{ current_site.name }} · {{ current_site.domain }}
+{% endautoescape %}

@@ -9,6 +9,8 @@ from django.contrib.gis.db import models
 from django.contrib.gis.geos import LineString, Point
 from django.db.models.functions import Lower
 
+from core.route_input import RoutingProfile
+
 
 def route_point(lat: float, lon: float) -> Point:
     """Build a WGS84 point while keeping the app-facing latitude-first API explicit."""
@@ -33,7 +35,7 @@ class UserManager(DjangoUserManager):
 
 
 class User(AbstractUser):
-    """A NoRain account: the sign-in identities plus whether sign-up was finished.
+    """A Meteolane account: the sign-in identities plus whether sign-up was finished.
 
     The reason this is a custom model rather than ``django.contrib.auth.User`` is the two
     constraints below. Django's default user permits duplicate and blank emails
@@ -53,6 +55,13 @@ class User(AbstractUser):
     # until step 2 (core.auth.views.complete_signup_view). Not inferred from the password:
     # a password reset sets one without the user ever picking a username.
     signup_completed = models.BooleanField(default=False)
+    # Pre-selected in the route, journey and map forms; picked in step 2 of sign-up.
+    default_profile = models.CharField(
+        max_length=16, choices=[(p.value, p.value) for p in RoutingProfile], default=RoutingProfile.BIKE.value
+    )
+    # The language of the app, the API's messages and every mail or briefing. Set from the
+    # request's language when allauth creates the account; changed on /account.
+    language = models.CharField(max_length=8, choices=settings.LANGUAGES, default="de")
     created_at = models.DateTimeField(auto_now_add=True)
 
     objects = UserManager()
@@ -200,6 +209,22 @@ class RecurringRoute(models.Model):
         max_length=10, default="", blank=True, choices=[("", "Off"), ("email", "Email"), ("push", "Push")]
     )
     active = models.BooleanField(default=True)
+
+    # Sharing. A public route is readable by anyone at /r/<public_slug>, but only as the
+    # line between the two privacy zones (core/public_routes.py): never its endpoints, their
+    # names, the via points or the schedule, which together say where and when someone rides.
+    class Visibility(models.TextChoices):
+        PRIVATE = "private", "Private"
+        PUBLIC = "public", "Public"
+
+    visibility = models.CharField(max_length=10, choices=Visibility.choices, default=Visibility.PRIVATE)
+    # Kept when a route goes private again, so a re-published route keeps its link.
+    public_slug = models.CharField(max_length=16, unique=True, null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    privacy_zone_m = models.PositiveIntegerField(
+        default=500, help_text="Radius around start and destination hidden from the public view"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -376,6 +401,7 @@ class ForecastJob(models.Model):
         ADHOC = "adhoc", "Ad-hoc route"
         ROUTE = "route", "Saved route"
         JOURNEY_STAGE = "journey_stage", "Journey stage"
+        PUBLIC_ROUTE = "public_route", "Public route"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -431,6 +457,7 @@ class ForecastJob(models.Model):
     # (flagged stale) instead of a spinner. Only the HTTP envelope serves it; see
     # ``jobs.carry_stale`` for what may be kept.
     stale_result = models.JSONField(null=True, blank=True)
+    # A code the SPA words (e.g. "weather_failed"); rows from before hold German prose.
     error = models.TextField(blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -456,6 +483,9 @@ class PushSubscription(models.Model):
     keys = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
 
+    def __str__(self):
+        return f"PushSubscription({self.user_id}, {self.endpoint[:40]})"
+
 
 class RideBriefing(models.Model):
     """One scheduled briefing per route/departure, including its delivery claim.
@@ -479,6 +509,9 @@ class RideBriefing(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["route", "departure"], name="unique_ride_briefing")]
 
+    def __str__(self):
+        return f"RideBriefing({self.route_id}, {self.departure:%Y-%m-%d %H:%M}, {self.status})"
+
 
 class Poi(models.Model):
     """A point of interest near bike routes, extracted from OSM (see core/pois.py).
@@ -488,8 +521,8 @@ class Poi(models.Model):
     one row per category it belongs to: a machine selling drinks and sweets is two rows.
     """
 
-    osm_ref = models.CharField(max_length=32, db_index=True, help_text="n123 / w456 / r789")
-    category = models.CharField(max_length=32, db_index=True)
+    osm_ref = models.CharField(max_length=32, help_text="n123 / w456 / r789")
+    category = models.CharField(max_length=32)
     name = models.CharField(max_length=300, blank=True, default="")
     tags = models.JSONField(default=dict, blank=True, help_text="A whitelist of OSM tags, see core.pois.KEPT_TAGS")
     location = models.PointField(srid=4326, geography=True)
@@ -502,13 +535,21 @@ class Poi(models.Model):
 
 
 class Journey(models.Model):
-    """A one-off ride over one or more days, planned by NoRain (core/journeys.py).
+    """A one-off ride over one or more days, planned by Meteolane (core/journeys.py).
 
     The user gives the ends, the date, how far a day and a leg may be, which POIs matter and
     how the road should be. ``plan_journey`` turns that into days (ending at lodging) and, per
     day, alternative stages. Their weather is ordinary forecast jobs (``JOURNEY_STAGE``), and
     the ranking is computed when the journey is read, never stored.
+
+    A ``RANDOM`` journey is a random ride (core/random_rides.py): one day whose stages are
+    generated candidates of a given length, a loop when ``random_prefs["round_trip"]`` (then
+    the destination is the start).
     """
+
+    class Kind(models.TextChoices):
+        TOUR = "tour", "Tour"
+        RANDOM = "random", "Random ride"
 
     class PlanStatus(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -520,6 +561,10 @@ class Journey(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="journeys")
     name = models.CharField(max_length=200)
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.TOUR)
+    random_prefs = models.JSONField(
+        default=dict, blank=True, help_text="Random rides only: round_trip, heading, seed (core.random_rides)"
+    )
 
     start_point = models.PointField(srid=4326, geography=True)
     start_name = models.CharField(max_length=300)
@@ -549,6 +594,7 @@ class Journey(models.Model):
     # for and stops writing once it is no longer current.
     plan_revision = models.PositiveIntegerField(default=0)
     plan_attempts = models.PositiveSmallIntegerField(default=0)
+    # A code the SPA words (e.g. "no_route"); rows from before hold German prose.
     plan_error = models.TextField(blank=True, default="")
     planned_at = models.DateTimeField(null=True, blank=True)
     # The day cuts between the two planning tasks: ends, lodging, which days are weather-routed.
@@ -590,6 +636,9 @@ class JourneyDay(models.Model):
         ordering: ClassVar[list[str]] = ["index"]
         constraints = (models.UniqueConstraint(fields=["journey", "index"], name="unique_journey_day"),)
 
+    def __str__(self):
+        return f"JourneyDay({self.journey_id}, day {self.index + 1}, {self.date})"
+
 
 class JourneyStage(models.Model):
     """One way to ride one day: a route alternative, gap-filled and with its breaks."""
@@ -621,6 +670,9 @@ class JourneyStage(models.Model):
     class Meta:
         ordering: ClassVar[list[str]] = ["rank"]
 
+    def __str__(self):
+        return f"JourneyStage({self.day_id}, rank {self.rank})"
+
     @property
     def polyline_coordinates(self) -> list[list[float]]:
         return [[float(lon), float(lat)] for lon, lat in self.polyline.coords]
@@ -630,3 +682,56 @@ class ElevationProfile(models.Model):
     key = models.CharField(max_length=64, primary_key=True)
     data = models.JSONField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"ElevationProfile({self.key})"
+
+
+def _photo_path(photo: RoutePhoto, filename: str) -> str:
+    return f"route-photos/{photo.route_id}/{filename}"
+
+
+class RoutePhoto(models.Model):
+    """A photo on a route, re-encoded on upload (core/photos.py): no EXIF, no GPS, bounded size.
+
+    Served through ``core.api.community`` so a private route's photos stay private; the files
+    are never exposed under a static URL.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    route = models.ForeignKey(RecurringRoute, on_delete=models.CASCADE, related_name="photos")
+    uploader = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="route_photos")
+    image = models.ImageField(upload_to=_photo_path)
+    thumbnail = models.ImageField(upload_to=_photo_path)
+    width = models.PositiveIntegerField(default=0)
+    height = models.PositiveIntegerField(default=0)
+    caption = models.CharField(max_length=500, blank=True, default="")
+    # Set by the uploader on the map, never read from the file. Hidden on the public page when
+    # it lies inside a privacy zone.
+    location = models.PointField(srid=4326, geography=True, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering: ClassVar[list[str]] = ["created_at"]
+
+
+class RouteComment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    route = models.ForeignKey(RecurringRoute, on_delete=models.CASCADE, related_name="comments")
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="route_comments")
+    body = models.TextField(max_length=2000)
+    created_at = models.DateTimeField(auto_now_add=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering: ClassVar[list[str]] = ["created_at"]
+        indexes = (models.Index(fields=["route", "created_at"]),)
+
+
+class RouteLike(models.Model):
+    route = models.ForeignKey(RecurringRoute, on_delete=models.CASCADE, related_name="likes")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="route_likes")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = (models.UniqueConstraint(fields=["route", "user"], name="core_routelike_once"),)

@@ -1,0 +1,43 @@
+// Custom Quasar color names: usable by color/text-color props and text-/bg- classes.
+@each $name in "navy", "blue", "gold", "ink", "muted", "faint", "page", "mist", "placeholder", "stripe", "glass" {
+    .text-brand-#{$name} {
+        color: var(--q-brand-#{$name}) !important;
+    }
+    .bg-brand-#{$name} {
+        background: var(--q-brand-#{$name}) !important;
+    }
+}
+
+.bg-brand-gradient {
+    background: linear-gradient(90deg, var(--q-brand-navy), var(--q-brand-blue)) !important;
+}
+
+.brand-surface {
+    color: var(--q-brand-ink);
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--q-brand-navy) 8%, transparent) !important;
+}
+
+.q-btn__content > span {
+    font-weight: inherit;
+}
+
+.text-display,
+.text-heading,
+.text-subheading {
+    font-weight: 600;
+    text-wrap: balance;
+}
+.text-display {
+    font-size: clamp(36px, 5vw, 52px);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+}
+.text-heading {
+    font-size: 30px;
+    line-height: 1.2;
+}
+.text-subheading {
+    font-size: 18px;
+    line-height: 1.4;
+    letter-spacing: normal;
+}

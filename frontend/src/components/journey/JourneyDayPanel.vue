@@ -1,19 +1,30 @@
 <script setup lang="ts">
+import { useRoutePosition } from "@/composables/useRoutePosition";
 import ElevationChart from "@/components/ElevationChart.vue";
 import { computed, ref, toRefs, watch } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { symSharpBed, symSharpCloudOff, symSharpStar, symSharpWarning } from "@quasar/extras/material-symbols-sharp";
-import type { JourneyDayOut, JourneyOut, JourneyStageOut, PoiOut } from "@norain/api/models";
+import {
+    JourneyReasonOutKindEnum,
+    type JourneyDayOut,
+    type JourneyOut,
+    type JourneyStageOut,
+    type PoiOut,
+} from "@norain/api/models";
 import ForecastFreshness from "@/components/ForecastFreshness.vue";
 import ForecastSummaryCard from "@/components/ForecastSummaryCard.vue";
 import NiceMap from "@/components/NiceMap.vue";
 import WeatherChart from "@/components/WeatherChart.vue";
 import { useJourneyStageForecast, useJourneyStageForecasts, useJourneyStagesPois } from "@/queries/journeys";
-import { clock, dayLabel, duration, gapExcessLabel, km } from "@/utils/journeys";
+import { clock, dayLabel, duration, gapExcessLabel, isPlanningWarning, km, reasonText } from "@/utils/journeys";
+import { intlLocale } from "@/i18n";
+import { rideLabelText } from "@/utils/levels";
 import { CANDIDATE_COLOR, poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
 import { alternativeColor } from "@/utils/rideQuality";
 
 const $q = useQuasar();
+const { t } = useI18n();
 const props = defineProps<{
     journey: JourneyOut;
     day: JourneyDayOut;
@@ -75,12 +86,12 @@ const selectedIndex = computed(() =>
     ),
 );
 const selectedProfileColor = computed(() => variantColor(selectedIndex.value));
-const selectedLabel = computed(() => `Variante ${selectedIndex.value + 1}`);
+const selectedLabel = computed(() => t("journeyDay.variant", { n: selectedIndex.value + 1 }));
 const alternativeProfiles = computed(() =>
     alternativeLines.value.map(a => ({
         stageId: a.id,
         color: variantColor(a.index),
-        label: `Variante ${a.index + 1}`,
+        label: t("journeyDay.variant", { n: a.index + 1 }),
     })),
 );
 
@@ -101,12 +112,7 @@ const refreshing = computed(() => {
     return forecastQuery.isFetching.value && !!status && status !== "done" && status !== "failed";
 });
 const refreshFailed = computed(() => !!forecastQuery.error.value && !forecastQuery.isFetching.value);
-const selectedSample = ref(0);
-// Not on every new result: a stale forecast and the fresh one replacing it share the job and
-// the samples' places, so the user's pick stays where it was.
-watch([() => forecast.value?.jobId, () => forecast.value?.samples.length], () => {
-    selectedSample.value = 0;
-});
+const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePosition(() => forecast.value);
 
 // The candidates the planner did not pick, grey, when the user asks for them: the wanted
 // categories in the area of every variant, and other lodging where the day could have ended.
@@ -134,9 +140,9 @@ const mapPois = computed<MapPoi[]>(() => {
             ? []
             : [
                   ...(s.breaks ?? []).flatMap(b =>
-                      (b.pois ?? []).map(p => mapPoi(p, false, `Pause in Variante ${index + 1}`)),
+                      (b.pois ?? []).map(p => mapPoi(p, false, t("journeyDay.breakIn", { n: index + 1 }))),
                   ),
-                  ...(s.detours ?? []).map(p => mapPoi(p, false, `Umweg in Variante ${index + 1}`)),
+                  ...(s.detours ?? []).map(p => mapPoi(p, false, t("journeyDay.detourIn", { n: index + 1 }))),
               ],
     );
     const candidates = areaPois.value.flatMap(query => (query.data ?? []).map(p => mapPoi(p, false)));
@@ -154,26 +160,20 @@ const missingGaps = computed(() =>
     }),
 );
 const planningWarnings = computed(() =>
-    (stage.value?.reasons ?? []).filter(
-        reason =>
-            reason.startsWith("Tageslimit:") ||
-            /^Etappe \d+:/.test(reason) ||
-            reason.startsWith("Kein erreichbarer Stopp für "),
-    ),
+    (stage.value?.reasons ?? []).filter(isPlanningWarning).map(reasonText),
 );
 
-const detailReasons = computed(() =>
-    (stage.value?.reasons ?? []).filter(reason => !planningWarnings.value.includes(reason)),
-);
+const detailReasonsData = computed(() => (stage.value?.reasons ?? []).filter(reason => !isPlanningWarning(reason)));
+const detailReasons = computed(() => detailReasonsData.value.map(reasonText).filter(Boolean));
 const fallbackDetours = computed(() =>
-    detailReasons.value.some(reason => reason.startsWith("Umweg ")) ? [] : (stage.value?.detours ?? []),
+    detailReasonsData.value.some(reason => reason.kind === JourneyReasonOutKindEnum.Detour) ? [] : (stage.value?.detours ?? []),
 );
 
 function breakEta(elapsedS: number): string {
     const departure = stage.value?.recommendedDeparture ?? stage.value?.departureTime;
     if (!departure) return duration(elapsedS);
     const start = new Date(departure).getTime();
-    return new Date(start + elapsedS * 1000).toLocaleTimeString("de-CH", {
+    return new Date(start + elapsedS * 1000).toLocaleTimeString(intlLocale(), {
         hour: "2-digit",
         minute: "2-digit",
         timeZone: "Europe/Zurich",
@@ -186,10 +186,14 @@ function breakEta(elapsedS: number): string {
         <div class="journey-overview" :class="{ 'has-forecast': forecast }">
             <q-card class="q-pa-sm" data-testid="journey-selector">
                 <div class="row items-center q-gutter-x-sm q-mb-sm">
-                    <span class="text-subtitle2">Tag {{ day.index + 1 }} · {{ dayLabel(day.date) }}</span>
-                    <span v-if="day.weatherRouted" class="text-caption text-muted">Um Regen und Gegenwind geplant</span>
+                    <span class="text-subtitle2">
+                        {{ journey.kind === "random" ? "" : `${t("journeyDay.day", { n: day.index + 1 })} · ` }}{{
+                            dayLabel(day.date)
+                        }}
+                    </span>
+                    <span v-if="day.weatherRouted" class="text-caption text-muted">{{ t("journeyDay.weatherRouted") }}</span>
                 </div>
-                <div v-if="stages.length > 1" class="variant-grid" role="group" aria-label="Route wählen">
+                <div v-if="stages.length > 1" class="variant-grid" role="group" :aria-label="t('journeyDay.pickRoute')">
                     <button
                         v-for="(alternative, n) in stages"
                         :key="alternative.id"
@@ -201,47 +205,55 @@ function breakEta(elapsedS: number): string {
                     >
                         <span class="row items-center q-gutter-x-xs">
                             <span class="line-swatch" :style="{ background: variantColor(n) }" aria-hidden="true" />
-                            <span>Variante {{ n + 1 }}</span>
+                            <span>{{ t("journeyDay.variant", { n: n + 1 }) }}</span>
                             <q-icon
                                 v-if="alternative.recommended"
                                 :name="symSharpStar"
                                 color="accent"
                                 size="xs"
                                 role="img"
-                                aria-label="Empfohlen"
+                                :aria-label="t('departures.recommendedBadge')"
                             />
                             <span v-if="alternative.forecastStatus === 'failed'" class="text-caption text-negative">
-                                Wetter fehlgeschlagen
+                                {{ t("journeyDay.weatherFailed") }}
                             </span>
                             <q-spinner-dots
                                 v-else-if="alternative.forecastStatus && alternative.forecastStatus !== 'done'"
                                 size="1rem"
-                                aria-label="Wetter wird geladen"
+                                :aria-label="t('journeyDay.weatherLoading')"
                             />
                         </span>
                         <span class="text-caption">
                             {{ km(alternative.distanceM) }} · {{ duration(alternative.totalSeconds) }}
-                            <span v-if="alternative.rideLabel">· {{ alternative.rideLabel }}</span>
+                            <span v-if="alternative.rideLabel">
+                                · {{ rideLabelText(alternative.rideLabel, alternative.rideCause) }}
+                            </span>
                         </span>
                     </button>
                 </div>
                 <div v-else-if="stage" class="text-body2">
                     {{ km(stage.distanceM) }} · {{ duration(stage.totalSeconds) }}
-                    <span v-if="stage.rideLabel">· {{ stage.rideLabel }}</span>
+                    <span v-if="stage.rideLabel">· {{ rideLabelText(stage.rideLabel, stage.rideCause) }}</span>
                 </div>
                 <div v-if="stage" class="text-caption q-mt-sm" data-testid="selected-stage-summary">
                     <template v-if="stage.recommendedDeparture || stage.departureTime">
-                        {{ stage.recommendedDeparture ? "Empfohlene Abfahrt" : "Abfahrt" }}:
-                        {{ clock(stage.recommendedDeparture ?? stage.departureTime!) }} ·
+                        {{
+                            stage.recommendedDeparture
+                                ? t("journeyDay.recommendedDeparture", {
+                                      time: clock(stage.recommendedDeparture),
+                                  })
+                                : t("journeyDay.departure", { time: clock(stage.departureTime!) })
+                        }}
+                        ·
                     </template>
-                    {{ stage.breaks?.length ?? 0 }} Stopps
+                    {{ t("journeyDay.stops", stage.breaks?.length ?? 0) }}
                 </div>
                 <div v-if="day.lodging" class="text-caption q-mt-sm">
                     <q-icon :name="symSharpBed" />
-                    Übernachtung: {{ poiName(day.lodging) }} · {{ km(day.lodging.offsetM) }} neben der Strecke
+                    {{ t("journeyDay.lodging", { name: poiName(day.lodging), offset: km(day.lodging.offsetM) }) }}
                 </div>
                 <q-banner v-else-if="day.lodgingMissing" dense rounded class="bg-tint-warn q-mt-sm">
-                    Keine passende Unterkunft nahe der Strecke gefunden. Der Tag endet, wo das Tageslimit erreicht ist.
+                    {{ t("journeyDay.noLodging") }}
                 </q-banner>
                 <q-banner
                     v-if="planningWarnings.length || missingGaps.length"
@@ -258,12 +270,12 @@ function breakEta(elapsedS: number): string {
                     v-if="stage"
                     v-model="detailsOpen"
                     dense
-                    label="Stopps & Umwege"
+                    :label="t('journeyDay.stopsAndDetours')"
                     class="q-mt-xs"
                     data-testid="journey-details"
                 >
                     <div class="q-pa-sm">
-                        <div v-if="!stage.breaks?.length" class="text-caption text-muted">Keine Pause nötig.</div>
+                        <div v-if="!stage.breaks?.length" class="text-caption text-muted">{{ t("journeyDay.noBreak") }}</div>
                         <q-timeline v-else dense layout="dense" color="primary" class="q-my-none">
                             <q-timeline-entry
                                 v-for="stop in stage.breaks"
@@ -271,7 +283,7 @@ function breakEta(elapsedS: number): string {
                                 :subtitle="`${km(stop.alongM)} · ${breakEta(stop.elapsedS)}`"
                             >
                                 <div v-if="!stop.pois?.length" class="text-caption text-muted">
-                                    Hier gibt es nichts Gewünschtes.
+                                    {{ t("journeyDay.nothingWanted") }}
                                 </div>
                                 <div
                                     v-for="poi in stop.pois"
@@ -283,7 +295,7 @@ function breakEta(elapsedS: number): string {
                             </q-timeline-entry>
                         </q-timeline>
                         <div v-for="detour in fallbackDetours" :key="detour.osmRef" class="text-caption text-muted">
-                            Umweg zu {{ poiCategory(detour.category).emoji }} {{ poiName(detour) }}
+                            {{ t("journeyDay.detourTo", { poi: `${poiCategory(detour.category).emoji} ${poiName(detour)}` }) }}
                         </div>
                         <div v-for="reason in detailReasons" :key="reason" class="text-caption text-muted">
                             {{ reason }}
@@ -305,11 +317,11 @@ function breakEta(elapsedS: number): string {
             </q-card>
             <q-banner v-else-if="!day.forecastAvailable" rounded class="bg-tint-neutral">
                 <template #avatar><q-icon :name="symSharpCloudOff" class="text-muted" /></template>
-                Für diesen Tag gibt es noch keine Vorhersage. Plane die Reise näher am Termin neu, dann richtet NoRain
-                Strecke und Abfahrt nach dem Wetter.
+                <template v-if="journey.kind === 'random'">{{ t("journeyDay.noForecastRandom") }}</template>
+                <template v-else>{{ t("journeyDay.noForecastJourney") }}</template>
             </q-banner>
             <q-banner v-else-if="forecastQuery.error.value" rounded class="bg-tint-error">
-                Wetterdaten konnten nicht geladen werden.
+                {{ t("journeyDay.weatherLoadFailed") }}
             </q-banner>
         </div>
         <div v-if="stage || forecast" class="journey-charts" data-testid="journey-charts">
@@ -319,7 +331,9 @@ function breakEta(elapsedS: number): string {
                 :color="selectedProfileColor"
                 :label="selectedLabel"
                 :alternatives="alternativeProfiles"
+                :position="position"
                 compact
+                @select-position="selectPosition"
             >
                 <template v-if="alternativeProfiles.length" #footer>
                     <span
@@ -327,7 +341,7 @@ function breakEta(elapsedS: number): string {
                         :style="{ background: selectedProfileColor }"
                         aria-hidden="true"
                     />
-                    {{ selectedLabel }} (gewählt) ·
+                    {{ t("journeyDay.chosen", { label: selectedLabel }) }} ·
                     <span
                         v-for="alternative in alternativeProfiles"
                         :key="alternative.stageId"
@@ -335,7 +349,7 @@ function breakEta(elapsedS: number): string {
                         :style="{ background: alternative.color }"
                         aria-hidden="true"
                     />
-                    weitere Varianten
+                    {{ t("journeyDay.otherVariants") }}
                 </template>
             </ElevationChart>
             <template v-if="forecast">
@@ -343,9 +357,9 @@ function breakEta(elapsedS: number): string {
                     <WeatherChart
                         :kind="kind"
                         :version="forecast.version"
-                        :selected-sample="selectedSample"
+                        :cursor-minutes="positionMinutes"
                         :samples="forecast.samples"
-                        @select-sample="selectedSample = $event"
+                        @select-minutes="selectMinutes"
                     />
                 </q-card>
             </template>
@@ -356,10 +370,10 @@ function breakEta(elapsedS: number): string {
             <NiceMap
                 :route-weather="forecast"
                 :preview-line="forecast ? undefined : stage.path"
-                :selected-sample="selectedSample"
+                :position="position"
                 :pois="mapPois"
                 :alternative-lines="alternativeLines"
-                @select-sample="selectedSample = $event"
+                @select-position="selectPosition"
                 @select-alternative="pick"
             />
         </q-card>
@@ -367,14 +381,14 @@ function breakEta(elapsedS: number): string {
             <q-toggle
                 v-model="showAllPois"
                 dense
-                label="Weitere Orte in der Umgebung der Strecken zeigen (grau)"
+                :label="t('journeyDay.showMorePois')"
                 size="sm"
                 class="no-padding"
             />
             <span class="text-caption text-muted">
-                Farbig: eingeplant ·
+                {{ t("journeyDay.coloured") }} ·
                 <span class="poi-dot" :style="{ background: CANDIDATE_COLOR }" aria-hidden="true" />
-                nicht eingeplant
+                {{ t("map.notPlanned") }}
             </span>
             <span v-if="alternativeLines.length" class="text-caption text-muted">
                 <span
@@ -384,7 +398,7 @@ function breakEta(elapsedS: number): string {
                     :style="{ background: variantColor(alternative.index) }"
                     aria-hidden="true"
                 />
-                weitere Varianten, antippen zum Wählen
+                {{ t("journeyDay.tapToPick") }}
             </span>
         </div>
 
@@ -399,7 +413,7 @@ function breakEta(elapsedS: number): string {
                 track-color="grey-3"
             />
             <q-spinner-dots v-else size="3rem" color="primary" />
-            <div class="text-muted q-mt-sm">Wetterdaten werden geladen…</div>
+            <div class="text-muted q-mt-sm">{{ t("forecast.loading") }}</div>
         </q-inner-loading>
     </div>
 </template>

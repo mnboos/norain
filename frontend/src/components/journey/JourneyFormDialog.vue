@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, type Ref } from "vue";
 import { QSelect } from "quasar";
-import {
-    symSharpElectricBike,
-    symSharpElectricMoped,
-    symSharpPedalBike,
-} from "@quasar/extras/material-symbols-sharp";
+import { useI18n } from "vue-i18n";
 import {
     RoadPrefsInClimbingEnum as Climbing,
     RoadPrefsInSurfaceEnum as Surface,
@@ -16,12 +12,16 @@ import {
     type PlacesSearchResult,
 } from "@norain/api/models";
 import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
+import CurrentLocationButton from "@/components/CurrentLocationButton.vue";
 import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import { useEntitlements } from "@/composables/useEntitlements";
+import { useSession } from "@/composables/useSession";
 import { usePlaceSearch } from "@/queries/places";
+import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
 import { placeLabel } from "@/utils/placeLabel";
 import { LODGING_KINDS, POI_CATEGORIES } from "@/utils/poiCategories";
 import ChipMultiSelect from "@/components/ChipMultiSelect.vue";
+import WeatherRoutingChoice from "@/components/WeatherRoutingChoice.vue";
 
 const props = defineProps<{
     modelValue: boolean;
@@ -34,7 +34,8 @@ const emit = defineEmits<{
     save: [data: JourneyIn];
 }>();
 
-const { isPro } = useEntitlements();
+const { t } = useI18n();
+const { isPro, weatherRouting } = useEntitlements();
 
 type Limit = "distance" | "time";
 
@@ -55,7 +56,8 @@ function tomorrow(): string {
 const name = ref("");
 const start = ref<PlacesSearchResult | null>(null);
 const dest = ref<PlacesSearchResult | null>(null);
-const profile = ref("bike");
+const { defaultProfile } = useSession();
+const profile = ref<string>(defaultProfile.value);
 const startDate = ref(tomorrow());
 const earliestStart = ref("08:00");
 const latestArrival = ref("18:00");
@@ -71,8 +73,9 @@ const surface = ref(Surface.Any);
 const climbing = ref(Climbing.Neutral);
 const traffic = ref(Traffic.Neutral);
 const towns = ref(Towns.Neutral);
-const avoidRain = ref(true);
-const avoidHeadwind = ref(true);
+// Off until the rider chooses it; see WeatherRoutingChoice.
+const avoidRain = ref(false);
+const avoidHeadwind = ref(false);
 const departureWindow = ref(60);
 
 function load(journey: JourneyOut | undefined) {
@@ -96,8 +99,8 @@ function load(journey: JourneyOut | undefined) {
     climbing.value = journey.roadPrefs.climbing ?? Climbing.Neutral;
     traffic.value = journey.roadPrefs.traffic ?? Traffic.Neutral;
     towns.value = journey.roadPrefs.towns ?? Towns.Neutral;
-    avoidRain.value = journey.weatherPrefs.avoidRain ?? true;
-    avoidHeadwind.value = journey.weatherPrefs.avoidHeadwind ?? true;
+    avoidRain.value = journey.weatherPrefs.avoidRain ?? false;
+    avoidHeadwind.value = journey.weatherPrefs.avoidHeadwind ?? false;
     departureWindow.value = journey.weatherPrefs.departureWindowMinutes ?? 60;
 }
 watch(
@@ -141,37 +144,37 @@ const timesValid = computed(
     () => TIME.test(earliestStart.value) && TIME.test(latestArrival.value) && latestArrival.value > earliestStart.value,
 );
 
-const profileOptions = [
-    { label: "Velo", value: "bike", icon: symSharpPedalBike },
-    { label: "E-Bike", value: "ebike", icon: symSharpElectricBike },
-    { label: "S-Pedelec", value: "fast_ebike", icon: symSharpElectricMoped },
-];
-const limitOptions = [
+const profileOptions = BIKE_PROFILE_OPTIONS;
+// Built in computeds, so every label follows a language switch.
+const limitOptions = computed(() => [
     { label: "km", value: "distance" },
-    { label: "Stunden", value: "time" },
-];
-const surfaceOptions = [
-    { label: "Egal", value: Surface.Any },
-    { label: "Wenig Naturbelag", value: Surface.AvoidUnpaved },
-    { label: "Nur asphaltiert", value: Surface.PavedOnly },
-];
-const climbingOptions = [
-    { label: "Egal", value: Climbing.Neutral },
-    { label: "Steigungen meiden", value: Climbing.Avoid },
-];
-const trafficOptions = [
-    { label: "Egal", value: Traffic.Neutral },
-    { label: "Hauptstrassen meiden", value: Traffic.AvoidMain },
-    { label: "Velonetz bevorzugen", value: Traffic.AvoidOffNetwork },
-];
-const townOptions = [
-    { label: "Egal", value: Towns.Neutral },
-    { label: "Ortschaften meiden", value: Towns.Avoid },
-];
-const windowOptions = [0, 30, 60, 90, 120].map(value => ({
-    label: value ? `bis ${value} min später` : "Fix",
-    value,
-}));
+    { label: t("journeyForm.hours"), value: "time" },
+]);
+const surfaceOptions = computed(() => [
+    { label: t("roadPrefs.any"), value: Surface.Any },
+    { label: t("roadPrefs.surface.avoidUnpaved"), value: Surface.AvoidUnpaved },
+    { label: t("roadPrefs.surface.pavedOnly"), value: Surface.PavedOnly },
+]);
+const climbingOptions = computed(() => [
+    { label: t("roadPrefs.any"), value: Climbing.Neutral },
+    { label: t("roadPrefs.climbing.avoid"), value: Climbing.Avoid },
+    { label: t("roadPrefs.climbing.preferHilly"), value: Climbing.Hilly },
+]);
+const trafficOptions = computed(() => [
+    { label: t("roadPrefs.any"), value: Traffic.Neutral },
+    { label: t("roadPrefs.traffic.avoidMain"), value: Traffic.AvoidMain },
+    { label: t("roadPrefs.traffic.preferNetwork"), value: Traffic.AvoidOffNetwork },
+]);
+const townOptions = computed(() => [
+    { label: t("roadPrefs.any"), value: Towns.Neutral },
+    { label: t("roadPrefs.towns.avoid"), value: Towns.Avoid },
+]);
+const windowOptions = computed(() =>
+    [0, 30, 60, 90, 120].map(value => ({
+        label: value ? t("journeyForm.windowLater", { minutes: value }) : t("journeyForm.windowFixed"),
+        value,
+    })),
+);
 
 const isValid = computed(
     () =>
@@ -207,8 +210,8 @@ function onSave() {
         lodgingKinds: lodgingKinds.value,
         roadPrefs: { surface: surface.value, climbing: climbing.value, traffic: traffic.value, towns: towns.value },
         weatherPrefs: {
-            avoidRain: avoidRain.value,
-            avoidHeadwind: avoidHeadwind.value,
+            avoidRain: weatherRouting.value && avoidRain.value,
+            avoidHeadwind: weatherRouting.value && avoidHeadwind.value,
             departureWindowMinutes: departureWindow.value,
         },
     };
@@ -225,18 +228,16 @@ function onClose() {
     <q-dialog :model-value="modelValue" persistent :maximized="$q.screen.xs" @update:model-value="onClose">
         <q-card style="min-width: min(720px, 96vw)">
             <q-card-section>
-                <q-item-label overline>{{ journey ? "Reise bearbeiten" : "Neue Reise" }}</q-item-label>
-                <div class="text-caption text-muted">
-                    NoRain schlägt Tagesetappen, Pausen und Abfahrtszeiten vor, nach Wetter und deinen Wünschen.
-                </div>
+                <q-item-label overline>{{ journey ? t("journeyForm.editTitle") : t("journeys.new") }}</q-item-label>
+                <div class="text-caption text-muted">{{ t("journeyForm.intro") }}</div>
             </q-card-section>
 
             <q-card-section class="q-gutter-md">
-                <q-input v-model="name" label="Name" outlined dense autofocus no-error-icon />
+                <q-input v-model="name" :label="t('routeForm.name')" outlined dense autofocus no-error-icon />
 
                 <q-select
                     v-model="start"
-                    label="Start"
+                    :label="t('routeForm.start')"
                     dense
                     outlined
                     use-input
@@ -250,6 +251,9 @@ function onClose() {
                     @filter="onFilterStart"
                     @focus="selectInputText"
                 >
+                    <template #append>
+                        <CurrentLocationButton @select="start = $event" />
+                    </template>
                     <template #option="scope">
                         <PlaceSearchItem
                             :feature="scope.opt"
@@ -261,7 +265,7 @@ function onClose() {
                 </q-select>
                 <q-select
                     v-model="dest"
-                    label="Ziel"
+                    :label="t('routeForm.dest')"
                     dense
                     outlined
                     use-input
@@ -275,6 +279,9 @@ function onClose() {
                     @filter="onFilterDest"
                     @focus="selectInputText"
                 >
+                    <template #append>
+                        <CurrentLocationButton @select="dest = $event" />
+                    </template>
                     <template #option="scope">
                         <PlaceSearchItem
                             :feature="scope.opt"
@@ -287,16 +294,23 @@ function onClose() {
                 <RouteLocationPicker v-model:start="start" v-model:dest="dest" />
 
                 <div>
-                    <div class="text-caption q-mb-sm">Profil</div>
-                    <q-btn-toggle v-model="profile" :options="profileOptions" toggle-color="primary" spread size="sm" />
+                    <div class="text-caption q-mb-sm">{{ t("journeyForm.profile") }}</div>
+                    <q-btn-toggle
+                        v-model="profile"
+                        :options="profileOptions"
+                        toggle-color="primary"
+                        spread
+                        no-caps
+                        size="sm"
+                    />
                 </div>
 
                 <div class="row q-col-gutter-sm">
-                    <q-input v-model="startDate" class="col-12 col-sm-4" type="date" label="Erster Tag" outlined dense />
+                    <q-input v-model="startDate" class="col-12 col-sm-4" type="date" :label="t('journeyForm.firstDay')" outlined dense />
                     <q-input
                         v-model="earliestStart"
                         class="col-6 col-sm-4"
-                        label="Frühester Start"
+                        :label="t('journeyForm.earliestStart')"
                         outlined
                         dense
                         mask="##:##"
@@ -305,20 +319,20 @@ function onClose() {
                     <q-input
                         v-model="latestArrival"
                         class="col-6 col-sm-4"
-                        label="Späteste Ankunft"
+                        :label="t('journeyForm.latestArrival')"
                         outlined
                         dense
                         mask="##:##"
                         fill-mask
                         :error="!timesValid"
-                        error-message="Ankunft nach dem Start, als HH:MM"
+                        :error-message="t('journeyForm.arrivalError')"
                         no-error-icon
                     />
                 </div>
 
                 <div class="row q-col-gutter-sm items-center">
                     <div class="col-12 col-sm-6">
-                        <div class="text-caption q-mb-xs">Pro Tag höchstens</div>
+                        <div class="text-caption q-mb-xs">{{ t("journeyForm.perDay") }}</div>
                         <div class="row no-wrap items-center q-gutter-sm">
                             <q-input
                                 v-if="dayLimit === 'distance'"
@@ -345,7 +359,7 @@ function onClose() {
                         </div>
                     </div>
                     <div class="col-12 col-sm-6">
-                        <div class="text-caption q-mb-xs">Am Stück (bis zur nächsten Pause)</div>
+                        <div class="text-caption q-mb-xs">{{ t("journeyForm.perLeg") }}</div>
                         <div class="row no-wrap items-center q-gutter-sm">
                             <q-input
                                 v-if="legLimit === 'distance'"
@@ -375,14 +389,19 @@ function onClose() {
 
                 <ChipMultiSelect
                     v-model="poiCategories"
-                    label="Auf jeder Etappe am Stück brauche ich"
-                    hint="Jede Auswahl muss auf jeder Etappe vorkommen"
+                    :label="t('journeyForm.pois')"
+                    :hint="t('journeyForm.poisHint')"
                     :options="POI_CATEGORIES.filter(c => c.value !== 'lodging')"
                 />
 
-                <ChipMultiSelect v-model="lodgingKinds" label="Übernachten in" hint="Leer: jede Art" :options="LODGING_KINDS" />
+                <ChipMultiSelect
+                    v-model="lodgingKinds"
+                    :label="t('journeyForm.lodging')"
+                    :hint="t('journeyForm.lodgingHint')"
+                    :options="LODGING_KINDS"
+                />
 
-                <q-expansion-item dense label="Strasse" header-class="text-caption q-px-none" default-opened>
+                <q-expansion-item dense :label="t('roadPrefs.title')" header-class="text-caption q-px-none" default-opened>
                     <div class="row q-col-gutter-sm q-pt-sm">
                         <q-select
                             v-model="surface"
@@ -390,7 +409,7 @@ function onClose() {
                             :options="surfaceOptions"
                             emit-value
                             map-options
-                            label="Belag"
+                            :label="t('roadPrefs.surface.label')"
                             outlined
                             dense
                         />
@@ -400,7 +419,7 @@ function onClose() {
                             :options="climbingOptions"
                             emit-value
                             map-options
-                            label="Steigungen"
+                            :label="t('roadPrefs.climbing.climbs')"
                             outlined
                             dense
                         />
@@ -410,7 +429,7 @@ function onClose() {
                             :options="trafficOptions"
                             emit-value
                             map-options
-                            label="Verkehr"
+                            :label="t('roadPrefs.traffic.label')"
                             outlined
                             dense
                         />
@@ -420,20 +439,18 @@ function onClose() {
                             :options="townOptions"
                             emit-value
                             map-options
-                            label="Ortschaften"
+                            :label="t('roadPrefs.towns.label')"
                             outlined
                             dense
                         />
                     </div>
                 </q-expansion-item>
 
-                <q-expansion-item dense label="Wetter" header-class="text-caption q-px-none" default-opened>
+                <q-expansion-item dense :label="t('randomForm.weather')" header-class="text-caption q-px-none" default-opened>
                     <div class="q-pt-sm">
-                        <q-toggle v-model="avoidRain" label="Um Regen herum planen" />
-                        <q-toggle v-model="avoidHeadwind" label="Starken Gegenwind meiden" />
-                        <div v-if="!isPro" class="text-caption text-muted">
-                            Mit Plus plant NoRain die nächsten Tage um Regen und Gegenwind herum, vergleicht bis zu
-                            drei Varianten pro Tag und schlägt die beste Abfahrtszeit vor.
+                        <WeatherRoutingChoice v-model:avoid-rain="avoidRain" v-model:avoid-headwind="avoidHeadwind" />
+                        <div v-if="!isPro" class="text-caption text-muted q-mt-sm">
+                            {{ t("journeyForm.plusPitch") }}
                         </div>
                         <q-select
                             v-else
@@ -441,7 +458,7 @@ function onClose() {
                             :options="windowOptions"
                             emit-value
                             map-options
-                            label="Abfahrt verschieben"
+                            :label="t('journeyForm.shiftDeparture')"
                             outlined
                             dense
                             class="q-mt-sm"
@@ -452,10 +469,10 @@ function onClose() {
             </q-card-section>
 
             <q-card-actions align="right">
-                <q-btn flat label="Abbrechen" no-caps @click="onClose" />
+                <q-btn flat :label="t('common.cancel')" no-caps @click="onClose" />
                 <q-btn
                     color="primary"
-                    :label="journey ? 'Speichern und neu planen' : 'Reise planen'"
+                    :label="journey ? t('randomForm.saveAndReplan') : t('journeyForm.plan')"
                     :disable="!isValid"
                     no-caps
                     @click="onSave"

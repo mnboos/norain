@@ -1,4 +1,4 @@
-# NoRain — Bike-route weather forecaster
+# Meteolane — Bike-route weather forecaster
 
 Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo
 (primary, free) with OpenWeatherMap One Call 3.0 as fallback.

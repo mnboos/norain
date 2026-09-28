@@ -1,5 +1,7 @@
 import type { PlacesSearchResult } from "@norain/api/models";
 
+import { t } from "@/i18n";
+
 const cantonAbbreviations: Record<string, string> = {
     Aargau: "AG",
     "Appenzell Innerrhoden": "AI",
@@ -45,7 +47,7 @@ export function cityWithOptionalCanton(feature: PlacesSearchResult): string {
 /** One-line label for a place: the text shown in the select's input once it is chosen. */
 export function placeLabel(feature: PlacesSearchResult): string {
     const { name, city } = feature.properties;
-    if (!name) return "Unknown";
+    if (!name) return t("places.unknown");
 
     const cityWithCanton = cityWithOptionalCanton(feature);
 

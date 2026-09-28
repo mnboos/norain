@@ -66,6 +66,8 @@ services:
     volumes:
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/caddy/data:/data
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/caddy/config:/config
+      # Cloudflare Origin CA certificate: origin.pem + origin.key (deploy/Caddyfile).
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/caddy/certs:/etc/caddy/certs:ro
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/django/static:/app/static:ro
     networks:
       - edge
@@ -79,6 +81,9 @@ services:
       photon: *healthy
     volumes:
       - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/django/static:/app/backend/static
+      # Route photos. Only daphne reads and writes them (core.api.community serves each file
+      # after checking the route is public), so no worker mounts this.
+      - ${APP_STORAGE_PATH:?APP_STORAGE_PATH must be set}/django/media:/app/backend/media
     healthcheck:
       test: [ "CMD", "python", "-c", "import os, urllib.request; request = urllib.request.Request('http://127.0.0.1:8000/healthz', headers={'Host': os.environ['DJANGO_ALLOWED_HOSTS'].split(',')[0].strip(), 'X-Forwarded-Proto': 'https'}); urllib.request.urlopen(request, timeout=5)" ]
       interval: 20s

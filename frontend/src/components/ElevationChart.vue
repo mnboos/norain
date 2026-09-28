@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, ref } from "vue";
 import { useQueries, useQuery } from "@tanstack/vue-query";
-import { ElevationApi } from "@norain/api/apis";
+import { useI18n } from "vue-i18n";
+import { ElevationApi, PublicRoutesApi } from "@norain/api/apis";
 import type { ElevationOut } from "@norain/api/models";
-import { elevationFigure, type ElevationSeries } from "@/utils/elevation";
+import { ELEVATION_PRIMARY_GROUP, elevationFigure, type ElevationSeries } from "@/utils/elevation";
+import { interpolate } from "@/utils/forecastSelection";
 
 const NiceChart = defineAsyncComponent(() => import("./chart/NiceChart.vue"));
+const { t } = useI18n();
 const props = defineProps<{
     routeId?: string;
     stageId?: string;
+    /** A public route's profile: its line between the privacy zones only. */
+    publicSlug?: string;
     version?: string;
     coordinates?: number[][];
     totalSeconds?: number;
@@ -19,8 +24,12 @@ const props = defineProps<{
     alternatives?: { stageId: string; color: string; label: string }[];
     /** Compact card sizing for side-by-side journey charts. */
     compact?: boolean;
+    /** The selected route position, a share (0..1) of the route's distance. */
+    position?: number;
 }>();
+const emit = defineEmits<{ selectPosition: [position: number] }>();
 const api = new ElevationApi();
+const publicApi = new PublicRoutesApi();
 const axis = ref<"distance" | "time">("distance");
 const STALE_TIME = 60 * 60 * 1000;
 // One key per stage, whether it is the main line or an alternative, so switching variants
@@ -34,14 +43,20 @@ const query = useQuery({
                   "elevation",
                   props.routeId,
                   props.stageId,
+                  props.publicSlug,
                   props.version,
                   props.coordinates,
                   props.totalSeconds,
                   props.vertexTimes,
               ],
     ),
-    enabled: () => !!props.routeId || !!props.stageId || (!!props.coordinates?.length && !!props.totalSeconds),
+    enabled: () =>
+        !!props.routeId ||
+        !!props.stageId ||
+        !!props.publicSlug ||
+        (!!props.coordinates?.length && !!props.totalSeconds),
     queryFn: () => {
+        if (props.publicSlug) return publicApi.coreApiCommunityPublicRouteElevation({ slug: props.publicSlug });
         if (props.routeId) return api.coreApiElevationRouteElevation({ routeId: props.routeId });
         if (props.stageId) return api.coreApiElevationStageElevation({ stageId: props.stageId });
         if (!props.coordinates || !props.totalSeconds) throw new Error("Route is not ready");
@@ -79,7 +94,7 @@ const profiles = computed(() =>
         {
             data: query.data.value,
             color: props.color ?? "#32966b",
-            label: props.label ?? "Höhe",
+            label: props.label ?? t("elevation.height"),
             primary: true,
         },
     ].filter((p): p is typeof p & { data: ElevationOut } => usable(p.data)),
@@ -102,6 +117,33 @@ function retryFailed() {
 const sources = computed(() => [...new Set(profiles.value.map(p => p.data.source))].join(" · "));
 const approximateTiming = computed(() => profiles.value.some(p => p.data.approximateTiming));
 const partialHeights = computed(() => profiles.value.some(p => p.data.points.some(point => point.elevationM == null)));
+// The position is a share of the distance; the axis is km or minutes of this route's own profile.
+const primaryPoints = computed(() => (usable(query.data.value) ? (query.data.value?.points ?? []) : []));
+const distances = computed(() => primaryPoints.value.map(p => p.distanceM));
+const totalDistance = computed(() => distances.value[distances.value.length - 1] ?? 0);
+const cursorX = computed(() => {
+    if (props.position === undefined || !(totalDistance.value > 0)) return undefined;
+    const distance = props.position * totalDistance.value;
+    if (axis.value === "distance") return distance / 1000;
+    const elapsed = interpolate(
+        distance,
+        distances.value,
+        primaryPoints.value.map(p => p.elapsedS),
+    );
+    return elapsed === undefined ? undefined : elapsed / 60;
+});
+function selectX(x: number) {
+    if (!(totalDistance.value > 0)) return;
+    const distance =
+        axis.value === "distance"
+            ? x * 1000
+            : interpolate(
+                  x * 60,
+                  primaryPoints.value.map(p => p.elapsedS),
+                  distances.value,
+              );
+    if (distance !== undefined) emit("selectPosition", Math.max(0, Math.min(1, distance / totalDistance.value)));
+}
 const figure = computed(() => {
     const series: ElevationSeries[] = profiles.value.map(p => ({ ...p, points: p.data.points }));
     return elevationFigure(series, axis.value);
@@ -111,16 +153,16 @@ const figure = computed(() => {
 <template>
     <q-card flat bordered class="q-pa-sm" :class="{ 'compact-elevation': compact }">
         <div class="row items-center justify-between q-gutter-sm">
-            <div class="text-subtitle2">Höhenprofil</div>
+            <div class="text-subtitle2">{{ t("elevation.title") }}</div>
             <q-btn-toggle
                 v-model="axis"
                 dense
                 flat
                 no-caps
-                aria-label="Achse des Höhenprofils"
+                :aria-label="t('elevation.axis')"
                 :options="[
-                    { label: 'Strecke', value: 'distance' },
-                    { label: 'Fahrzeit', value: 'time' },
+                    { label: t('elevation.distance'), value: 'distance' },
+                    { label: t('timing.duration'), value: 'time' },
                 ]"
             />
         </div>
@@ -128,36 +170,39 @@ const figure = computed(() => {
             v-if="hasData"
             :figure="figure"
             keep-line-widths
+            :cursor-x="cursorX"
+            :cursor-group="ELEVATION_PRIMARY_GROUP"
             :x-unit="axis === 'distance' ? 'km' : 'min'"
             :class="{ 'compact-elevation-plot': compact }"
             :style="compact ? undefined : { height: '260px' }"
+            @cursor="selectX"
         />
         <q-skeleton
             v-else-if="pending"
             :height="props.compact ? '180px' : '220px'"
-            aria-label="Höhenprofil wird geladen"
+            :aria-label="t('elevation.loading')"
         />
         <div v-else-if="failed.length" role="alert" class="q-pa-md">
-            Höhendaten konnten nicht geladen werden.
-            <q-btn flat no-caps label="Erneut versuchen" @click="retryFailed" />
+            {{ t("elevation.loadFailed") }}
+            <q-btn flat no-caps :label="t('common.retry')" @click="retryFailed" />
         </div>
-        <div v-else class="q-pa-md">Keine Höhendaten für diese Strecke verfügbar.</div>
+        <div v-else class="q-pa-md">{{ t("elevation.noData") }}</div>
         <template v-if="hasData">
             <div v-if="query.isError.value" role="alert" class="q-pa-md">
-                Höhendaten für die gewählte Strecke konnten nicht geladen werden.
-                <q-btn flat no-caps label="Erneut versuchen" @click="query.refetch()" />
+                {{ t("elevation.selectedLoadFailed") }}
+                <q-btn flat no-caps :label="t('common.retry')" @click="query.refetch()" />
             </div>
             <div v-else-if="query.isPending.value" role="status" class="q-pa-md">
-                Höhenprofil für die gewählte Strecke wird geladen…
+                {{ t("elevation.selectedLoading") }}
             </div>
             <div v-else-if="!usable(query.data.value)" class="q-pa-md">
-                Keine Höhendaten für die gewählte Strecke verfügbar.
+                {{ t("elevation.selectedNoData") }}
             </div>
         </template>
         <div v-if="hasData" class="text-caption text-muted">
             {{ sources }}
-            <span v-if="axis === 'time' && approximateTiming">· Fahrzeit nach Streckenlänge geschätzt</span>
-            <span v-if="partialHeights">· Höhendaten teilweise nicht verfügbar</span>
+            <span v-if="axis === 'time' && approximateTiming">· {{ t("elevation.approximateTiming") }}</span>
+            <span v-if="partialHeights">· {{ t("elevation.partial") }}</span>
         </div>
         <div v-if="$slots.footer" class="text-caption text-muted"><slot name="footer" /></div>
     </q-card>

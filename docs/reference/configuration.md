@@ -91,6 +91,7 @@ CORS allows `http://localhost:$FRONTEND_PORT` and `http://127.0.0.1:$FRONTEND_PO
 | `${APP_STORAGE_PATH}/postgres/` | Production PostgreSQL/PostGIS data bind mount |
 | `${APP_STORAGE_PATH}/caddy/{data,config}/` | Production Caddy certificates and configuration |
 | `${APP_STORAGE_PATH}/django/static/` | Collected Django static files |
+| `${APP_STORAGE_PATH}/django/media/` | Route photos (`MEDIA_ROOT`); `release.sh` hands the folder to the container's `app` user. Backed up by `deploy/backup.sh` |
 | `${APP_STORAGE_PATH}/graphhopper/cache/` | Production routing graph, built elsewhere and copied in |
 | `${APP_STORAGE_PATH}/photon/` | Production Photon index bind mount |
 

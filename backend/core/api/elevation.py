@@ -3,10 +3,11 @@
 from uuid import UUID
 
 import httpx
+from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
-from ..auth.backend import optional_session_auth
+from ..auth.backend import optional_session_auth, session_auth
 from ..elevation import ElevationIn, ElevationOut, elevation_profile, with_heights
 from ..models import JourneyStage, RecurringRoute
 from .gpx import limit_request
@@ -19,10 +20,10 @@ async def profile(coordinates, seconds, times=None):
     try:
         return await elevation_profile(coordinates or [], seconds, times)
     except (httpx.HTTPError, ValueError, OSError) as exc:
-        raise HttpError(503, "Höhendaten konnten nicht geladen werden. Bitte erneut versuchen.") from exc
+        raise HttpError(503, gettext("Höhendaten konnten nicht geladen werden. Bitte erneut versuchen.")) from exc
 
 
-@router.post("/elevation", response=ElevationOut)
+@router.post("/elevation", response=ElevationOut, auth=session_auth)
 async def preview_elevation(request, data: ElevationIn):
     limit_request(request, "elevation", 60)
     return await profile([p[:2] for p in data.coordinates], data.total_seconds, data.vertex_times)
@@ -32,10 +33,10 @@ async def preview_elevation(request, data: ElevationIn):
 async def route_elevation(request, route_id: UUID):
     user = request.auth
     if not user or not user.is_authenticated:
-        raise HttpError(404, "Route not found.")
+        raise HttpError(404, gettext("Route nicht gefunden."))
     route = await RecurringRoute.objects.filter(id=route_id, owner=user).afirst()
     if route is None:
-        raise HttpError(404, "Route not found.")
+        raise HttpError(404, gettext("Route nicht gefunden."))
     return await profile(
         with_heights(route.polyline_coordinates or [], route.vertex_elevations),
         route.total_seconds,
@@ -47,10 +48,10 @@ async def route_elevation(request, route_id: UUID):
 async def stage_elevation(request, stage_id: UUID):
     user = request.auth
     if not user or not user.is_authenticated:
-        raise HttpError(404, "Stage not found.")
+        raise HttpError(404, gettext("Etappe nicht gefunden."))
     stage = await JourneyStage.objects.filter(id=stage_id, day__journey__owner=user).afirst()
     if stage is None:
-        raise HttpError(404, "Stage not found.")
+        raise HttpError(404, gettext("Etappe nicht gefunden."))
     return await profile(
         with_heights(stage.polyline_coordinates, stage.vertex_elevations), stage.total_seconds, stage.vertex_times
     )

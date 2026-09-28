@@ -12,6 +12,8 @@ export default mergeConfig(
     test: {
       environment: 'jsdom',
       exclude: [...configDefaults.exclude, 'e2e/**'],
+      // Registers vue-i18n (German) for every mount; see src/test/setup.ts.
+      setupFiles: ['src/test/setup.ts'],
       root: fileURLToPath(new URL('./', import.meta.url)),
     },
   }),

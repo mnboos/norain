@@ -162,9 +162,13 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    # Accept-Language picks the language before sign-in; UserLanguageMiddleware then puts
+    # the account's own setting on top. The SPA has no language prefix in its URLs.
+    "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "core.middleware.UserLanguageMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -191,9 +195,10 @@ AXES_LOCKOUT_CALLABLE = "core.auth.lockout.lockout_response"
 # Sign-up, sign-in and password reset are django-allauth in headless mode: it serves JSON
 # under /api/allauth/ and the Vue app draws every form. Sign-up has two steps. Step 1 takes
 # only the email; allauth creates the user with a generated username and no usable
-# password and mails a link. Step 2 (core.auth.views.complete_signup_view) sets the real
-# username and password. A link opened in another browser verifies the email but does not
-# sign in, so sign-in by emailed code is on as the way back in.
+# password and mails a code, which the user types into the same tab: that verifies the
+# address and signs in, whichever device the mail is read on. Step 2
+# (core.auth.views.complete_signup_view) sets the username, the default bike profile and,
+# optionally, a password; without one the account signs in by emailed code.
 ACCOUNT_ADAPTER = "core.auth.adapter.AccountAdapter"
 HEADLESS_ADAPTER = "core.auth.adapter.HeadlessAdapter"
 ACCOUNT_LOGIN_METHODS = {"email", "username"}
@@ -201,8 +206,11 @@ ACCOUNT_SIGNUP_FIELDS = ["email*"]
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_LOGIN_ON_EMAIL_CONFIRMATION = True
+ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED = True
+# Two new codes per sign-up, on top of allauth's own mail rate limits.
+ACCOUNT_EMAIL_VERIFICATION_SUPPORTS_RESEND = True
 ACCOUNT_LOGIN_BY_CODE_ENABLED = True
-ACCOUNT_EMAIL_SUBJECT_PREFIX = "NoRain: "
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "Meteolane: "
 # Axes is the only lockout for failed sign-ins. allauth's own `login_failed` limit would
 # block one identity after 5 tries with a different error body, before axes ever counts
 # to 10. allauth's other limits (sign-up, mails, codes, reset) stay on.
@@ -212,7 +220,6 @@ HEADLESS_CLIENTS = ("browser",)
 # Paths only: HeadlessAdapter.get_frontend_url puts FRONTEND_URL in front when a mail is
 # sent, because production.py sets FRONTEND_URL after this file is read.
 HEADLESS_FRONTEND_URLS = {
-    "account_confirm_email": "/account?verify_key={key}",
     "account_reset_password": "/account?mode=reset",
     "account_reset_password_from_key": "/account?reset_key={key}",
     "account_signup": "/account?mode=signup",
@@ -220,7 +227,7 @@ HEADLESS_FRONTEND_URLS = {
 
 # 2FA for the admin: OTPAdminSite (backend/urls.py) asks for a code from an authenticator
 # app. The first device is created with `manage.py add_totp_device`.
-OTP_TOTP_ISSUER = "NoRain"
+OTP_TOTP_ISSUER = "Meteolane"
 # Only development.py may turn this off (DJANGO_ADMIN_OTP); production never reads it.
 ADMIN_OTP = True
 
@@ -308,7 +315,13 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = "en-us"
+# German is the source language: every msgid is the German text, so "de" needs no catalog.
+# See "Internationalisation" in CLAUDE.md.
+LANGUAGE_CODE = "de"
+
+LANGUAGES = [("de", "Deutsch"), ("en", "English")]
+
+LOCALE_PATHS = [BASE_DIR / "core" / "locale"]
 
 TIME_ZONE = "Europe/Zurich"
 
@@ -329,3 +342,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Bounded GPX drafts can include up to 100000 coordinates.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+
+# Route photos. Never served from here directly: core.api.community checks the route is
+# public (or the viewer's own) and streams the file, so MEDIA_URL is deliberately unset.
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT") or BASE_DIR / "media")
+# A phone photo is 3-12 MB. Uploads over this are refused before Pillow sees them.
+PHOTO_UPLOAD_MAX_BYTES = 20 * 1024 * 1024

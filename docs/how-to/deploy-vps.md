@@ -1,4 +1,4 @@
-# Deploy NoRain to a Docker VPS
+# Deploy Meteolane to a Docker VPS
 
 This deployment uses Caddy for automatic HTTPS, PostgreSQL/PostGIS for application data,
 Docker Compose for the application processes, GitHub Container Registry (GHCR)
@@ -6,7 +6,16 @@ for immutable images, and Restic for encrypted database backups.
 
 ## Requirements
 
-Use a domain whose A/AAAA records point to the VPS. Open only SSH, HTTP (80), and
+The site sits behind Cloudflare. Point the domain's A/AAAA records and its `www.` name at
+the VPS, both **proxied**, with SSL/TLS mode **Full (strict)**. Caddy redirects `www.` to
+`DOMAIN` permanently (so `DJANGO_ALLOWED_HOSTS` and the other origin settings name `DOMAIN`
+only). It serves a Cloudflare Origin CA certificate for both names instead of getting its own:
+create one under SSL/TLS → Origin Server for `DOMAIN` and `*.DOMAIN`, and save it as
+`$APP_STORAGE_PATH/caddy/certs/origin.pem` and `origin.key` (mode 600). This stack's Caddy
+owns ports 80/443: no other proxy may run on the VPS. Caddy takes the
+rider's IP from `CF-Connecting-IP`, trusting only Cloudflare's published ranges, which are
+listed in `deploy/Caddyfile`: update them there when https://www.cloudflare.com/ips/ changes.
+Open only SSH, HTTP (80), and
 HTTPS (443) in the VPS firewall. Install Docker Engine, the Docker Compose plugin,
 Git, and Restic. Create a non-root `norain` deployment user in the `docker` group,
 then clone this repository at `/srv/norain`.
@@ -53,6 +62,7 @@ all persistent bind mounts:
 APP_STORAGE_PATH/
   caddy/{data,config}/
   django/static/
+  django/media/
   postgres/
   graphhopper/{osm,cache}/
   photon/
@@ -63,7 +73,7 @@ Create the directory tree before the first release, owned by the deployment user
 ```bash
 sudo install -d -o norain -g norain -m 0750 \
   /srv/norain-data/caddy/data /srv/norain-data/caddy/config \
-  /srv/norain-data/django/static /srv/norain-data/postgres \
+  /srv/norain-data/django/static /srv/norain-data/django/media /srv/norain-data/postgres \
   /srv/norain-data/graphhopper/osm /srv/norain-data/graphhopper/cache \
   /srv/norain-data/photon
 ```
@@ -172,7 +182,7 @@ approval and a verified backup.
 The GitHub Actions workflow publishes SHA-tagged images after backend and
 frontend checks pass. Configure the GitHub `production` environment with
 `VPS_DEPLOY_SSH_KEY`, `VPS_HOST`, `VPS_USER`, `VPS_KNOWN_HOSTS`, and
-`VPS_PUBLIC_HEALTH_URL` (for example, `https://norain.example.com/healthz`);
+`VPS_PUBLIC_HEALTH_URL` (for example, `https://meteolane.com/healthz`);
 protect that environment with the desired reviewer rule. `VPS_KNOWN_HOSTS` must
 contain the VPS's pinned SSH host key, obtained through an independently trusted
 channel.
@@ -259,25 +269,6 @@ builds.
 To roll back a published-image deployment, run the release command with the prior known-good immutable SHA. The
 configured bind-mount directories persist PostgreSQL, Caddy certificates, and
 imported geographic data across releases.
-
-## Shared hostname reverse proxy
-
-On a server hosting several apps, run one independent Caddy stack that owns ports
-80/443 and TLS certificates. Each app's frontend joins the external `server-proxy`
-network under a unique alias; databases and backend services remain private.
-See [the proxy setup and hostname activation guide](../../deploy/proxy/README.md).
-
-After creating the shared network, set this in NoRain's production `.env`:
-
-```dotenv
-COMPOSE_FILE=docker-compose.prod.yml:docker-compose.proxy.yml
-```
-
-Then `docker compose up -d`, `just deploy-local`, and `deploy/release.sh` use both
-files. Commands that explicitly supply `-f` must include both files too. The NoRain
-frontend listens internally at `norain-web:80`, with no host ports, and preserves
-the central proxy's forwarded HTTPS headers. Keep the NoRain hostname template
-inactive until you choose a domain and configure its DNS and application origins.
 
 ## Backups and recovery
 

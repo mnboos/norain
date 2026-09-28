@@ -1,6 +1,6 @@
-# Monitor NoRain with Sentry
+# Monitor Meteolane with Sentry
 
-NoRain emits application metrics using the SDK's `count`, `gauge`, and
+Meteolane emits application metrics using the SDK's `count`, `gauge`, and
 `distribution` APIs. Business milestones also produce structured Sentry logs
 with the same name and attributes. The instrumentation lives in
 `backend/core/telemetry.py` and `frontend/src/services/telemetry.ts`.

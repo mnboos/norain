@@ -11,7 +11,9 @@ import httpx
 import stripe
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
+from django.apps import apps
 from django.conf import settings
+from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
 from django.core.management import call_command
@@ -19,7 +21,7 @@ from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, o
 
 from backend import load_dotenv
 from backend.asgi import application
-from core.api.places import retrieve_places
+from core.api.places import retrieve_places, reverse_url
 from core.api.recurring_route import _route_to_out
 from core.claims import claim_cell
 from core.entitlements import FREE, PRO, entitlements_for_sync, strip_uncertainty
@@ -84,6 +86,12 @@ from core.weather import (
     forecast_days_for,
 )
 from core.wind import wind_components as _wind_components
+
+
+class AdminRegistryTests(SimpleTestCase):
+    def test_every_core_model_is_in_the_admin(self):
+        missing = [m.__name__ for m in apps.get_app_config("core").get_models() if m not in admin.site._registry]
+        self.assertEqual(missing, [])
 
 
 class LoadDotenvTests(SimpleTestCase):
@@ -1302,6 +1310,27 @@ class StripeWebhookTests(TestCase):
         self.assertEqual(self.subscription.status, "past_due")
         self.assertEqual(entitlements_for_sync(self.user), FREE)
 
+    def test_paused_and_resumed_events_sync_subscription_access(self):
+        self.post_event(self.subscription_event("evt_active", "customer.subscription.updated", status="active"))
+        self.post_event(self.subscription_event("evt_paused", "customer.subscription.paused", status="paused"))
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, "paused")
+        self.assertEqual(entitlements_for_sync(self.user), FREE)
+
+        self.post_event(self.subscription_event("evt_resumed", "customer.subscription.resumed", status="active"))
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, "active")
+        self.assertEqual(entitlements_for_sync(self.user), PRO)
+
+    def test_trial_will_end_notice_does_not_change_subscription_access(self):
+        self.post_event(self.subscription_event("evt_trial", "customer.subscription.created", status="trialing"))
+        self.post_event(
+            self.subscription_event("evt_trial_ending", "customer.subscription.trial_will_end", status="trialing")
+        )
+        self.subscription.refresh_from_db()
+        self.assertEqual(self.subscription.status, "trialing")
+        self.assertEqual(entitlements_for_sync(self.user), PRO)
+
     def test_an_unknown_event_is_acknowledged_without_changing_anything(self):
         response = self.post_event(self.subscription_event("evt_x", "customer.created"))
         self.assertEqual(response.status_code, 200)
@@ -1415,6 +1444,49 @@ class PlaceSearchTests(SimpleTestCase):
         ):
             async_to_sync(retrieve_places)(query="unconfigured-geocoder-probe", lat=47.0, lon=9.0, zoom=12)
         self.assertIn("GEOCODER_API_URL", str(caught.exception))
+
+    def test_reverse_url_sits_beside_the_search_endpoint(self):
+        self.assertEqual(reverse_url("http://photon:2322/api"), "http://photon:2322/reverse")
+        self.assertEqual(reverse_url("http://127.0.0.1:2322/api/"), "http://127.0.0.1:2322/reverse")
+
+
+class ReverseGeocodeTests(TestCase):
+    """Current location names the point, but keeps the user's own coordinates."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("reverse", "reverse@example.com", "pw")
+        self.client.force_login(self.user)
+
+    def _get(self, features):
+        with patch("core.api.places.retrieve_reverse", AsyncMock(return_value=features)):
+            return self.client.get("/api/reverse", {"lat": 47.5, "lon": 9.3})
+
+    def test_names_the_street_and_keeps_the_users_point(self):
+        response = self._get(
+            [
+                {
+                    "properties": {
+                        "street": "Hauptstrasse",
+                        "housenumber": "3",
+                        "city": "Amriswil",
+                        "state": "Thurgau",
+                    },
+                    "geometry": {"type": "Point", "coordinates": [9.31, 47.51]},
+                }
+            ]
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["properties"]["name"], "Hauptstrasse 3")
+        self.assertEqual(body["properties"]["city"], "Amriswil")
+        self.assertEqual(body["geometry"]["coordinates"], [9.3, 47.5])
+
+    def test_nothing_there_is_a_404(self):
+        self.assertEqual(self._get([]).status_code, 404)
+
+    def test_needs_a_session(self):
+        self.client.logout()
+        self.assertEqual(self.client.get("/api/reverse", {"lat": 47.5, "lon": 9.3}).status_code, 401)
 
 
 def _sample_with_uncertainty() -> WeatherSample:
@@ -1966,6 +2038,10 @@ class ForecastJobTests(TestCase):
         self.assertIsNone(job.computed_weather)
         # The frontend draws the charts from the samples; the result carries no figures.
         self.assertNotIn("figures", job.result)
+        # Only the winning assembly asks for the list glyph, now that the route's cells are warm.
+        thumbnails = DBTaskResult.objects.filter(task_path="core.tasks.refresh_route_thumbnail")
+        self.assertEqual(thumbnails.count(), 1)
+        self.assertEqual(thumbnails.get().args_kwargs["args"], [str(self.route.id)])
 
     def test_stale_computation_cannot_overwrite_or_fail_the_next_stage(self):
         from django_tasks_db.models import DBTaskResult
@@ -2338,7 +2414,7 @@ class ForecastJobTests(TestCase):
         # The stale payload has no samples: a 404 for the index, not for the job.
         response = self.client.get(f"/api/forecast_jobs/{job.id}/samples/0/uncertainty")
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["detail"], "Sample not found.")
+        self.assertEqual(response.json()["detail"], "Messpunkt nicht gefunden.")
 
         ForecastJob.objects.filter(id=job.id).update(stale_result=None)
         response = self.client.get(f"/api/forecast_jobs/{job.id}/map_detail", {"detail": "medium"})
@@ -2590,10 +2666,10 @@ class ForecastViewTests(TestCase):
         ]
         view = forecast_view(self._job(payload, key="frost"))
 
-        self.assertEqual(view["sections"][0]["frost_level"], "stark")
+        self.assertEqual(view["sections"][0]["frost_level"], "heavy")
         # The mild half says nothing rather than claiming frost for the whole ride.
         self.assertIsNone(view["sections"][1]["frost_level"])
-        self.assertEqual(view["summary"]["max_frost_level"], "stark")
+        self.assertEqual(view["summary"]["max_frost_level"], "heavy")
 
     def test_sections_stored_before_they_carried_their_sample_range_still_serve(self):
         """Old jobs live for hours; a required index would 500 the detail page until they expire."""
@@ -2680,7 +2756,7 @@ class ForecastViewTests(TestCase):
                 "wind_speed": 12.0,
                 "wind_dir": 270.0,
                 "wind_power_w": -34,
-                "wind_effort_level": "Wind hilft",
+                "wind_effort_level": "tailwind",
                 "wind_effort": 0.0,
             },
         )

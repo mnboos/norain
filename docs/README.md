@@ -1,6 +1,6 @@
-# NoRain documentation
+# Meteolane documentation
 
-NoRain connects the time and location of a journey to weather forecasts. These
+Meteolane connects the time and location of a journey to weather forecasts. These
 pages cover using the local application, operating its services, and contributing
 changes.
 
@@ -21,6 +21,7 @@ the implementation, and explanation develops understanding.
 - [Build routing and search from downloaded files, for several countries](how-to/import-geodata.md).
 - [Build the routing graph, step by step: one country, several countries, on the VPS, or elsewhere and copied](how-to/build-routing-graph.md).
 - [Develop, test, and regenerate the API client](how-to/development.md).
+- [Maintain the translations: frontend catalogs, backend messages, and the codes between them](how-to/translations.md).
 - [Deploy and operate a production VPS](how-to/deploy-vps.md).
 - [Troubleshoot setup and missing forecasts](how-to/troubleshooting.md).
 

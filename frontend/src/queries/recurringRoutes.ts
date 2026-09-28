@@ -181,7 +181,7 @@ export async function prefetchRecurringRouteForecast(
     }
 }
 
-async function invalidateRouteLists(queryClient: ReturnType<typeof useQueryClient>) {
+export async function invalidateRouteLists(queryClient: ReturnType<typeof useQueryClient>) {
     await Promise.all([
         queryClient.invalidateQueries({ queryKey: recurringRouteKeys.lists() }),
         queryClient.invalidateQueries({ queryKey: entitlementKeys.all }),

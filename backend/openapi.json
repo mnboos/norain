@@ -1,7 +1,7 @@
 {
     "openapi": "3.1.0",
     "info": {
-        "title": "NoRain API",
+        "title": "Meteolane API",
         "version": "1.0.0",
         "description": ""
     },
@@ -775,6 +775,48 @@
                 ]
             }
         },
+        "/api/reverse": {
+            "get": {
+                "operationId": "core_api_places_reverse",
+                "summary": "Reverse",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "lat",
+                        "schema": {
+                            "title": "Lat",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "lon",
+                        "schema": {
+                            "title": "Lon",
+                            "type": "number"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PlacesSearchResult"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "The place at a point, for \"current location\": a name to show and save instead of coordinates.",
+                "tags": [
+                    "Places"
+                ]
+            }
+        },
         "/api/gpx/import": {
             "post": {
                 "operationId": "core_api_gpx_import_gpx",
@@ -935,7 +977,28 @@
             "get": {
                 "operationId": "core_api_journey_list_journeys",
                 "summary": "List Journeys",
-                "parameters": [],
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "kind",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "enum": [
+                                        "tour",
+                                        "random"
+                                    ],
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Kind"
+                        },
+                        "required": false
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1016,7 +1079,7 @@
                         }
                     }
                 },
-                "description": "Change a journey. Every change re-plans it: the days depend on all of the inputs.",
+                "description": "Change a journey. Every change re-plans it: the days depend on all of the inputs.\n\nThe kind stays what it was created as; a random ride keeps its dice.",
                 "tags": [
                     "Journeys"
                 ],
@@ -1116,7 +1179,7 @@
                         }
                     }
                 },
-                "description": "Plan again with the same inputs: newer weather, POIs or graph.",
+                "description": "Plan again with the same inputs: newer weather, POIs or graph. A random ride gets new\ncandidates: its dice are thrown again.",
                 "tags": [
                     "Journeys"
                 ]
@@ -1174,6 +1237,60 @@
                 "tags": [
                     "Journeys"
                 ]
+            }
+        },
+        "/api/journeys/{journey_id}/stages/{stage_id}/route": {
+            "post": {
+                "operationId": "core_api_journey_save_variant_as_route",
+                "summary": "Save Variant As Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "journey_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Journey Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "stage_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Stage Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecurringRouteOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Save one variant of a random ride as a route of the rider's, with their own schedule.\n\nIt is an imported path, so the route rides exactly the variant's line, and it goes through\n``create_route``: the route quota (402), the geometry task and, from then on, the route's\nown forecast. Call it once per variant the rider picked.",
+                "tags": [
+                    "Journeys"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SaveVariantIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
             }
         },
         "/api/journeys/{journey_id}/stages/{stage_id}/pois": {
@@ -1241,6 +1358,1130 @@
                 "description": "POIs in the area of one stage, for the map: within ``FILL_CORRIDOR_M``, where the gap fill\nlooks for a detour, so a village a kilometre off the line shows too (``offset_m`` says how\nfar). ``categories`` is a comma-separated filter; empty means every category, unless only\n``lodging`` is asked for.\n\n``lodging`` adds the places the day could have ended at: lodging of the journey's kinds\nwithin ``LODGING_CORRIDOR_M`` in the day's last ``LODGING_WINDOW``, where the planner looked.\nNone on the last day, which ends at the destination.",
                 "tags": [
                     "Journeys"
+                ]
+            }
+        },
+        "/api/routes/{route_id}/sharing": {
+            "get": {
+                "operationId": "core_api_community_get_sharing",
+                "summary": "Get Sharing",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SharingOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Sharing"
+                ]
+            },
+            "put": {
+                "operationId": "core_api_community_update_sharing",
+                "summary": "Update Sharing",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SharingOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Publish or hide a route, and choose how much of either end stays hidden.",
+                "tags": [
+                    "Sharing"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SharingIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/routes/{route_id}/photos": {
+            "get": {
+                "operationId": "core_api_community_list_photos",
+                "summary": "List Photos",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/PhotoOut"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Sharing"
+                ]
+            },
+            "post": {
+                "operationId": "core_api_community_upload_photo",
+                "summary": "Upload Photo",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PhotoOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Add a photo. It is re-encoded without metadata; its position is only what the owner sets.",
+                "tags": [
+                    "Sharing"
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "properties": {
+                                    "file": {
+                                        "format": "binary",
+                                        "title": "File",
+                                        "type": "string"
+                                    },
+                                    "caption": {
+                                        "default": "",
+                                        "title": "Caption",
+                                        "type": "string"
+                                    },
+                                    "lat": {
+                                        "anyOf": [
+                                            {
+                                                "type": "number"
+                                            },
+                                            {
+                                                "type": "null"
+                                            }
+                                        ],
+                                        "title": "Lat"
+                                    },
+                                    "lon": {
+                                        "anyOf": [
+                                            {
+                                                "type": "number"
+                                            },
+                                            {
+                                                "type": "null"
+                                            }
+                                        ],
+                                        "title": "Lon"
+                                    }
+                                },
+                                "required": [
+                                    "file"
+                                ],
+                                "title": "MultiPartBodyParams",
+                                "type": "object"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/routes/{route_id}/photos/{photo_id}": {
+            "patch": {
+                "operationId": "core_api_community_update_photo",
+                "summary": "Update Photo",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "photo_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Photo Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PhotoOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Sharing"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PhotoUpdateIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "core_api_community_delete_photo",
+                "summary": "Delete Photo",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "route_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Route Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "photo_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Photo Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                },
+                "tags": [
+                    "Sharing"
+                ]
+            }
+        },
+        "/api/photos/{photo_id}/{size}": {
+            "get": {
+                "operationId": "core_api_community_photo_file",
+                "summary": "Photo File",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "photo_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Photo Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "size",
+                        "schema": {
+                            "enum": [
+                                "full",
+                                "thumb"
+                            ],
+                            "title": "Size",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                },
+                "description": "The image itself: to anyone when its route is public, else only to the route's owner.",
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes": {
+            "get": {
+                "operationId": "core_api_community_list_public_routes",
+                "summary": "List Public Routes",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "sort",
+                        "schema": {
+                            "default": "new",
+                            "enum": [
+                                "new",
+                                "popular"
+                            ],
+                            "title": "Sort",
+                            "type": "string"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "q",
+                        "schema": {
+                            "default": "",
+                            "title": "Q",
+                            "type": "string"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "bbox",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Bbox"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "default": 0,
+                            "title": "Offset",
+                            "type": "integer"
+                        },
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/PublicRouteSummary"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Discover public routes, newest or most liked first, optionally inside a map box.\n\n``bbox`` is ``minLon,minLat,maxLon,maxLat``. It is checked against the public line, so a\nroute never turns up for a box that only its hidden ends touch.",
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}": {
+            "get": {
+                "operationId": "core_api_community_get_public_route",
+                "summary": "Get Public Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PublicRouteDetail"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}/elevation": {
+            "get": {
+                "operationId": "core_api_community_public_route_elevation",
+                "summary": "Public Route Elevation",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ElevationOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}/forecast": {
+            "get": {
+                "operationId": "core_api_community_public_route_forecast",
+                "summary": "Public Route Forecast",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "date",
+                        "schema": {
+                            "title": "Date",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "time",
+                        "schema": {
+                            "title": "Time",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastJobOut"
+                                }
+                            }
+                        }
+                    },
+                    "202": {
+                        "description": "Accepted",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ForecastJobOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "The weather on this route for the visitor's own departure: a forecast job like any other.\n\nSigned-in visitors only, like all planning. The job is the visitor's, so the result is\nshaped for the visitor's tier, and it runs on the public line only.",
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}/comments": {
+            "get": {
+                "operationId": "core_api_community_list_comments",
+                "summary": "List Comments",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/CommentOut"
+                                    },
+                                    "title": "Response",
+                                    "type": "array"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ]
+            },
+            "post": {
+                "operationId": "core_api_community_add_comment",
+                "summary": "Add Comment",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CommentOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CommentIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/public/comments/{comment_id}": {
+            "patch": {
+                "operationId": "core_api_community_edit_comment",
+                "summary": "Edit Comment",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "comment_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Comment Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CommentOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CommentIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            },
+            "delete": {
+                "operationId": "core_api_community_delete_comment",
+                "summary": "Delete Comment",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "comment_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Comment Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                },
+                "description": "The author may delete a comment, and so may the route's owner: it is their page.",
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}/like": {
+            "put": {
+                "operationId": "core_api_community_like_route",
+                "summary": "Like Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LikeOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ]
+            },
+            "delete": {
+                "operationId": "core_api_community_unlike_route",
+                "summary": "Unlike Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LikeOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Public routes"
+                ]
+            }
+        },
+        "/api/public/routes/{slug}/copy": {
+            "post": {
+                "operationId": "core_api_community_copy_route",
+                "summary": "Copy Route",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "slug",
+                        "schema": {
+                            "title": "Slug",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecurringRouteOut"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "Save the public line as one of the visitor's own routes, with their own schedule.\n\nIt is an imported path, so the copy rides exactly the line shown (never the hidden ends)\nand counts against the visitor's route quota like any other route.",
+                "tags": [
+                    "Public routes"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CopyIn"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
+        },
+        "/api/system/summary": {
+            "get": {
+                "operationId": "core_api_system_summary",
+                "summary": "Summary",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemSummary"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/api/system/map": {
+            "get": {
+                "operationId": "core_api_system_map_features",
+                "summary": "Map Features",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "layer",
+                        "schema": {
+                            "enum": [
+                                "routes",
+                                "journeys",
+                                "cells"
+                            ],
+                            "title": "Layer",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "bbox",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Bbox"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "zoom",
+                        "schema": {
+                            "default": 8,
+                            "maximum": 24,
+                            "minimum": 0,
+                            "title": "Zoom",
+                            "type": "number"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "default": 0,
+                            "minimum": 0,
+                            "title": "Offset",
+                            "type": "integer"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "default": 500,
+                            "maximum": 1000,
+                            "minimum": 1,
+                            "title": "Limit",
+                            "type": "integer"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "kind",
+                        "schema": {
+                            "default": "forecast",
+                            "enum": [
+                                "forecast",
+                                "ensemble"
+                            ],
+                            "title": "Kind",
+                            "type": "string"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "source",
+                        "schema": {
+                            "default": "all",
+                            "enum": [
+                                "all",
+                                "open-meteo",
+                                "openweathermap"
+                            ],
+                            "title": "Source",
+                            "type": "string"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "day",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "format": "date",
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Day"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "active",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "boolean"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Active"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "profile",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "enum": [
+                                        "bike",
+                                        "ebike",
+                                        "fast_ebike"
+                                    ],
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ],
+                            "title": "Profile"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "alternatives",
+                        "schema": {
+                            "default": false,
+                            "title": "Alternatives",
+                            "type": "boolean"
+                        },
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemMapPage"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/api/system/cells": {
+            "get": {
+                "operationId": "core_api_system_cell_history",
+                "summary": "Cell History",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "lat",
+                        "schema": {
+                            "title": "Lat",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "lon",
+                        "schema": {
+                            "title": "Lon",
+                            "type": "number"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "default": 0,
+                            "title": "Offset",
+                            "type": "integer"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "default": 25,
+                            "title": "Limit",
+                            "type": "integer"
+                        },
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemMapPage"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/api/system/coverage/{kind}/{item_id}": {
+            "get": {
+                "operationId": "core_api_system_coverage",
+                "summary": "Coverage",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "kind",
+                        "schema": {
+                            "enum": [
+                                "route",
+                                "stage"
+                            ],
+                            "title": "Kind",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "item_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Item Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemCoverage"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/api/system/jobs": {
+            "get": {
+                "operationId": "core_api_system_jobs",
+                "summary": "Jobs",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "offset",
+                        "schema": {
+                            "default": 0,
+                            "title": "Offset",
+                            "type": "integer"
+                        },
+                        "required": false
+                    },
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "default": 25,
+                            "title": "Limit",
+                            "type": "integer"
+                        },
+                        "required": false
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemJobsPage"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "system"
                 ]
             }
         }
@@ -1372,15 +2613,28 @@
                         "title": "Ride Score"
                     },
                     "ride_label": {
-                        "title": "Ride Label",
-                        "type": "string"
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Label"
                     }
                 },
                 "required": [
                     "departure_time",
                     "arrival_time",
-                    "available",
-                    "ride_label"
+                    "available"
                 ],
                 "title": "DepartureCandidate",
                 "type": "object"
@@ -1418,6 +2672,16 @@
                         "title": "Recommended Time"
                     },
                     "explanation": {
+                        "enum": [
+                            "insufficient_data",
+                            "best_in_window",
+                            "requested_equivalent",
+                            "requested_best",
+                            "less_rain",
+                            "less_wind",
+                            "milder",
+                            "less_frost"
+                        ],
                         "title": "Explanation",
                         "type": "string"
                     }
@@ -1737,10 +3001,6 @@
                         ],
                         "title": "Weather Code"
                     },
-                    "weather_desc": {
-                        "title": "Weather Desc",
-                        "type": "string"
-                    },
                     "station_count": {
                         "anyOf": [
                             {
@@ -1781,6 +3041,13 @@
                     "ride_label": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -1789,9 +3056,34 @@
                         ],
                         "title": "Ride Label"
                     },
+                    "ride_cause": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "rain",
+                                    "wind",
+                                    "temp",
+                                    "frost"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Cause"
+                    },
                     "wind_effort_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "tailwind",
+                                    "none",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "very_high"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -1803,6 +3095,11 @@
                     "frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -1818,8 +3115,7 @@
                     "elapsed_s",
                     "eta",
                     "rain_mm",
-                    "temp",
-                    "weather_desc"
+                    "temp"
                 ],
                 "title": "ForecastSampleOut",
                 "type": "object"
@@ -2063,6 +3359,11 @@
                     "frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -2157,6 +3458,14 @@
                     "max_wind_effort_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "tailwind",
+                                    "none",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "very_high"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -2168,6 +3477,11 @@
                     "max_frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -2242,6 +3556,14 @@
                     "wind_effort_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "tailwind",
+                                    "none",
+                                    "low",
+                                    "medium",
+                                    "high",
+                                    "very_high"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -2377,7 +3699,7 @@
             "RoutePlanForecastIn": {
                 "properties": {
                     "name": {
-                        "default": "NoRain",
+                        "default": "Meteolane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"
@@ -2850,6 +4172,26 @@
                             }
                         ],
                         "title": "Return Next Departure"
+                    },
+                    "visibility": {
+                        "default": "private",
+                        "enum": [
+                            "private",
+                            "public"
+                        ],
+                        "title": "Visibility",
+                        "type": "string"
+                    },
+                    "public_slug": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Public Slug"
                     }
                 },
                 "required": [
@@ -2921,6 +4263,13 @@
                     "ride_label": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -2929,9 +4278,31 @@
                         ],
                         "title": "Ride Label"
                     },
+                    "ride_cause": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "rain",
+                                    "wind",
+                                    "temp",
+                                    "frost"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Cause"
+                    },
                     "rain_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -2943,6 +4314,11 @@
                     "frost_level": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "light",
+                                    "moderate",
+                                    "heavy"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -3206,7 +4582,8 @@
                         "default": "neutral",
                         "enum": [
                             "neutral",
-                            "avoid"
+                            "avoid",
+                            "hilly"
                         ],
                         "title": "Climbing",
                         "type": "string"
@@ -3406,7 +4783,7 @@
             "GpxExportIn": {
                 "properties": {
                     "name": {
-                        "default": "NoRain",
+                        "default": "Meteolane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"
@@ -3476,7 +4853,7 @@
             "RoutePlanIn": {
                 "properties": {
                     "name": {
-                        "default": "NoRain",
+                        "default": "Meteolane",
                         "maxLength": 200,
                         "title": "Name",
                         "type": "string"
@@ -3682,6 +5059,18 @@
                         "title": "Name",
                         "type": "string"
                     },
+                    "kind": {
+                        "default": "tour",
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "random_prefs": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RandomPrefsOut"
+                            }
+                        ]
+                    },
                     "start_lat": {
                         "title": "Start Lat",
                         "type": "number"
@@ -3860,6 +5249,94 @@
                 "title": "JourneyOut",
                 "type": "object"
             },
+            "JourneyReasonOut": {
+                "description": "Why a variant ranks where it does, as data the SPA words (``journeys.rank_day``).\n\n``missing_stop``: no reachable stop for ``category``. ``gap``: ``minutes`` / ``km`` of a leg\nwithout ``category``. ``detour``: ``km`` off the line to ``name`` (or ``category``).\n``longer``: ``percent`` longer than the fastest variant. ``day_limit`` / ``leg_limit``\n(with ``leg``): ``minutes`` too long or ``km`` too far.",
+                "properties": {
+                    "kind": {
+                        "enum": [
+                            "missing_stop",
+                            "gap",
+                            "detour",
+                            "longer",
+                            "day_limit",
+                            "leg_limit"
+                        ],
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "category": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Category"
+                    },
+                    "name": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Name"
+                    },
+                    "leg": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Leg"
+                    },
+                    "minutes": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Minutes"
+                    },
+                    "km": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Km"
+                    },
+                    "percent": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Percent"
+                    }
+                },
+                "required": [
+                    "kind"
+                ],
+                "title": "JourneyReasonOut",
+                "type": "object"
+            },
             "JourneyStageOut": {
                 "properties": {
                     "id": {
@@ -3943,6 +5420,18 @@
                         "title": "Detour M",
                         "type": "number"
                     },
+                    "ascent_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "Total climb of the line, metres",
+                        "title": "Ascent M"
+                    },
                     "forecast_job_id": {
                         "anyOf": [
                             {
@@ -3994,6 +5483,13 @@
                     "ride_label": {
                         "anyOf": [
                             {
+                                "enum": [
+                                    "very_good",
+                                    "good",
+                                    "fair",
+                                    "poor",
+                                    "very_poor"
+                                ],
                                 "type": "string"
                             },
                             {
@@ -4001,6 +5497,23 @@
                             }
                         ],
                         "title": "Ride Label"
+                    },
+                    "ride_cause": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "rain",
+                                    "wind",
+                                    "temp",
+                                    "frost"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ride Cause"
                     },
                     "recommended_departure": {
                         "anyOf": [
@@ -4020,7 +5533,7 @@
                     },
                     "reasons": {
                         "items": {
-                            "type": "string"
+                            "$ref": "#/components/schemas/JourneyReasonOut"
                         },
                         "title": "Reasons",
                         "type": "array"
@@ -4163,15 +5676,52 @@
                 "title": "PoiOut",
                 "type": "object"
             },
+            "RandomPrefsOut": {
+                "properties": {
+                    "round_trip": {
+                        "default": true,
+                        "title": "Round Trip",
+                        "type": "boolean"
+                    },
+                    "heading": {
+                        "anyOf": [
+                            {
+                                "exclusiveMaximum": 360,
+                                "minimum": 0,
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "Preferred direction, degrees from north",
+                        "title": "Heading"
+                    },
+                    "consider_weather": {
+                        "default": false,
+                        "description": "Plus: forecast and rank the candidates (and route around the weather if chosen). Off: variants to pick from and save as routes, no forecast.",
+                        "title": "Consider Weather",
+                        "type": "boolean"
+                    },
+                    "seed": {
+                        "default": 0,
+                        "title": "Seed",
+                        "type": "integer"
+                    }
+                },
+                "title": "RandomPrefsOut",
+                "type": "object"
+            },
             "WeatherPrefsIn": {
+                "description": "Whether to ride around bad weather: the rider's choice, off unless they make it, and only\nkept for accounts with ``weather_routing`` (Plus). See ``_values``.",
                 "properties": {
                     "avoid_rain": {
-                        "default": true,
+                        "default": false,
                         "title": "Avoid Rain",
                         "type": "boolean"
                     },
                     "avoid_headwind": {
-                        "default": true,
+                        "default": false,
                         "title": "Avoid Headwind",
                         "type": "boolean"
                     },
@@ -4193,6 +5743,16 @@
                         "maxLength": 200,
                         "minLength": 1,
                         "title": "Name",
+                        "type": "string"
+                    },
+                    "kind": {
+                        "default": "tour",
+                        "description": "A random ride is one day of generated candidates; fixed at creation",
+                        "enum": [
+                            "tour",
+                            "random"
+                        ],
+                        "title": "Kind",
                         "type": "string"
                     },
                     "startLat": {
@@ -4338,6 +5898,13 @@
                                 "$ref": "#/components/schemas/WeatherPrefsIn"
                             }
                         ]
+                    },
+                    "randomPrefs": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/RandomPrefsIn"
+                            }
+                        ]
                     }
                 },
                 "required": [
@@ -4351,6 +5918,1224 @@
                     "startDate"
                 ],
                 "title": "JourneyIn",
+                "type": "object"
+            },
+            "RandomPrefsIn": {
+                "description": "A random ride's shape. The dice (``seed``) are the server's: a re-plan throws them again.",
+                "properties": {
+                    "roundTrip": {
+                        "default": true,
+                        "title": "Roundtrip",
+                        "type": "boolean"
+                    },
+                    "heading": {
+                        "anyOf": [
+                            {
+                                "exclusiveMaximum": 360,
+                                "minimum": 0,
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "Preferred direction, degrees from north",
+                        "title": "Heading"
+                    },
+                    "considerWeather": {
+                        "default": false,
+                        "description": "Plus: forecast and rank the candidates (and route around the weather if chosen). Off: variants to pick from and save as routes, no forecast.",
+                        "title": "Considerweather",
+                        "type": "boolean"
+                    }
+                },
+                "title": "RandomPrefsIn",
+                "type": "object"
+            },
+            "SaveVariantIn": {
+                "properties": {
+                    "name": {
+                        "default": "",
+                        "maxLength": 200,
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "scheduleCron": {
+                        "title": "Schedulecron",
+                        "type": "string"
+                    },
+                    "scheduleDescription": {
+                        "title": "Scheduledescription",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "scheduleCron",
+                    "scheduleDescription"
+                ],
+                "title": "SaveVariantIn",
+                "type": "object"
+            },
+            "SharingOut": {
+                "properties": {
+                    "visibility": {
+                        "enum": [
+                            "private",
+                            "public"
+                        ],
+                        "title": "Visibility",
+                        "type": "string"
+                    },
+                    "public_slug": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Public Slug"
+                    },
+                    "published_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Published At"
+                    },
+                    "privacy_zone_m": {
+                        "title": "Privacy Zone M",
+                        "type": "integer"
+                    },
+                    "public_distance_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Public Distance M"
+                    },
+                    "public_line": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "items": {
+                                        "type": "number"
+                                    },
+                                    "type": "array"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Public Line"
+                    }
+                },
+                "required": [
+                    "visibility",
+                    "privacy_zone_m"
+                ],
+                "title": "SharingOut",
+                "type": "object"
+            },
+            "SharingIn": {
+                "properties": {
+                    "visibility": {
+                        "enum": [
+                            "private",
+                            "public"
+                        ],
+                        "title": "Visibility",
+                        "type": "string"
+                    },
+                    "privacyZoneM": {
+                        "default": 500,
+                        "title": "Privacyzonem",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "visibility"
+                ],
+                "title": "SharingIn",
+                "type": "object"
+            },
+            "PhotoOut": {
+                "properties": {
+                    "id": {
+                        "format": "uuid",
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "url": {
+                        "title": "Url",
+                        "type": "string"
+                    },
+                    "thumbnail_url": {
+                        "title": "Thumbnail Url",
+                        "type": "string"
+                    },
+                    "width": {
+                        "title": "Width",
+                        "type": "integer"
+                    },
+                    "height": {
+                        "title": "Height",
+                        "type": "integer"
+                    },
+                    "caption": {
+                        "title": "Caption",
+                        "type": "string"
+                    },
+                    "lat": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lat"
+                    },
+                    "lon": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lon"
+                    },
+                    "created_at": {
+                        "format": "date-time",
+                        "title": "Created At",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "url",
+                    "thumbnail_url",
+                    "width",
+                    "height",
+                    "caption",
+                    "created_at"
+                ],
+                "title": "PhotoOut",
+                "type": "object"
+            },
+            "PhotoUpdateIn": {
+                "properties": {
+                    "caption": {
+                        "default": "",
+                        "maxLength": 500,
+                        "title": "Caption",
+                        "type": "string"
+                    },
+                    "lat": {
+                        "anyOf": [
+                            {
+                                "maximum": 90,
+                                "minimum": -90,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lat"
+                    },
+                    "lon": {
+                        "anyOf": [
+                            {
+                                "maximum": 180,
+                                "minimum": -180,
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lon"
+                    }
+                },
+                "title": "PhotoUpdateIn",
+                "type": "object"
+            },
+            "PublicRouteSummary": {
+                "properties": {
+                    "slug": {
+                        "title": "Slug",
+                        "type": "string"
+                    },
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "description": {
+                        "title": "Description",
+                        "type": "string"
+                    },
+                    "author": {
+                        "title": "Author",
+                        "type": "string"
+                    },
+                    "profile": {
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "distance_m": {
+                        "title": "Distance M",
+                        "type": "number"
+                    },
+                    "duration_s": {
+                        "title": "Duration S",
+                        "type": "integer"
+                    },
+                    "ascent_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ascent M"
+                    },
+                    "published_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Published At"
+                    },
+                    "like_count": {
+                        "default": 0,
+                        "title": "Like Count",
+                        "type": "integer"
+                    },
+                    "comment_count": {
+                        "default": 0,
+                        "title": "Comment Count",
+                        "type": "integer"
+                    },
+                    "photo_count": {
+                        "default": 0,
+                        "title": "Photo Count",
+                        "type": "integer"
+                    },
+                    "cover_url": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Cover Url"
+                    },
+                    "path": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Path",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "slug",
+                    "name",
+                    "description",
+                    "author",
+                    "profile",
+                    "distance_m",
+                    "duration_s"
+                ],
+                "title": "PublicRouteSummary",
+                "type": "object"
+            },
+            "PublicRouteDetail": {
+                "properties": {
+                    "slug": {
+                        "title": "Slug",
+                        "type": "string"
+                    },
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "description": {
+                        "title": "Description",
+                        "type": "string"
+                    },
+                    "author": {
+                        "title": "Author",
+                        "type": "string"
+                    },
+                    "profile": {
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "distance_m": {
+                        "title": "Distance M",
+                        "type": "number"
+                    },
+                    "duration_s": {
+                        "title": "Duration S",
+                        "type": "integer"
+                    },
+                    "ascent_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Ascent M"
+                    },
+                    "published_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Published At"
+                    },
+                    "like_count": {
+                        "default": 0,
+                        "title": "Like Count",
+                        "type": "integer"
+                    },
+                    "comment_count": {
+                        "default": 0,
+                        "title": "Comment Count",
+                        "type": "integer"
+                    },
+                    "photo_count": {
+                        "default": 0,
+                        "title": "Photo Count",
+                        "type": "integer"
+                    },
+                    "cover_url": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Cover Url"
+                    },
+                    "path": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Path",
+                        "type": "array"
+                    },
+                    "line": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Line",
+                        "type": "array"
+                    },
+                    "photos": {
+                        "items": {
+                            "$ref": "#/components/schemas/PhotoOut"
+                        },
+                        "title": "Photos",
+                        "type": "array"
+                    },
+                    "is_owner": {
+                        "default": false,
+                        "title": "Is Owner",
+                        "type": "boolean"
+                    },
+                    "liked": {
+                        "default": false,
+                        "title": "Liked",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "slug",
+                    "name",
+                    "description",
+                    "author",
+                    "profile",
+                    "distance_m",
+                    "duration_s",
+                    "line",
+                    "photos"
+                ],
+                "title": "PublicRouteDetail",
+                "type": "object"
+            },
+            "CommentOut": {
+                "properties": {
+                    "id": {
+                        "format": "uuid",
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "author": {
+                        "title": "Author",
+                        "type": "string"
+                    },
+                    "body": {
+                        "title": "Body",
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "format": "date-time",
+                        "title": "Created At",
+                        "type": "string"
+                    },
+                    "edited_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Edited At"
+                    },
+                    "can_edit": {
+                        "default": false,
+                        "title": "Can Edit",
+                        "type": "boolean"
+                    },
+                    "can_delete": {
+                        "default": false,
+                        "title": "Can Delete",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "author",
+                    "body",
+                    "created_at"
+                ],
+                "title": "CommentOut",
+                "type": "object"
+            },
+            "CommentIn": {
+                "properties": {
+                    "body": {
+                        "maxLength": 2000,
+                        "minLength": 1,
+                        "title": "Body",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "body"
+                ],
+                "title": "CommentIn",
+                "type": "object"
+            },
+            "LikeOut": {
+                "properties": {
+                    "liked": {
+                        "title": "Liked",
+                        "type": "boolean"
+                    },
+                    "like_count": {
+                        "title": "Like Count",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "liked",
+                    "like_count"
+                ],
+                "title": "LikeOut",
+                "type": "object"
+            },
+            "CopyIn": {
+                "properties": {
+                    "name": {
+                        "anyOf": [
+                            {
+                                "maxLength": 200,
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Name"
+                    },
+                    "scheduleCron": {
+                        "default": "0 8 * * 6",
+                        "title": "Schedulecron",
+                        "type": "string"
+                    },
+                    "scheduleDescription": {
+                        "default": "Jeden Samstag um 08:00",
+                        "maxLength": 200,
+                        "title": "Scheduledescription",
+                        "type": "string"
+                    }
+                },
+                "title": "CopyIn",
+                "type": "object"
+            },
+            "SystemCacheCount": {
+                "properties": {
+                    "kind": {
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "source": {
+                        "title": "Source",
+                        "type": "string"
+                    },
+                    "records": {
+                        "title": "Records",
+                        "type": "integer"
+                    },
+                    "fresh": {
+                        "title": "Fresh",
+                        "type": "integer"
+                    },
+                    "stale": {
+                        "title": "Stale",
+                        "type": "integer"
+                    },
+                    "locations": {
+                        "title": "Locations",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "kind",
+                    "source",
+                    "records",
+                    "fresh",
+                    "stale",
+                    "locations"
+                ],
+                "title": "SystemCacheCount",
+                "type": "object"
+            },
+            "SystemSummary": {
+                "properties": {
+                    "generated_at": {
+                        "format": "date-time",
+                        "title": "Generated At",
+                        "type": "string"
+                    },
+                    "max_cell_age_seconds": {
+                        "title": "Max Cell Age Seconds",
+                        "type": "integer"
+                    },
+                    "recurring_routes": {
+                        "title": "Recurring Routes",
+                        "type": "integer"
+                    },
+                    "journeys": {
+                        "title": "Journeys",
+                        "type": "integer"
+                    },
+                    "stages": {
+                        "title": "Stages",
+                        "type": "integer"
+                    },
+                    "missing_geometry": {
+                        "title": "Missing Geometry",
+                        "type": "integer"
+                    },
+                    "cache_locations": {
+                        "title": "Cache Locations",
+                        "type": "integer"
+                    },
+                    "caches": {
+                        "items": {
+                            "$ref": "#/components/schemas/SystemCacheCount"
+                        },
+                        "title": "Caches",
+                        "type": "array"
+                    },
+                    "bounds": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "type": "number"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Bounds"
+                    }
+                },
+                "required": [
+                    "generated_at",
+                    "max_cell_age_seconds",
+                    "recurring_routes",
+                    "journeys",
+                    "stages",
+                    "missing_geometry",
+                    "cache_locations",
+                    "caches",
+                    "bounds"
+                ],
+                "title": "SystemSummary",
+                "type": "object"
+            },
+            "SystemMapFilter": {
+                "properties": {
+                    "layer": {
+                        "enum": [
+                            "routes",
+                            "journeys",
+                            "cells"
+                        ],
+                        "title": "Layer",
+                        "type": "string"
+                    },
+                    "bbox": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Bbox"
+                    },
+                    "zoom": {
+                        "default": 8,
+                        "maximum": 24,
+                        "minimum": 0,
+                        "title": "Zoom",
+                        "type": "number"
+                    },
+                    "offset": {
+                        "default": 0,
+                        "minimum": 0,
+                        "title": "Offset",
+                        "type": "integer"
+                    },
+                    "limit": {
+                        "default": 500,
+                        "maximum": 1000,
+                        "minimum": 1,
+                        "title": "Limit",
+                        "type": "integer"
+                    },
+                    "kind": {
+                        "default": "forecast",
+                        "enum": [
+                            "forecast",
+                            "ensemble"
+                        ],
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "source": {
+                        "default": "all",
+                        "enum": [
+                            "all",
+                            "open-meteo",
+                            "openweathermap"
+                        ],
+                        "title": "Source",
+                        "type": "string"
+                    },
+                    "day": {
+                        "anyOf": [
+                            {
+                                "format": "date",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Day"
+                    },
+                    "active": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Active"
+                    },
+                    "profile": {
+                        "anyOf": [
+                            {
+                                "enum": [
+                                    "bike",
+                                    "ebike",
+                                    "fast_ebike"
+                                ],
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Profile"
+                    },
+                    "alternatives": {
+                        "default": false,
+                        "title": "Alternatives",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "layer"
+                ],
+                "title": "SystemMapFilter",
+                "type": "object"
+            },
+            "SystemFeature": {
+                "properties": {
+                    "id": {
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "kind": {
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "coordinates": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Coordinates",
+                        "type": "array"
+                    },
+                    "name": {
+                        "default": "",
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "profile": {
+                        "default": "",
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "active": {
+                        "anyOf": [
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Active"
+                    },
+                    "rank": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Rank"
+                    },
+                    "source": {
+                        "default": "",
+                        "title": "Source",
+                        "type": "string"
+                    },
+                    "fetched_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Fetched At"
+                    },
+                    "day_key": {
+                        "anyOf": [
+                            {
+                                "format": "date",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Day Key"
+                    },
+                    "forecast_days": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Forecast Days"
+                    },
+                    "lat": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lat"
+                    },
+                    "lon": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Lon"
+                    }
+                },
+                "required": [
+                    "id",
+                    "kind",
+                    "coordinates"
+                ],
+                "title": "SystemFeature",
+                "type": "object"
+            },
+            "SystemMapPage": {
+                "properties": {
+                    "items": {
+                        "items": {
+                            "$ref": "#/components/schemas/SystemFeature"
+                        },
+                        "title": "Items",
+                        "type": "array"
+                    },
+                    "total": {
+                        "title": "Total",
+                        "type": "integer"
+                    },
+                    "next_offset": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Next Offset"
+                    },
+                    "generated_at": {
+                        "format": "date-time",
+                        "title": "Generated At",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "items",
+                    "total",
+                    "next_offset",
+                    "generated_at"
+                ],
+                "title": "SystemMapPage",
+                "type": "object"
+            },
+            "SystemCoverage": {
+                "properties": {
+                    "id": {
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "kind": {
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "profile": {
+                        "title": "Profile",
+                        "type": "string"
+                    },
+                    "distance_m": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Distance M"
+                    },
+                    "duration_seconds": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Duration Seconds"
+                    },
+                    "geometry_fetched_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Geometry Fetched At"
+                    },
+                    "departure": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Departure"
+                    },
+                    "unavailable": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Unavailable"
+                    },
+                    "points": {
+                        "items": {
+                            "$ref": "#/components/schemas/SystemCoveragePoint"
+                        },
+                        "title": "Points",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "id",
+                    "kind",
+                    "name",
+                    "profile",
+                    "distance_m",
+                    "duration_seconds",
+                    "geometry_fetched_at",
+                    "departure",
+                    "unavailable",
+                    "points"
+                ],
+                "title": "SystemCoverage",
+                "type": "object"
+            },
+            "SystemCoveragePoint": {
+                "properties": {
+                    "lat": {
+                        "title": "Lat",
+                        "type": "number"
+                    },
+                    "lon": {
+                        "title": "Lon",
+                        "type": "number"
+                    },
+                    "forecast": {
+                        "enum": [
+                            "usable",
+                            "stale",
+                            "missing",
+                            "insufficient"
+                        ],
+                        "title": "Forecast",
+                        "type": "string"
+                    },
+                    "ensemble": {
+                        "enum": [
+                            "usable",
+                            "stale",
+                            "missing",
+                            "insufficient"
+                        ],
+                        "title": "Ensemble",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "lat",
+                    "lon",
+                    "forecast",
+                    "ensemble"
+                ],
+                "title": "SystemCoveragePoint",
+                "type": "object"
+            },
+            "SystemJob": {
+                "properties": {
+                    "id": {
+                        "title": "Id",
+                        "type": "string"
+                    },
+                    "kind": {
+                        "title": "Kind",
+                        "type": "string"
+                    },
+                    "status": {
+                        "title": "Status",
+                        "type": "string"
+                    },
+                    "cells_total": {
+                        "title": "Cells Total",
+                        "type": "integer"
+                    },
+                    "cells_settled": {
+                        "title": "Cells Settled",
+                        "type": "integer"
+                    },
+                    "cells_failed": {
+                        "title": "Cells Failed",
+                        "type": "integer"
+                    },
+                    "created_at": {
+                        "format": "date-time",
+                        "title": "Created At",
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "format": "date-time",
+                        "title": "Updated At",
+                        "type": "string"
+                    },
+                    "error": {
+                        "title": "Error",
+                        "type": "string"
+                    },
+                    "possibly_stalled": {
+                        "title": "Possibly Stalled",
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "kind",
+                    "status",
+                    "cells_total",
+                    "cells_settled",
+                    "cells_failed",
+                    "created_at",
+                    "updated_at",
+                    "error",
+                    "possibly_stalled"
+                ],
+                "title": "SystemJob",
+                "type": "object"
+            },
+            "SystemJobsPage": {
+                "properties": {
+                    "items": {
+                        "items": {
+                            "$ref": "#/components/schemas/SystemJob"
+                        },
+                        "title": "Items",
+                        "type": "array"
+                    },
+                    "total": {
+                        "title": "Total",
+                        "type": "integer"
+                    },
+                    "next_offset": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Next Offset"
+                    },
+                    "stall_timeout_seconds": {
+                        "title": "Stall Timeout Seconds",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "items",
+                    "total",
+                    "next_offset",
+                    "stall_timeout_seconds"
+                ],
+                "title": "SystemJobsPage",
                 "type": "object"
             }
         }

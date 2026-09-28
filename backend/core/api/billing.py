@@ -19,8 +19,11 @@ import stripe
 from django.conf import settings
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser
+from django.core.mail import send_mail
 from django.db import transaction
 from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.utils import formats, timezone, translation
+from django.utils.translation import gettext
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_GET, require_POST
 from loguru import logger
@@ -44,7 +47,10 @@ HANDLED_EVENTS = {
     "checkout.session.completed",
     "customer.subscription.created",
     "customer.subscription.updated",
+    "customer.subscription.paused",
+    "customer.subscription.resumed",
     "customer.subscription.deleted",
+    "customer.subscription.trial_will_end",
     "invoice.payment_failed",
 }
 
@@ -60,7 +66,7 @@ def _user(request: HttpRequest) -> User | None:
 
 
 def _not_configured() -> JsonResponse:
-    return JsonResponse({"detail": "Billing is not configured on this server."}, status=503)
+    return JsonResponse({"detail": gettext("Die Abrechnung ist auf diesem Server nicht eingerichtet.")}, status=503)
 
 
 def _entitlements_payload(user: AbstractBaseUser | AnonymousUser) -> dict[str, Any]:
@@ -71,6 +77,7 @@ def _entitlements_payload(user: AbstractBaseUser | AnonymousUser) -> dict[str, A
         "maxRoutes": limits.max_routes,
         "ensembleUncertainty": limits.ensemble_uncertainty,
         "departureComparison": limits.departure_comparison,
+        "weatherRouting": limits.weather_routing,
         "maxBriefingRoutes": limits.max_briefing_routes,
         "trialEligible": bool(
             user.is_authenticated and not limits.is_pro and (not subscription or not subscription.trial_started_at)
@@ -110,14 +117,14 @@ def checkout_view(request: HttpRequest) -> HttpResponse:
     """Start a Stripe Checkout session for the Pro subscription."""
     user = _user(request)
     if user is None:
-        return JsonResponse({"detail": "Authentication required."}, status=401)
+        return JsonResponse({"detail": gettext("Anmeldung erforderlich.")}, status=401)
     try:
         data = json.loads(request.body or b"{}")
         interval = data.get("interval", "annual")
         if interval not in {"annual", "monthly"}:
             raise ValueError
     except ValueError, AttributeError, TypeError:
-        return JsonResponse({"detail": "Choose annual or monthly billing."}, status=400)
+        return JsonResponse({"detail": gettext("Bitte jährliche oder monatliche Zahlung wählen.")}, status=400)
     client = _client()
     price = _price(interval)
     if not settings.BILLING_ENABLED or client is None or not price:
@@ -134,14 +141,14 @@ def checkout_view(request: HttpRequest) -> HttpResponse:
             "incomplete",
             "paused",
         }:
-            return JsonResponse({"detail": "Manage your existing subscription in the billing portal."}, status=409)
+            return JsonResponse({"detail": gettext("Verwalte dein bestehendes Abo im Kundenportal.")}, status=409)
         if subscription.checkout_session_id:
             previous = client.v1.checkout.sessions.retrieve(subscription.checkout_session_id)
             if previous.status == "complete" and not (
                 subscription.stripe_subscription_id and subscription.status in {"canceled", "incomplete_expired"}
             ):
                 return JsonResponse(
-                    {"detail": "Payment is being processed. Please refresh your account shortly."}, status=409
+                    {"detail": gettext("Die Zahlung wird verarbeitet. Bitte lade dein Konto gleich neu.")}, status=409
                 )
             if previous.status == "open" and subscription.checkout_interval == interval and previous.url:
                 return JsonResponse({"url": previous.url})
@@ -178,7 +185,7 @@ def checkout_view(request: HttpRequest) -> HttpResponse:
         # nothing to redirect the browser to, and the server is configured correctly, so
         # this is not the 503 that _not_configured reports.
         logger.error(f"Stripe checkout session {session.id} came back without a URL")
-        return JsonResponse({"detail": "Stripe did not return a checkout URL."}, status=502)
+        return JsonResponse({"detail": gettext("Stripe hat keine Bezahlseite geliefert.")}, status=502)
     return JsonResponse({"url": session.url})
 
 
@@ -189,14 +196,14 @@ def portal_view(request: HttpRequest) -> HttpResponse:
     """Open the Stripe billing portal so the user can cancel or change payment details."""
     user = _user(request)
     if user is None:
-        return JsonResponse({"detail": "Authentication required."}, status=401)
+        return JsonResponse({"detail": gettext("Anmeldung erforderlich.")}, status=401)
     client = _client()
     if client is None:
         return _not_configured()
 
     subscription = subscription_for_sync(user)
     if not subscription.stripe_customer_id:
-        return JsonResponse({"detail": "No billing account yet."}, status=400)
+        return JsonResponse({"detail": gettext("Noch kein Kundenkonto für die Abrechnung.")}, status=400)
 
     session = client.v1.billing_portal.sessions.create(
         params=PortalSessionParams(
@@ -256,6 +263,37 @@ def _apply_subscription(subscription: Subscription, obj: dict) -> None:
     subscription.save()
 
 
+def _send_trial_ending_email(subscription: Subscription, obj: dict) -> None:
+    """Tell the customer their Stripe trial is ending soon."""
+    user = subscription.user
+    trial_end = obj.get("trial_end")
+    sent = False
+    try:
+        # Sent from a webhook, so there is no request language: the account's own.
+        with translation.override(user.language):
+            end_text = gettext("bald")
+            if isinstance(trial_end, int):
+                end_text = formats.date_format(
+                    timezone.localtime(datetime.fromtimestamp(trial_end, tz=UTC)), "SHORT_DATE_FORMAT"
+                )
+            subject = gettext("Dein Meteolane Plus-Testzeitraum endet bald")
+            body = gettext(
+                "Hallo %(name)s,\n\n"
+                "Dein Testzeitraum für Meteolane Plus endet am %(date)s. "
+                "Bitte prüfe dein Abo oder verwalte es hier:\n\n"
+                "%(url)s\n"
+            ) % {"name": user.username, "date": end_text, "url": f"{settings.FRONTEND_URL.rstrip('/')}/account"}
+        sent = bool(send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [user.email]))
+    except Exception:  # noqa: BLE001 -- email delivery must not make Stripe retry the event
+        logger.exception("Could not send trial-ending notification")
+    telemetry.event(
+        "billing.action",
+        action="customer.subscription.trial_will_end",
+        outcome="sent" if sent else "failed",
+        **telemetry.user_context(subscription.user),
+    )
+
+
 def _handle_event(event_type: str, obj: dict) -> bool:
     subscription = _subscription_for_event(obj)
     if subscription is None:
@@ -280,7 +318,11 @@ def _handle_event(event_type: str, obj: dict) -> bool:
         subscription.status = "past_due"
         subscription.plan = Plan.FREE
         subscription.save()
-    else:  # customer.subscription.created / updated
+    elif event_type == "customer.subscription.trial_will_end":
+        # This is an advance notice; the subscription remains trialing. Send after commit
+        # so a rolled-back webhook cannot send an email for an unapplied event.
+        transaction.on_commit(lambda: _send_trial_ending_email(subscription, obj))
+    else:  # customer.subscription.created / updated / paused / resumed
         _apply_subscription(subscription, obj)
 
     context = {**telemetry.user_context(subscription.user), "event_type": event_type}
@@ -369,12 +411,12 @@ def _price(interval: str) -> str:
 def trial_view(request):
     user = _user(request)
     if user is None:
-        return JsonResponse({"detail": "Authentication required."}, status=401)
+        return JsonResponse({"detail": gettext("Anmeldung erforderlich.")}, status=401)
     with transaction.atomic():
         User.objects.select_for_update().get(pk=user.pk)
         subscription = subscription_for_sync(user)
         if subscription.trial_started_at or entitlements_for_sync(user).is_pro:
-            return JsonResponse({"detail": "The trial is available once per account."}, status=409)
+            return JsonResponse({"detail": gettext("Die Testphase gibt es einmal pro Konto.")}, status=409)
         subscription.trial_started_at = datetime.now(tz=UTC)
         subscription.trial_ends_at = subscription.trial_started_at + timedelta(days=14)
         subscription.save(update_fields=["trial_started_at", "trial_ends_at", "updated_at"])
@@ -387,7 +429,7 @@ def trial_view(request):
 def free_routes_view(request):
     user = _user(request)
     if user is None:
-        return JsonResponse({"detail": "Authentication required."}, status=401)
+        return JsonResponse({"detail": gettext("Anmeldung erforderlich.")}, status=401)
     try:
         data = json.loads(request.body)
         ids = data["routeIds"]
@@ -402,12 +444,12 @@ def free_routes_view(request):
 
         ids = [UUID(i) for i in ids]
     except ValueError, TypeError, KeyError:
-        return JsonResponse({"detail": "Choose up to two of your active routes."}, status=400)
+        return JsonResponse({"detail": gettext("Wähle bis zu zwei deiner aktiven Routen.")}, status=400)
     with transaction.atomic():
         User.objects.select_for_update().get(pk=user.pk)
         routes = RecurringRoute.objects.filter(owner=user, active=True, return_of__isnull=True)
         if routes.filter(id__in=ids).count() != len(ids):
-            return JsonResponse({"detail": "Route not found."}, status=404)
+            return JsonResponse({"detail": gettext("Route nicht gefunden.")}, status=404)
         routes.update(free_selected=False)
         routes.filter(id__in=ids).update(free_selected=True)
     return JsonResponse(

@@ -23,6 +23,7 @@ from .cell_lease import fetch_lease
 from .models import EnsembleCell, ForecastCell
 from .ratelimit import Limit, ProviderThrottled, acquire, cooldown_left, record_throttle
 from .ratelimit import describe_failure as _failure
+from .system_events import notify_system
 from .telemetry import emit, provider
 from .uncertainty import ENSEMBLE_VARIABLES
 from .wind import finite_number
@@ -633,7 +634,9 @@ async def _fetch_and_store_forecast(
 
     if source == "openweathermap":
         emit("count", "weather.fallback", outcome="recovered")
-    return await sync_to_async(_store_forecast_cell_sync)(lat_r, lon_r, day_key, forecast_days, data, source)
+    cell = await sync_to_async(_store_forecast_cell_sync)(lat_r, lon_r, day_key, forecast_days, data, source)
+    await notify_system("cells")
+    return cell
 
 
 async def get_cached_ensemble_cell(
@@ -700,7 +703,9 @@ async def _fetch_and_store_ensemble(
             raise ProviderThrottled(limit.provider, wait)
         return None
 
-    return await sync_to_async(_store_ensemble_cell_sync)(lat_r, lon_r, day_key, forecast_days, data)
+    cell = await sync_to_async(_store_ensemble_cell_sync)(lat_r, lon_r, day_key, forecast_days, data)
+    await notify_system("cells")
+    return cell
 
 
 def extract_sample(cell_data: dict, eta: datetime, source: str | None = None) -> dict | None:

@@ -113,6 +113,7 @@ describe("Plus account", () => {
             billingConfigured: false,
         });
         expect(result?.departureComparison).toBe(false);
+        expect(result?.weatherRouting).toBe(false);
         expect(result?.trialEligible).toBe(false);
     });
 });
