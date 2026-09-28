@@ -218,37 +218,34 @@ msgstr "Comment not found."
 
 #: .\core\api\coverage.py:70
 msgid "Bitte gib eine gültige E-Mail-Adresse ein."
-msgstr ""
+msgstr "Please enter a valid email address."
 
 #: .\core\api\coverage.py:100 .\core\api\coverage.py:109
-#, fuzzy
-#| msgid "Unbekannter Velotyp."
 msgid "Unbekanntes Gebiet."
-msgstr "Unknown bike profile."
+msgstr "Unknown area."
 
 #: .\core\api\coverage.py:107
 msgid "Dieses Gebiet deckt Meteolane schon ab."
-msgstr ""
+msgstr "Meteolane already covers this area."
 
 #: .\core\api\coverage.py:182
 msgid "Zu viele Stimmen. Bitte versuche es später noch einmal."
-msgstr ""
+msgstr "Too many votes. Please try again later."
 
 #: .\core\api\coverage.py:185
 msgid ""
 "Von hier aus wurde heute schon für dieses Gebiet gestimmt. Melde dich an, um "
 "mitzustimmen."
 msgstr ""
+"Someone here has already voted for this area today. Sign in to add your vote."
 
 #: .\core\api\coverage.py:209
-#, fuzzy
-#| msgid "Zu viele Anfragen. Bitte kurz warten."
 msgid "Zu viele Anfragen. Bitte versuche es später noch einmal."
-msgstr "Too many requests. Please wait a moment."
+msgstr "Too many requests. Please try again later."
 
 #: .\core\api\coverage.py:219
 msgid "Dieser Link ist abgelaufen oder wurde schon abbestellt."
-msgstr ""
+msgstr "This link has expired or has already been used to unsubscribe."
 
 #: .\core\api\elevation.py:23
 msgid "Höhendaten konnten nicht geladen werden. Bitte erneut versuchen."
@@ -604,7 +601,7 @@ msgstr "Manage briefings: %(url)s"
 #: .\core\coverage.py:172
 #, python-format
 msgid "Bitte bestätige: Nachricht, sobald Meteolane %(area)s abdeckt"
-msgstr ""
+msgstr "Please confirm: a message once Meteolane covers %(area)s"
 
 #: .\core\coverage.py:174
 #, python-format
@@ -622,11 +619,23 @@ msgid ""
 "Abbestellen kannst du jederzeit hier:\n"
 "%(unsubscribe)s\n"
 msgstr ""
+"Hello,\n"
+"\n"
+"You asked for an email once Meteolane covers %(area)s. Please confirm with "
+"this link:\n"
+"\n"
+"%(url)s\n"
+"\n"
+"Wasn't you? Then simply ignore this email. Without confirmation, we delete "
+"the address after 7 days.\n"
+"\n"
+"You can unsubscribe at any time here:\n"
+"%(unsubscribe)s\n"
 
 #: .\core\coverage.py:222
 #, python-format
 msgid "Meteolane deckt jetzt %(area)s ab"
-msgstr ""
+msgstr "Meteolane now covers %(area)s"
 
 #: .\core\coverage.py:224
 #, python-format
@@ -640,6 +649,14 @@ msgid ""
 "\n"
 "Das war die einzige Nachricht dazu. Deine Adresse haben wir jetzt gelöscht.\n"
 msgstr ""
+"Hello,\n"
+"\n"
+"You wanted to know when Meteolane covers %(area)s: from now on you can plan "
+"routes there and see the weather along the way.\n"
+"\n"
+"%(url)s\n"
+"\n"
+"This was the only message about it. We have now deleted your address.\n"
 
 #: .\core\departures.py:42
 msgid "Die Flexibilität muss 0–120 Minuten in 15-Minuten-Schritten sein."
