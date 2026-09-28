@@ -2,8 +2,10 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Quasar, Screen } from "quasar";
 import { createMemoryHistory, createRouter } from "vue-router";
+import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import type { RecurringRouteOut } from "@norain/api/models";
 
+import { recurringRouteKeys } from "@/queries/recurringRoutes";
 import RouteListPanel from "../RouteListPanel.vue";
 
 const ROUTE: RecurringRouteOut = {
@@ -30,9 +32,12 @@ function mountPanel() {
         history: createMemoryHistory(),
         routes: [{ path: "/:p(.*)*", component: { template: "<div />" } }],
     });
+    // Each row reads its route from the list query; seeded, so nothing is fetched.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
+    queryClient.setQueryData(recurringRouteKeys.lists(), [ROUTE]);
     return mount(RouteListPanel, {
         props: { routes: [ROUTE], loading: false },
-        global: { plugins: [Quasar, router] },
+        global: { plugins: [Quasar, router, [VueQueryPlugin, { queryClient }]] },
         attachTo: document.body,
     });
 }

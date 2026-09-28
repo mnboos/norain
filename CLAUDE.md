@@ -352,7 +352,7 @@ Two rules hold this together:
 
 **The glyph is one colour: the worst sample's.** The whole line is painted
 `scoreColor(thumbnail.rideScore)` — the same YlOrRd ramp as the map route line, for the
-sample whose `rideLabel` `RouteListPanel.qualityLabel` shows, so glyph and caption always
+sample whose `rideLabel` `RouteListItem.qualityLabel` shows, so glyph and caption always
 agree. Where along the route it changes is the map's job. At 40 px the ramp's pale good end (`#ffeda0`) all but
 disappears, so the line sits on the theme-flipping casing the map uses (`CASING_*` in `rideQuality.ts`, shared by both —
 change them there). The glyph has no legend

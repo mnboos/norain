@@ -7,7 +7,7 @@
  * The ramp's pale good end (`#ffeda0`) all but disappears at this size, so the line sits on
  * the same theme-flipping casing the map uses (`CASING_*`). The glyph has no legend and no
  * hover, so the colour is never the only channel: the caption beside it
- * (`RouteListPanel.qualityLabel`) and the `aria-label` here say the quality in words.
+ * (`RouteListItem.qualityLabel`) and the `aria-label` here say the quality in words.
  *
  * Neutral grey means no usable forecast - a fact about the data, not a reading of the
  * weather - and it is deliberately off the warm ramp.
