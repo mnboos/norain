@@ -1052,7 +1052,7 @@
         "noVotes": "Noch keine Stimmen. Mach den Anfang!",
         "votes": "keine Stimmen | eine Stimme | {n} Stimmen",
         "voteShort": "Stimmen",
-        "votedShort": "Gestimmt",
+        "votedShort": "Stimme zurückziehen",
         "voteFor": "Für {area} stimmen",
         "withdraw": "Stimme für {area} zurückziehen",
         "notifyFor": "Benachrichtigung für {area}",

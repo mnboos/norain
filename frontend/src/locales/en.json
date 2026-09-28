@@ -1052,7 +1052,7 @@
         "noVotes": "No votes yet. Be the first!",
         "votes": "no votes | one vote | {n} votes",
         "voteShort": "Vote",
-        "votedShort": "Voted",
+        "votedShort": "Withdraw vote",
         "voteFor": "Vote for {area}",
         "withdraw": "Withdraw your vote for {area}",
         "notifyFor": "Notification for {area}",

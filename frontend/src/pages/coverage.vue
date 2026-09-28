@@ -15,6 +15,7 @@ import {
     symSharpConstruction,
     symSharpNotificationsActive,
     symSharpPublic,
+    symSharpThumbDown,
     symSharpThumbUp,
 } from "@quasar/extras/material-symbols-sharp";
 import { type CoverageAreaOut, CoverageAreaOutStatusEnum as Status, SubscribeOutStatusEnum } from "@norain/api/models";
@@ -279,7 +280,15 @@ onMounted(async () => {
                                         })
                                     "
                                     @click="toggleVote(area)"
-                                />
+                                >
+                                    <q-tooltip>
+                                        {{
+                                            t(area.voted ? "coverage.withdraw" : "coverage.voteFor", {
+                                                area: nameOf(area.code),
+                                            })
+                                        }}
+                                    </q-tooltip>
+                                </q-btn>
                             </div>
                         </q-item-section>
                     </q-item>
@@ -290,7 +299,7 @@ onMounted(async () => {
                 <h2 id="coverage-wish" class="text-subtitle1 text-weight-bold q-my-sm">{{ t("coverage.wish") }}</h2>
                 <q-card flat bordered>
                     <q-card-section class="q-gutter-y-sm">
-                        <div class="text-body2 text-muted">{{ t("coverage.wishHint") }}</div>
+                        <q-item-label>{{ t("coverage.wishHint") }}</q-item-label>
                         <q-select
                             v-model="picked"
                             :options="filtered"
@@ -302,7 +311,6 @@ onMounted(async () => {
                             input-debounce="0"
                             outlined
                             dense
-                            clearable
                             :label="t('coverage.pick')"
                             @filter="onFilter"
                         >
@@ -313,7 +321,7 @@ onMounted(async () => {
                                 </q-item>
                             </template>
                         </q-select>
-                        <q-checkbox v-model="notify" :label="t('coverage.notifyMe')" />
+                        <q-checkbox v-model="notify" :label="t('coverage.notifyMe')" dense size="sm" />
                         <q-input
                             v-if="notify"
                             v-model="email"
@@ -374,7 +382,7 @@ onMounted(async () => {
                                     color="primary"
                                     dense
                                     no-caps
-                                    :icon="symSharpThumbUp"
+                                    :icon="area.voted ? symSharpThumbDown : symSharpThumbUp"
                                     :label="area.voted ? t('coverage.votedShort') : t('coverage.voteShort')"
                                     :aria-pressed="area.voted === true"
                                     :aria-label="
@@ -383,7 +391,15 @@ onMounted(async () => {
                                         })
                                     "
                                     @click="toggleVote(area)"
-                                />
+                                >
+                                    <q-tooltip>
+                                        {{
+                                            t(area.voted ? "coverage.withdraw" : "coverage.voteFor", {
+                                                area: nameOf(area.code),
+                                            })
+                                        }}
+                                    </q-tooltip>
+                                </q-btn>
                             </div>
                         </q-item-section>
                     </q-item>
