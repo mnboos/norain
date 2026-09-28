@@ -1,5 +1,9 @@
+import { t } from "@/i18n";
+
 /** Weekdays as cron numbers, Monday = 1 … Sunday = 7 (the route form's convention). */
-export const WEEKDAY_LABELS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+export function weekdayLabels(): string[] {
+    return [1, 2, 3, 4, 5, 6, 7].map(day => t(`schedule.weekday.${day}`));
+}
 
 /** A complete "HH:MM", or null: a half-typed time must never reach the cron string. */
 export function parseTime(value: string): { h: number; m: number } | null {
@@ -18,8 +22,10 @@ export function weeklyCron(days: number[], time: string): string {
 export function weeklyDescription(days: number[], time: string): string {
     const parsed = parseTime(time);
     if (!days.length || !parsed) return "";
-    const names = [...days].sort().map(d => WEEKDAY_LABELS[d - 1] ?? "");
-    return `${names.join(", ")} um ${String(parsed.h).padStart(2, "0")}:${String(parsed.m).padStart(2, "0")}`;
+    const labels = weekdayLabels();
+    const names = [...days].sort().map(d => labels[d - 1] ?? "");
+    const clock = `${String(parsed.h).padStart(2, "0")}:${String(parsed.m).padStart(2, "0")}`;
+    return t("schedule.daysAt", { days: names.join(", "), time: clock });
 }
 
 /** The weekday of a date as the ride's server sends it (midnight UTC of that day). */

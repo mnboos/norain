@@ -1,13 +1,15 @@
 <route lang="json5">
 {
     name: "dashboard",
-    meta: { title: "Dashboard", requiresAuth: true },
+    path: "/routes",
+    meta: { titleKey: "pages.dashboard", requiresAuth: true },
 }
 </route>
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
 import type { RecurringRouteIn, RecurringRouteOut } from "@norain/api/models";
 import RouteListPanel from "@/components/RouteListPanel.vue";
@@ -18,6 +20,7 @@ import { isQuotaExceeded } from "@/services/http";
 import { useCreateRecurringRoute, useDeleteRecurringRoute, useRecurringRoutes } from "@/queries/recurringRoutes";
 
 const $q = useQuasar();
+const { t } = useI18n();
 const router = useRouter();
 const showAddDialog = ref(false);
 const { maxRoutes, atRouteLimit } = useEntitlements();
@@ -37,14 +40,14 @@ function onRouteSave(data: RecurringRouteIn) {
             // The server enforces the quota; 402 is it saying the tier is full.
             if (isQuotaExceeded(err)) {
                 $q.dialog({
-                    title: "Tarifgrenze erreicht",
-                    message: `Dein Tarif erlaubt ${maxRoutes.value ?? 2} aktive Routen. Plus umfasst 20 Routen.`,
-                    cancel: { label: "Später", flat: true },
-                    ok: { label: "Upgrade", color: "primary", unelevated: true },
+                    title: t("quota.title"),
+                    message: t("quota.routes", maxRoutes.value ?? 2),
+                    cancel: { label: t("quota.later"), flat: true },
+                    ok: { label: t("quota.upgrade"), color: "primary", unelevated: true },
                 }).onOk(() => void router.push("/account"));
                 return;
             }
-            $q.notify({ type: "negative", message: "Route konnte nicht erstellt werden." });
+            $q.notify({ type: "negative", message: t("routes.createFailed") });
         },
     });
 }
@@ -52,10 +55,10 @@ function onRouteSave(data: RecurringRouteIn) {
 function onRouteDelete(id: string) {
     const route = routesList.value.find(r => r.id === id);
     $q.dialog({
-        title: "Route löschen",
-        message: `Möchtest du die Route „${route?.name ?? ""}“ wirklich löschen?`,
-        cancel: { label: "Abbrechen", flat: true },
-        ok: { label: "Löschen", color: "negative", unelevated: true },
+        title: t("routes.delete.title"),
+        message: t("routes.delete.message", { name: route?.name ?? "" }),
+        cancel: { label: t("common.cancel"), flat: true },
+        ok: { label: t("common.delete"), color: "negative", unelevated: true },
         persistent: true,
     }).onOk(() => {
         deleteMutation.mutate(id);

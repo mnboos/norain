@@ -82,23 +82,23 @@ describe("forecast uncertainty presentation", () => {
             const f = forecast(pop, { windLevel });
             return forecastHeadline(f.summary, f.samples);
         };
-        expect(headline("mittel")).toBe("Trocken, etwas Gegenwind");
-        expect(headline("hoch")).toBe("Trocken, starker Gegenwind");
-        expect(headline("sehr hoch")).toBe("Trocken, sehr starker Gegenwind");
-        expect(headline("Wind hilft")).toBe("Trocken mit Rückenwind");
-        expect(headline("niedrig")).toBe("Voraussichtlich trocken");
-        expect(headline("keiner")).toBe("Voraussichtlich trocken");
+        expect(headline("medium")).toBe("Trocken, etwas Gegenwind");
+        expect(headline("high")).toBe("Trocken, starker Gegenwind");
+        expect(headline("very_high")).toBe("Trocken, sehr starker Gegenwind");
+        expect(headline("tailwind")).toBe("Trocken mit Rückenwind");
+        expect(headline("low")).toBe("Voraussichtlich trocken");
+        expect(headline("none")).toBe("Voraussichtlich trocken");
         // No ensemble: the dry verdict still names the wind.
-        expect(headline("hoch", null)).toBe("Trocken, starker Gegenwind");
+        expect(headline("high", null)).toBe("Trocken, starker Gegenwind");
     });
     it("puts frost before wind on a dry ride", () => {
-        const f = forecast(0, { windLevel: "hoch", frostLevel: "mässig" });
+        const f = forecast(0, { windLevel: "high", frostLevel: "moderate" });
         expect(forecastHeadline(f.summary, f.samples)).toBe("Trocken, aber Glättegefahr");
-        const light = forecast(0, { windLevel: "hoch", frostLevel: "leicht" });
+        const light = forecast(0, { windLevel: "high", frostLevel: "light" });
         expect(forecastHeadline(light.summary, light.samples)).toBe("Trocken, leichte Glättegefahr");
     });
     it("keeps the rain headline when rain is possible, whatever the wind", () => {
-        const f = forecast(0.25, { windLevel: "sehr hoch", frostLevel: "stark" });
+        const f = forecast(0.25, { windLevel: "very_high", frostLevel: "heavy" });
         expect(forecastHeadline(f.summary, f.samples)).toBe("Regen möglich ab ca. 12:00 Uhr");
     });
     it("shows the wet members' amount when rain is expected", () => {

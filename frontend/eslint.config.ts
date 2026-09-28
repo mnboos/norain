@@ -7,6 +7,7 @@ import vueParser from "vue-eslint-parser";
 import eslintPluginVueQuery from "@tanstack/eslint-plugin-query";
 import eslintPluginVue from "eslint-plugin-vue";
 import { defineConfigWithVueTs } from "@vue/eslint-config-typescript";
+import vueI18n from "@intlify/eslint-plugin-vue-i18n";
 
 export default defineConfigWithVueTs(
     js.configs.recommended,
@@ -24,50 +25,37 @@ export default defineConfigWithVueTs(
         },
     },
     {
+        // The catalogs in src/locales are checked by the build (unplugin-vue-i18n compiles
+        // every message) and by src/locales/__tests__; these rules check the code that uses them.
+        files: ["src/**/*.{ts,vue}"],
+        plugins: { "@intlify/vue-i18n": vueI18n },
         rules: {
-            // Optional.
-            // "@intlify/vue-i18n/no-dynamic-keys": "error",
-            // "@intlify/vue-i18n/no-missing-keys": "error",
-            // "@intlify/vue-i18n/no-unused-keys": [
-            //     "error",
-            //     {
-            //         extensions: [".vue", ".ts"],
-            //     },
-            // ],
+            "@intlify/vue-i18n/no-missing-keys": "error",
+            // Text shown to users goes through t(); brand names and units are the exceptions.
+            "@intlify/vue-i18n/no-raw-text": [
+                "warn",
+                {
+                    ignorePattern: "^[-–—·•:,.()/+|→↑➤°%#!?\\s\\d]*$",
+                    ignoreText: [
+                        ...["Meteolane", "Meteolane Plus", "Meteolane Free", "Plus", "Free", "FAQ"],
+                        ...["km", "km ·", "min", "h", "m", "m ↑", "°C", "Open-Meteo", "OpenWeatherMap"],
+                    ],
+                },
+            ],
+            "@intlify/vue-i18n/no-deprecated-tc": "error",
+            "@intlify/vue-i18n/no-deprecated-v-t": "error",
         },
         settings: {
             "vue-i18n": {
-                localeDir: "./src/locales/*.{json,json5,yaml,yml}", // extension is glob formatting!
-                // or
-                // localeDir: {
-                //   pattern: './path/to/locales/*.{json,json5,yaml,yml}', // extension is glob formatting!
-                //   localeKey: 'file' // or 'path' or 'key'
-                // }
-                // or
-                // localeDir: [
-                //   {
-                //     // 'file' case
-                //     pattern: './path/to/locales1/*.{json,json5,yaml,yml}',
-                //     localeKey: 'file'
-                //   },
-                //   {
-                //     // 'path' case
-                //     pattern: './path/to/locales2/*.{json,json5,yaml,yml}',
-                //     localePattern: /^.*\/(?<locale>[A-Za-z0-9-_]+)\/.*\.(json5?|ya?ml)$/,
-                //     localeKey: 'path'
-                //   },
-                //   {
-                //     // 'key' case
-                //     pattern: './path/to/locales3/*.{json,json5,yaml,yml}',
-                //     localeKey: 'key'
-                //   },
-                // ]
-
-                // Specify the version of `vue-i18n` you are using.
-                // If not specified, the message will be parsed twice.
+                localeDir: "./src/locales/*.json",
                 messageSyntaxVersion: "^11.0.0",
             },
         },
+    },
+    {
+        // The landing page carries its own de/en copy object (and placeholders for shots to come).
+        files: ["src/pages/welcome.vue"],
+        rules: { "@intlify/vue-i18n/no-raw-text": "off" },
     },
     {
         languageOptions: {

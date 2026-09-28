@@ -21,6 +21,7 @@ from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.http import FileResponse, HttpRequest
+from django.utils.translation import gettext
 from loguru import logger
 from ninja import File, Form, Router, UploadedFile
 from ninja.errors import HttpError
@@ -65,7 +66,7 @@ class SharingIn(CamelSchema):
     @classmethod
     def check_zone(cls, value: int) -> int:
         if value not in PRIVACY_ZONE_CHOICES:
-            raise ValueError(f"one of {', '.join(map(str, PRIVACY_ZONE_CHOICES))}")
+            raise ValueError(gettext("Eine von %(choices)s.") % {"choices": ", ".join(map(str, PRIVACY_ZONE_CHOICES))})
         return value
 
 
@@ -130,7 +131,7 @@ class CommentIn(CamelSchema):
     def strip_body(cls, value: str) -> str:
         value = value.strip()
         if not value:
-            raise ValueError("empty comment")
+            raise ValueError(gettext("Der Kommentar ist leer."))
         return value
 
 
@@ -170,7 +171,7 @@ def _viewer(request: HttpRequest) -> User | None:
 def _require_viewer(request: HttpRequest) -> User:
     user = _viewer(request)
     if user is None:
-        raise HttpError(401, "Bitte melde dich an.")
+        raise HttpError(401, gettext("Bitte melde dich an."))
     return user
 
 
@@ -178,7 +179,7 @@ async def _owned_route(request: HttpRequest, route_id: UUID) -> RecurringRoute:
     try:
         return await RecurringRoute.objects.aget(id=route_id, owner=_require_viewer(request))
     except RecurringRoute.DoesNotExist:
-        raise HttpError(404, "Route not found.") from None
+        raise HttpError(404, gettext("Route nicht gefunden.")) from None
 
 
 async def _public_route(slug: str) -> RecurringRoute:
@@ -188,7 +189,7 @@ async def _public_route(slug: str) -> RecurringRoute:
         .afirst()
     )
     if route is None:
-        raise HttpError(404, "Route nicht gefunden.")
+        raise HttpError(404, gettext("Route nicht gefunden."))
     return route
 
 
@@ -290,9 +291,11 @@ async def update_sharing(request: HttpRequest, route_id: UUID, data: SharingIn):
     route.privacy_zone_m = data.privacy_zone_m
     if data.visibility == RecurringRoute.Visibility.PUBLIC:
         if not route.polyline:
-            raise HttpError(409, "Die Strecke wird noch berechnet. Bitte gleich nochmal versuchen.")
+            raise HttpError(409, gettext("Die Strecke wird noch berechnet. Bitte gleich nochmal versuchen."))
         if public_geometry(route) is None:
-            raise HttpError(422, "Zwischen den Privatsphäre-Zonen bleibt zu wenig Strecke. Wähle eine kleinere Zone.")
+            raise HttpError(
+                422, gettext("Zwischen den Privatsphäre-Zonen bleibt zu wenig Strecke. Wähle eine kleinere Zone.")
+            )
         route.published_at = route.published_at or datetime.now(tz=UTC)
     route.visibility = data.visibility
     fields = ["visibility", "privacy_zone_m", "published_at", "public_slug", "updated_at"]
@@ -304,7 +307,7 @@ async def update_sharing(request: HttpRequest, route_id: UUID, data: SharingIn):
         except IntegrityError:
             route.public_slug = None  # a slug collision: roll again
     else:
-        raise HttpError(503, "Bitte nochmal versuchen.")
+        raise HttpError(503, gettext("Bitte nochmal versuchen."))
     return _sharing_out(route)
 
 
@@ -334,7 +337,7 @@ def _store_photo(route: RecurringRoute, user: User, data: bytes, caption: str, l
         RecurringRoute.objects.select_for_update().filter(id=route.id).first()
         limit = entitlements_for_sync(user)
         if RoutePhoto.objects.filter(route=route).count() >= limit.max_route_photos:
-            raise HttpError(402, f"Höchstens {limit.max_route_photos} Fotos pro Route.")
+            raise HttpError(402, gettext("Höchstens %(n)s Fotos pro Route.") % {"n": limit.max_route_photos})
         photo.image.save(f"{photo.id}.jpg", ContentFile(processed.image), save=False)
         photo.thumbnail.save(f"{photo.id}-thumb.jpg", ContentFile(processed.thumbnail), save=False)
         photo.save()
@@ -354,13 +357,13 @@ async def upload_photo(
     route = await _owned_route(request, route_id)
     user = _require_viewer(request)
     if file.size is not None and file.size > settings.PHOTO_UPLOAD_MAX_BYTES:
-        raise HttpError(413, "Das Foto ist grösser als 20 MB.")
+        raise HttpError(413, gettext("Das Foto ist grösser als 20 MB."))
     if len(caption) > 500:
-        raise HttpError(422, "Die Bildunterschrift ist zu lang.")
+        raise HttpError(422, gettext("Die Bildunterschrift ist zu lang."))
     location = None
     if lat is not None and lon is not None:
         if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-            raise HttpError(422, "Ungültige Position.")
+            raise HttpError(422, gettext("Ungültige Position."))
         location = route_point(lat, lon)
     try:
         photo = await sync_to_async(_store_photo)(route, user, file.read(), caption.strip(), location)
@@ -374,7 +377,7 @@ async def _owned_photo(request: HttpRequest, route_id: UUID, photo_id: UUID) -> 
     route = await _owned_route(request, route_id)
     photo = await RoutePhoto.objects.filter(id=photo_id, route=route).afirst()
     if photo is None:
-        raise HttpError(404, "Foto nicht gefunden.")
+        raise HttpError(404, gettext("Foto nicht gefunden."))
     photo.route = route
     return photo
 
@@ -407,12 +410,12 @@ async def photo_file(request: HttpRequest, photo_id: UUID, size: Literal["full",
     viewer = _viewer(request)
     public = photo is not None and photo.route.visibility == RecurringRoute.Visibility.PUBLIC
     if photo is None or not (public or (viewer and viewer.id == photo.route.owner_id)):
-        raise HttpError(404, "Foto nicht gefunden.")
+        raise HttpError(404, gettext("Foto nicht gefunden."))
     field = photo.image if size == "full" else photo.thumbnail
     try:
         handle = await sync_to_async(field.open)("rb")
     except FileNotFoundError:
-        raise HttpError(404, "Foto nicht gefunden.") from None
+        raise HttpError(404, gettext("Foto nicht gefunden.")) from None
     response = FileResponse(handle, content_type="image/jpeg")
     # Files never change (a new photo is a new id). An hour keeps a route made private again
     # from lingering long in shared caches.
@@ -462,7 +465,7 @@ async def list_public_routes(
             if len(box) != 4:
                 raise ValueError
         except ValueError:
-            raise HttpError(422, "bbox is minLon,minLat,maxLon,maxLat") from None
+            raise HttpError(422, gettext("bbox ist minLon,minLat,maxLon,maxLat")) from None
         query = query.filter(polyline__intersects=Polygon.from_bbox(box))
     order = ("-like_count", "-published_at") if sort == "popular" else ("-published_at",)
     offset = max(0, offset)
@@ -495,7 +498,7 @@ async def get_public_route(request: HttpRequest, slug: str):
     route = await _with_counts(_public_query()).aget(id=route.id)
     geometry = public_geometry(route)
     if geometry is None:
-        raise HttpError(404, "Route nicht gefunden.")
+        raise HttpError(404, gettext("Route nicht gefunden."))
     photos = [p async for p in route.photos.all()]
     for photo in photos:
         photo.route = route
@@ -515,7 +518,7 @@ async def get_public_route(request: HttpRequest, slug: str):
 async def public_route_elevation(request: HttpRequest, slug: str):
     geometry = public_geometry(await _public_route(slug))
     if geometry is None:
-        raise HttpError(404, "Route nicht gefunden.")
+        raise HttpError(404, gettext("Route nicht gefunden."))
     line = geometry["polyline"]
     elevations = geometry["vertex_elevations"]
     coordinates = [[*p, h] for p, h in zip(line, elevations, strict=True)] if elevations else line
@@ -536,7 +539,7 @@ async def public_route_forecast(request: HttpRequest, slug: str, date: str, time
     try:
         candidate_times({"departure_time": departure})
     except ValueError:
-        raise HttpError(422, "Ungültige Abfahrtszeit.") from None
+        raise HttpError(422, gettext("Ungültige Abfahrtszeit.")) from None
     job = await start_forecast_job(
         ForecastJob.Kind.PUBLIC_ROUTE,
         _viewer(request),
@@ -579,7 +582,7 @@ async def add_comment(request: HttpRequest, slug: str, data: CommentIn):
     viewer = _require_viewer(request)
     route = await _public_route(slug)
     if not _allowed(f"comment:{viewer.id}", COMMENT_LIMIT_PER_MINUTE):
-        raise HttpError(429, "Zu viele Kommentare. Bitte kurz warten.")
+        raise HttpError(429, gettext("Zu viele Kommentare. Bitte kurz warten."))
     comment = await RouteComment.objects.acreate(route=route, author=viewer, body=data.body)
     comment.author = viewer
     return _comment_out(comment, viewer, route.owner_id)
@@ -588,7 +591,7 @@ async def add_comment(request: HttpRequest, slug: str, data: CommentIn):
 async def _comment(comment_id: UUID) -> RouteComment:
     comment = await RouteComment.objects.select_related("author", "route").filter(id=comment_id).afirst()
     if comment is None:
-        raise HttpError(404, "Kommentar nicht gefunden.")
+        raise HttpError(404, gettext("Kommentar nicht gefunden."))
     return comment
 
 
@@ -597,7 +600,7 @@ async def edit_comment(request: HttpRequest, comment_id: UUID, data: CommentIn):
     viewer = _require_viewer(request)
     comment = await _comment(comment_id)
     if comment.author_id != viewer.id:
-        raise HttpError(404, "Kommentar nicht gefunden.")
+        raise HttpError(404, gettext("Kommentar nicht gefunden."))
     comment.body = data.body
     comment.edited_at = datetime.now(tz=UTC)
     await comment.asave(update_fields=["body", "edited_at"])
@@ -610,7 +613,7 @@ async def delete_comment(request: HttpRequest, comment_id: UUID):
     viewer = _require_viewer(request)
     comment = await _comment(comment_id)
     if viewer.id not in {comment.author_id, comment.route.owner_id}:
-        raise HttpError(404, "Kommentar nicht gefunden.")
+        raise HttpError(404, gettext("Kommentar nicht gefunden."))
     await comment.adelete()
     return 204, None
 
@@ -651,7 +654,7 @@ async def copy_route(request: HttpRequest, slug: str, data: CopyIn):
     route = await _public_route(slug)
     geometry = public_geometry(route)
     if geometry is None:
-        raise HttpError(404, "Route nicht gefunden.")
+        raise HttpError(404, gettext("Route nicht gefunden."))
     line = geometry["polyline"]
     route_in = RecurringRouteIn(
         name=data.name or route.name,

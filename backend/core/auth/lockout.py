@@ -1,6 +1,7 @@
 """Hooks for django-axes, which locks out a client after too many failed sign-ins."""
 
 from django.http import HttpRequest, JsonResponse
+from django.utils.translation import gettext
 
 
 def client_ip(request: HttpRequest) -> str | None:
@@ -34,6 +35,6 @@ def lockout_response(request: HttpRequest, *args) -> JsonResponse:
     ``(request, credentials)`` depending on the path; neither is needed here.
     """
     return JsonResponse(
-        {"detail": "Zu viele fehlgeschlagene Anmeldeversuche. Bitte in 30 Minuten erneut versuchen."},
+        {"detail": gettext("Zu viele fehlgeschlagene Anmeldeversuche. Bitte in 30 Minuten erneut versuchen.")},
         status=429,
     )

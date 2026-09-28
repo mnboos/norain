@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { useNow } from "@vueuse/core";
+import { useI18n } from "vue-i18n";
 import { ResponseError } from "@norain/api/runtime";
 import {
     CoreApiSystemMapFeaturesLayerEnum as Layer,
@@ -13,7 +14,9 @@ import type { SystemFeature, SystemJob } from "@norain/api/models";
 import SystemMap from "@/components/SystemMap.vue";
 import { useSession } from "@/composables/useSession";
 import { useBackendHost } from "@/utils";
-import { CACHE_COLORS, COVERAGE_COLORS, COVERAGE_LABELS, cacheFreshness } from "@/utils/systemOverview";
+import { intlLocale } from "@/i18n";
+import { jobErrorText } from "@/utils/serverErrors";
+import { CACHE_COLORS, COVERAGE_COLORS, cacheFreshness, coverageLabels } from "@/utils/systemOverview";
 import {
     systemKey,
     useSystemSummary,
@@ -24,7 +27,8 @@ import {
     useSystemEvents,
 } from "@/queries/system";
 
-definePage({ meta: { requiresAuth: true, requiresSystem: true } });
+definePage({ meta: { requiresAuth: true, requiresSystem: true, titleKey: "pages.system" } });
+const { t } = useI18n();
 const { session, refreshSession } = useSession();
 const allowed = computed(() => session.value.system?.allowed === true);
 const queryClient = useQueryClient();
@@ -82,7 +86,7 @@ const loaded = computed(() => allFeatures.value.length);
 const total = computed(() => routes.total.value + journeys.total.value + cells.total.value);
 const maxAge = computed(() => summary.data.value?.maxCellAgeSeconds ?? 7200);
 const coverageCounts = computed(() =>
-    Object.entries(COVERAGE_LABELS).map(([status, label]) => ({
+    Object.entries(coverageLabels()).map(([status, label]) => ({
         status,
         label,
         forecast: countCoverage(status, "forecast"),
@@ -97,42 +101,44 @@ const isCell = computed(() => selected.value?.kind === "forecast" || selected.va
 const summaryCards = computed(() =>
     summary.data.value
         ? [
-              ["Wiederkehrende Routen", summary.data.value.recurringRoutes],
-              ["Reisen", summary.data.value.journeys],
-              ["Etappen inkl. Alternativen", summary.data.value.stages],
-              ["Ohne Geometrie", summary.data.value.missingGeometry],
-              ["Gespeicherte Zellstandorte", summary.data.value.cacheLocations],
+              [t("system.summary.recurringRoutes"), summary.data.value.recurringRoutes],
+              [t("pages.journeys"), summary.data.value.journeys],
+              [t("system.summary.stages"), summary.data.value.stages],
+              [t("system.summary.missingGeometry"), summary.data.value.missingGeometry],
+              [t("system.summary.cacheLocations"), summary.data.value.cacheLocations],
           ]
         : [],
 );
-const profileOptions = [
-    { label: "Alle Profile", value: null },
+const profileOptions = computed(() => [
+    { label: t("system.filter.allProfiles"), value: null },
     ...Object.values(Profile).map(value => ({ label: value, value })),
-];
-const sourceOptions = [
-    { label: "Beide Anbieter", value: Source.All },
+]);
+const sourceOptions = computed(() => [
+    { label: t("system.filter.bothProviders"), value: Source.All },
     { label: "Open-Meteo", value: Source.OpenMeteo },
     { label: "OpenWeatherMap", value: Source.Openweathermap },
-];
-const activeOptions = [
-    { label: "Alle Routen", value: null },
-    { label: "Aktive Routen", value: true },
-    { label: "Inaktive Routen", value: false },
-];
-const kindOptions = [
-    { label: "Vorhersagen", value: Kind.Forecast },
-    { label: "Ensemble", value: Kind.Ensemble },
-];
+]);
+const activeOptions = computed(() => [
+    { label: t("system.filter.allRoutes"), value: null },
+    { label: t("system.filter.activeRoutes"), value: true },
+    { label: t("system.filter.inactiveRoutes"), value: false },
+]);
+const kindOptions = computed(() => [
+    { label: t("system.filter.forecasts"), value: Kind.Forecast },
+    { label: t("system.filter.ensemble"), value: Kind.Ensemble },
+]);
 
 function dateTime(value?: Date | null) {
     return value
-        ? value.toLocaleString("de-CH", { timeZone: "Europe/Zurich", dateStyle: "short", timeStyle: "short" })
+        ? value.toLocaleString(intlLocale(), { timeZone: "Europe/Zurich", dateStyle: "short", timeStyle: "short" })
         : "–";
 }
 function age(value?: Date | null) {
     if (!value) return "–";
     const minutes = Math.max(0, Math.floor((now.value.getTime() - value.getTime()) / 60000));
-    return minutes < 60 ? `${minutes} Min.` : `${Math.floor(minutes / 60)} Std. ${minutes % 60} Min.`;
+    return minutes < 60
+        ? t("system.age.minutes", { m: minutes })
+        : t("system.age.hours", { h: Math.floor(minutes / 60), m: minutes % 60 });
 }
 // A stalled job writes nothing, so no change notice reports it: re-derive the flag on the page clock.
 function stalled(job: SystemJob) {
@@ -182,40 +188,40 @@ onBeforeUnmount(() => {
     <q-page class="system-page q-pa-md">
         <div class="row items-center q-gutter-sm q-mb-md">
             <div class="col">
-                <h1 class="text-h5 q-my-none">Systemübersicht</h1>
-                <div class="text-caption">Gespeicherte Daten · alle Benutzer · nur lesend</div>
+                <h1 class="text-h5 q-my-none">{{ t("pages.system") }}</h1>
+                <div class="text-caption">{{ t("system.subtitle") }}</div>
             </div>
-            <q-btn outline no-caps label="Aktualisieren" :loading="refreshing" @click="refresh" />
+            <q-btn outline no-caps :label="t('system.refresh')" :loading="refreshing" @click="refresh" />
         </div>
         <q-banner v-if="!allowed" rounded class="bg-amber-2 text-dark">
-            Für diese Übersicht ist eine verifizierte Administrator-Anmeldung erforderlich.
+            {{ t("system.needAdmin") }}
             <template #action>
                 <q-btn
                     v-if="session.system"
                     flat
                     no-caps
-                    label="Administrator-Anmeldung"
+                    :label="t('system.adminLogin')"
                     :href="`${useBackendHost()}${session.system.loginUrl}`"
                     target="_blank"
                     rel="noopener"
                 />
             </template>
-            <div class="text-caption">Nach der Anmeldung hier auf «Aktualisieren» klicken.</div>
+            <div class="text-caption">{{ t("system.afterLogin") }}</div>
         </q-banner>
         <template v-else>
             <q-banner v-if="failed || mapError" rounded class="bg-amber-2 text-dark q-mb-sm" role="alert">
                 {{
                     failed
-                        ? "Daten konnten nicht vollständig aktualisiert werden. Bereits geladene Daten bleiben sichtbar."
+                        ? t("system.partialFailure")
                         : mapError
                 }}
-                <template #action><q-btn flat no-caps label="Erneut versuchen" @click="refresh" /></template>
+                <template #action><q-btn flat no-caps :label="t('common.retry')" @click="refresh" /></template>
             </q-banner>
             <div class="text-caption q-mb-sm">
-                <span v-if="live">Live: Änderungen erscheinen nach wenigen Sekunden.</span>
-                <span v-else>Keine Live-Verbindung. «Aktualisieren» lädt die Daten neu.</span>
+                <span v-if="live">{{ t("system.live") }}</span>
+                <span v-else>{{ t("system.notLive") }}</span>
                 <span v-if="summary.dataUpdatedAt.value">
-                    Übersicht zuletzt geladen: {{ dateTime(new Date(summary.dataUpdatedAt.value)) }} (Zürich).
+                    {{ t("system.lastLoaded", { time: dateTime(new Date(summary.dataUpdatedAt.value)) }) }}
                 </span>
             </div>
             <div class="summary-grid q-mb-md">
@@ -224,12 +230,17 @@ onBeforeUnmount(() => {
                     <div class="text-caption">{{ label }}</div>
                 </q-card>
             </div>
-            <q-linear-progress v-if="summary.isPending.value" indeterminate aria-label="Systemdaten werden geladen" />
+            <q-linear-progress v-if="summary.isPending.value" indeterminate :aria-label="t('system.loading')" />
             <div class="row q-gutter-sm items-center q-mb-sm">
-                <q-checkbox v-model="showRoutes" label="Wiederkehrende Routen" dense />
-                <q-checkbox v-model="showJourneys" label="Reisen" dense />
-                <q-checkbox v-model="alternatives" label="Reise-Alternativen" :disable="!showJourneys" dense />
-                <q-checkbox v-model="showCells" label="Wetterzellen" dense />
+                <q-checkbox v-model="showRoutes" :label="t('system.summary.recurringRoutes')" dense />
+                <q-checkbox v-model="showJourneys" :label="t('pages.journeys')" dense />
+                <q-checkbox
+                    v-model="alternatives"
+                    :label="t('system.layer.alternatives')"
+                    :disable="!showJourneys"
+                    dense
+                />
+                <q-checkbox v-model="showCells" :label="t('system.layer.cells')" dense />
             </div>
             <div class="filters q-mb-sm">
                 <q-select
@@ -239,7 +250,7 @@ onBeforeUnmount(() => {
                     map-options
                     dense
                     outlined
-                    label="Routingprofil"
+                    :label="t('system.filter.profile')"
                 />
                 <q-select
                     v-model="active"
@@ -248,7 +259,7 @@ onBeforeUnmount(() => {
                     map-options
                     dense
                     outlined
-                    label="Wiederkehrende Routen"
+                    :label="t('system.summary.recurringRoutes')"
                     :disable="!showRoutes"
                 />
                 <q-select
@@ -258,7 +269,7 @@ onBeforeUnmount(() => {
                     map-options
                     dense
                     outlined
-                    label="Zelltyp / Abdeckung"
+                    :label="t('system.filter.kind')"
                 />
                 <q-select
                     v-model="source"
@@ -267,7 +278,7 @@ onBeforeUnmount(() => {
                     map-options
                     dense
                     outlined
-                    label="Anbieter"
+                    :label="t('system.filter.provider')"
                     :disable="kind === Kind.Ensemble || !showCells"
                 />
                 <q-input
@@ -276,42 +287,41 @@ onBeforeUnmount(() => {
                     clearable
                     dense
                     outlined
-                    label="Cache-Datum (optional)"
+                    :label="t('system.filter.cacheDate')"
                     :disable="!showCells"
                 />
             </div>
             <div class="text-caption q-mb-sm">
-                Je Standort der neueste Eintrag nach Filterung. Das Cache-Datum ist der gespeicherte Tagesschlüssel,
-                nicht die Abfahrtszeit.
+                {{ t("system.filterHint") }}
             </div>
-            <div class="row q-gutter-md text-caption q-mb-sm" aria-label="Kartenlegende">
+            <div class="row q-gutter-md text-caption q-mb-sm" :aria-label="t('system.legend.label')">
                 <span>
                     <i class="legend-line" :style="{ background: CACHE_COLORS.fresh }" />
-                    Frisch (&lt; {{ maxAge / 7200 }} Std.)
+                    {{ t("system.legend.fresh", { h: maxAge / 7200 }) }}
                 </span>
                 <span>
                     <i class="legend-line" :style="{ background: CACHE_COLORS.aging }" />
-                    Alternd (bis {{ maxAge / 3600 }} Std.)
+                    {{ t("system.legend.aging", { h: maxAge / 3600 }) }}
                 </span>
                 <span>
                     <i class="legend-line" :style="{ background: CACHE_COLORS.stale }" />
-                    Veraltet (&gt; {{ maxAge / 3600 }} Std.)
+                    {{ t("system.legend.stale", { h: maxAge / 3600 }) }}
                 </span>
                 <span>
                     <i class="legend-line" style="background: #2186bd" />
-                    Route
+                    {{ t("pages.route") }}
                 </span>
                 <span>
                     <i class="legend-line" style="background: #9264cf" />
-                    Reise
+                    {{ t("pages.journey") }}
                 </span>
             </div>
             <div class="overview-grid">
                 <div class="map-panel">
                     <div class="text-caption q-pa-xs">
-                        Kartenausschnitt: {{ loaded }} / {{ total }} Objekte geladen.
-                        <span v-if="mapLoading">Wird geladen …</span>
-                        <span v-else-if="!total">Keine passenden Daten.</span>
+                        {{ t("system.mapLoaded", { loaded, total }) }}
+                        <span v-if="mapLoading">{{ t("common.loading") }}</span>
+                        <span v-else-if="!total">{{ t("system.noMatches") }}</span>
                     </div>
                     <q-linear-progress v-if="mapLoading" indeterminate />
                     <SystemMap
@@ -328,21 +338,20 @@ onBeforeUnmount(() => {
                         @error="mapError = $event"
                     />
                     <div class="text-caption q-pa-xs">
-                        Meteolane-Cachegitter: 0.01° × 0.01°. Routen oder Zellen anklicken für Details.
+                        {{ t("system.gridHint") }}
                     </div>
                 </div>
-                <aside class="diagnostics" aria-label="Systemdiagnostik">
+                <aside class="diagnostics" :aria-label="t('system.diagnostics')">
                     <q-card flat bordered class="q-mb-sm">
                         <q-card-section class="q-pa-sm">
                             <div class="row items-center">
                                 <h2 class="text-subtitle1 col q-my-none">
-                                    {{ selected ? (isCell ? "Wetterzelle" : selected.name) : "Auswahl" }}
+                                    {{ selected ? (isCell ? t("system.cell") : selected.name) : t("system.selection") }}
                                 </h2>
-                                <q-btn v-if="selected" flat dense label="Schliessen" no-caps @click="selected = null" />
+                                <q-btn v-if="selected" flat dense :label="t('common.close')" no-caps @click="selected = null" />
                             </div>
                             <p v-if="!selected" class="text-caption q-mb-none">
-                                Eine Route zeigt die Cache-Abdeckung ihrer nächsten Abfahrt. Eine Zelle zeigt
-                                gespeicherte Einträge aller Anbieter und Tage.
+                                {{ t("system.selectionHint") }}
                             </p>
                             <template v-else-if="isCell">
                                 <div class="text-caption">
@@ -350,11 +359,10 @@ onBeforeUnmount(() => {
                                     {{ selected.source }}
                                 </div>
                                 <div class="text-caption">
-                                    Geladen: {{ dateTime(selected.fetchedAt) }} · Alter: {{ age(selected.fetchedAt) }}
+                                    {{ t("system.fetched", { time: dateTime(selected.fetchedAt), age: age(selected.fetchedAt) }) }}
                                 </div>
                                 <div class="text-caption">
-                                    Angeforderter Horizont: {{ selected.forecastDays }} Tage. Frische allein bedeutet
-                                    keine Abdeckung einer Abfahrt.
+                                    {{ t("system.horizon", { days: selected.forecastDays }) }}
                                 </div>
                                 <q-linear-progress v-if="history.isFetching.value" indeterminate />
                                 <q-list dense separator>
@@ -366,9 +374,10 @@ onBeforeUnmount(() => {
                                         <q-item-section>
                                             <q-item-label>{{ record.source }}</q-item-label>
                                             <q-item-label caption>
-                                                {{ dateTime(record.fetchedAt) }} · {{ record.forecastDays }} Tage
+                                                {{ dateTime(record.fetchedAt) }} ·
+                                                {{ t("system.days", { n: record.forecastDays }) }}
                                                 <br />
-                                                Cache: {{ record.dayKey?.toISOString().slice(0, 10) }}
+                                                {{ t("system.cacheDay", { day: record.dayKey?.toISOString().slice(0, 10) }) }}
                                             </q-item-label>
                                         </q-item-section>
                                         <q-item-section side>
@@ -389,16 +398,18 @@ onBeforeUnmount(() => {
                                         flat
                                         dense
                                         no-caps
-                                        label="Zurück"
+                                        :label="t('common.back')"
                                         :disable="!historyOffset"
                                         @click="historyOffset = Math.max(0, historyOffset - 25)"
                                     />
-                                    <span class="text-caption">{{ history.data.value?.total ?? 0 }} Einträge</span>
+                                    <span class="text-caption">
+                                        {{ t("system.entries", { n: history.data.value?.total ?? 0 }) }}
+                                    </span>
                                     <q-btn
                                         flat
                                         dense
                                         no-caps
-                                        label="Weiter"
+                                        :label="t('system.next')"
                                         :disable="history.data.value?.nextOffset == null"
                                         @click="historyOffset = history.data.value!.nextOffset!"
                                     />
@@ -410,27 +421,31 @@ onBeforeUnmount(() => {
                                     <div class="text-caption">
                                         {{ coverage.data.value.profile }} ·
                                         {{ ((coverage.data.value.distanceM ?? 0) / 1000).toFixed(1) }} km ·
-                                        {{ Math.round((coverage.data.value.durationSeconds ?? 0) / 60) }} Min.
+                                        {{
+                                            t("system.age.minutes", {
+                                                m: Math.round((coverage.data.value.durationSeconds ?? 0) / 60),
+                                            })
+                                        }}
                                     </div>
                                     <div class="text-caption">
-                                        Geometrie: {{ dateTime(coverage.data.value.geometryFetchedAt) }}
+                                        {{ t("system.geometry", { time: dateTime(coverage.data.value.geometryFetchedAt) }) }}
                                     </div>
                                     <div class="text-caption">
-                                        Abfahrt: {{ dateTime(coverage.data.value.departure) }} (Zürich)
+                                        {{ t("system.departure", { time: dateTime(coverage.data.value.departure) }) }}
                                     </div>
                                     <p v-if="coverage.data.value.unavailable" class="q-mt-sm q-mb-none">
                                         {{ coverage.data.value.unavailable }}
                                     </p>
                                     <template v-else>
                                         <div class="text-caption q-mt-sm">
-                                            Zellstandorte für die feste Abfahrt, ohne flexible Alternativzeiten.
+                                            {{ t("system.fixedDeparture") }}
                                         </div>
                                         <table class="diagnostic-table">
                                             <thead>
                                                 <tr>
-                                                    <th>Status</th>
-                                                    <th>Prognose</th>
-                                                    <th>Ensemble</th>
+                                                    <th>{{ t("system.table.status") }}</th>
+                                                    <th>{{ t("system.table.forecast") }}</th>
+                                                    <th>{{ t("system.filter.ensemble") }}</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -453,9 +468,14 @@ onBeforeUnmount(() => {
                                             </tbody>
                                         </table>
                                         <div class="text-caption">
-                                            Kartenpunkte zeigen
-                                            {{ kind === Kind.Forecast ? "Prognose" : "Ensemble" }}-Abdeckung. Nicht
-                                            ausreichend: Horizont, Daten oder Version passen nicht.
+                                            {{
+                                                t("system.pointsHint", {
+                                                    kind:
+                                                        kind === Kind.Forecast
+                                                            ? t("system.table.forecast")
+                                                            : t("system.filter.ensemble"),
+                                                })
+                                            }}
                                         </div>
                                     </template>
                                 </template>
@@ -463,13 +483,13 @@ onBeforeUnmount(() => {
                         </q-card-section>
                     </q-card>
                     <q-expansion-item
-                        label="Cache-Bestand (gesamtes System)"
+                        :label="t('system.cacheTotal')"
                         default-opened
                         class="bordered-panel q-mb-sm"
                     >
                         <div class="q-pa-sm">
                             <div v-if="!summary.data.value?.caches.length" class="text-caption">
-                                Noch keine Wetterzellen gespeichert.
+                                {{ t("system.noCells") }}
                             </div>
                             <div
                                 v-for="cache in summary.data.value?.caches"
@@ -478,41 +498,49 @@ onBeforeUnmount(() => {
                             >
                                 <div class="text-body2">{{ cache.source }}</div>
                                 <div class="text-caption">
-                                    {{ cache.locations }} Standorte · {{ cache.records }} Einträge
+                                    {{ t("system.locations", { n: cache.locations }) }} ·
+                                    {{ t("system.entries", { n: cache.records }) }}
                                 </div>
-                                <div class="text-caption">{{ cache.fresh }} frisch · {{ cache.stale }} veraltet</div>
+                                <div class="text-caption">
+                                    {{ t("system.freshStale", { fresh: cache.fresh, stale: cache.stale }) }}
+                                </div>
                             </div>
                             <div class="text-caption">
-                                Ein Standort kann mehrere Tage, Anbieter und Zelltypen enthalten.
+                                {{ t("system.locationHint") }}
                             </div>
                         </div>
                     </q-expansion-item>
-                    <q-expansion-item label="Vorhersage-Aufträge" default-opened class="bordered-panel">
+                    <q-expansion-item :label="t('system.jobs.title')" default-opened class="bordered-panel">
                         <div class="q-pa-sm text-caption">
-                            Alle offenen Aufträge sowie abgeschlossene/fehlgeschlagene Aufträge der letzten 24 Stunden.
+                            {{ t("system.jobs.hint") }}
                         </div>
                         <q-linear-progress v-if="jobs.isFetching.value" indeterminate />
                         <div v-if="jobs.data.value && !jobs.data.value.items.length" class="q-pa-sm text-caption">
-                            Keine Aufträge in diesem Zeitraum.
+                            {{ t("system.jobs.none") }}
                         </div>
                         <q-list dense separator>
                             <q-item v-for="job in jobs.data.value?.items" :key="job.id">
                                 <q-item-section>
                                     <q-item-label>{{ job.kind }} · {{ job.status }}</q-item-label>
                                     <q-item-label v-if="stalled(job)" class="text-negative">
-                                        Möglicherweise stehen geblieben
+                                        {{ t("system.jobs.stalled") }}
                                     </q-item-label>
                                     <q-item-label caption>
-                                        {{ job.cellsSettled }} / {{ job.cellsTotal }} Zellen bearbeitet ·
-                                        {{ job.cellsFailed }} fehlgeschlagen
+                                        {{
+                                            t("system.jobs.cells", {
+                                                settled: job.cellsSettled,
+                                                total: job.cellsTotal,
+                                                failed: job.cellsFailed,
+                                            })
+                                        }}
                                     </q-item-label>
                                     <q-item-label caption>
-                                        Erstellt: {{ dateTime(job.createdAt) }}
+                                        {{ t("system.jobs.created", { time: dateTime(job.createdAt) }) }}
                                         <br />
-                                        Aktualisiert: {{ dateTime(job.updatedAt) }}
+                                        {{ t("system.jobs.updated", { time: dateTime(job.updatedAt) }) }}
                                     </q-item-label>
                                     <q-item-label v-if="job.error" caption class="job-error">
-                                        {{ job.error }}
+                                        {{ jobErrorText(job.error) }}
                                     </q-item-label>
                                 </q-item-section>
                             </q-item>
@@ -522,16 +550,16 @@ onBeforeUnmount(() => {
                                 flat
                                 dense
                                 no-caps
-                                label="Zurück"
+                                :label="t('common.back')"
                                 :disable="!jobsOffset"
                                 @click="jobsOffset = Math.max(0, jobsOffset - 25)"
                             />
-                            <span class="text-caption">{{ jobs.data.value?.total ?? 0 }} Aufträge</span>
+                            <span class="text-caption">{{ t("system.jobs.count", { n: jobs.data.value?.total ?? 0 }) }}</span>
                             <q-btn
                                 flat
                                 dense
                                 no-caps
-                                label="Weiter"
+                                :label="t('system.next')"
                                 :disable="jobs.data.value?.nextOffset == null"
                                 @click="jobsOffset = jobs.data.value!.nextOffset!"
                             />

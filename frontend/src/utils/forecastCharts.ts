@@ -7,6 +7,8 @@
  */
 import type { Data, Layout } from "plotly.js";
 
+import { t } from "@/i18n";
+
 /** The fields of a forecast sample the charts read. */
 export interface ChartSample {
     elapsedS: number;
@@ -123,7 +125,7 @@ function forecastTrace(samples: readonly ChartSample[], series: Series): Data {
         name: series.name,
         legendgroup: series.metric,
         showlegend: true,
-        hovertemplate: `%{customdata[1]} Uhr · %{y:.1f} ${series.unit}<extra>${series.label}</extra>`,
+        hovertemplate: `${t("common.clock", { time: "%{customdata[1]}" })} · %{y:.1f} ${series.unit}<extra>${series.label}</extra>`,
     };
 }
 
@@ -150,7 +152,7 @@ function baseLayout(title: string, unit: string): Partial<Layout> {
         autosize: true,
         hovermode: "closest",
         showlegend: true,
-        xaxis: { title: { text: "Fahrzeit (min)", standoff: 4 }, zeroline: false, automargin: true },
+        xaxis: { title: { text: t("charts.axis.rideMinutes"), standoff: 4 }, zeroline: false, automargin: true },
         yaxis: { title: { text: unit, standoff: 15 }, zeroline: true, automargin: true },
         legend: {
             orientation: "h",
@@ -166,20 +168,20 @@ function baseLayout(title: string, unit: string): Partial<Layout> {
 function temperatureChart(samples: readonly ChartSample[]): ChartFigure {
     const series: Series = {
         metric: "temperature",
-        name: "Temperatur",
-        label: "Temperatur",
+        name: t("charts.temperature"),
+        label: t("charts.temperature"),
         color: RED,
         unit: "°C",
         dash: "solid",
         value: sample => sample.temp,
     };
-    const layout = baseLayout("Temperatur", "°C");
+    const layout = baseLayout(t("charts.temperature"), "°C");
     const data = seriesTraces(samples, series);
     if (samples.some(sample => sample.feltTemp != null)) {
         const felt: Series = {
             metric: "felt",
-            name: "Gefühlt",
-            label: "Gefühlt (Fahrtwind)",
+            name: t("charts.felt"),
+            label: t("charts.feltLong"),
             color: RED,
             unit: "°C",
             dash: "dot",
@@ -193,11 +195,11 @@ function temperatureChart(samples: readonly ChartSample[]): ChartFigure {
             x: minutes(samples),
             y: samples.map(sample => sample.rainRateMmH ?? null),
             customdata: customdata(samples),
-            name: "Niederschlag",
+            name: t("charts.precipitation"),
             legendgroup: "precipitation",
             marker: { color: BLUE, opacity: 0.45 },
             yaxis: "y2",
-            hovertemplate: "%{customdata[1]} Uhr · %{y:.1f} mm/h<extra>Niederschlag</extra>",
+            hovertemplate: `${t("common.clock", { time: "%{customdata[1]}" })} · %{y:.1f} mm/h<extra>${t("charts.precipitation")}</extra>`,
         });
         // Rain can't be negative, and a dry ride would otherwise autorange to -1..1 mm/h. The
         // axis is at least 0..1 so a drizzle does not fill the whole chart height.
@@ -218,14 +220,14 @@ function temperatureChart(samples: readonly ChartSample[]): ChartFigure {
 function headwindChart(samples: readonly ChartSample[]): ChartFigure {
     const series: Series = {
         metric: "headwind",
-        name: "Gegenwind (+) / Rückenwind (−)",
-        label: "Gegen-(+)/Rückenwind(−)",
+        name: t("charts.headwindTailwind"),
+        label: t("charts.headwindTailwindShort"),
         color: BLUE,
         unit: "km/h",
         dash: "solid",
         value: sample => sample.headwind,
     };
-    return { data: seriesTraces(samples, series), layout: baseLayout("Gegenwind", "km/h") };
+    return { data: seriesTraces(samples, series), layout: baseLayout(t("charts.headwind"), "km/h") };
 }
 
 export type ChartKind = "temperature" | "headwind";

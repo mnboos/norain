@@ -1,7 +1,7 @@
 <route lang="json5">
 {
     name: "map",
-    meta: { title: "Karte", requiresAuth: true },
+    meta: { titleKey: "pages.map", requiresAuth: true },
 }
 </route>
 
@@ -22,6 +22,7 @@ import PlaceSearchItem from "@/components/PlaceSearchItem.vue";
 import CurrentLocationButton from "@/components/CurrentLocationButton.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import { QSelect, useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { useQuery } from "@tanstack/vue-query";
 import { useSession } from "@/composables/useSession";
 import GpxImportDialog from "@/components/GpxImportDialog.vue";
@@ -50,6 +51,7 @@ import { useRouteWeather } from "@/queries/routeWeather";
 const route = useRoute();
 const router = useRouter();
 const $q = useQuasar();
+const { t } = useI18n();
 const { defaultProfile } = useSession();
 const importing = ref(false);
 const showSave = ref(false);
@@ -154,7 +156,7 @@ const { data: preview, error: previewError } = useQuery({
     queryKey: computed(() => ["routePlanPreview", plan.value]),
     enabled: validPlan,
     queryFn: ({ signal }) => {
-        if (!plan.value) throw new Error("Bitte eine Strecke wählen.");
+        if (!plan.value) throw new Error(t("mapPage.pickRoute"));
         return gpxApi.coreApiGpxPreviewGpx({ routePlanIn: plan.value }, { signal });
     },
     staleTime: 5 * 60 * 1000,
@@ -169,8 +171,8 @@ function applyImport(value: RouteDraft) {
         last = points.at(-1);
     if (!first || !last) return;
     draft.value = value;
-    abfahrtsort.value = routePlace(first, "Start");
-    zielort.value = routePlace(last, "Ziel");
+    abfahrtsort.value = routePlace(first, t("routeForm.start"));
+    zielort.value = routePlace(last, t("routeForm.dest"));
     viaPoints.value = value.plan.geometrySource === GeometrySource.Graphhopper ? points.slice(1, -1) : [];
     duration.value = value.plan.durationSeconds ?? value.preview.timeS;
     profile.value = value.plan.profile ?? defaultProfile.value;
@@ -291,30 +293,30 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                 >
                     <q-card class="q-pa-md q-mt-md q-gutter-y-sm">
                         <div class="row q-gutter-xs">
-                            <q-btn flat no-caps label="GPX importieren" @click="importing = true" />
+                            <q-btn flat no-caps :label="t('gpx.import')" @click="importing = true" />
                             <q-btn
                                 flat
                                 no-caps
                                 :icon="sharing ? symSharpShare : symSharpDownload"
-                                :label="sharing ? 'GPX teilen' : 'GPX herunterladen'"
+                                :label="sharing ? t('routeDetail.shareGpx') : t('routeDetail.downloadGpx')"
                                 :disable="!currentDraft"
                                 :loading="exporting"
                                 @click="exportRoute"
                             />
-                            <q-btn flat no-caps label="Route speichern" :disable="!currentDraft" @click="saveDraft" />
+                            <q-btn flat no-caps :label="t('mapPage.saveRoute')" :disable="!currentDraft" @click="saveDraft" />
                         </div>
                         <template v-if="draft">
                             <div class="text-subtitle2">{{ draft.plan.name }}</div>
                             <RouteTimingFields v-if="exact" v-model="duration" :distance-m="draft.preview.distanceM" />
-                            <q-btn flat dense no-caps label="Neue Route planen" @click="clearImport" />
+                            <q-btn flat dense no-caps :label="t('mapPage.planNew')" @click="clearImport" />
                         </template>
                         <div v-if="previewError" class="text-negative" role="alert">
-                            Die Strecke konnte nicht berechnet werden.
+                            {{ t("errors.job.route_failed") }}
                         </div>
                         <q-select
                             v-model="abfahrtsort"
                             :disable="exact"
-                            label="Abfahrtsort"
+                            :label="t('mapPage.from')"
                             dense
                             outlined
                             rounded
@@ -345,7 +347,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         <q-select
                             v-model="zielort"
                             :disable="exact"
-                            label="Zielort"
+                            :label="t('mapPage.to')"
                             dense
                             outlined
                             rounded
@@ -391,7 +393,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         <q-input
                             v-model="departureTime"
                             type="datetime-local"
-                            label="Abfahrtszeit"
+                            :label="t('routeForm.departureTime')"
                             dense
                             outlined
                             stack-label
@@ -432,15 +434,14 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         />
 
                         <q-banner v-if="weatherError" dense class="bg-tint-warn rounded-borders">
-                            Route oder Wetter konnte nicht geladen werden. Liegen Start und Ziel innerhalb der geladenen
-                            OSM-Region?
+                            {{ t("mapPage.loadFailed") }}
                         </q-banner>
 
                         <template v-else-if="routeWeather">
                             <ForecastSummaryCard flat :forecast="routeWeather" />
                             <KeyRideDataCard flat :forecast="routeWeather" :columns="2" />
                             <template v-if="routeWeather.summary.windDistribution">
-                                <div class="text-subtitle2">Wind entlang der Strecke</div>
+                                <div class="text-subtitle2">{{ t("routeDetail.windAlong") }}</div>
                                 <WindDistributionBar :distribution="routeWeather.summary.windDistribution" />
                             </template>
                             <ForecastDetails
@@ -451,7 +452,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         </template>
 
                         <div v-else-if="!ready" class="text-caption text-muted">
-                            Ziel wählen für die Wetterprognose entlang der Route.
+                            {{ t("mapPage.pickDestination") }}
                         </div>
                     </q-card>
                 </div>

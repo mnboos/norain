@@ -6,7 +6,6 @@ import App from "./App.vue";
 import * as Sentry from "@sentry/vue";
 import router from "./router";
 import { Quasar, Dialog, Dark, LocalStorage, Notify } from "quasar";
-import quasarLang from "quasar/lang/de-CH";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { Configuration, DefaultConfig, type Middleware, type RequestContext } from "@norain/api/runtime";
 import quasarIconSet from "quasar/icon-set/svg-material-symbols-sharp";
@@ -21,6 +20,8 @@ import "@fontsource-variable/lexend";
 // import "quasar/src/css/flex-addon.sass";
 import { getCookie, useBackendHost } from "@/utils";
 import { useSession } from "@/composables/useSession";
+import { applyLocale, detectLocale } from "@/composables/useLocale";
+import { currentLocale, i18n } from "@/i18n";
 import { initialDarkConfig } from "@/utils/theme";
 import { backendTraceTargets } from "@/services/tracing";
 
@@ -48,6 +49,8 @@ export class AppropriateOptionsMiddleware implements Middleware {
             headers: {
                 ...currentHeaders,
                 "X-CSRFToken": getCookie("csrftoken") ?? "",
+                // The API's messages follow the app's language (an account's own setting wins).
+                "Accept-Language": currentLocale(),
                 ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
             },
         };
@@ -116,16 +119,20 @@ Sentry.init({
 
 // Install the router after tracing so its initial navigation is instrumented too.
 app.use(router);
+app.use(i18n);
 app.use(VueQueryPlugin);
 app.use(Quasar, {
     plugins: { Dialog, Dark, LocalStorage, Notify },
-    lang: quasarLang,
     iconSet: quasarIconSet,
     config: { dark: initialDarkConfig() },
 });
 
 async function bootstrap() {
-    await useSession().refreshSession();
+    // The browser's (or last chosen) language first, so the session request already asks
+    // for it; then the account's own setting, which wins.
+    i18n.global.locale.value = detectLocale();
+    const session = await useSession().refreshSession();
+    await applyLocale(detectLocale(session.user?.language));
     app.mount("#app");
 }
 

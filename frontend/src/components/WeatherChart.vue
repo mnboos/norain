@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, toRefs } from "vue";
 import { QSkeleton } from "quasar";
+import { useI18n } from "vue-i18n";
 import { forecastChart, type ChartKind, type ChartSample } from "@/utils/forecastCharts";
 
 defineEmits<{ selectMinutes: [minutes: number] }>();
@@ -9,11 +10,12 @@ defineEmits<{ selectMinutes: [minutes: number] }>();
 const ChartSkeleton = defineComponent({
     inheritAttrs: false,
     setup(_, { attrs }) {
+        const { t } = useI18n();
         return () =>
             h(
                 "div",
                 { class: attrs.class },
-                h(QSkeleton, { square: true, height: "100%", "aria-label": "Diagramm wird geladen" }),
+                h(QSkeleton, { square: true, height: "100%", "aria-label": t("charts.loading") }),
             );
     },
 });
@@ -35,7 +37,9 @@ const props = defineProps<{
 }>();
 
 const { kind, version, cursorMinutes, samples } = toRefs(props);
+const { t, locale } = useI18n();
 
+// forecastChart words its traces and axes with t(), so a language switch redraws the chart.
 const figure = computed(() => forecastChart(kind.value, samples.value));
 </script>
 
@@ -43,12 +47,12 @@ const figure = computed(() => forecastChart(kind.value, samples.value));
     <!-- NiceChart fills its parent, so the parent gives this a height. -->
     <NiceChart
         v-if="figure"
-        :key="`${version}:${kind}`"
+        :key="`${version}:${kind}:${locale}`"
         class="fit"
         :figure="figure"
         :cursor-x="cursorMinutes"
         :temperature="kind === 'temperature'"
         @cursor="$emit('selectMinutes', $event)"
     />
-    <div v-else class="text-muted">Keine Diagrammdaten verfügbar.</div>
+    <div v-else class="text-muted">{{ t("charts.noData") }}</div>
 </template>

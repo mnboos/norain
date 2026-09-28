@@ -75,6 +75,13 @@ frontend:
 manage +args:
     uv run python manage.py {{ args }}
 
+[doc("Update the backend's English catalog (core/locale/en) from the German msgids, then compile it. Needs GNU gettext (apt install gettext, winget install mlocati.GetText). Commit the .po and the .mo.")]
+[group('tasks')]
+[working-directory("backend")]
+messages:
+    uv run python manage.py makemessages --locale en --ignore ".venv/*" --ignore "core/test*" --no-obsolete
+    uv run python manage.py compilemessages --locale en --ignore ".venv/*"
+
 [doc("Process background tasks locally; defaults to all queues. Optionally pass default, cells, compute or forecasts.")]
 [group('tasks')]
 [working-directory("backend")]
@@ -322,3 +329,10 @@ lint-frontend:
     npm run lint
 
 lint: lint-backend lint-frontend
+
+install-stripe-cli:
+    npm i -g @stripe/cli@latest
+
+[working-directory("backend")]
+migrate:
+    uv run python manage.py migrate

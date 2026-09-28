@@ -1,12 +1,12 @@
-{% autoescape off %}Hallo
+{% load i18n %}{% autoescape off %}{% blocktranslate with site_name=current_site.name %}Hallo
 
-Jemand – hoffentlich du – wollte mit {{ email }} ein Konto bei {{ current_site.name }} erstellen. Für diese Adresse gibt es aber schon eines.
+Jemand – hoffentlich du – wollte mit {{ email }} ein Konto bei {{ site_name }} erstellen. Für diese Adresse gibt es aber schon eines.
 
-Melde dich mit einem Code an, den wir dir per E-Mail schicken:
+Melde dich mit einem Code an, den wir dir per E-Mail schicken:{% endblocktranslate %}
 
 {{ frontend_url }}/account?mode=code
 
-Warst du das nicht? Dann kannst du diese E-Mail ignorieren.
+{% translate "Warst du das nicht? Dann kannst du diese E-Mail ignorieren." %}
 
 {{ current_site.name }} · {{ current_site.domain }}
 {% endautoescape %}

@@ -1,7 +1,7 @@
 <route lang="json5">
 {
     name: "public-route",
-    meta: { title: "Öffentliche Route" },
+    meta: { titleKey: "pages.publicRoute" },
 }
 </route>
 
@@ -9,8 +9,9 @@
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { copyToClipboard, useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { format } from "date-fns";
-import { de } from "date-fns/locale";
+import { dateFnsLocale, te } from "@/i18n";
 import {
     symSharpArrowBack,
     symSharpBookmarkAdd,
@@ -39,11 +40,12 @@ import {
 import { apiErrorMessage } from "@/services/http";
 import type { MapPoi } from "@/utils/poiCategories";
 
-const PROFILE_LABELS: Record<string, string> = { bike: "Velo", ebike: "E-Bike", fast_ebike: "S-Pedelec" };
 
 const currentRoute = useRoute();
 const router = useRouter();
 const $q = useQuasar();
+const { t } = useI18n();
+const profileLabel = (profile: string) => (te(`profiles.${profile}`) ? t(`profiles.${profile}`) : profile);
 const { isAuthenticated } = useSession();
 const slug = computed(() => String(currentRoute.params.slug));
 
@@ -77,7 +79,7 @@ const forecast = computed(() => forecastQuery.data.value);
 const { position, selectedSample, selectSample, selectPosition } = useRoutePosition(() => forecast.value);
 const forecastError = ref("");
 watch(forecastQuery.error, async value => {
-    forecastError.value = value ? await apiErrorMessage(value, "Das Wetter konnte nicht berechnet werden.") : "";
+    forecastError.value = value ? await apiErrorMessage(value, t("errors.job.weather_failed")) : "";
 });
 const progress = computed(() => {
     const value = forecastQuery.progress.value;
@@ -125,19 +127,19 @@ async function share() {
         return;
     }
     await copyToClipboard(url);
-    $q.notify({ type: "positive", message: "Link kopiert." });
+    $q.notify({ type: "positive", message: t("publicRoute.linkCopied") });
 }
 
 async function saveCopy() {
     if (!requireSignIn()) return;
     try {
         const saved = await copy.mutateAsync();
-        $q.notify({ type: "positive", message: "In deinen Routen gespeichert. Passe den Fahrplan dort an." });
+        $q.notify({ type: "positive", message: t("publicRoute.copied") });
         await router.push(`/routes/${saved.id}`);
     } catch (e) {
         $q.notify({
             type: "negative",
-            message: await apiErrorMessage(e, "Die Route konnte nicht gespeichert werden."),
+            message: await apiErrorMessage(e, t("routeDetail.shapeSaveFailed")),
         });
     }
 }
@@ -153,11 +155,11 @@ const duration = (s: number) => {
 
 <template>
     <q-page class="q-pa-md">
-        <q-btn flat no-caps :icon="symSharpArrowBack" label="Entdecken" to="/explore" class="q-mb-sm" />
+        <q-btn flat no-caps :icon="symSharpArrowBack" :label="t('nav.explore')" to="/explore" class="q-mb-sm" />
 
         <div v-if="isLoading" class="text-center q-mt-xl"><q-spinner-dots size="3rem" /></div>
         <q-banner v-else-if="error || !route" class="bg-tint-warn" rounded>
-            Diese Route gibt es nicht, oder sie ist nicht mehr öffentlich.
+            {{ t("publicRoute.notFound") }}
         </q-banner>
 
         <div v-else class="row q-col-gutter-md">
@@ -166,9 +168,9 @@ const duration = (s: number) => {
                     <div class="col">
                         <h1 class="text-h5 text-weight-bold q-my-none">{{ route.name }}</h1>
                         <div class="text-caption text-muted">
-                            von {{ route.author }}
+                            {{ t("explore.by", { author: route.author }) }}
                             <template v-if="route.publishedAt">
-                                · {{ format(route.publishedAt, "d. MMMM yyyy", { locale: de }) }}
+                                · {{ format(route.publishedAt, "PPP", { locale: dateFnsLocale() }) }}
                             </template>
                         </div>
                     </div>
@@ -178,19 +180,19 @@ const duration = (s: number) => {
                         :color="route.liked ? 'negative' : undefined"
                         :icon="symSharpFavorite"
                         :label="String(route.likeCount ?? 0)"
-                        :aria-label="route.liked ? 'Gefällt mir nicht mehr' : 'Gefällt mir'"
+                        :aria-label="route.liked ? t('publicRoute.unlike') : t('publicRoute.like')"
                         :aria-pressed="!!route.liked"
                         :loading="like.isPending.value"
                         @click="toggleLike"
                     />
-                    <q-btn outline no-caps :icon="symSharpShare" label="Teilen" @click="share" />
+                    <q-btn outline no-caps :icon="symSharpShare" :label="t('gpx.share')" @click="share" />
                     <q-btn
                         v-if="!route.isOwner"
                         unelevated
                         no-caps
                         color="primary"
                         :icon="symSharpBookmarkAdd"
-                        label="In meine Routen"
+                        :label="t('publicRoute.copy')"
                         :loading="copy.isPending.value"
                         @click="saveCopy"
                     />
@@ -204,7 +206,7 @@ const duration = (s: number) => {
                         :icon="symSharpTrendingUp"
                         :label="`${route.ascentM} m`"
                     />
-                    <q-chip dense outline :label="PROFILE_LABELS[route.profile] ?? route.profile" />
+                    <q-chip dense outline :label="profileLabel(route.profile)" />
                 </div>
                 <p v-if="route.description" class="q-mt-sm q-mb-none description">{{ route.description }}</p>
             </div>
@@ -219,7 +221,7 @@ const duration = (s: number) => {
                     @select-position="selectPosition"
                 />
                 <div v-if="route.photos.length" class="q-mt-md">
-                    <h2 class="text-subtitle1 text-weight-bold q-my-sm">Fotos</h2>
+                    <h2 class="text-subtitle1 text-weight-bold q-my-sm">{{ t("publicRoute.photos") }}</h2>
                     <PhotoGallery :photos="route.photos" />
                 </div>
                 <ElevationChart
@@ -233,20 +235,17 @@ const duration = (s: number) => {
             <div class="col-12 col-md-5">
                 <q-card flat bordered>
                     <q-card-section>
-                        <h2 class="text-subtitle1 text-weight-bold q-my-none">Wetter für deine Fahrt</h2>
-                        <p class="text-caption text-muted q-mb-sm">
-                            Wann fährst du los? Das Wetter kommt für jeden Abschnitt zur Zeit, zu der du dort bist, bis
-                            16 Tage im Voraus.
-                        </p>
+                        <h2 class="text-subtitle1 text-weight-bold q-my-none">{{ t("publicRoute.weatherTitle") }}</h2>
+                        <p class="text-caption text-muted q-mb-sm">{{ t("publicRoute.weatherIntro") }}</p>
                         <div class="row q-col-gutter-sm items-end">
-                            <q-input v-model="date" type="date" dense outlined label="Datum" class="col-6" />
-                            <q-input v-model="time" type="time" dense outlined label="Abfahrt" class="col-4" />
+                            <q-input v-model="date" type="date" dense outlined :label="t('routeForm.date')" class="col-6" />
+                            <q-input v-model="time" type="time" dense outlined :label="t('routeForm.departure')" class="col-4" />
                             <div class="col-2">
                                 <q-btn
                                     unelevated
                                     no-caps
                                     color="primary"
-                                    label="Los"
+                                    :label="t('publicRoute.go')"
                                     :loading="forecastQuery.isFetching.value"
                                     @click="planWeather"
                                 />

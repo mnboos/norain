@@ -16,6 +16,7 @@ describe("session identity compatibility", () => {
                 signup_complete: false,
                 has_password: false,
                 default_profile: "ebike",
+                language: "en",
             },
             user: {
                 id: "42",
@@ -24,6 +25,7 @@ describe("session identity compatibility", () => {
                 signupComplete: false,
                 hasPassword: false,
                 defaultProfile: "ebike",
+                language: "en",
             },
         },
         // An older backend has no second sign-up step, so its accounts count as complete;
@@ -36,6 +38,7 @@ describe("session identity compatibility", () => {
                 signupComplete: true,
                 hasPassword: true,
                 defaultProfile: "bike",
+                language: null,
             },
         },
     ])("accepts current and older user payloads: %j", async ({ payload, user }) => {

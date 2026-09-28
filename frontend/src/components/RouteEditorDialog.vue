@@ -2,6 +2,7 @@
 import ElevationChart from "@/components/ElevationChart.vue";
 import { computed, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { useQuasar } from "quasar";
+import { useI18n } from "vue-i18n";
 import { GeoJSONSource, LngLatBounds, Map as MapLibreMap, Marker, config as maplibreConfig } from "maplibre-gl";
 import type { Feature, LineString } from "geojson";
 import type { MapLayerMouseEvent, MapLayerTouchEvent, MapMouseEvent, MapTouchEvent } from "maplibre-gl";
@@ -38,6 +39,7 @@ const emit = defineEmits<{
 }>();
 
 const $q = useQuasar();
+const { t } = useI18n();
 
 const START_COLOR = "#2b6cb0";
 const DEST_COLOR = "#d24d78";
@@ -109,7 +111,7 @@ async function errorMessage(error: unknown): Promise<string> {
             // Not JSON: fall through to the generic message.
         }
     }
-    return "Die Route konnte nicht berechnet werden.";
+    return t("errors.job.route_failed");
 }
 
 // --------------------------------------------------------------------------- map layers
@@ -199,8 +201,8 @@ function renderMarkers() {
         const element = dot("white", 16);
         element.style.border = `3px solid ${LINE_COLOR}`;
         element.setAttribute("role", "button");
-        element.setAttribute("aria-label", `Zwischenpunkt ${index + 1} entfernen`);
-        element.title = "Ziehen zum Verschieben, tippen zum Entfernen";
+        element.setAttribute("aria-label", t("routeEditor.removeVia", { n: index + 1 }));
+        element.title = t("routeEditor.viaHint");
         let dragged = false;
         const marker = new Marker({ element, draggable: true }).setLngLat(via).addTo(m);
         marker.on("dragstart", () => {
@@ -326,26 +328,23 @@ function apply() {
     >
         <q-card style="width: 900px; max-width: 96vw" class="column no-wrap">
             <q-card-section class="q-pb-sm">
-                <div class="text-h6">Strecke anpassen</div>
-                <div class="text-caption">
-                    Linie ziehen, um einen Zwischenpunkt zu setzen. Zwischenpunkte lassen sich verschieben oder durch
-                    Tippen entfernen.
-                </div>
+                <div class="text-h6">{{ t("routeEditor.title") }}</div>
+                <div class="text-caption">{{ t("routeEditor.intro") }}</div>
             </q-card-section>
             <div ref="map" class="col" :style="{ minHeight: $q.screen.xs ? '0' : 'min(60dvh, 560px)' }" />
-            <q-expansion-item v-if="previewSeconds && !loading" label="Höhenprofil">
+            <q-expansion-item v-if="previewSeconds && !loading" :label="t('elevation.title')">
                 <ElevationChart :coordinates="line" :total-seconds="previewSeconds" :vertex-times="previewTimes" />
             </q-expansion-item>
             <q-card-actions>
                 <div class="text-caption q-ml-sm" aria-live="polite">
                     <q-spinner v-if="loading" size="1em" class="q-mr-xs" />
                     {{ caption }}
-                    <template v-if="vias.length"> · {{ vias.length }} Zwischenpunkt{{ vias.length === 1 ? "" : "e" }}</template>
+                    <template v-if="vias.length"> · {{ t("routeEditor.vias", vias.length) }}</template>
                 </div>
                 <q-space />
-                <q-btn flat no-caps label="Zurücksetzen" :disable="!vias.length" @click="reset" />
-                <q-btn v-close-popup flat no-caps label="Abbrechen" />
-                <q-btn color="primary" no-caps label="Übernehmen" :disable="loading || !changed" @click="apply" />
+                <q-btn flat no-caps :label="t('routeEditor.reset')" :disable="!vias.length" @click="reset" />
+                <q-btn v-close-popup flat no-caps :label="t('common.cancel')" />
+                <q-btn color="primary" no-caps :label="t('common.apply')" :disable="loading || !changed" @click="apply" />
             </q-card-actions>
         </q-card>
     </q-dialog>

@@ -1,3 +1,4 @@
+import { t } from "@/i18n";
 import { isRecord, request, type Parse } from "@/services/http";
 
 export interface BriefingRoute {
@@ -86,11 +87,9 @@ export function pushSupported() {
 }
 export async function enablePush(publicKey: string) {
     if (!pushSupported())
-        throw new Error(
-            "Push ist hier nicht verfügbar. Nutze E-Mail oder installiere Meteolane auf deinem Startbildschirm.",
-        );
+        throw new Error(t("briefings.pushUnavailable"));
     const permission = await Notification.requestPermission();
-    if (permission !== "granted") throw new Error("Bitte erlaube Benachrichtigungen in den Browser-Einstellungen.");
+    if (permission !== "granted") throw new Error(t("briefings.allowNotifications"));
     await navigator.serviceWorker.register("/sw.js");
     const registration = await navigator.serviceWorker.ready;
     const bytes = Uint8Array.from(

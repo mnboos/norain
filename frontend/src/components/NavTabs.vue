@@ -5,14 +5,16 @@ import {
     symSharpChevronRight,
     symSharpExplore,
 } from "@quasar/extras/material-symbols-sharp";
+import { useI18n } from "vue-i18n";
 
 // compact: the phone row under the toolbar (arrows, icons, no caps) instead of the toolbar tabs.
 defineProps<{ compact?: boolean }>();
 
-const tabs = [
-    { to: "/", label: "Dashboard", icon: symSharpList },
-    { to: "/map", label: "Karte" },
-    { to: "/explore", label: "Entdecken", icon: symSharpExplore },
+const { t } = useI18n();
+const tabs: { to: string; key: "nav.dashboard" | "nav.map" | "nav.explore"; icon?: string }[] = [
+    { to: "/routes", key: "nav.dashboard", icon: symSharpList },
+    { to: "/map", key: "nav.map" },
+    { to: "/explore", key: "nav.explore", icon: symSharpExplore },
 ];
 </script>
 
@@ -30,7 +32,7 @@ const tabs = [
             v-for="tab in tabs"
             :key="tab.to"
             :to="tab.to"
-            :label="tab.label"
+            :label="t(tab.key)"
             :icon="compact ? tab.icon : undefined"
         />
     </q-tabs>
