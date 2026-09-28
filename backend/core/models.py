@@ -8,6 +8,7 @@ from django.contrib.auth.models import UserManager as DjangoUserManager
 from django.contrib.gis.db import models
 from django.contrib.gis.geos import LineString, Point
 from django.db.models.functions import Lower
+from django.utils import timezone
 
 from core.route_input import RoutingProfile
 
@@ -743,3 +744,84 @@ class RouteLike(models.Model):
 
     class Meta:
         constraints = (models.UniqueConstraint(fields=["route", "user"], name="core_routelike_once"),)
+
+
+class CoverageArea(models.Model):
+    """A country or region as the public coverage page lists it (``/coverage``).
+
+    Rows are the admin's: the areas Meteolane covers, the ones in the works, and regions below a
+    country that visitors may vote for (a country needs no row to be voted for, see
+    ``core.countries``). Saving a row as covered mails everyone who asked to be told
+    (``core.signals.notify_coverage_subscribers``).
+    """
+
+    class Status(models.TextChoices):
+        COVERED = "covered", "Covered"
+        PLANNED = "planned", "Planned"
+        # Listed for voting only: a region below a country, which has no ISO name to vote by.
+        CANDIDATE = "candidate", "Open for votes"
+
+    # ISO 3166-1 alpha-2 ("CH") or ISO 3166-2 ("IT-32"), upper case.
+    code = models.CharField(max_length=6, unique=True)
+    # Only needed for a region: a country is named from its code, in the reader's language.
+    name = models.CharField(max_length=100, blank=True, default="", help_text="German. Empty for a country.")
+    name_en = models.CharField(max_length=100, blank=True, default="", help_text="English. Empty: the German name.")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.CANDIDATE)
+    # What the page says under a covered or planned area, e.g. "Ortssuche ohne Routing".
+    note = models.CharField(max_length=200, blank=True, default="", help_text="German, optional.")
+    note_en = models.CharField(max_length=200, blank=True, default="", help_text="English, optional.")
+    covered_since = models.DateField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering: ClassVar[list[str]] = ["code"]
+
+    def __str__(self):
+        return f"{self.code} {self.name}".strip()
+
+    def save(self, *args, **kwargs):
+        self.code = self.code.strip().upper()
+        if self.status == self.Status.COVERED and self.covered_since is None:
+            self.covered_since = timezone.localdate()
+        super().save(*args, **kwargs)
+
+
+class CoverageVote(models.Model):
+    """One voter's wish for an area Meteolane does not cover yet.
+
+    ``area_code`` is a plain code, not a key: a country needs no ``CoverageArea`` row to be
+    voted for. ``voter`` is ``user:<id>`` for an account, else ``anon:`` and a hash of the
+    random token in the voter's cookie; no IP address is stored.
+    """
+
+    area_code = models.CharField(max_length=6)
+    voter = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = (models.UniqueConstraint(fields=["area_code", "voter"], name="core_coveragevote_once"),)
+        indexes = (models.Index(fields=["voter"]),)
+
+
+class CoverageSubscription(models.Model):
+    """ "Tell me when this area is covered": an address, confirmed by a link in a mail.
+
+    Double opt-in, because anyone can type any address. Unconfirmed rows are purged after
+    ``COVERAGE_CONFIRM_RETENTION``; a row is deleted once its mail went out. ``token`` confirms
+    and unsubscribes, and is the only way to reach the row from outside.
+    """
+
+    area_code = models.CharField(max_length=6)
+    email = models.EmailField()
+    # The mails' language: the page's when the visitor asked.
+    language = models.CharField(max_length=8, choices=settings.LANGUAGES, default="de")
+    token = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    confirmation_sent_at = models.DateTimeField(null=True, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = (models.UniqueConstraint("area_code", Lower("email"), name="core_coveragesubscription_once"),)
+
+    def __str__(self):
+        return f"{self.area_code} {self.email}"

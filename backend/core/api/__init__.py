@@ -3,6 +3,7 @@ from ninja import NinjaAPI
 from ..auth.backend import session_auth
 from .community import owner_router as sharing_router
 from .community import public_router
+from .coverage import router as coverage_router
 from .elevation import router as elevation_router
 from .gpx import router as gpx_router
 from .journey import router as journey_router
@@ -20,4 +21,5 @@ api.add_router("", gpx_router)
 api.add_router("", journey_router)
 api.add_router("", sharing_router)
 api.add_router("", public_router)
+api.add_router("", coverage_router)
 api.add_router("/system", system_router)

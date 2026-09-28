@@ -191,7 +191,8 @@
         "publicRoute": "Public route",
         "randomRides": "Random rides",
         "route": "Route",
-        "system": "System overview"
+        "system": "System overview",
+        "coverage": "Coverage"
     },
     "account": {
         "passwordMismatch": "The passwords do not match.",
@@ -1024,5 +1025,40 @@
         "submitButtonLabel": "Send",
         "confirmButtonLabel": "Confirm",
         "successMessageText": "Thank you for your feedback!"
+    },
+    "coverage": {
+        "title": "Where Meteolane works",
+        "intro": "Route planning, place search and the weather along your route are available in these areas. Yours is missing? Vote for it – no account needed.",
+        "covered": "Covered",
+        "noneCovered": "No areas yet.",
+        "since": "since {date}",
+        "planned": "In the works",
+        "wish": "Wish for an area",
+        "wishHint": "Pick a country or region. The votes help us decide where to go next.",
+        "pick": "Country or region",
+        "noMatch": "Nothing found.",
+        "notifyMe": "Email me as soon as it's ready",
+        "email": "Email address",
+        "emailHint": "You'll get an email to confirm first. After the notice we delete the address.",
+        "emailInvalid": "Please enter a valid email address.",
+        "submit": "Vote",
+        "notifySubmit": "Notify me",
+        "alreadyVoted": "You've already voted for it.",
+        "voted": "Thanks! Your vote for {area} is counted.",
+        "notifyPending": "Thanks! Please confirm the notification with the link we sent to {email}.",
+        "notifyConfirmed": "Thanks! We'll email you once Meteolane covers {area}.",
+        "voteFailed": "The vote could not be saved.",
+        "ranking": "Most wanted",
+        "noVotes": "No votes yet. Be the first!",
+        "votes": "no votes | one vote | {n} votes",
+        "voteShort": "Vote",
+        "votedShort": "Voted",
+        "voteFor": "Vote for {area}",
+        "withdraw": "Withdraw your vote for {area}",
+        "notifyFor": "Notification for {area}",
+        "confirmed": "Confirmed. We'll email you once Meteolane covers {area}.",
+        "unsubscribed": "Unsubscribed. Your address is deleted.",
+        "linkFailed": "The link didn't work. It may have expired.",
+        "loadFailed": "Coverage could not be loaded."
     }
 }

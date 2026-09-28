@@ -16,7 +16,7 @@ from django.db import transaction
 from django.db.models import F
 from loguru import logger
 
-from core import departures, telemetry
+from core import coverage, departures, telemetry
 from core.claims import claim_cell, release_cell
 from core.entitlements import (
     allowed_route_ids,
@@ -1025,11 +1025,13 @@ async def _refresh_upcoming_forecasts_async() -> dict:
         await notify_system("jobs")
     stations_purged = await sync_to_async(purge_station_data)()
     signups_purged = await sync_to_async(_purge_abandoned_signups)()
+    coverage_purged = await sync_to_async(coverage.purge_unconfirmed)()
 
     logger.info(
         f"refresh_upcoming_forecasts: {scanned} route scans enqueued, {prebuilds} pre-builds enqueued, "
         f"{purged} stripe events purged, {jobs_purged} forecast jobs purged, "
-        f"{stations_purged} station rows purged, {signups_purged} abandoned sign-ups purged"
+        f"{stations_purged} station rows purged, {signups_purged} abandoned sign-ups purged, "
+        f"{coverage_purged} unconfirmed coverage addresses purged"
     )
     return {
         "routes": scanned,
@@ -1038,7 +1040,14 @@ async def _refresh_upcoming_forecasts_async() -> dict:
         "forecast_jobs_purged": jobs_purged,
         "station_rows_purged": stations_purged,
         "signups_purged": signups_purged,
+        "coverage_subscriptions_purged": coverage_purged,
     }
+
+
+@task()
+def notify_area_covered(code: str) -> dict:
+    """Mail everyone who asked to be told once ``code`` is covered (see core.coverage)."""
+    return {"sent": coverage.notify_covered(code)}
 
 
 @task()
