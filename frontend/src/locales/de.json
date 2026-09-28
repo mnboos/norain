@@ -687,9 +687,7 @@
     "routeList": {
         "noDeparture": "Keine Abfahrt",
         "past": "Vergangen",
-        "inMinutes": "in {n} min",
-        "inHours": "in {n}h",
-        "tomorrow": "morgen",
+        "now": "jetzt",
         "computing": "Route wird berechnet …",
         "add": "Route hinzufügen",
         "randomRide": "Zufallsrunde",

@@ -8,7 +8,8 @@ import RouteWeatherBadges from "@/components/RouteWeatherBadges.vue";
 import { liveThumbnail } from "@/utils/routeThumbnail";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
-import { intlLocale } from "@/i18n";
+import { differenceInHours, differenceInMinutes, formatDistanceToNow, formatRelative, isPast } from "date-fns";
+import { dateFnsLocale } from "@/i18n";
 import { rideLabelText } from "@/utils/levels";
 import { useRecurringRoutes } from "@/queries/recurringRoutes";
 
@@ -24,7 +25,6 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const router = useRouter();
 
-// The list query the page already runs: same key, so no request of its own per row.
 const { data: routes } = useRecurringRoutes();
 const route = computed(() => routes.value?.find(r => r.id === props.routeId));
 
@@ -32,15 +32,12 @@ function relativeTime(iso: string | null | undefined): string {
     if (!iso) return t("routeList.noDeparture");
     const dt = new Date(iso);
     const now = new Date();
-    const diffMs = dt.getTime() - now.getTime();
-    const diffMin = Math.round(diffMs / 60000);
-    if (diffMin < 0) return t("routeList.past");
-    if (diffMin < 60) return t("routeList.inMinutes", { n: diffMin });
-    const diffH = Math.round(diffMin / 60);
-    if (diffH < 24) return t("routeList.inHours", { n: diffH });
-    const diffD = Math.round(diffH / 24);
-    if (diffD === 1) return t("routeList.tomorrow");
-    return dt.toLocaleDateString(intlLocale(), { weekday: "short", hour: "2-digit", minute: "2-digit" });
+    if (isPast(dt)) return t("routeList.past");
+    if (differenceInMinutes(dt, now) < 1) return t("routeList.now");
+    const locale = dateFnsLocale();
+    // Within a day, "in 3 hours"; past that, "tomorrow at 07:30" / "Monday at 07:30".
+    if (differenceInHours(dt, now) < 24) return formatDistanceToNow(dt, { addSuffix: true, locale });
+    return formatRelative(dt, now, { locale });
 }
 
 /**
@@ -50,9 +47,7 @@ function relativeTime(iso: string | null | undefined): string {
  */
 function qualityLabel(route: RecurringRouteOut): string {
     if (!route.hasGeometry) return t("routeList.computing");
-    // A thumbnail computed for a departure that has since passed describes the wrong ride.
     const thumbnail = liveThumbnail(route);
-    // The server scores the worst sample; no label means nothing could be scored yet.
     return rideLabelText(thumbnail?.rideLabel, thumbnail?.rideCause) || t("thumbnail.noForecast");
 }
 
@@ -67,22 +62,30 @@ function openInNewTab(id: string) {
             <RouteThumbnail :route="route" />
         </q-item-section>
         <q-item-section>
-            <q-item-label>{{ route.name }}</q-item-label>
-            <q-item-label caption>
-                {{ relativeTime(route.nextDeparture) }} · {{ qualityLabel(route) }}
+            <q-item-label>
+                {{ route.name }}
             </q-item-label>
+            <q-item-label caption>{{ relativeTime(route.nextDeparture) }} · {{ qualityLabel(route) }}</q-item-label>
             <!--            <q-item-label caption>-->
             <!--                {{ route.startName }} → {{ route.destName }} · {{ profileLabel(route.profile) }}-->
             <!--            </q-item-label>-->
-            <q-item-label v-if="route.returnRouteId" caption>
-                {{ t("routeList.return", { schedule: route.returnScheduleDescription }) }} ·
-                {{ relativeTime(route.returnNextDeparture) }}
-            </q-item-label>
+            <!--            <q-item-label v-if="route.returnRouteId" caption>-->
+            <!--                {{ t("routeList.return", { schedule: route.returnScheduleDescription }) }} ·-->
+            <!--                {{ relativeTime(route.returnNextDeparture) }}-->
+            <!--            </q-item-label>-->
             <!-- Rain and frost: the two readings that decide whether you ride. They add
                  to the wording above, never replace it, and the line is there only when
                  there is rain or frost to report - the component owns its own label. -->
             <RouteWeatherBadges :route="route" />
         </q-item-section>
+        <!--        <q-item-section>-->
+        <!--            <q-item-label overline>Nächste Fahrt</q-item-label>-->
+        <!--            <q-item-label caption>{{ relativeTime(route.nextDeparture) }}</q-item-label>-->
+        <!--        </q-item-section>-->
+        <!--        <q-item-section>-->
+        <!--            <q-item-label overline>Bedingungen</q-item-label>-->
+        <!--            <q-item-label caption>{{ qualityLabel(route) }}</q-item-label>-->
+        <!--        </q-item-section>-->
         <q-item-section side>
             <q-btn
                 flat

@@ -687,9 +687,7 @@
     "routeList": {
         "noDeparture": "No departure",
         "past": "Past",
-        "inMinutes": "in {n} min",
-        "inHours": "in {n}h",
-        "tomorrow": "tomorrow",
+        "now": "now",
         "computing": "Route is being calculated …",
         "add": "Add route",
         "randomRide": "Random ride",
