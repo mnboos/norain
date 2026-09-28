@@ -1,4 +1,14 @@
 {
+    "garmin": {
+        "title": "Garmin watch",
+        "intro": "Show the next recurring ride or planned journey on your Forerunner 255.",
+        "create": "Create watch token",
+        "replace": "Replace watch token",
+        "revoke": "Disconnect watch",
+        "token": "Watch token",
+        "help": "Copy this token now. Enter it in the Meteolane Connect IQ app settings. Replacing or disconnecting it disables the previous token.",
+        "connected": "A watch token is active."
+    },
     "errors": {
         "requestFailed": "The request failed.",
         "unexpectedReply": "Unexpected reply from the server.",
@@ -535,7 +545,8 @@
     "profiles": {
         "bike": "Bike",
         "ebike": "E-bike",
-        "fast_ebike": "S-pedelec"
+        "fast_ebike": "S-pedelec",
+        "hike": "Hiking"
     },
     "randomForm": {
         "length": {
@@ -694,6 +705,7 @@
         "label": "Key figures of the ride",
         "felt": "Feels like Ø",
         "windEffort": "Wind effort max.",
+        "maxGust": "Gusts max.",
         "noFrost": "none",
         "rainMax": "Rain max.",
         "headwindMax": "Headwind max.",

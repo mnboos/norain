@@ -18,6 +18,7 @@ class RoutingProfile(StrEnum):
     BIKE = "bike"
     EBIKE = "ebike"
     FAST_EBIKE = "fast_ebike"
+    HIKE = "hike"
 
 
 class RoutePlanIn(CamelSchema):

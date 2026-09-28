@@ -1,4 +1,14 @@
 {
+    "garmin": {
+        "title": "Garmin-Uhr",
+        "intro": "Zeige die nächste regelmässige Fahrt oder geplante Tour auf deiner Forerunner 255.",
+        "create": "Uhr-Token erstellen",
+        "replace": "Uhr-Token ersetzen",
+        "revoke": "Uhr trennen",
+        "token": "Uhr-Token",
+        "help": "Kopiere diesen Token jetzt und trage ihn in den Einstellungen der Meteolane Connect-IQ-App ein. Ersetzen oder Trennen deaktiviert den bisherigen Token.",
+        "connected": "Ein Uhr-Token ist aktiv."
+    },
     "errors": {
         "requestFailed": "Die Anfrage ist fehlgeschlagen.",
         "unexpectedReply": "Unerwartete Antwort vom Server.",
@@ -535,7 +545,8 @@
     "profiles": {
         "bike": "Velo",
         "ebike": "E-Bike",
-        "fast_ebike": "S-Pedelec"
+        "fast_ebike": "S-Pedelec",
+        "hike": "Wandern"
     },
     "randomForm": {
         "length": {
@@ -694,6 +705,7 @@
         "label": "Kennzahlen der Fahrt",
         "felt": "Gefühlt Ø",
         "windEffort": "Wind­aufwand max.",
+        "maxGust": "Böen max.",
         "noFrost": "kein",
         "rainMax": "Regen max.",
         "headwindMax": "Gegenwind max.",

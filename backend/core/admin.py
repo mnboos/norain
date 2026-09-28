@@ -10,6 +10,7 @@ from .models import (
     EnsembleCell,
     ForecastCell,
     ForecastJob,
+    GarminToken,
     Journey,
     JourneyDay,
     JourneyStage,
@@ -232,3 +233,13 @@ class RouteLikeAdmin(admin.ModelAdmin):
     list_display = ("user", "route", "created_at")
     search_fields = ("user__username", "route__name")
     raw_id_fields = ("route", "user")
+
+
+@admin.register(GarminToken)
+class GarminTokenAdmin(admin.ModelAdmin):
+    """Only the digest is stored, so there is nothing to read here: revoke by deleting the row."""
+
+    list_display = ("user", "created_at")
+    search_fields = ("user__username",)
+    raw_id_fields = ("user",)
+    readonly_fields = ("digest", "created_at")

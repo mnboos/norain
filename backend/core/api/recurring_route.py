@@ -27,6 +27,7 @@ from ..ride_quality import (
     ImpactLevel,
     RideBand,
     RideFactor,
+    config_for,
     worst_frost_level,
     worst_rain_level,
     worst_ride_score,
@@ -126,11 +127,11 @@ class RouteThumbnail(CamelSchema):
     temp_min: float | None = None  # coldest point of the ride, °C
 
 
-def _thumbnail_out(blob: dict | None) -> RouteThumbnail | None:
+def _thumbnail_out(blob: dict | None, profile: str = "bike") -> RouteThumbnail | None:
     if not blob:
         return None
     samples = [s for s in (blob.get("samples") or []) if s is not None]
-    worst = worst_ride_score(samples)
+    worst = worst_ride_score(samples, config_for(profile))
     pops = [s["pop"] for s in samples if s.get("pop") is not None]
     rates = [s["rain_rate_mm_h"] for s in samples if s.get("rain_rate_mm_h") is not None]
     temps = [s["temp"] for s in samples if s.get("temp") is not None]
@@ -245,7 +246,7 @@ def _route_to_out(route: RecurringRoute, *, detail=False) -> RecurringRouteOut:
         updated_at=route.updated_at,
         # Read straight from the stored blob: the list endpoint must not parse forecast
         # cells. refresh_route_thumbnail keeps it current; scoring it is cheap arithmetic.
-        thumbnail=_thumbnail_out(route.thumbnail),
+        thumbnail=_thumbnail_out(route.thumbnail, route.profile),
         visibility=route.visibility,
         public_slug=route.public_slug if route.visibility == RecurringRoute.Visibility.PUBLIC else None,
     )
@@ -401,7 +402,7 @@ async def route_preview(request: HttpRequest, data: RoutePreviewIn):
     if not _preview_allowed(request.auth.pk):
         raise HttpError(429, gettext("Zu viele Routenberechnungen. Bitte kurz warten."))
     try:
-        model = road_prefs_model(data.road_prefs.prefs()) if data.road_prefs else None
+        model = road_prefs_model(data.road_prefs.prefs(), data.profile) if data.road_prefs else None
         return await preview_route(data.profile, tuple((lon, lat) for lon, lat in data.points), model)
     except ROUTING_ERRORS as exc:
         logger.info(f"Route preview failed: {exc}")

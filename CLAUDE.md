@@ -387,7 +387,6 @@ how fast the score climbs the colour ramp). It is the app's own judgement and st
   `plan_forecast_job` resolved); a result without it is a bike ride. Every scorer on read takes the
   config from there, or from the route or journey row. A hike never routes around headwind
   (`tasks._weather_prefs`), and "off the network" is `foot_network` for it (`road_prefs_model`).
-  back out of; that is how `wind_effort_level` has always worked.
 - **Score on read, never store.** `core.jobs.forecast_view` (samples, summary *and* sections),
   `wind_arrows_at_detail` and `recurring_route._thumbnail_out` score the stored raw weather when
   serving, so a change to `RIDE_QUALITY` shows on the next request without rebuilding jobs or
