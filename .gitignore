@@ -23,3 +23,6 @@ data/downloads/
 
 # Python helpers and tests
 __pycache__/
+.cache
+garmin/bin
+garmin/private
