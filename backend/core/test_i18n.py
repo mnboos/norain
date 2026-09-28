@@ -6,6 +6,7 @@ source text and one in English proves the compiled catalog (core/locale/en) is t
 
 from types import SimpleNamespace
 
+from django.conf import settings
 from django.core import mail
 from django.core.cache import cache
 from django.test import Client, SimpleTestCase, TestCase, override_settings
@@ -17,6 +18,8 @@ from core.models import User
 from core.test_signup import TEST_SETTINGS, SpaClient, verified_user
 
 MISSING_ROUTE = "/api/public/routes/no-such-route"
+# allauth puts this in front of every subject ("Meteolane: "); it is not translated.
+SUBJECT_PREFIX = settings.ACCOUNT_EMAIL_SUBJECT_PREFIX
 
 
 class CatalogTests(SimpleTestCase):
@@ -79,10 +82,10 @@ class SignupLanguageTests(TestCase):
         browser = SpaClient(HTTP_ACCEPT_LANGUAGE="en")
         self.assertEqual(browser.signup("rider@example.test").status_code, 401)
         self.assertEqual(User.objects.get(email="rider@example.test").language, "en")
-        self.assertEqual(mail.outbox[-1].subject, "Your confirmation code")
+        self.assertEqual(mail.outbox[-1].subject, SUBJECT_PREFIX + "Your confirmation code")
 
     def test_a_mail_to_an_existing_account_uses_its_owner_language(self):
         verified_user(email="rider@example.test", language="de")
         # Someone with an English browser tries to sign up with that address.
         SpaClient(HTTP_ACCEPT_LANGUAGE="en").signup("rider@example.test")
-        self.assertEqual(mail.outbox[-1].subject, "Du hast bereits ein Konto")
+        self.assertEqual(mail.outbox[-1].subject, SUBJECT_PREFIX + "Du hast bereits ein Konto")
