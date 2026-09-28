@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type CoverageAreaOut, CoverageAreaOutStatusEnum as Status } from "@norain/api/models";
 
-import { areaName, rankedWishes, voteOptions } from "@/utils/coverage";
+import { areaName, flagCode, rankedWishes, voteOptions } from "@/utils/coverage";
 
 const area = (code: string, extra: Partial<CoverageAreaOut> = {}): CoverageAreaOut => ({ code, ...extra });
 
@@ -15,6 +15,15 @@ describe("areaName", () => {
         expect(areaName("IT-32", { name: "Südtirol", nameEn: "South Tyrol" }, "en")).toBe("South Tyrol");
         expect(areaName("IT-32", { name: "Südtirol" }, "en")).toBe("Südtirol");
         expect(areaName("IT-32", null, "de")).toBe("IT-32");
+    });
+});
+
+describe("flagCode", () => {
+    it("gives the country's flag, also for a region below it", () => {
+        expect(flagCode("CH")).toBe("ch");
+        expect(flagCode("IT-32")).toBe("it");
+        expect(flagCode("xx")).toBeNull();
+        expect(flagCode("")).toBeNull();
     });
 });
 

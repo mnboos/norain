@@ -29,7 +29,15 @@ import {
     useCoverageVote,
 } from "@/queries/coverage";
 import { apiErrorMessage } from "@/services/http";
-import { areaName, areaNote, rankedWishes, voteOptions, type AreaOption } from "@/utils/coverage";
+import { areaName, areaNote, flagCode, rankedWishes, voteOptions, type AreaOption } from "@/utils/coverage";
+
+// One lazy chunk per flag, loaded only for the areas shown. flag-icons' own stylesheet would
+// inline every flag (~420 kB) into this public page.
+const FLAG_DIR = "/node_modules/flag-icons/flags/4x3/";
+const flagLoaders = import.meta.glob<string>("/node_modules/flag-icons/flags/4x3/*.svg", {
+    query: "?url",
+    import: "default",
+});
 
 const { t } = useI18n();
 // Typed, and reactive: the catalogs' locale ref is read inside.
@@ -50,6 +58,26 @@ const covered = computed(() =>
     areas.value
         .filter(area => area.status === Status.Covered)
         .sort((a, b) => nameOf(a.code).localeCompare(nameOf(b.code))),
+);
+const flagUrls = ref<Record<string, string>>({});
+const flagUrl = (code: string) => {
+    const flag = flagCode(code);
+    return flag ? flagUrls.value[flag] : undefined;
+};
+watch(
+    covered,
+    list => {
+        for (const area of list) {
+            const flag = flagCode(area.code);
+            const load = flag ? flagLoaders[`${FLAG_DIR}${flag}.svg`] : undefined;
+            if (!flag || !load || flagUrls.value[flag]) continue;
+            load().then(
+                url => (flagUrls.value[flag] = url),
+                () => undefined, // No flag: the check icon stays.
+            );
+        }
+    },
+    { immediate: true },
 );
 const planned = computed(() => areas.value.filter(area => area.status === Status.Planned));
 const wishes = computed(() => rankedWishes(areas.value, locale.value).filter(area => area.status !== Status.Planned));
@@ -194,7 +222,9 @@ onMounted(async () => {
                 <q-list bordered separator class="rounded-borders">
                     <q-item v-for="area in covered" :key="area.code">
                         <q-item-section avatar>
-                            <q-icon :name="symSharpCheckCircle" color="positive" />
+                            <!-- Decorative: the name beside it says the country. -->
+                            <img v-if="flagUrl(area.code)" :src="flagUrl(area.code)" alt="" class="coverage-flag" />
+                            <q-icon v-else :name="symSharpCheckCircle" color="positive" />
                         </q-item-section>
                         <q-item-section>
                             <q-item-label class="text-weight-medium">{{ nameOf(area.code) }}</q-item-label>
@@ -367,5 +397,14 @@ onMounted(async () => {
 .coverage-page {
     max-width: 720px;
     margin: 0 auto;
+}
+
+/* The outline keeps white-edged flags (JP, PL…) visible in both themes. */
+.coverage-flag {
+    width: 1.6em;
+    height: 1.2em;
+    object-fit: cover;
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
 }
 </style>

@@ -26,6 +26,14 @@ export function areaName(
     }
 }
 
+/**
+ * The `flag-icons` file name for an area: the country's flag, also for a region below it
+ * (`IT-32` → `it`). Null for a code that names no country.
+ */
+export function flagCode(code: string): string | null {
+    return /^[A-Z]{2}(-|$)/.test(code) ? code.slice(0, 2).toLowerCase() : null;
+}
+
 /** The admin's note under a covered or planned area, in the reader's language. */
 export function areaNote(area: CoverageAreaOut, locale: AppLocale = currentLocale()): string | null {
     return (locale === "en" ? (area.noteEn ?? area.note) : area.note) ?? null;
