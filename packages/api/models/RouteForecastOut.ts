@@ -81,6 +81,10 @@ export interface RouteForecastOut {
     /**
      * 
      */
+    profile?: string;
+    /**
+     * 
+     */
     departureTime: string;
     /**
      * 
@@ -149,6 +153,7 @@ export function RouteForecastOutFromJSONTyped(json: any, ignoreDiscriminator: bo
         'version': json['version'],
         'computedAt': json['computed_at'] === undefined ? undefined : json['computed_at'] === null ? null : json['computed_at'],
         'routeId': json['route_id'] === undefined ? undefined : json['route_id'] === null ? null : json['route_id'],
+        'profile': json['profile'] == null ? undefined : json['profile'],
         'departureTime': json['departure_time'],
         'line': json['line'],
         'totalSeconds': json['total_seconds'],
@@ -177,6 +182,7 @@ export function RouteForecastOutToJSONTyped(value?: RouteForecastOut | null, ign
         'version': value['version'],
         'computed_at': value['computedAt'],
         'route_id': value['routeId'],
+        'profile': value['profile'],
         'departure_time': value['departureTime'],
         'line': value['line'],
         'total_seconds': value['totalSeconds'],

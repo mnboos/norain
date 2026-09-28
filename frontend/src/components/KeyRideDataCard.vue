@@ -12,6 +12,7 @@ import {
 } from "@quasar/extras/material-symbols-sharp";
 import type { RouteForecastOut } from "@norain/api/models";
 import { meanFeltTemp, peakRain } from "@/utils/forecastDetails";
+import { hasWindEffort } from "@/utils/bikeProfiles";
 import { headwindColor, temperatureColor } from "@/utils/statColors";
 
 const props = withDefaults(
@@ -33,6 +34,11 @@ const NEUTRAL = "blue-grey-6";
 
 const peakRate = computed(() => peakRain(forecast.value));
 const feltTemp = computed(() => meanFeltTemp(forecast.value.samples));
+// A hike has no wind effort (see hasWindEffort); its tile shows the strongest gust instead.
+const maxGust = computed(() => {
+    const gusts = forecast.value.samples.map(s => s.windGust).filter((g): g is number => g != null);
+    return gusts.length ? Math.round(Math.max(...gusts)) : null;
+});
 const stats = computed(() => [
     {
         label: "Gefühlt Ø",
@@ -51,13 +57,21 @@ const stats = computed(() => [
                 : Math.round(forecast.value.summary.rainProbability * 100),
         unit: "%",
     },
-    {
-        label: "Wind\u00adaufwand max.",
-        icon: symSharpSpeed,
-        color: "blue-grey-6",
-        value: forecast.value.summary.maxWindEffortLevel ?? null,
-        unit: "",
-    },
+    hasWindEffort(forecast.value.profile)
+        ? {
+              label: t("keyData.windEffort"),
+              icon: symSharpSpeed,
+              color: "blue-grey-6",
+              value: windEffortText(forecast.value.summary.maxWindEffortLevel) || null,
+              unit: "",
+          }
+        : {
+              label: t("keyData.maxGust"),
+              icon: symSharpAir,
+              color: "blue-grey-6",
+              value: maxGust.value,
+              unit: "km/h",
+          },
     {
         label: "Distanz",
         icon: symSharpStraighten,

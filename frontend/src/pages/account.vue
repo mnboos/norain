@@ -7,6 +7,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
+import GarminPanel from "@/components/account/GarminPanel.vue";
 import { useRoute, useRouter } from "vue-router";
 
 import CompleteSignupForm from "@/components/account/CompleteSignupForm.vue";
@@ -106,6 +107,7 @@ async function signOut() {
                 <q-separator class="q-my-md" />
 
                 <PlanPanel class="q-mb-lg" />
+                <GarminPanel />
 
                 <q-btn color="primary" label="Abmelden" flat @click="signOut" />
             </template>

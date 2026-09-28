@@ -13,9 +13,9 @@ export interface SessionUser {
     defaultProfile: BikeProfile;
 }
 
-export type BikeProfile = "bike" | "ebike" | "fast_ebike";
+export type BikeProfile = "bike" | "ebike" | "fast_ebike" | "hike";
 
-const BIKE_PROFILES: readonly string[] = ["bike", "ebike", "fast_ebike"];
+const BIKE_PROFILES: readonly string[] = ["bike", "ebike", "fast_ebike", "hike"];
 
 function isBikeProfile(value: unknown): value is BikeProfile {
     return typeof value === "string" && BIKE_PROFILES.includes(value);

@@ -2295,7 +2295,8 @@
                                     "enum": [
                                         "bike",
                                         "ebike",
-                                        "fast_ebike"
+                                        "fast_ebike",
+                                        "hike"
                                     ],
                                     "type": "string"
                                 },
@@ -3159,6 +3160,11 @@
                         ],
                         "title": "Route Id"
                     },
+                    "profile": {
+                        "default": "bike",
+                        "title": "Profile",
+                        "type": "string"
+                    },
                     "departure_time": {
                         "title": "Departure Time",
                         "type": "string"
@@ -3703,7 +3709,8 @@
                 "enum": [
                     "bike",
                     "ebike",
-                    "fast_ebike"
+                    "fast_ebike",
+                    "hike"
                 ],
                 "title": "RoutingProfile",
                 "type": "string"
@@ -6491,7 +6498,8 @@
                                 "enum": [
                                     "bike",
                                     "ebike",
-                                    "fast_ebike"
+                                    "fast_ebike",
+                                    "hike"
                                 ],
                                 "type": "string"
                             },

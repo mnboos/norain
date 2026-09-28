@@ -9,7 +9,7 @@ There are three separate artifacts:
 
 | Artifact | Container location | Purpose |
 | --- | --- | --- |
-| Filtered OSM | `/osm_data/bike-*.osm.pbf` | Roads and bike-route relations |
+| Filtered OSM | `/osm_data/bike-*.osm.pbf` | Roads and paths, bike- and hiking-route relations |
 | Terrain | `/osm_data/elevation/<manifest-hash>/` | Zoom-15 and zoom-12 fallback PMTiles, attribution, and reusable decoded caches |
 | Routing graph | `/graph-cache/releases/<id>/` | Graph, configuration snapshot, models, and build identity |
 

@@ -85,6 +85,16 @@ tasks (`refresh_upcoming_forecasts`) pre-warm forecast cells for upcoming depart
 
 ## Testing
 
+### Generated API
+
+- After changing API endpoints or schemas, run `just update-api` on the feature branch.
+- Commit `backend/openapi.json` and all changes under `packages/api`, including added
+  and deleted files. Do not fix generated files by hand.
+- After merging or rebasing main, regenerate from the combined backend code instead
+  of choosing one branch's generated files when resolving conflicts.
+- CI regenerates the schema and TypeScript client and fails the `test` job if they
+  differ from the committed files.
+
 - `SimpleTestCase` for pure functions (no DB)
 - `TestCase` for DB-dependent tests (CellCacheTests)
 - Run: `cd backend && python manage.py test core`

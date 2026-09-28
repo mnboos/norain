@@ -228,6 +228,9 @@ class RouteForecastOut(CamelSchema):
     # existed. The page shows it while a stale result stands in for a refreshing one.
     computed_at: str | None = None
     route_id: UUID | None = None
+    # The routing profile it was planned for. "hike" has no wind effort: its samples, summary
+    # and arrows carry no wind-effort level. Results stored before it existed are bike rides.
+    profile: str = "bike"
     departure_time: str
     line: list[list[float]]  # coarse route line as [[lon, lat], ...]
     total_seconds: int

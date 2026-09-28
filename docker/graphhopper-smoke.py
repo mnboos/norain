@@ -92,24 +92,33 @@ def main():
                 raise RuntimeError("Candidate did not become healthy in 15 minutes.")
             time.sleep(2)
     heights = request(args.url + "/elevation", {"points": points}).get("elevation")
-    if not isinstance(heights, list) or len(heights) != len(points) or not all(
-        value is None or (isinstance(value, (int, float)) and math.isfinite(value))
-        for value in heights
+    if (
+        not isinstance(heights, list)
+        or len(heights) != len(points)
+        or not all(
+            value is None or (isinstance(value, (int, float)) and math.isfinite(value))
+            for value in heights
+        )
     ):
         raise ValueError("Saved-coordinate elevation lookup returned invalid data.")
     if any(value is None for value in heights):
         print("WARNING: coordinate elevation lookup contains a terrain gap.")
-    prefs = {
-        "priority": [
-            {"if": "surface == GRAVEL", "multiply_by": "0.5"},
-            {"if": "road_class == PRIMARY", "multiply_by": "0.6"},
-            {"if": "average_slope > 6", "multiply_by": "0.4"},
-            {"if": "bike_network == MISSING", "multiply_by": "0.7"},
-            {"if": "urban_density == CITY", "multiply_by": "0.5"},
-        ]
-    }
+
+    def prefs(network):
+        return {
+            "priority": [
+                {"if": "surface == GRAVEL", "multiply_by": "0.5"},
+                {"if": "road_class == PRIMARY", "multiply_by": "0.6"},
+                {"if": "average_slope > 6", "multiply_by": "0.4"},
+                {"if": f"{network} == MISSING", "multiply_by": "0.7"},
+                {"if": "urban_density == CITY", "multiply_by": "0.5"},
+            ]
+        }
+
     dry, wet = weather_field(points, 1.0, 0.0), weather_field(points, 4.0, 15.0)
-    for profile in ("bike", "ebike", "fast_ebike"):
+    # hike has no landmarks: this also checks that flexible routing serves every variant.
+    for profile in ("bike", "ebike", "fast_ebike", "hike"):
+        model = prefs("foot_network" if profile == "hike" else "bike_network")
         base = {
             "profile": profile,
             "points": points,
@@ -127,9 +136,9 @@ def main():
                 algorithm="alternative_route",
                 **{"alternative_route.max_paths": 2},
             ),
-            dict(base, custom_model=prefs),
+            dict(base, custom_model=model),
             dict(base, weather=wet),
-            dict(base, weather=wet, custom_model=prefs),
+            dict(base, weather=wet, custom_model=model),
             dict(base, points=[points[0], via, points[1]], weather=wet),
         ]
         for body in variants:
@@ -137,12 +146,16 @@ def main():
                 validate_path(path)
         # Weather routing (docker/graphhopper/weather): a dry field changes nothing, and a
         # bidirectional search, which cannot know the time, is refused rather than guessed.
-        if request(args.url + "/route", dict(base, weather=dry))["paths"][0]["points"] != (
-            request(args.url + "/route", base)["paths"][0]["points"]
+        if (
+            request(args.url + "/route", dict(base, weather=dry))["paths"][0]["points"]
+            != (request(args.url + "/route", base)["paths"][0]["points"])
         ):
             raise ValueError("A dry weather field changed the route.")
         try:
-            request(args.url + "/route", dict(base, weather=wet, algorithm="alternative_route"))
+            request(
+                args.url + "/route",
+                dict(base, weather=wet, algorithm="alternative_route"),
+            )
             raise ValueError("Weather with alternative_route was not refused.")
         except urllib.error.HTTPError as error:
             if error.code != 400:

@@ -123,6 +123,14 @@ class ProcessedStripeEvent(models.Model):
         return self.event_id
 
 
+class GarminToken(models.Model):
+    """Read-only watch credential. Only its SHA-256 digest is retained."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    digest = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now=True)
+
+
 class RecurringRoute(models.Model):
     """A user-configured bike route with a cron schedule for recurring weather checks."""
 
@@ -153,7 +161,7 @@ class RecurringRoute(models.Model):
     profile = models.CharField(
         max_length=50,
         default="bike",
-        help_text="GraphHopper routing profile: bike, ebike, fast_ebike",
+        help_text="GraphHopper routing profile: bike, ebike, fast_ebike, hike",
     )
 
     schedule_cron = models.CharField(max_length=100, help_text="5-field cron expression")

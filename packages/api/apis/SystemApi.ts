@@ -461,4 +461,5 @@ export enum CoreApiSystemMapFeaturesProfileEnum {
     Bike = 'bike',
     Ebike = 'ebike',
     FastEbike = 'fast_ebike',
+    Hike = 'hike',
 }

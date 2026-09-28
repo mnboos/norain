@@ -113,9 +113,10 @@ despite older comments in Compose referring to a model-free application.
 | Forecast availability | Today through today + 15 days | Calendar window used for scheduled departures |
 | `ENSEMBLE_MODELS` | `icon_seamless_eps,meteoswiss_icon_ch1_ensemble,meteoswiss_icon_ch2_ensemble` | Models requested by the application |
 
-Enabled routing profiles are `bike`, `ebike`, and `fast_ebike`, each with a CH
-preparation. `ROUTING_PROFILES` in `core/api/route_weather.py` must list the same
-names; the API rejects any other profile with 422.
+Enabled routing profiles are `bike`, `ebike` and `fast_ebike`, each with an LM (landmark)
+preparation, and `hike`, which has none: hikes are short, so GraphHopper routes them in flexible
+mode, and landmarks would add about 200 MB per country-sized graph. `ROUTING_PROFILES` in
+`core/api/route_weather.py` must list the same names; the API rejects any other profile with 422.
 
 ### Ride speed
 
@@ -129,6 +130,7 @@ in `data/graphhopper/models/`:
 | `bike` | `bike.json` + `bike_elevation.json` (both from the jar) + `bike_speed.json` | road speed, slope, then ×1.15 capped at 30 km/h | ~18 km/h |
 | `ebike` | `ebike.json` | road speed ×1.35, soft slope rules, capped at 25 km/h | ~22 km/h |
 | `fast_ebike` | `fast_ebike.json` | road speed ×2.0, soft slope rules, capped at 35 km/h | ~32 km/h |
+| `hike` | `hike.json` + `foot_elevation.json` (both from the jar) | `foot_average_speed`, 4 km/h on T2, 1.5 km/h on T3–T5, slower uphill | ~4 km/h |
 
 "Road speed" is GraphHopper's `bike_average_speed`, which comes from the OSM road type and
 surface, so a forest track is slower than a cycleway for all three. Each profile's block

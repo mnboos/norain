@@ -21,7 +21,8 @@
 export enum RoutingProfile {
     Bike = 'bike',
     Ebike = 'ebike',
-    FastEbike = 'fast_ebike'
+    FastEbike = 'fast_ebike',
+    Hike = 'hike'
 }
 
 

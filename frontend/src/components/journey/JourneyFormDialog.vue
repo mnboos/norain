@@ -16,7 +16,7 @@ import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import { useEntitlements } from "@/composables/useEntitlements";
 import { useSession } from "@/composables/useSession";
 import { usePlaceSearch } from "@/queries/places";
-import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
+import { BIKE_PROFILE_OPTIONS, defaultKm, followProfileDefaults, hasWindEffort } from "@/utils/bikeProfiles";
 import { placeLabel } from "@/utils/placeLabel";
 import { LODGING_KINDS, POI_CATEGORIES } from "@/utils/poiCategories";
 import ChipMultiSelect from "@/components/ChipMultiSelect.vue";
@@ -60,11 +60,15 @@ const startDate = ref(tomorrow());
 const earliestStart = ref("08:00");
 const latestArrival = ref("18:00");
 const dayLimit = ref<Limit>("distance");
-const dayKm = ref(80);
+const dayKm = ref(defaultKm(profile.value, 80));
 const dayHours = ref(5);
 const legLimit = ref<Limit>("distance");
-const legKm = ref(25);
+const legKm = ref(defaultKm(profile.value, 25));
 const legHours = ref(1.5);
+followProfileDefaults(profile, [
+    [dayKm, 80],
+    [legKm, 25],
+]);
 const poiCategories = ref<string[]>(["drinking_water", "toilets"]);
 const lodgingKinds = ref<string[]>(["camp_site", "hostel", "guest_house", "hotel"]);
 const surface = ref(Surface.Any);
@@ -206,7 +210,7 @@ function onSave() {
         roadPrefs: { surface: surface.value, climbing: climbing.value, traffic: traffic.value, towns: towns.value },
         weatherPrefs: {
             avoidRain: weatherRouting.value && avoidRain.value,
-            avoidHeadwind: weatherRouting.value && avoidHeadwind.value,
+            avoidHeadwind: weatherRouting.value && avoidHeadwind.value && hasWindEffort(profile.value),
             departureWindowMinutes: departureWindow.value,
         },
     };
@@ -433,7 +437,11 @@ function onClose() {
 
                 <q-expansion-item dense label="Wetter" header-class="text-caption q-px-none" default-opened>
                     <div class="q-pt-sm">
-                        <WeatherRoutingChoice v-model:avoid-rain="avoidRain" v-model:avoid-headwind="avoidHeadwind" />
+                        <WeatherRoutingChoice
+                            v-model:avoid-rain="avoidRain"
+                            v-model:avoid-headwind="avoidHeadwind"
+                            :headwind="hasWindEffort(profile)"
+                        />
                         <div v-if="!isPro" class="text-caption text-muted q-mt-sm">
                             Mit Plus vergleicht Meteolane bis zu drei Varianten pro Tag und schlägt die beste Abfahrtszeit
                             vor.

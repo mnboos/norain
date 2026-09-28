@@ -81,11 +81,12 @@ def stage_weather(result: dict | None, now: datetime | None = None) -> tuple[flo
         if chosen and chosen["ride_score"] is not None:
             return chosen["ride_score"], chosen["ride_label"], view["recommended_time"]
     samples = result.get("samples") or []
-    scores = [ride_quality.ride_score(sample) for sample in samples]
+    config = ride_quality.config_for(result.get("profile"))
+    scores = [ride_quality.ride_score(sample, config) for sample in samples]
     if not samples or any(score is None for score in scores):
         return None, None, result.get("departure_time")
     score = departures.aggregate([s.score for s in scores], samples)
-    worst = ride_quality.worst_ride_score(samples)
+    worst = ride_quality.worst_ride_score(samples, config)
     label = worst.label if worst else ride_quality.BAND_LABELS[ride_quality.score_band(score)]
     return score, label, result.get("departure_time")
 
