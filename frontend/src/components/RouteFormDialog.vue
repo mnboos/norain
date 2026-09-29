@@ -335,8 +335,8 @@ function onClose() {
                 />
                 <div class="q-gutter-sm">
                     <q-input
-                        :disable="!twoWay"
                         v-model="returnTime"
+                        :disable="!twoWay"
                         :label="t('routeForm.returnTime')"
                         outlined
                         dense

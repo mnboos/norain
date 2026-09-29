@@ -613,6 +613,10 @@
         "towns": {
             "label": "Towns",
             "avoid": "Avoid towns"
+        },
+        "ferries": {
+            "label": "Ferries",
+            "avoid": "Avoid ferries"
         }
     },
     "journeyForm": {

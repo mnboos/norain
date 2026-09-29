@@ -244,8 +244,18 @@ class RoadPrefsTests(SimpleTestCase):
             for climbing in ("neutral", "avoid", "hilly"):
                 for traffic in ("neutral", "avoid_main", "avoid_off_network"):
                     for towns in ("neutral", "avoid"):
-                        model = road_prefs_model(RoadPrefs(surface, climbing, traffic, towns))
-                        self.assertTrue(is_penalty_only(model), model)
+                        for ferries in ("neutral", "avoid"):
+                            prefs = RoadPrefs(
+                                surface=surface, climbing=climbing, traffic=traffic, towns=towns, ferries=ferries
+                            )
+                            model = road_prefs_model(prefs)
+                            self.assertTrue(is_penalty_only(model), model)
+
+    def test_avoid_ferries_penalises_ferry_edges(self):
+        (statement,) = road_prefs_model(RoadPrefs(ferries="avoid"))["priority"]
+        self.assertEqual(statement["if"], "road_environment == FERRY")
+        self.assertLess(float(statement["multiply_by"]), 1)
+        self.assertEqual(RoadPrefs.from_json({"towns": "avoid"}).ferries, "neutral", "old rows ride ferries")
 
     def test_flat_and_hilly_penalise_the_opposite(self):
         flat = road_prefs_model(RoadPrefs(climbing="avoid"))["priority"]

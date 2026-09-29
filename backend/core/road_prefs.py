@@ -10,6 +10,7 @@ network cost more (``avoid_off_network``). For the hike profile the network is t
 The encoded values used here must be in ``graph.encoded_values``
 (data/graphhopper/graphhopper-config.yaml): surface, road_class, average_slope and
 bike_network were there already; urban_density was added for journeys, foot_network for hikes.
+Ferries are ``road_environment == FERRY``; the bike filter keeps ``route=ferry`` ways.
 """
 
 import json
@@ -22,6 +23,8 @@ Surface = Literal["any", "avoid_unpaved", "paved_only"]
 Climbing = Literal["neutral", "avoid", "hilly"]
 Traffic = Literal["neutral", "avoid_main", "avoid_off_network"]
 Towns = Literal["neutral", "avoid"]
+# A strong penalty, not an exclusion: a ride that cannot go round by land still plans.
+Ferries = Literal["neutral", "avoid"]
 
 UNPAVED = ("UNPAVED", "COMPACTED", "FINE_GRAVEL", "GRAVEL", "GROUND", "DIRT", "GRASS", "SAND")
 
@@ -32,11 +35,12 @@ class RoadPrefs:
     climbing: Climbing = "neutral"
     traffic: Traffic = "neutral"
     towns: Towns = "neutral"
+    ferries: Ferries = "neutral"
 
     @classmethod
     def from_json(cls, data: dict | None) -> RoadPrefs:
         data = data or {}
-        return cls(**{k: data[k] for k in ("surface", "climbing", "traffic", "towns") if k in data})
+        return cls(**{k: data[k] for k in ("surface", "climbing", "traffic", "towns", "ferries") if k in data})
 
     def as_json(self) -> dict:
         return asdict(self)
@@ -70,6 +74,8 @@ def road_prefs_model(prefs: RoadPrefs, profile: str = "bike") -> dict:
     if prefs.towns == "avoid":
         priority.append({"if": "urban_density == CITY", "multiply_by": "0.5"})
         priority.append({"else_if": "urban_density == RESIDENTIAL", "multiply_by": "0.8"})
+    if prefs.ferries == "avoid":
+        priority.append({"if": "road_environment == FERRY", "multiply_by": "0.05"})
     return {"priority": priority} if priority else {}
 
 

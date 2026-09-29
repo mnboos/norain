@@ -613,6 +613,10 @@
         "towns": {
             "label": "Ortschaften",
             "avoid": "Ortschaften meiden"
+        },
+        "ferries": {
+            "label": "Fähren",
+            "avoid": "Fähren meiden"
         }
     },
     "journeyForm": {

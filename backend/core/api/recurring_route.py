@@ -352,9 +352,16 @@ class RoadPrefsIn(CamelSchema):
     climbing: Literal["neutral", "avoid", "hilly"] = "neutral"
     traffic: Literal["neutral", "avoid_main", "avoid_off_network"] = "neutral"
     towns: Literal["neutral", "avoid"] = "neutral"
+    ferries: Literal["neutral", "avoid"] = "neutral"
 
     def prefs(self) -> RoadPrefs:
-        return RoadPrefs(surface=self.surface, climbing=self.climbing, traffic=self.traffic, towns=self.towns)
+        return RoadPrefs(
+            surface=self.surface,
+            climbing=self.climbing,
+            traffic=self.traffic,
+            towns=self.towns,
+            ferries=self.ferries,
+        )
 
 
 class RoutePreviewIn(CamelSchema):

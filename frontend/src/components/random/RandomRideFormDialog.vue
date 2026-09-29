@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n";
 import {
     JourneyInKindEnum,
     RoadPrefsInClimbingEnum as Climbing,
+    RoadPrefsInFerriesEnum as Ferries,
     RoadPrefsInSurfaceEnum as Surface,
     RoadPrefsInTownsEnum as Towns,
     RoadPrefsInTrafficEnum as Traffic,
@@ -75,6 +76,7 @@ const surface = ref(Surface.Any);
 const climbing = ref(Climbing.Neutral);
 const traffic = ref(Traffic.Neutral);
 const towns = ref(Towns.Neutral);
+const ferries = ref(Ferries.Neutral);
 // Every tier: three variants to pick from and save as routes. Plus: weigh them by the weather.
 const considerWeather = ref(false);
 // Off until the rider chooses it; see WeatherRoutingChoice.
@@ -104,6 +106,7 @@ function load(ride: JourneyOut | undefined) {
     climbing.value = ride.roadPrefs.climbing ?? Climbing.Neutral;
     traffic.value = ride.roadPrefs.traffic ?? Traffic.Neutral;
     towns.value = ride.roadPrefs.towns ?? Towns.Neutral;
+    ferries.value = ride.roadPrefs.ferries ?? Ferries.Neutral;
     avoidRain.value = ride.weatherPrefs.avoidRain ?? false;
     avoidHeadwind.value = ride.weatherPrefs.avoidHeadwind ?? false;
 }
@@ -172,6 +175,10 @@ const townOptions = computed(() => [
     { label: t("roadPrefs.any"), value: Towns.Neutral },
     { label: t("roadPrefs.towns.avoid"), value: Towns.Avoid },
 ]);
+const ferryOptions = computed(() => [
+    { label: t("roadPrefs.any"), value: Ferries.Neutral },
+    { label: t("roadPrefs.ferries.avoid"), value: Ferries.Avoid },
+]);
 const headings = computed(() => headingOptions());
 
 // The weather mode is Plus; without it the ride is always the picker.
@@ -222,7 +229,13 @@ function onSave() {
         maxLegDistanceM: null,
         poiCategories: poiCategories.value,
         lodgingKinds: [],
-        roadPrefs: { surface: surface.value, climbing: climbing.value, traffic: traffic.value, towns: towns.value },
+        roadPrefs: {
+            surface: surface.value,
+            climbing: climbing.value,
+            traffic: traffic.value,
+            towns: towns.value,
+            ferries: ferries.value,
+        },
         randomPrefs: {
             roundTrip: roundTrip.value,
             heading: heading.value,
@@ -475,6 +488,16 @@ function onClose() {
                             emit-value
                             map-options
                             :label="t('roadPrefs.towns.label')"
+                            outlined
+                            dense
+                        />
+                        <q-select
+                            v-model="ferries"
+                            class="col-12 col-sm-6"
+                            :options="ferryOptions"
+                            emit-value
+                            map-options
+                            :label="t('roadPrefs.ferries.label')"
                             outlined
                             dense
                         />

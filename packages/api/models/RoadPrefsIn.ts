@@ -36,6 +36,10 @@ export interface RoadPrefsIn {
      * 
      */
     towns?: RoadPrefsInTownsEnum;
+    /**
+     * 
+     */
+    ferries?: RoadPrefsInFerriesEnum;
 }
 
 /**
@@ -73,6 +77,14 @@ export enum RoadPrefsInTownsEnum {
     Neutral = 'neutral',
     Avoid = 'avoid'
 }
+/**
+* @export
+* @enum {string}
+*/
+export enum RoadPrefsInFerriesEnum {
+    Neutral = 'neutral',
+    Avoid = 'avoid'
+}
 
 
 /**
@@ -96,6 +108,7 @@ export function RoadPrefsInFromJSONTyped(json: any, ignoreDiscriminator: boolean
         'climbing': json['climbing'] == null ? undefined : json['climbing'],
         'traffic': json['traffic'] == null ? undefined : json['traffic'],
         'towns': json['towns'] == null ? undefined : json['towns'],
+        'ferries': json['ferries'] == null ? undefined : json['ferries'],
     };
 }
 
@@ -114,6 +127,7 @@ export function RoadPrefsInToJSONTyped(value?: RoadPrefsIn | null, ignoreDiscrim
         'climbing': value['climbing'],
         'traffic': value['traffic'],
         'towns': value['towns'],
+        'ferries': value['ferries'],
     };
 }
 

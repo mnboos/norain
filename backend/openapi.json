@@ -4877,6 +4877,15 @@
                         ],
                         "title": "Towns",
                         "type": "string"
+                    },
+                    "ferries": {
+                        "default": "neutral",
+                        "enum": [
+                            "neutral",
+                            "avoid"
+                        ],
+                        "title": "Ferries",
+                        "type": "string"
                     }
                 },
                 "title": "RoadPrefsIn",

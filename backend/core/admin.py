@@ -1,9 +1,11 @@
 from datetime import timedelta
 
+from django import forms
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.utils import timezone
 
+from .countries import COUNTRY_NAMES
 from .models import (
     CellFetchLease,
     CoverageArea,
@@ -238,14 +240,69 @@ class RouteLikeAdmin(admin.ModelAdmin):
     raw_id_fields = ("route", "user")
 
 
+def _country_label(code: str) -> str:
+    de, en = COUNTRY_NAMES[code]
+    return f"{code} – {de}" if de == en else f"{code} – {de} / {en}"
+
+
+class CoverageAreaForm(forms.ModelForm):
+    """``code`` picked as a country from ``core.countries`` plus an optional ISO 3166-2 region part.
+
+    A plain dropdown would lock out regions ("IT-32"), which have no list to pick from.
+    """
+
+    country = forms.ChoiceField(choices=[])
+    region = forms.CharField(
+        max_length=3,
+        required=False,
+        help_text='Only for a region: the ISO 3166-2 part after the dash, e.g. "32" for IT-32. Empty for the country.',
+    )
+
+    class Meta:
+        model = CoverageArea
+        fields = ("name", "name_en", "status", "note", "note_en", "covered_since")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["country"].choices = [("", "---------")] + [(c, _country_label(c)) for c in sorted(COUNTRY_NAMES)]
+        if self.instance.pk:
+            country, _, region = self.instance.code.partition("-")
+            self.initial.setdefault("country", country)
+            self.initial.setdefault("region", region)
+
+    def clean_region(self):
+        region = self.cleaned_data["region"].strip().upper()
+        if region and not region.isalnum():
+            raise forms.ValidationError("Letters and digits only.")
+        return region
+
+    def clean(self):
+        cleaned = super().clean()
+        country, region = cleaned.get("country"), cleaned.get("region")
+        if country is None or region is None:
+            return cleaned
+        code = f"{country}-{region}" if region else country
+        if CoverageArea.objects.filter(code=code).exclude(pk=self.instance.pk).exists():
+            raise forms.ValidationError(f"{code} is already listed.")
+        self.instance.code = code
+        return cleaned
+
+
 @admin.register(CoverageArea)
 class CoverageAreaAdmin(admin.ModelAdmin):
     """The public coverage page. Saving an area as covered mails everyone waiting for it."""
 
-    list_display = ("code", "name", "status", "covered_since", "vote_count", "waiting", "updated_at")
+    form = CoverageAreaForm
+    fields = ("country", "region", "name", "name_en", "status", "note", "note_en", "covered_since")
+    list_display = ("code", "country_name", "name", "status", "covered_since", "vote_count", "waiting", "updated_at")
     list_filter = ("status",)
     search_fields = ("code", "name", "name_en")
     actions = ["mark_covered"]
+
+    @admin.display(description="Country", ordering="code")
+    def country_name(self, obj):
+        names = COUNTRY_NAMES.get(obj.code.partition("-")[0])
+        return " / ".join(dict.fromkeys(names)) if names else "–"
 
     @admin.display(description="Votes")
     def vote_count(self, obj):

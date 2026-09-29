@@ -4,6 +4,7 @@ import { QSelect } from "quasar";
 import { useI18n } from "vue-i18n";
 import {
     RoadPrefsInClimbingEnum as Climbing,
+    RoadPrefsInFerriesEnum as Ferries,
     RoadPrefsInSurfaceEnum as Surface,
     RoadPrefsInTownsEnum as Towns,
     RoadPrefsInTrafficEnum as Traffic,
@@ -77,6 +78,7 @@ const surface = ref(Surface.Any);
 const climbing = ref(Climbing.Neutral);
 const traffic = ref(Traffic.Neutral);
 const towns = ref(Towns.Neutral);
+const ferries = ref(Ferries.Neutral);
 // Off until the rider chooses it; see WeatherRoutingChoice.
 const avoidRain = ref(false);
 const avoidHeadwind = ref(false);
@@ -103,6 +105,7 @@ function load(journey: JourneyOut | undefined) {
     climbing.value = journey.roadPrefs.climbing ?? Climbing.Neutral;
     traffic.value = journey.roadPrefs.traffic ?? Traffic.Neutral;
     towns.value = journey.roadPrefs.towns ?? Towns.Neutral;
+    ferries.value = journey.roadPrefs.ferries ?? Ferries.Neutral;
     avoidRain.value = journey.weatherPrefs.avoidRain ?? false;
     avoidHeadwind.value = journey.weatherPrefs.avoidHeadwind ?? false;
     departureWindow.value = journey.weatherPrefs.departureWindowMinutes ?? 60;
@@ -173,6 +176,10 @@ const townOptions = computed(() => [
     { label: t("roadPrefs.any"), value: Towns.Neutral },
     { label: t("roadPrefs.towns.avoid"), value: Towns.Avoid },
 ]);
+const ferryOptions = computed(() => [
+    { label: t("roadPrefs.any"), value: Ferries.Neutral },
+    { label: t("roadPrefs.ferries.avoid"), value: Ferries.Avoid },
+]);
 const windowOptions = computed(() =>
     [0, 30, 60, 90, 120].map(value => ({
         label: value ? t("journeyForm.windowLater", { minutes: value }) : t("journeyForm.windowFixed"),
@@ -212,7 +219,13 @@ function onSave() {
         maxLegSeconds: legLimit.value === "time" ? Math.round(legHours.value * 3600) : null,
         poiCategories: poiCategories.value,
         lodgingKinds: lodgingKinds.value,
-        roadPrefs: { surface: surface.value, climbing: climbing.value, traffic: traffic.value, towns: towns.value },
+        roadPrefs: {
+            surface: surface.value,
+            climbing: climbing.value,
+            traffic: traffic.value,
+            towns: towns.value,
+            ferries: ferries.value,
+        },
         weatherPrefs: {
             avoidRain: weatherRouting.value && avoidRain.value,
             avoidHeadwind: weatherRouting.value && avoidHeadwind.value && hasWindEffort(profile.value),
@@ -310,7 +323,14 @@ function onClose() {
                 </div>
 
                 <div class="row q-col-gutter-sm">
-                    <q-input v-model="startDate" class="col-12 col-sm-4" type="date" :label="t('journeyForm.firstDay')" outlined dense />
+                    <q-input
+                        v-model="startDate"
+                        class="col-12 col-sm-4"
+                        type="date"
+                        :label="t('journeyForm.firstDay')"
+                        outlined
+                        dense
+                    />
                     <q-input
                         v-model="earliestStart"
                         class="col-6 col-sm-4"
@@ -405,7 +425,12 @@ function onClose() {
                     :options="LODGING_KINDS"
                 />
 
-                <q-expansion-item dense :label="t('roadPrefs.title')" header-class="text-caption q-px-none" default-opened>
+                <q-expansion-item
+                    dense
+                    :label="t('roadPrefs.title')"
+                    header-class="text-caption q-px-none"
+                    default-opened
+                >
                     <div class="row q-col-gutter-sm q-pt-sm">
                         <q-select
                             v-model="surface"
@@ -447,10 +472,25 @@ function onClose() {
                             outlined
                             dense
                         />
+                        <q-select
+                            v-model="ferries"
+                            class="col-12 col-sm-6"
+                            :options="ferryOptions"
+                            emit-value
+                            map-options
+                            :label="t('roadPrefs.ferries.label')"
+                            outlined
+                            dense
+                        />
                     </div>
                 </q-expansion-item>
 
-                <q-expansion-item dense :label="t('randomForm.weather')" header-class="text-caption q-px-none" default-opened>
+                <q-expansion-item
+                    dense
+                    :label="t('randomForm.weather')"
+                    header-class="text-caption q-px-none"
+                    default-opened
+                >
                     <div class="q-pt-sm">
                         <WeatherRoutingChoice
                             v-model:avoid-rain="avoidRain"
