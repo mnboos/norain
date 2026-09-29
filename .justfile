@@ -18,6 +18,13 @@ image_prefix := "ghcr.io/mnboos/norain"
 # `docker=podman` doesn't count: recipes run in a non-interactive shell); override with CONTAINER_ENGINE.
 container := env("CONTAINER_ENGINE", if os_family() == "windows" { "podman" } else { `command -v docker >/dev/null && echo docker || echo podman` })
 
+# podman-docker provides a `docker` executable, so the choice above can still reach `podman compose`.
+# Prefer podman-compose when it is installed: legacy docker-compose 1.x sends Docker's removed
+# HostConfig.Links field and current Podman rejects every `compose run` with "link is not supported".
+# Docker Compose ignores this Podman-only variable; an explicit environment value still wins.
+podman_compose_provider := if os_family() == "windows" { "docker-compose" } else { `command -v podman-compose >/dev/null && echo podman-compose || true` }
+export PODMAN_COMPOSE_PROVIDER := env("PODMAN_COMPOSE_PROVIDER", podman_compose_provider)
+
 # The extract every graph build uses; same default as docker-compose.base.yml.
 osm_data_url := env("OSM_DATA_URL", "https://download.geofabrik.de/europe/switzerland-latest.osm.pbf")
 

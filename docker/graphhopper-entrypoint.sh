@@ -91,6 +91,17 @@ build() {
     artifact=$(python /graphhopper/artifact.py begin --terrain "$terrain_dir")
     flock -u 8
     fallback_args "$terrain_dir" cache
+    # Thread counts go into a copy of the config, never through -Ddw.: Dropwizard passes those as
+    # strings and GraphHopper's PMap.getInt ignores a string, so every count fell back to its
+    # default (0 for urban density, which fails the import after hours). The candidate keeps its
+    # fingerprinted config; thread counts do not change the graph.
+    build_config=$(mktemp /tmp/graphhopper-build-XXXXXX.yaml)
+    sed -E "s/^([[:space:]]*(prepare\.ch|prepare\.lm|graph\.urban_density|prepare\.subnetworks)\.threads:)[[:space:]]*[0-9]+/\1 ${GRAPHHOPPER_BUILD_THREADS}/" \
+        "$artifact/config.yaml" > "$build_config"
+    if [ "$(grep -cE '^[[:space:]]*(prepare\.ch|prepare\.lm|graph\.urban_density|prepare\.subnetworks)\.threads: '"${GRAPHHOPPER_BUILD_THREADS}"'$' "$build_config")" -ne 4 ]; then
+        echo "Could not set the four build thread counts in $artifact/config.yaml." >&2
+        exit 1
+    fi
     echo "Building candidate $artifact; the active graph remains available."
     java -Xmx"${GRAPHHOPPER_BUILD_HEAP}" \
         -Ddw.graphhopper.graph.location="$artifact/graph" \
@@ -99,12 +110,8 @@ build() {
         -Ddw.graphhopper.graph.elevation.cache_dir="$terrain_dir/cache" \
         "${fallback_opts[@]}" \
         -Ddw.graphhopper.graph.dataaccess.default_type="${GRAPHHOPPER_BUILD_DATAACCESS}" \
-        -Ddw.graphhopper.prepare.ch.threads="${GRAPHHOPPER_BUILD_THREADS}" \
-        -Ddw.graphhopper.prepare.lm.threads="${GRAPHHOPPER_BUILD_THREADS}" \
-        -Ddw.graphhopper.graph.urban_density.threads="${GRAPHHOPPER_BUILD_THREADS}" \
-        -Ddw.graphhopper.prepare.subnetworks.threads="${GRAPHHOPPER_BUILD_THREADS}" \
         -Ddw.graphhopper.datareader.file="${BIKE_DATA_FILE}" \
-        -jar graphhopper.jar import "$artifact/config.yaml"
+        -jar graphhopper.jar import "$build_config"
     python /graphhopper/artifact.py finish "${artifact#/graph-cache/}"
     echo "Candidate ready. Validate it before activation (see docs/how-to/build-routing-graph.md)."
 }

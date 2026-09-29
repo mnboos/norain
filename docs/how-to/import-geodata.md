@@ -136,7 +136,9 @@ These recipes work on the development services. For the VPS:
 ## Notes
 
 - The recipes use `docker`, or `podman` when there is no `docker` program. A shell alias
-  doesn't count; set `CONTAINER_ENGINE` to choose.
+  doesn't count; set `CONTAINER_ENGINE` to choose. When `docker` is Podman's compatibility
+  wrapper and `podman-compose` is installed, the recipes select it instead of legacy
+  `docker-compose` 1.x (which current Podman rejects with `link is not supported`).
 - The import recipes are bash scripts. They are not tested on Windows.
 - Weather requests use `Europe/Zurich`. All the default countries share that time zone.
   A region in another one needs code changes, see
