@@ -635,6 +635,14 @@ new graph. Terrain covers only the zoom-11 cells holding a node of the file (`no
 zoom-15 tile under each node (interpolation stays inside the tile, long-edge sampling is off).
 Turning on `long_edge_sampling_distance` would read points between nodes. `check` requires the
 file's cells to be a subset of `cells.json`.
+An import looks up every node's height once, in tile order, before it reads the ways
+(`PrefetchedElevationProvider`, wrapped around `withFallback` when `datareader.file` is set). OSMReader
+asks way by way, in way-ID order, and a continent's decoded tiles dwarf RAM (Europe: 187 GB), so
+without it nearly every lookup is a random disk read (4 h). The table costs ~30 bytes of heap per node.
+
+Numeric GraphHopper settings never go through `-Ddw.`: Dropwizard passes them as strings and
+`PMap.getInt` ignores a string, so the default applies silently (0 urban-density threads fails the
+import after pass 2). The entrypoint writes the build thread counts into a copy of the config instead.
 
 The whole download-and-import workflow is in `docs/how-to/import-geodata.md`.
 `just photon-import FILE…` imports several Photon dumps into **one** index (one dump per country).
