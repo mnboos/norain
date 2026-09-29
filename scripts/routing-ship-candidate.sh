@@ -18,6 +18,16 @@ remote="$VPS_USER@$VPS_HOST"
 norain_dir="${VPS_NORAIN_DIR:-/srv/norain}"
 command -v rsync >/dev/null || { echo "rsync is required (on Windows, run this from WSL)." >&2; exit 1; }
 
+# A Tailscale exit node tunnels the whole copy through that node (a NAS managed a few hundred
+# kbit/s). Warn only: it may be deliberate.
+if command -v ip >/dev/null; then
+    vps_ip=$(getent ahosts "$(ssh -G "$remote" 2>/dev/null | awk '/^hostname /{print $2}')" | awk 'NR==1{print $1}')
+    if [ -n "$vps_ip" ] && ip route get "$vps_ip" 2>/dev/null | grep -q 'dev tailscale0'; then
+        echo "Warning: traffic to $VPS_HOST ($vps_ip) goes through a Tailscale exit node, which can be" \
+            "far slower than your uplink. To bypass it: sudo tailscale set --exit-node=" >&2
+    fi
+fi
+
 # The graph cache mount in docker-compose.base.yml.
 cache=data/graphhopper/cache
 if [ ! -L "$cache/candidate" ]; then
