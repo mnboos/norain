@@ -147,6 +147,12 @@ build-graphhopper-graph-from filtered_pbf:
 routing-ship-candidate:
     POIS_FILE={{ quote(pois_file) }} bash scripts/routing-ship-candidate.sh
 
+[doc("Check whether routing-ship-candidate would fit: what it would copy to the VPS (only what the VPS lacks) against the free space there, plus the releases there that could be removed. Copies and changes nothing.")]
+[group('geodata')]
+[unix]
+routing-ship-candidate-dry-run:
+    DRY_RUN=1 POIS_FILE={{ quote(pois_file) }} bash scripts/routing-ship-candidate.sh
+
 [doc('Start an isolated candidate and test all profiles. Points: JSON [[lon,lat],[lon,lat]] within the graph. Marks a passing candidate ready for activation.')]
 [group('geodata')]
 routing-validate-candidate points:

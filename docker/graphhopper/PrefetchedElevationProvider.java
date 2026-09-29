@@ -12,7 +12,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Looks up the height of every node of the import file once, in tile order, before the import
@@ -21,25 +28,32 @@ import java.util.Arrays;
  * OSMReader asks for heights way by way, and way IDs follow no geography. Over a continent the
  * decoded zoom-15 tiles are far larger than RAM (Europe: 187 GB), so nearly every lookup was a
  * random disk read and "pass2 - start reading OSM ways" took four hours. In tile order each tile
- * is read once. The heights are the wrapped provider's own, at the same coordinates the import
+ * is read once, and a few threads read the next tiles' cache files ahead of the lookups, because
+ * one thread waiting on each tile in turn leaves the disk idle (~45 min for Europe). The heights are the wrapped provider's own, at the same coordinates the import
  * passes (GraphHopper stores them as 1e-7 degree ints), so the graph does not change. A
  * coordinate missing from the table goes to the wrapped provider.
  */
 public class PrefetchedElevationProvider implements ElevationProvider {
     private static final Logger logger = LoggerFactory.getLogger(PrefetchedElevationProvider.class);
     private static final long ORDINAL_MASK = (1L << 33) - 1;
+    // Tiles read ahead of the lookups (~200 KB each), and by how many threads.
+    private static final int READ_AHEAD_TILES = 512;
+    private static final int READ_AHEAD_THREADS = 16;
 
     private final ElevationProvider delegate;
     private final File osmFile;
     private final int zoom;
     private final int workerThreads;
+    private final File tileDir;
     private LongDoubleHashMap heights;
 
-    public PrefetchedElevationProvider(ElevationProvider delegate, File osmFile, int zoom, int workerThreads) {
+    /** @param tileDir the zoom-15 provider's decoded tile cache, read ahead of the lookups; null for none */
+    public PrefetchedElevationProvider(ElevationProvider delegate, File osmFile, int zoom, int workerThreads, File tileDir) {
         this.delegate = delegate;
         this.osmFile = osmFile;
         this.zoom = zoom;
         this.workerThreads = workerThreads;
+        this.tileDir = tileDir;
     }
 
     /**
@@ -51,8 +65,9 @@ public class PrefetchedElevationProvider implements ElevationProvider {
         if (file.isEmpty() || provider == ElevationProvider.NOOP)
             return provider;
         int zoom = config.getInt("graph.elevation.pmtiles.zoom", -1);
+        String tileDir = config.getString("graph.elevation.cache_dir", "");
         return new PrefetchedElevationProvider(provider, new File(file), zoom > 0 ? zoom : 15,
-                config.getInt("datareader.worker_threads", 2));
+                config.getInt("datareader.worker_threads", 2), tileDir.isEmpty() ? null : new File(tileDir));
     }
 
     @Override
@@ -88,13 +103,39 @@ public class PrefetchedElevationProvider implements ElevationProvider {
         }
         Arrays.parallelSort(order);
 
+        ExecutorService readAhead = tileDir == null ? null : Executors.newFixedThreadPool(READ_AHEAD_THREADS, r -> {
+            Thread t = new Thread(r, "elevation-read-ahead");
+            t.setDaemon(true);
+            return t;
+        });
         heights = new LongDoubleHashMap(count);
-        for (int i = 0; i < count; i++) {
-            long c = coords.get((int) (order[i] & ORDINAL_MASK));
-            if (!heights.containsKey(c))
-                heights.put(c, delegate.getEle(lat(c), lon(c)));
-            if ((i + 1) % 10_000_000 == 0)
-                logger.info("Elevation prefetch: {} of {} nodes, {}s", i + 1, count, seconds(start));
+        try {
+            // Index into order[] of the first node of the next tile not yet handed to read-ahead.
+            int ahead = 0, tilesAhead = 0;
+            long lastTile = -1;
+            for (int i = 0; i < count; i++) {
+                long tile = order[i] >>> 33;
+                if (readAhead != null && tile != lastTile) {
+                    lastTile = tile;
+                    tilesAhead--;
+                    while (ahead < count && tilesAhead < READ_AHEAD_TILES) {
+                        long next = order[ahead] >>> 33;
+                        File f = tileFile(next, tiles);
+                        readAhead.execute(() -> readQuietly(f));
+                        tilesAhead++;
+                        while (ahead < count && order[ahead] >>> 33 == next)
+                            ahead++;
+                    }
+                }
+                long c = coords.get((int) (order[i] & ORDINAL_MASK));
+                if (!heights.containsKey(c))
+                    heights.put(c, delegate.getEle(lat(c), lon(c)));
+                if ((i + 1) % 10_000_000 == 0)
+                    logger.info("Elevation prefetch: {} of {} nodes, {}s", i + 1, count, seconds(start));
+            }
+        } finally {
+            if (readAhead != null)
+                readAhead.shutdownNow();
         }
         logger.info("Elevation prefetch: {} heights in {}s", heights.size(), seconds(start));
     }
@@ -119,6 +160,25 @@ public class PrefetchedElevationProvider implements ElevationProvider {
         heights = null;
         delegate.release();
     }
+
+    /** The provider's cache file for a tile: its PMTiles (Hilbert) ID and the zoom. */
+    private File tileFile(long tile, int tiles) {
+        long id = PMTilesReader.hilbertBase(zoom) + PMTilesReader.xyToHilbertD(zoom, tile % tiles, tile / tiles);
+        return new File(tileDir, id + "_" + zoom + ".tile");
+    }
+
+    /** Pulls a file into the page cache. A tile not decoded yet has no file: the provider makes it. */
+    private static void readQuietly(File f) {
+        ByteBuffer buf = READ_BUFFER.get();
+        try (FileChannel ch = FileChannel.open(f.toPath(), StandardOpenOption.READ)) {
+            while (ch.read(buf.clear()) > 0) ;
+        } catch (NoSuchFileException ignored) {
+        } catch (IOException e) {
+            logger.debug("Elevation read-ahead of {} failed: {}", f, e.getMessage());
+        }
+    }
+
+    private static final ThreadLocal<ByteBuffer> READ_BUFFER = ThreadLocal.withInitial(() -> ByteBuffer.allocateDirect(1 << 20));
 
     static long key(int lat, int lon) {
         return ((long) lat << 32) | (lon & 0xFFFFFFFFL);

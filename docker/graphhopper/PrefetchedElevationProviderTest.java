@@ -61,7 +61,7 @@ class PrefetchedElevationProviderTest {
     @Test
     void prefetchesOncePerCoordinateInTileOrderAndServesTheSameHeights(@TempDir Path dir) throws Exception {
         RecordingProvider delegate = new RecordingProvider();
-        PrefetchedElevationProvider provider = new PrefetchedElevationProvider(delegate, osmFile(dir), 15, 1);
+        PrefetchedElevationProvider provider = new PrefetchedElevationProvider(delegate, osmFile(dir), 15, 1, dir.toFile());
         provider.init();
 
         // One lookup per distinct coordinate, grouped by tile rather than in file order.
