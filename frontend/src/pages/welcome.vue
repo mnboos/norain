@@ -164,6 +164,8 @@ const lang = computed<Lang>({
 const t = computed(() => copy[lang.value]);
 
 const { isAuthenticated } = useSession();
+
+const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.value.cta));
 </script>
 
 <template>
@@ -222,14 +224,15 @@ const { isAuthenticated } = useSession();
                                 <q-btn
                                     unelevated
                                     no-caps
-                                    to="/account"
+                                    :to="isAuthenticated ? '/routes' :'/account'"
                                     color="brand-gold"
                                     text-color="brand-navy"
                                     size="16px"
                                     padding="14px 24px"
-                                    :label="t.cta"
+                                    :label="loginLabel"
                                 />
                                 <q-btn
+                                    v-if="!isAuthenticated"
                                     outline
                                     no-caps
                                     to="/routes"
