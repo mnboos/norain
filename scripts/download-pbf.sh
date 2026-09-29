@@ -6,7 +6,7 @@ set -euo pipefail
 #
 # Only downloads: `just osm-filter-many-raw-pbf-into-one` filters them for bikes and merges them in the
 # GraphHopper container, so nothing but wget is needed here. The files are kept,
-# and a run downloads again only what Geofabrik has updated since.
+# and a run skips existing files even if Geofabrik has newer versions.
 # ==============================================================================
 
 TARGET_DIR="data/downloads/osm"
@@ -31,8 +31,8 @@ mkdir -p "$TARGET_DIR"
 echo "==> Downloading OSM extracts from Geofabrik into $TARGET_DIR..."
 for url in "${PBF_URLS[@]}"; do
   echo " -> $(basename "$url")"
-  # -N: download only when the server's file is newer than ours.
-  wget -N -q --show-progress -P "$TARGET_DIR" "$url"
+  # -nc: skip existing files regardless of whether the server has a newer version.
+  wget -nc -q --show-progress -P "$TARGET_DIR" "$url"
 done
 
 echo "=============================================================================="

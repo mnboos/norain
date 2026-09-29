@@ -5,8 +5,8 @@ set -euo pipefail
 # Download the Photon 1.0 dumps for the geocoder (DACH + NL + BE + DK)
 #
 # The dumps stay compressed: `just photon-import` reads .jsonl.zst directly and
-# imports all of them into one index. The files are kept, and a run downloads
-# again only what GraphHopper has updated since.
+# imports all of them into one index. The files are kept, and a run skips
+# existing files even if GraphHopper has newer versions.
 # ==============================================================================
 
 TARGET_DIR="data/downloads/photon"
@@ -31,8 +31,8 @@ mkdir -p "$TARGET_DIR"
 echo "==> Downloading Photon dumps into $TARGET_DIR..."
 for url in "${URLS[@]}"; do
   echo " -> $(basename "$url")"
-  # -N: download only when the server's file is newer than ours.
-  wget -N -q --show-progress -P "$TARGET_DIR" "$url"
+  # -nc: skip existing files regardless of whether the server has a newer version.
+  wget -nc -q --show-progress -P "$TARGET_DIR" "$url"
 done
 
 echo "=============================================================================="

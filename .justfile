@@ -317,23 +317,23 @@ claude-deepseek:
 
 alias claude := claude-deepseek
 
-[doc("Download the OSM extracts into data/downloads/osm (only what changed since); filter them with just osm-filter-many-raw-pbf-into-one, then just build-graphhopper-graph-from <that file>.")]
+[doc("Download missing OSM extracts into data/downloads/osm (skip existing files, even if outdated); filter them with just osm-filter-many-raw-pbf-into-one, then just build-graphhopper-graph-from <that file>.")]
 [windows]
 download-pbf:
     wsl bash -c "chmod +x scripts/download-pbf.sh && ./scripts/download-pbf.sh"
 
-[doc("Download the Photon dumps into data/downloads/photon (only what changed since); build the index from them with just photon-import.")]
+[doc("Download missing Photon dumps into data/downloads/photon (skip existing files, even if outdated); build the index from them with just photon-import.")]
 [windows]
 download-photon-dumps:
     wsl bash -c "chmod +x scripts/download-photon-dumps.sh && ./scripts/download-photon-dumps.sh"
 
-[doc("Download the OSM extracts into data/downloads/osm (only what changed since); filter them with just osm-filter-many-raw-pbf-into-one, then just build-graphhopper-graph-from <that file>.")]
+[doc("Download missing OSM extracts into data/downloads/osm (skip existing files, even if outdated); filter them with just osm-filter-many-raw-pbf-into-one, then just build-graphhopper-graph-from <that file>.")]
 [unix]
 download-pbf:
     chmod +x scripts/download-pbf.sh
     ./scripts/download-pbf.sh
 
-[doc("Download the Photon dumps into data/downloads/photon (only what changed since); build the index from them with just photon-import.")]
+[doc("Download missing Photon dumps into data/downloads/photon (skip existing files, even if outdated); build the index from them with just photon-import.")]
 [unix]
 download-photon-dumps:
     chmod +x scripts/download-photon-dumps.sh
