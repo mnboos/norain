@@ -156,25 +156,47 @@ export function frameTimeZone(realm: Window): string | null {
 /**
  * Draw exact colours and read them back. Browsers that add canvas noise (Brave, Safari's
  * advanced fingerprinting protection, Firefox's resistFingerprinting) change some pixels.
+ * Solid fills alone can pass noise that only touches varied pixels, so a second block gives
+ * every pixel its own colour, once drawn and once put, and every one must come back exact.
  */
 export function canvasIntegrity(): string {
     const canvas = document.createElement("canvas");
-    canvas.width = 16;
+    canvas.width = 48;
     canvas.height = 16;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (!ctx) throw new Error("Canvas unavailable");
+    const expected = new Uint8ClampedArray(48 * 16 * 4);
+    const paint = (x: number, y: number, colour: [number, number, number]) => {
+        expected.set([...colour, 255], (y * 48 + x) * 4);
+    };
     ctx.fillStyle = "rgb(17, 34, 51)";
     ctx.fillRect(0, 0, 16, 16);
     ctx.fillStyle = "rgb(204, 102, 0)";
     ctx.fillRect(4, 4, 8, 8);
-    const data = ctx.getImageData(0, 0, 16, 16).data;
+    const varied = new ImageData(16, 16);
+    for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+            const inner = x >= 4 && x < 12 && y >= 4 && y < 12;
+            paint(x, y, inner ? [204, 102, 0] : [17, 34, 51]);
+            const colour: [number, number, number] = [x * 15 + 7, y * 15 + 3, (x * 37 + y * 11) % 256];
+            ctx.fillStyle = `rgb(${colour.join(", ")})`;
+            ctx.fillRect(16 + x, y, 1, 1);
+            paint(16 + x, y, colour);
+            const other: [number, number, number] = [255 - colour[1], colour[2], 255 - colour[0]];
+            varied.data.set([...other, 255], (y * 16 + x) * 4);
+            paint(32 + x, y, other);
+        }
+    }
+    ctx.putImageData(varied, 32, 0);
+    const data = ctx.getImageData(0, 0, 48, 16).data;
     let wrong = 0;
-    for (let pixel = 0; pixel < 256; pixel++) {
-        const x = pixel % 16;
-        const y = Math.floor(pixel / 16);
-        const inner = x >= 4 && x < 12 && y >= 4 && y < 12;
-        const expected = inner ? [204, 102, 0, 255] : [17, 34, 51, 255];
-        if (expected.some((value, channel) => data[pixel * 4 + channel] !== value)) wrong++;
+    for (let pixel = 0; pixel < 48 * 16; pixel++) {
+        for (let channel = 0; channel < 4; channel++) {
+            if (data[pixel * 4 + channel] !== expected[pixel * 4 + channel]) {
+                wrong++;
+                break;
+            }
+        }
     }
     return wrong === 0 ? "clean" : `noise:${wrong}`;
 }

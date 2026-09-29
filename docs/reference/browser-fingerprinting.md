@@ -33,7 +33,9 @@ library does instead:
 - **Catches in-browser spoofing.** Extensions, devtools overrides and automation frameworks
   change values in the page's own JavaScript realm. The library compares that realm with a
   worker and with a fresh same-origin iframe. It inspects getters through the iframe's clean
-  `Function.prototype.toString`. It checks the canvas for injected noise. It reads the engine
+  `Function.prototype.toString`. It checks the canvas and the audio output for injected noise
+  against known answers (every pixel its own colour, drawn and put; a buffer of exact samples
+  played straight through). It reads the engine
   from its own error messages and compares that with the user agent. It also compares the
   user agent with the `Sec-CH-UA*` headers the server receives itself.
 - **Keeps its conclusions to itself.** The `verify` reply carries only a lifetime. The
@@ -99,8 +101,18 @@ The checks feed indicators only: `navigator`, `worker`, `iframe`, `integrity`,
   `iframe_canvas_mismatch`, `software_renderer`, `ios`, `client_hints_missing`,
   `ephemeral_key`, `low_signal_coverage` or `checks_unavailable`. A canvas that differs
   only between page and iframe counts as noise, not a lie: a script that patches the canvas
-  already shows as `native_tampered`.
+  already shows as `native_tampered`. Audio that fails its known answer reads as
+  `audio_unstable`, like audio that changes between two reads.
 - `high`: everything else.
+
+**Protected browsers.** A `low` browser with `canvas_noise`, `iframe_canvas_mismatch`,
+`audio_unstable` or `ephemeral_key` randomises on purpose or cannot keep its key. Safari's
+private tabs are the case in point: every tab has its own storage (so its own key) and salts
+its canvas and audio noise per tab. Such a browser gets a `coarsePrint`, a keyed hash of what
+the noise leaves alone (`graphics`, `fonts`, `hardware`, `math`, `media`) and its user agent.
+`math` carries the WebAssembly NaN bits of 0/0, which the hardware sets (x86 and ARM differ).
+Many devices share a coarse print, so it is never a claim on its own: it is bound to the
+network (IPv4 as is, IPv6 by its /64) and the UTC day.
 
 `core.fingerprinting.device_keys` turns an assessment into claim keys:
 
@@ -108,7 +120,12 @@ The checks feed indicators only: `navigator`, `worker`, `iframe`, `integrity`,
 |---|---|
 | `high` | its key and its fingerprint |
 | `low` | its key, when that key is persistent |
+| `low`, protected | also `p:` = its coarse print on this network, today |
 | `suspicious` or unknown | none; these share a small per-IP count instead |
+
+So a new private tab mints a new key, but not a new `p:` key. Look-alike devices behind one
+address (CGNAT, iCloud Private Relay) share a `p:` key for that day. That is never stricter
+than the per-IP count they would otherwise fall back to, which the whole address shares.
 
 ## Where it is used
 
@@ -125,6 +142,7 @@ replacing them.
 | Browser | Sign-ups | Code requests |
 |---|---|---|
 | Recognised | 3 a day per claim key | 10 an hour per claim key |
+| Its `p:` key (protected) | 5 a day, the IP's allowance | 10 an hour |
 | Unknown or suspicious | 5 a day per IP | 10 an hour per IP |
 
 - Only requests allauth accepted (200 or 401) are counted, so a mistyped address costs nothing.
@@ -165,12 +183,15 @@ Configuration:
 On a running site, an admin can open `/system` and use the "Browser-Erkennung" panel.
 "Diesen Browser prüfen" runs a fresh proof, and the panel then shows what the server
 concluded about that browser: tier, indicators, continuity, similarity, the current
-proof-of-work bits and the first 8 characters of the key and fingerprint ids.
+proof-of-work bits, the first 8 characters of the key and fingerprint ids, the claim keys
+the browser holds on this network, and a prefix per probe value (which probe moved between
+two checks).
 `GET /api/system/browser` is the only reply the app serves that carries an assessment. It requires system
 access (staff plus the admin's OTP) and only ever shows the requesting browser's own receipt,
 so only an admin account can use it as an oracle. An honest desktop browser should read
 `high` with no indicators; iOS reads `low` (`ios`), and a browser that cannot keep its key
-(some private windows) reads `low` with `ephemeral_key`. Each check is also logged as
+(some private windows) reads `low` with `ephemeral_key`. Several Safari private tabs read
+`low` with `canvas_noise` or `audio_unstable`, a different key each, and the same `p:` key. Each check is also logged as
 `Browser assessed: <tier> <indicators>`.
 
 `cd backend && uv run python manage.py test core.test_fingerprinting --noinput`

@@ -927,6 +927,13 @@ protocol and tables are in `docs/reference/browser-fingerprinting.md`. Rules tha
 - **Claims stack on the IP limits and are recorded per voter**, so a withdrawal releases
   exactly what was claimed. The device claim runs before the IP claim and is released when
   the IP claim refuses.
+- **Protected browsers claim per network too.** A `low` browser that randomises on purpose or
+  cannot keep its key (`fingerprinting.PROTECTED`: Safari's private tabs, each with its own
+  storage and per-tab noise) gets a `coarsePrint`, and `device_keys(assessment, ip)` adds a
+  `p:` key = coarse print + IP (IPv6 /64) + UTC day. A new private tab is not a new device;
+  look-alikes behind one CGNAT share it for a day, never stricter than the per-IP fallback.
+  Pass the IP wherever `device_keys` is called. Canvas and audio noise are found by known
+  answers (`canvasIntegrity`, `audioIsExact`); `repeated` cannot see a noise salted per tab.
 - **Collect on demand only.** The SPA calls `prewarmRecognition()` where a vote or sign-up
   may follow and `ensureRecognized()` (waits ≤ 6 s, never rejects) before the request;
   there is no background collection on other pages.

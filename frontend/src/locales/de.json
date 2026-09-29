@@ -822,7 +822,9 @@
             "ids": "Schlüssel {browser}… · Fingerabdruck {fingerprint}",
             "continuity": "Dauerhafter Schlüssel {persistent} · gleicher Schlüssel wie zuvor {continuity} · Ähnlichkeit {similarity}",
             "pow": "Proof-of-Work für diese Adresse: {bits} Bit",
-            "check": "Diesen Browser prüfen"
+            "check": "Diesen Browser prüfen",
+            "keys": "Anspruchsschlüssel (b: Schlüssel, f: Fingerabdruck, p: grober Abdruck in diesem Netz)",
+            "components": "Messwerte"
         }
     },
     "freshness": {

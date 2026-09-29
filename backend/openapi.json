@@ -7075,6 +7075,20 @@
                             }
                         ],
                         "title": "Fingerprint Id"
+                    },
+                    "components": {
+                        "additionalProperties": {
+                            "type": "string"
+                        },
+                        "title": "Components",
+                        "type": "object"
+                    },
+                    "keys": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Keys",
+                        "type": "array"
                     }
                 },
                 "required": [
@@ -7084,7 +7098,9 @@
                     "continuity",
                     "similarity",
                     "browser_id",
-                    "fingerprint_id"
+                    "fingerprint_id",
+                    "components",
+                    "keys"
                 ],
                 "title": "SystemBrowserAssessment",
                 "type": "object"

@@ -19,11 +19,13 @@ Rules that hold this together (CLAUDE.md, "Browser recognition"):
 import base64
 import binascii
 import hashlib
+import ipaddress
 import json
 import re
 import secrets
 import time
 from collections import Counter
+from datetime import UTC, datetime
 from typing import Literal
 
 from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
@@ -103,6 +105,11 @@ LOW = frozenset(
         "checks_unavailable",
     }
 )
+# The browser randomises its renderers on purpose or cannot keep its key: Safari's private tabs
+# (each one its own storage, noise salted per tab), Brave, Firefox's resistFingerprinting.
+PROTECTED = frozenset({"canvas_noise", "iframe_canvas_mismatch", "audio_unstable", "ephemeral_key"})
+# What such a browser's noise leaves alone. Shared by every device of one model and browser version.
+COARSE = ("graphics", "fonts", "hardware", "math", "media")
 CACHE_ERRORS = (RedisError, OSError)
 
 
@@ -483,16 +490,46 @@ def assess(browser_id, evidence, headers, previous_browser_id=None):
     if previous_browser_id is not None and previous_browser_id != browser_id:
         indicators.append("browser_key_changed")
     tier = tier_of(indicators)
+    protected = tier == "low" and bool(PROTECTED.intersection(indicators))
     fingerprint = json.dumps(stable, sort_keys=True, separators=(",", ":"))
     return {
         "browserId": browser_id,
         "persistent": evidence.persistent,
         "fingerprintId": keyed_id("fingerprint", fingerprint) if tier == "high" else None,
+        "coarsePrint": _coarse_print(components, headers) if protected else None,
         "tier": tier,
         "continuity": previous_browser_id == browser_id,
         "similarity": similarity,
         "indicators": sorted(set(indicators)),
+        # Keyed hashes, for the /system panel's prefixes: which probe moved between two checks.
+        "components": components,
     }
+
+
+def _coarse_print(components, headers):
+    """The parts a protected browser's noise leaves alone, plus its user agent; None without them.
+
+    Many devices share it, so it is never a claim on its own: ``device_keys`` binds it to the
+    network and the day.
+    """
+    coarse = {name: components[name] for name in COARSE if name in components}
+    if not coarse:
+        return None
+    coarse["userAgent"] = keyed_id("probe.userAgent", headers.get("user-agent", ""))
+    return keyed_id("coarse", json.dumps(coarse, sort_keys=True, separators=(",", ":")))
+
+
+def ip_bucket(ip):
+    """IPv4 as it is; IPv6 by its /64, since privacy addresses rotate the host part."""
+    try:
+        address = ipaddress.ip_address(ip or "")
+    except ValueError:
+        return ip or "-"
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.ipv4_mapped is not None:
+            return str(address.ipv4_mapped)
+        return str(ipaddress.ip_network(f"{address}/64", strict=False))
+    return str(address)
 
 
 def _similarity(browser_id, components):
@@ -556,8 +593,14 @@ def get_browser_assessment(request):
         return None
 
 
-def device_keys(assessment):
-    """The keys a claim can be made on. Suspicious or unknown: none. A fingerprint only when high."""
+def device_keys(assessment, ip=None):
+    """The keys a claim can be made on. Suspicious or unknown: none. A fingerprint only when high.
+
+    A protected browser (``coarsePrint``) also claims on its coarse print within its network and
+    UTC day: a new private tab mints a new key, but not a new ``p:`` key. Look-alike devices
+    behind one address (CGNAT, iCloud Private Relay) share it for that day, which is never
+    stricter than the per-IP count an unrecognised browser falls back to.
+    """
     if not isinstance(assessment, dict) or assessment.get("tier") not in {"high", "low"}:
         return []
     keys = []
@@ -565,6 +608,10 @@ def device_keys(assessment):
         keys.append(f"b:{assessment['browserId']}")
     if assessment.get("tier") == "high" and assessment.get("fingerprintId"):
         keys.append(f"f:{assessment['fingerprintId']}")
+    if assessment.get("coarsePrint") and ip:
+        day = datetime.now(tz=UTC).date().isoformat()
+        network = f"{assessment['coarsePrint']}|{ip_bucket(ip)}|{day}"
+        keys.append(f"p:{keyed_id('network', network)}")
     return keys
 
 

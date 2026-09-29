@@ -86,7 +86,7 @@ async function identify(page: Page): Promise<Assessment> {
     return assessment;
 }
 
-test("an honest browser shows no lie and every check runs", async ({ page }) => {
+test("an honest browser shows no lie and every check runs", async ({ page }, testInfo) => {
     await setup(page);
     let result = await identify(page);
     for (const lie of LIES) expect(result.indicators).not.toContain(lie);
@@ -99,6 +99,11 @@ test("an honest browser shows no lie and every check runs", async ({ page }) => 
     for (const check of ["iframe", "integrity", "canvasIntegrity", "engine", "worker", "navigator"]) {
         expect(result.indicators).not.toContain(`${check}_unavailable`);
         expect(result.indicators).not.toContain(`${check}_timeout`);
+    }
+    // The known-answer canvas and audio checks must pass wherever nothing adds noise on purpose.
+    if (!testInfo.project.name.includes("resist")) {
+        expect(result.indicators).not.toContain("canvas_noise");
+        expect(result.indicators).not.toContain("audio_unstable");
     }
     // A test browser is driven by a program, which is the one reason it may be suspicious.
     if (result.tier === "suspicious") expect(result.indicators).toContain("automation");

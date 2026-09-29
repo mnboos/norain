@@ -5,7 +5,9 @@ limit sits in front of them as middleware. It stacks on Caddy's per-IP flood lim
 allauth's per-address ones:
 
 - A recognised browser (``core.fingerprinting.device_keys``) is counted per key, whatever
-  its network: a fresh cookie or another IP does not reset it.
+  its network: a fresh cookie or another IP does not reset it. A browser that randomises its
+  probes (Safari's private tabs) is also counted by its coarse print on its network, so a new
+  private tab does not start afresh either.
 - An unknown or suspicious browser shares one tighter count per IP.
 
 Only requests allauth accepted are counted (a refused address costs nothing), so parallel
@@ -49,12 +51,21 @@ def counters(request: HttpRequest) -> list[tuple[str, int, int]]:
         return []
     name, window, per_key, per_ip = rule
     slot = int(time.time()) // window
-    keys = fp.device_keys(fp.get_browser_assessment(request))
+    ip = client_ip(request)
+    keys = fp.device_keys(fp.get_browser_assessment(request), ip)
     if keys:
         # Every key is counted, so neither a new cookie nor a new key alone starts afresh.
-        return [(f"auth:device:{name}:{fp.keyed_id('auth', key)}:{slot}", per_key, window) for key in keys]
-    ip = client_ip(request) or "-"
-    return [(f"auth:device:{name}:ip:{fp.keyed_id('auth', ip)}:{slot}", per_ip, window)]
+        # A network key (``p:``) stands for whoever shares the address, so it gets the IP's
+        # allowance: look-alikes behind one CGNAT are never held tighter than without it.
+        return [
+            (
+                f"auth:device:{name}:{fp.keyed_id('auth', key)}:{slot}",
+                per_ip if key.startswith("p:") else per_key,
+                window,
+            )
+            for key in keys
+        ]
+    return [(f"auth:device:{name}:ip:{fp.keyed_id('auth', ip or '-')}:{slot}", per_ip, window)]
 
 
 def refused(held: list[tuple[str, int, int]]) -> bool:

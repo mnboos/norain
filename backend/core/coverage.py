@@ -154,7 +154,7 @@ def claim_device_vote(voter: str, assessment: dict | None, ip: str | None, code:
             cache.set(_device_claim_key(voter, code), {"keys": [], "bucket": bucket}, DEVICE_VOTE_TTL)
             return None
         claimed: list[str] = []
-        for key in fingerprinting.device_keys(assessment):
+        for key in fingerprinting.device_keys(assessment, ip):
             if not cache.add(_device_vote_key(key, code), 1, DEVICE_VOTE_TTL):
                 cache.delete_many([_device_vote_key(k, code) for k in claimed])
                 return "device"

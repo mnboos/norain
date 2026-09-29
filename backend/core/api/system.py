@@ -149,6 +149,10 @@ class SystemBrowserAssessment(CamelSchema):
     # Short prefixes only: enough to see a key or fingerprint stay the same across checks.
     browser_id: str
     fingerprint_id: str | None
+    # Per probe, so two checks show which one moved (Safari's private tabs salt their noise per tab).
+    components: dict[str, str]
+    # The claim keys this browser holds on this network: a new private tab keeps its ``p:`` key.
+    keys: list[str]
 
 
 class SystemBrowser(CamelSchema):
@@ -163,6 +167,7 @@ def browser(request):
     behind system access, and only for the browser that asks (docs/reference/browser-fingerprinting.md)."""
     assessment = fingerprinting.get_browser_assessment(request)
     if assessment is not None:
+        keys = fingerprinting.device_keys(assessment, client_ip(request))
         assessment = {
             "tier": assessment["tier"],
             "indicators": assessment["indicators"],
@@ -171,6 +176,8 @@ def browser(request):
             "similarity": assessment["similarity"],
             "browser_id": assessment["browserId"][:8],
             "fingerprint_id": (assessment["fingerprintId"] or "")[:8] or None,
+            "components": {name: value[:8] for name, value in assessment.get("components", {}).items()},
+            "keys": [f"{key[:2]}{key[2:10]}" for key in keys],
         }
     return {
         "enabled": settings.BROWSER_FINGERPRINT_ENABLED,

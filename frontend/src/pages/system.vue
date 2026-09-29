@@ -618,6 +618,18 @@ onBeforeUnmount(() => {
                                         })
                                     }}
                                 </div>
+                                <div class="text-caption">
+                                    {{ t("system.browser.keys") }}:
+                                    {{ browser.data.value.assessment.keys.join(" · ") || "–" }}
+                                </div>
+                                <div class="text-caption">
+                                    {{ t("system.browser.components") }}:
+                                    {{
+                                        Object.entries(browser.data.value.assessment.components)
+                                            .map(([name, value]) => `${name} ${value}`)
+                                            .join(" · ") || "–"
+                                    }}
+                                </div>
                             </template>
                             <div v-else-if="browser.data.value" class="text-caption">
                                 {{ t("system.browser.none") }}

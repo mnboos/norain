@@ -822,7 +822,9 @@
             "ids": "Key {browser}… · fingerprint {fingerprint}",
             "continuity": "Persistent key {persistent} · same key as before {continuity} · similarity {similarity}",
             "pow": "Proof of work for this address: {bits} bits",
-            "check": "Check this browser"
+            "check": "Check this browser",
+            "keys": "Claim keys (b: key, f: fingerprint, p: coarse print on this network)",
+            "components": "Probe values"
         }
     },
     "freshness": {

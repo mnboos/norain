@@ -95,7 +95,31 @@ function graphics(): unknown {
     }
 }
 
+/**
+ * Play a buffer of exactly representable samples straight to the output and compare. Safari's
+ * fingerprinting protection salts audio noise per tab, and `repeated` cannot see a noise that
+ * is the same twice in one tab; a known answer can.
+ */
+export async function audioIsExact(): Promise<boolean> {
+    const context = new OfflineAudioContext(1, 256, 44100);
+    const input = context.createBuffer(1, 256, 44100);
+    const samples = Float32Array.from({ length: 256 }, (_, i) => i / 256 - 0.5);
+    input.copyToChannel(samples, 0);
+    const source = context.createBufferSource();
+    source.buffer = input;
+    source.connect(context.destination);
+    source.start();
+    try {
+        const output = (await context.startRendering()).getChannelData(0);
+        return samples.every((value, i) => output[i] === value);
+    } finally {
+        source.disconnect();
+    }
+}
+
 async function audio(): Promise<string> {
+    // Noisy audio is no fingerprint: report it as unstable, like one that changes between reads.
+    if (!(await audioIsExact())) return "unstable";
     const context = new OfflineAudioContext(1, 5000, 44100);
     const oscillator = context.createOscillator();
     const compressor = context.createDynamicsCompressor();
@@ -115,6 +139,35 @@ async function audio(): Promise<string> {
     } finally {
         oscillator.disconnect();
         compressor.disconnect();
+    }
+}
+
+/**
+ * `(a, b) => bits(a / b)` for f32 and f64 (high word), as WebAssembly. The sign and payload of
+ * the NaN from 0/0 are left to the hardware (x86 and ARM differ), and fingerprinting protection
+ * leaves them alone. Parameters, not constants, so no compiler folds the division away.
+ */
+const NAN_MODULE = new Uint8Array([
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0d, 0x02, 0x60, 0x02, 0x7d, 0x7d, 0x01, 0x7f, 0x60, 0x02,
+    0x7c, 0x7c, 0x01, 0x7f, 0x03, 0x03, 0x02, 0x00, 0x01, 0x07, 0x09, 0x02, 0x01, 0x61, 0x00, 0x00, 0x01, 0x62, 0x00,
+    0x01, 0x0a, 0x17, 0x02, 0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x95, 0xbc, 0x0b, 0x0c, 0x00, 0x20, 0x00, 0x20, 0x01,
+    0xa3, 0xbd, 0x42, 0x20, 0x88, 0xa7, 0x0b,
+]);
+
+export function nanBits(): string[] | null {
+    if (typeof WebAssembly !== "object") return null;
+    try {
+        const { exports } = new WebAssembly.Instance(new WebAssembly.Module(NAN_MODULE));
+        const hex = (name: string) => {
+            const run: unknown = exports[name];
+            if (typeof run !== "function") throw new Error("Missing export");
+            const value: unknown = Reflect.apply(run, undefined, [0, 0]);
+            return (Number(value) >>> 0).toString(16);
+        };
+        return [hex("a"), hex("b")];
+    } catch {
+        // A CSP without wasm-unsafe-eval, or WebAssembly switched off.
+        return null;
     }
 }
 
@@ -213,7 +266,11 @@ export async function collectSignals(): Promise<Signals> {
         [
             "display",
             // No devicePixelRatio: it follows the zoom.
-            probe(() => [Math.min(screen.width, screen.height), Math.max(screen.width, screen.height), screen.colorDepth]),
+            probe(() => [
+                Math.min(screen.width, screen.height),
+                Math.max(screen.width, screen.height),
+                screen.colorDepth,
+            ]),
         ],
         [
             "locale",
@@ -223,7 +280,10 @@ export async function collectSignals(): Promise<Signals> {
                 Intl.NumberFormat().resolvedOptions().numberingSystem,
             ]),
         ],
-        ["math", probe(() => [Math.acos(0.123), Math.asinh(1), Math.tan(-1e300), Math.expm1(1)].map(String))],
+        [
+            "math",
+            probe(() => [...[Math.acos(0.123), Math.asinh(1), Math.tan(-1e300), Math.expm1(1)].map(String), nanBits()]),
+        ],
         [
             "media",
             probe(() => {

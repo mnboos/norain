@@ -48,6 +48,14 @@ export interface SystemBrowserAssessment {
      * 
      */
     fingerprintId: string | null;
+    /**
+     * 
+     */
+    components: { [key: string]: string; };
+    /**
+     * 
+     */
+    keys: Array<string>;
 }
 
 /**
@@ -72,6 +80,8 @@ export function instanceOfSystemBrowserAssessment(value: object): value is Syste
     if (!('similarity' in value) || value['similarity'] === undefined) return false;
     if ((!('browserId' in (value as Record<string, any>)) && !('browser_id' in (value as Record<string, any>))) || ((value as Record<string, any>)['browserId'] === undefined && (value as Record<string, any>)['browser_id'] === undefined)) return false;
     if ((!('fingerprintId' in (value as Record<string, any>)) && !('fingerprint_id' in (value as Record<string, any>))) || ((value as Record<string, any>)['fingerprintId'] === undefined && (value as Record<string, any>)['fingerprint_id'] === undefined)) return false;
+    if (!('components' in value) || value['components'] === undefined) return false;
+    if (!('keys' in value) || value['keys'] === undefined) return false;
     return true;
 }
 
@@ -92,6 +102,8 @@ export function SystemBrowserAssessmentFromJSONTyped(json: any, ignoreDiscrimina
         'similarity': json['similarity'],
         'browserId': json['browser_id'],
         'fingerprintId': json['fingerprint_id'],
+        'components': json['components'],
+        'keys': json['keys'],
     };
 }
 
@@ -113,6 +125,8 @@ export function SystemBrowserAssessmentToJSONTyped(value?: SystemBrowserAssessme
         'similarity': value['similarity'],
         'browser_id': value['browserId'],
         'fingerprint_id': value['fingerprintId'],
+        'components': value['components'],
+        'keys': value['keys'],
     };
 }
 

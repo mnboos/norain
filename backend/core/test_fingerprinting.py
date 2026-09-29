@@ -4,6 +4,7 @@ import json
 import os
 import secrets
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import skipUnless
 from unittest.mock import patch
@@ -30,6 +31,10 @@ CHROME_UA = (
 IPHONE_UA = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) "
     "Version/18.0 Mobile/15E148 Safari/604.1"
+)
+SAFARI_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) "
+    "Version/26.0 Safari/605.1.15"
 )
 CHROME_HEADERS = {
     "User-Agent": CHROME_UA,
@@ -77,7 +82,7 @@ def evidence(signals, persistent=True):
     return fp.parse_evidence(json.dumps({"version": 2, "persistent": persistent, "signals": signals}))
 
 
-def recognise(client, tier, browser="browser", fingerprint="fingerprint", persistent=True):
+def recognise(client, tier, browser="browser", fingerprint="fingerprint", persistent=True, coarse=None):
     """Give a test client a stored receipt, as a verified browser of ``tier`` would have."""
     response = HttpResponse()
     context = f"context-{browser}"
@@ -86,10 +91,12 @@ def recognise(client, tier, browser="browser", fingerprint="fingerprint", persis
         "browserId": browser,
         "persistent": persistent,
         "fingerprintId": fingerprint if tier == "high" else None,
+        "coarsePrint": coarse,
         "tier": tier,
         "continuity": False,
         "similarity": None,
         "indicators": [],
+        "components": {},
     }
     fp.store_receipt(response, context, assessment)
     for name, morsel in response.cookies.items():
@@ -331,6 +338,58 @@ class FingerprintTests(SimpleTestCase):
                 self.assertEqual(result["tier"], "low", result["indicators"])
                 self.assertIsNone(result["fingerprintId"])
 
+    def safari_private_tab(self):
+        """Safari's fingerprinting protection: canvas and audio salted per tab, so both differ."""
+        signals = honest_signals(ua=SAFARI_UA, platform="MacIntel", engine=JAVASCRIPTCORE)
+        signals["graphics"]["value"] = json.dumps({"vendor": "Apple Inc.", "renderer": "Apple GPU"})
+        signals["iframe"]["value"] = json.dumps([SAFARI_UA, "MacIntel", 8, "Apple GPU", "Europe/Zurich", None])
+        signals["canvas"]["value"] = secrets.token_hex(8)
+        signals["audio"] = {"status": "unstable"}
+        signals["canvasIntegrity"]["value"] = "noise:12"
+        return signals
+
+    def test_every_safari_private_tab_shares_one_coarse_print(self):
+        tabs = []
+        for n in range(3):
+            self.signals = self.safari_private_tab()
+            tabs.append(fp.assess(f"tab-{n}", evidence(self.signals), {"User-Agent": SAFARI_UA}))
+        for tab in tabs:
+            self.assertEqual(tab["tier"], "low", tab["indicators"])
+            self.assertIn("canvas_noise", tab["indicators"])
+            self.assertIsNone(tab["fingerprintId"])
+        self.assertEqual({tab["coarsePrint"] for tab in tabs} - {None}, {tabs[0]["coarsePrint"]})
+        keys = [fp.device_keys(tab, "203.0.113.7") for tab in tabs]
+        # A new key per tab, one network key for all of them.
+        self.assertEqual(len({k[0] for k in keys}), 3)
+        self.assertEqual(len({k[-1] for k in keys}), 1)
+        self.assertTrue(keys[0][-1].startswith("p:"))
+
+    def test_the_network_key_is_bound_to_the_address_and_the_day(self):
+        tab = {"tier": "low", "persistent": True, "browserId": "b", "fingerprintId": None, "coarsePrint": "c"}
+        here = fp.device_keys(tab, "203.0.113.7")[-1]
+        self.assertNotEqual(fp.device_keys(tab, "203.0.113.8")[-1], here)
+        self.assertNotEqual(fp.device_keys({**tab, "coarsePrint": "d"}, "203.0.113.7")[-1], here)
+        # Privacy addresses rotate the host part of an IPv6 address; the /64 stays.
+        self.assertEqual(
+            fp.device_keys(tab, "2001:db8:1:2::1")[-1], fp.device_keys(tab, "2001:db8:1:2:aaaa:bbbb:cccc:dddd")[-1]
+        )
+        self.assertNotEqual(fp.device_keys(tab, "2001:db8:1:2::1")[-1], fp.device_keys(tab, "2001:db8:1:3::1")[-1])
+        self.assertEqual(fp.device_keys(tab), ["b:b"])
+        with patch("core.fingerprinting.datetime") as clock:
+            clock.now.return_value = datetime(2030, 1, 2, tzinfo=UTC)
+            self.assertNotEqual(fp.device_keys(tab, "203.0.113.7")[-1], here)
+
+    def test_only_a_protected_browser_gets_a_coarse_print(self):
+        self.assertIsNone(self.assess()["coarsePrint"])
+        self.signals["audio"] = {"status": "timeout"}
+        self.assertIsNone(self.assess()["coarsePrint"], "degraded, not protected")
+        self.signals = {**honest_signals(), "canvasIntegrity": {"status": "ok", "value": "noise:3"}}
+        self.assertIsNotNone(self.assess()["coarsePrint"])
+        self.assertIsNotNone(fp.assess("b", evidence(honest_signals(), False), CHROME_HEADERS)["coarsePrint"])
+        self.signals["integrity"] = {"status": "ok", "value": '["Navigator.userAgent"]'}
+        self.assertEqual(self.assess()["tier"], "suspicious")
+        self.assertIsNone(self.assess()["coarsePrint"])
+
     def test_device_keys_by_tier(self):
         high = {"tier": "high", "persistent": True, "browserId": "b", "fingerprintId": "f"}
         self.assertEqual(fp.device_keys(high), ["b:b", "f:f"])
@@ -481,6 +540,16 @@ class DeviceVoteTests(TestCase):
             recognise(client, "low", browser=f"iphone-{n}", fingerprint="same-model")
             self.assertEqual(self.vote(client, "DE", f"10.0.1.{n}").status_code, 200)
 
+    def test_private_tabs_of_one_browser_vote_once_per_network(self):
+        for n in range(2):
+            client = Client()
+            recognise(client, "low", browser=f"tab-{n}", coarse="same-safari")
+            self.assertEqual(self.vote(client, "DE", "10.0.8.1").status_code, 200 if n == 0 else 429, n)
+        # A look-alike Mac on another network is another device.
+        other = Client()
+        recognise(other, "low", browser="elsewhere", coarse="same-safari")
+        self.assertEqual(self.vote(other, "DE", "10.0.8.2").status_code, 200)
+
     def test_unknown_browsers_share_a_small_daily_count_per_ip(self):
         for n, code in enumerate(["DE", "FR", "IT"]):
             self.assertEqual(self.vote(Client(), code, "10.0.2.1").status_code, 200, n)
@@ -551,6 +620,16 @@ class DeviceThrottleTests(TestCase):
         fresh = Client()
         recognise(fresh, "high", browser="two", fingerprint="device")
         self.assertEqual(self.signup(fresh, 4, "10.1.0.10").status_code, 429)
+
+    def test_a_new_private_tab_does_not_start_afresh(self):
+        # The network key gets the IP's allowance (5), not a device's (3).
+        for n in range(5):
+            client = Client()
+            recognise(client, "low", browser=f"tab-{n}", coarse="same-safari")
+            self.assertNotEqual(self.signup(client, n, "10.1.3.1").status_code, 429, n)
+        fresh = Client()
+        recognise(fresh, "low", browser="tab-5", coarse="same-safari")
+        self.assertEqual(self.signup(fresh, 5, "10.1.3.1").status_code, 429)
 
     def test_unknown_browsers_share_a_count_per_ip(self):
         for n in range(5):

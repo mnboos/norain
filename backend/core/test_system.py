@@ -173,6 +173,8 @@ class SystemApiTests(TestCase):
         # Prefixes only, never the full keyed ids.
         self.assertEqual(assessment["browser_id"], "b" * 8)
         self.assertEqual(assessment["fingerprint_id"], "f" * 8)
+        self.assertEqual(assessment["keys"], ["b:" + "b" * 8, "f:" + "f" * 8])
+        self.assertEqual(assessment["components"], {})
         recognise(self.client, "low", browser="c" * 64)
         self.assertIsNone(self.get("browser")["assessment"]["fingerprint_id"])
         with self.settings(BROWSER_FINGERPRINT_ENABLED=False):
