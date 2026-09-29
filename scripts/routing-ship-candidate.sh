@@ -6,6 +6,8 @@
 #
 # Takes from just: VPS_USER, VPS_HOST, ROUTING_OSM_IMPORT_DIR (local), POIS_FILE, and
 # optionally VPS_NORAIN_DIR (the checkout with the production .env, default /srv/norain).
+# DRY_RUN=1 (`just routing-ship-candidate-dry-run`) only reports what would be copied and whether
+# the VPS has the space for it.
 # The VPS paths come from that .env: APP_STORAGE_PATH and ROUTING_OSM_IMPORT_DIR.
 set -euo pipefail
 
@@ -51,6 +53,63 @@ if [[ "$remote_storage" != /* || "$remote_osm" != /* ]]; then
     exit 1
 fi
 remote_cache="$remote_storage/graphhopper/cache"
+terrain_excludes=(--exclude /cache/ --exclude /cache-fallback/)
+ship_pois=
+if [ -n "${POIS_FILE:-}" ] && [ -f "$ROUTING_OSM_IMPORT_DIR/$POIS_FILE" ]; then
+    ship_pois=1
+fi
+
+if [ -n "${DRY_RUN:-}" ]; then
+    # What the copies below would send (rsync skips files the VPS already has), against the free
+    # space of the filesystem each lands on. Changes nothing on the VPS.
+    sent_bytes() {
+        rsync -an --stats "$@" | sed -n 's/^Total transferred file size: \([0-9,]*\) bytes.*/\1/p' | tr -d ,
+    }
+    # Mount point and free bytes of the filesystem a (possibly missing) remote path would be on.
+    remote_free() {
+        ssh "$remote" "p='$1'; while [ ! -e \"\$p\" ]; do p=\$(dirname \"\$p\"); done; df -PB1 \"\$p\" | awk 'NR==2 {print \$6, \$4}'"
+    }
+    human() { numfmt --to=iec --suffix=B "$1"; }
+
+    declare -A need=() free=()
+    add() {  # add <bytes> <remote destination> <label>
+        local mount avail
+        read -r mount avail < <(remote_free "$2")
+        free[$mount]=$avail
+        need[$mount]=$(( ${need[$mount]:-0} + $1 ))
+        printf '  %-10s %8s  -> %s (%s)\n' "$3" "$(human "$1")" "$2" "$mount"
+    }
+    echo "Dry run: shipping $release and $terrain to $remote would copy"
+    add "$(sent_bytes "$cache/$release/" "$remote:$remote_cache/$release/")" "$remote_cache/$release" graph
+    add "$(sent_bytes "${terrain_excludes[@]}" "$ROUTING_OSM_IMPORT_DIR/$terrain/" "$remote:$remote_osm/$terrain/")" \
+        "$remote_osm/$terrain" terrain
+    if [ -n "$ship_pois" ]; then
+        add "$(sent_bytes "$ROUTING_OSM_IMPORT_DIR/$POIS_FILE" "$remote:$remote_osm/")" "$remote_osm/$POIS_FILE" POIs
+    fi
+
+    # Keep some room for the running services (Postgres, logs) on top of the copy itself.
+    headroom=$((2 * 1024 * 1024 * 1024))
+    ok=1
+    echo
+    for mount in "${!need[@]}"; do
+        if (( need[$mount] + headroom <= free[$mount] )); then verdict=ok; else verdict="NOT ENOUGH"; ok=; fi
+        printf '%s: needs %s (+%s headroom), %s free: %s\n' "$mount" "$(human "${need[$mount]}")" \
+            "$(human "$headroom")" "$(human "${free[$mount]}")" "$verdict"
+    done
+
+    # What could make room: releases that are neither current nor candidate there.
+    echo
+    echo "Releases on $VPS_HOST (current/candidate are in use):"
+    ssh "$remote" "cd '$remote_cache' 2>/dev/null && for r in releases/*/; do
+            r=\${r%/}; [ -d \"\$r\" ] || continue; tag=
+            [ \"\$(readlink current 2>/dev/null)\" = \"\$r\" ] && tag=' current'
+            [ \"\$(readlink candidate 2>/dev/null)\" = \"\$r\" ] && tag=\"\$tag candidate\"
+            printf '  %s\t%s%s\n' \"\$(du -sh \"\$r\" | cut -f1)\" \"\$r\" \"\$tag\"
+        done" || echo "  (none)"
+    [ -n "$ok" ] || { echo "Not enough space on $VPS_HOST." >&2; exit 1; }
+    echo "Enough space: just routing-ship-candidate would fit."
+    exit 0
+fi
 
 echo "Shipping $release and $terrain to $remote"
 ssh "$remote" "mkdir -p '$remote_cache/releases' '$remote_osm/elevation'"
@@ -59,9 +118,9 @@ ssh "$remote" "mkdir -p '$remote_cache/releases' '$remote_osm/elevation'"
 rsync -aP "$cache/$release/" "$remote:$remote_cache/$release/"
 # terrain.pmtiles and fallback.pmtiles. The decoded tile caches are only written and read
 # by an import; serving (and /elevation) reads the archives.
-rsync -aP --exclude /cache/ --exclude /cache-fallback/ \
+rsync -aP "${terrain_excludes[@]}" \
     "$ROUTING_OSM_IMPORT_DIR/$terrain/" "$remote:$remote_osm/$terrain/"
-if [ -n "${POIS_FILE:-}" ] && [ -f "$ROUTING_OSM_IMPORT_DIR/$POIS_FILE" ]; then
+if [ -n "$ship_pois" ]; then
     rsync -aP "$ROUTING_OSM_IMPORT_DIR/$POIS_FILE" "$remote:$remote_osm/"
 else
     echo "No POI file ${POIS_FILE:-} in $ROUTING_OSM_IMPORT_DIR; journeys keep the VPS's POIs."

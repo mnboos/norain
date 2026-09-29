@@ -76,10 +76,14 @@ RUN sed -i '/environment.jersey().register(new RootResource());/a\        enviro
     web/src/main/java/com/graphhopper/application/GraphHopperApplication.java
 # Where the zoom-15 terrain has no value, read the zoom-12 archive instead of storing 0 m.
 # The grep fails the build if the line moved and the sed matched nothing.
-COPY docker/graphhopper/FallbackElevationProvider.java /source/core/src/main/java/com/graphhopper/reader/dem/FallbackElevationProvider.java
-RUN sed -i 's/ElevationProvider elevationProvider = createElevationProvider(ghConfig);/ElevationProvider elevationProvider = com.graphhopper.reader.dem.FallbackElevationProvider.withFallback(createElevationProvider(ghConfig), ghConfig, ghConfig.getString("graph.elevation.pmtiles.fallback.cache_dir", ""));/' \
+# An import also looks up every node's height once, in tile order, before reading the ways: in
+# OSMReader's way order a continent's tiles are read at random (Europe: 4 h of disk reads).
+COPY docker/graphhopper/FallbackElevationProvider.java docker/graphhopper/PrefetchedElevationProvider.java \
+    /source/core/src/main/java/com/graphhopper/reader/dem/
+COPY docker/graphhopper/PrefetchedElevationProviderTest.java /source/core/src/test/java/com/graphhopper/reader/dem/
+RUN sed -i 's/ElevationProvider elevationProvider = createElevationProvider(ghConfig);/ElevationProvider elevationProvider = com.graphhopper.reader.dem.PrefetchedElevationProvider.forImport(com.graphhopper.reader.dem.FallbackElevationProvider.withFallback(createElevationProvider(ghConfig), ghConfig, ghConfig.getString("graph.elevation.pmtiles.fallback.cache_dir", "")), ghConfig);/' \
     core/src/main/java/com/graphhopper/GraphHopper.java \
-    && grep -q 'FallbackElevationProvider.withFallback' core/src/main/java/com/graphhopper/GraphHopper.java
+    && grep -q 'PrefetchedElevationProvider.forImport(com.graphhopper.reader.dem.FallbackElevationProvider.withFallback' core/src/main/java/com/graphhopper/GraphHopper.java
 # Route around the weather a request carries (core/weather_routing.py): a time-dependent A*
 # behind a Router subclass. The grep fails the build if the line moved and the sed matched nothing.
 COPY docker/graphhopper/weather/WeatherField.java docker/graphhopper/weather/WeatherAStar.java docker/graphhopper/weather/WeatherRouter.java \
@@ -88,7 +92,7 @@ COPY docker/graphhopper/weather/WeatherAStarTest.java /source/core/src/test/java
 RUN sed -i 's/return new Router(baseGraph, encodingManager, locationIndex, profilesByName, pathBuilderFactory,/return new com.graphhopper.routing.weather.WeatherRouter(baseGraph, encodingManager, locationIndex, profilesByName, pathBuilderFactory,/' \
     core/src/main/java/com/graphhopper/GraphHopper.java \
     && grep -q 'new com.graphhopper.routing.weather.WeatherRouter(' core/src/main/java/com/graphhopper/GraphHopper.java
-RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -pl core -am install -Dtest=WeatherAStarTest -Dsurefire.failIfNoSpecifiedTests=false
+RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -pl core -am install -Dtest=WeatherAStarTest,PrefetchedElevationProviderTest -Dsurefire.failIfNoSpecifiedTests=false
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -pl web -am package -DskipTests
 
 FROM docker.io/library/eclipse-temurin:25-jre AS graphhopper
