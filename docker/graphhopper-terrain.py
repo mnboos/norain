@@ -97,6 +97,10 @@ def extract_piece(source, zoom, output, region_file, dry_run=False):
             raise PieceTooLarge("Terrain piece exceeded the 1 GB file limit")
         return
     # go-pmtiles v1.31.2 reports humanized decimal tile payload bytes, not metadata.
+    # Empty extracts cannot pass CLI verification (its minimum tile zoom stays 31).
+    # Use the explicit entry count, not a rounded payload size, to detect them.
+    if re.search(r"\bresult tile entries 0\b", result.stdout):
+        return 0
     match = re.search(
         r"archive size of ([\d.]+) (B|kB|MB|GB|TB|PB|EB)\b", result.stdout
     )
@@ -150,6 +154,12 @@ def download_pieces(source, zoom, cells, directory, dry_run=False, cell_zoom=MAS
     if not split.exists():
         region_file.write_text(json.dumps(region_geojson(cell_boxes(cells, cell_zoom))))
         size = extract_piece(source, zoom, temporary, region_file, dry_run=True)
+        if size == 0:
+            print(
+                f"Skipping empty terrain piece {source['name']} zoom {zoom}",
+                flush=True,
+            )
+            return []
         if size <= ESTIMATE_PIECE_BYTES:
             print(
                 f"Terrain piece {source['name']} zoom {zoom}: at most ~{size / 1e6:.1f} MB payload",
@@ -178,6 +188,8 @@ def download_pieces(source, zoom, cells, directory, dry_run=False, cell_zoom=MAS
 
 
 def merge_pieces(parts, output):
+    if not parts:
+        raise ValueError(f"No terrain tiles available for {output.name}")
     temporary = output.with_suffix(".partial.pmtiles")
     temporary.unlink(missing_ok=True)
     if len(parts) == 1:
@@ -611,6 +623,8 @@ def prepare(pbf, root, dry_run=False):
                     part.unlink(missing_ok=True)
             if not part.exists():
                 pieces = download_pieces(source, zoom, cells, stage / "pieces")
+                if not pieces and zoom == ZOOM:
+                    continue
                 merge_pieces(pieces, part)
             parts.append(part)
         *parts, fallback_path = parts

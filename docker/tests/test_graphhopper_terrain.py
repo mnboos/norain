@@ -294,6 +294,8 @@ class DownloadPieceTests(unittest.TestCase):
 
     def test_estimate_rounding_and_unknown_output(self):
         for message, expected in [
+            ("Region tiles 1311488, result tile entries 0\narchive size of 0 B", 0),
+            ("result tile entries 1\narchive size of 0 B", 1),
             ("archive size of 899 MB", 900_000_000),
             ("archive size of 1.1 GB", 1_200_000_000),
         ]:
@@ -315,6 +317,38 @@ class DownloadPieceTests(unittest.TestCase):
             self.assertRaisesRegex(ValueError, "unbounded"),
         ):
             terrain.extract_piece(self.source, 15, Path("out"), Path("region"), True)
+
+    def test_empty_piece_skips_download_and_verification(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(terrain, "extract_piece", return_value=0) as extract,
+            patch.object(terrain, "run") as run,
+        ):
+            root = Path(directory)
+            self.assertEqual(terrain.download_pieces(self.source, 15, [(0, 0)], root), [])
+            self.assertEqual(extract.call_count, 1)
+            self.assertTrue(extract.call_args.kwargs["dry_run"])
+            run.assert_not_called()
+            self.assertFalse(list(root.glob("*.pmtiles")))
+
+    def test_empty_merge_preserves_previous_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "terrain.pmtiles"
+            output.write_bytes(b"previous")
+            with self.assertRaisesRegex(ValueError, "No terrain tiles"):
+                terrain.merge_pieces([], output)
+            self.assertEqual(output.read_bytes(), b"previous")
+
+    @unittest.skipUnless(shutil.which("pmtiles"), "requires pinned pmtiles CLI")
+    def test_local_empty_region_is_skipped(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.pmtiles"
+            archive(source, [(1078 * 16, 719 * 16, (131, 10, 20))])
+            parts = terrain.download_pieces(
+                dict(self.source, url=str(source)), 15, [(1080, 719)], root / "pieces"
+            )
+            self.assertEqual(parts, [])
 
     def test_restart_reuses_completed_piece_after_failure(self):
         for zoom in (12, 15):
@@ -420,10 +454,16 @@ class DownloadPieceTests(unittest.TestCase):
             )
             catalog = {
                 "version": "test",
-                "items": [source, dict(source, name="planet", min_zoom=0, max_zoom=12)],
+                "items": [
+                    source,
+                    dict(source, name="empty"),
+                    dict(source, name="planet", min_zoom=0, max_zoom=12),
+                ],
             }
 
             def download(source, zoom, cells, directory):
+                if source["name"] == "empty":
+                    return []
                 directory.mkdir(exist_ok=True)
                 part = directory / f"{zoom}.pmtiles"
                 part.write_bytes(b"piece")
@@ -449,16 +489,17 @@ class DownloadPieceTests(unittest.TestCase):
                     terrain.prepare(Path("test.osm.pbf"), root)
                 stage = next(root.glob(".prepare-*"))
                 self.assertEqual((root / "current").resolve(), (root / "old").resolve())
-                self.assertTrue((stage / "part-0.pmtiles").exists())
+                self.assertFalse((stage / "part-0.pmtiles").exists())
+                self.assertTrue((stage / "part-1.pmtiles").exists())
                 self.assertEqual(len(list((stage / "pieces").glob("*.pmtiles"))), 2)
                 terrain.prepare(Path("test.osm.pbf"), root)
-                self.assertEqual(downloads.call_count, 2)
+                self.assertEqual(downloads.call_count, 4)
                 self.assertNotEqual(
                     (root / "current").resolve(), (root / "old").resolve()
                 )
                 published = root / "current"
                 self.assertEqual(len(list((published / "pieces").glob("*.pmtiles"))), 2)
-                self.assertEqual((published / "part-0.pmtiles").read_bytes(), b"piece")
+                self.assertEqual((published / "part-1.pmtiles").read_bytes(), b"piece")
                 self.assertEqual(
                     (published / "fallback.pmtiles").read_bytes(), b"piece"
                 )
