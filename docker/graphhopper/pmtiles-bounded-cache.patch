@@ -1,0 +1,72 @@
+diff --git a/core/src/main/java/com/graphhopper/reader/dem/PMTilesElevationProvider.java b/core/src/main/java/com/graphhopper/reader/dem/PMTilesElevationProvider.java
+index 6479dc24d..8e85e749f 100644
+--- a/core/src/main/java/com/graphhopper/reader/dem/PMTilesElevationProvider.java
++++ b/core/src/main/java/com/graphhopper/reader/dem/PMTilesElevationProvider.java
+@@ -29,6 +29,6 @@ import java.nio.file.Files;
+ import java.nio.file.StandardOpenOption;
+ import java.util.ArrayDeque;
+-import java.util.HashMap;
++import java.util.LinkedHashMap;
+ import java.util.Map;
+ 
+ /**
+@@ -111,9 +111,21 @@ public class PMTilesElevationProvider implements ElevationProvider {
+ 
+     private final PMTilesReader reader = new PMTilesReader();
+ 
++    // A continent can touch hundreds of thousands of tiles. Keeping every mmap alive until
++    // release() exhausts native mappings/file resources and provides no benefit for the
++    // tile-ordered import. Retain a small LRU for ordinary routing and nearby lookups.
++    static final int MAX_CACHED_TILES = 512;
+     // Cache of packed tiles, keyed by Hilbert tile ID. Missing (or all-sea) tiles use marker objects.
+     // On-disk .tile files use the packed block format defined in PackedTileCodex.
+-    private final Map<Long, PackedTileData> tileBuffers = new HashMap<>();
++    private final Map<Long, PackedTileData> tileBuffers = new LinkedHashMap<>(MAX_CACHED_TILES, 0.75f, true) {
++        @Override
++        protected boolean removeEldestEntry(Map.Entry<Long, PackedTileData> eldest) {
++            if (size() <= MAX_CACHED_TILES) return false;
++            PackedTileData value = eldest.getValue();
++            if (value != MISSING_TILE && value != SEA_LEVEL_TILE) value.release();
++            return true;
++        }
++    };
+ 
+     // Last-tile cache: consecutive getEle() calls typically hit the same tile.
+     private long lastTileId = -1;
+@@ -290,7 +302,16 @@ public class PMTilesElevationProvider implements ElevationProvider {
+         if (tileDir == null) return null;
+         File f = tileFile(tileId);
+         if (!f.exists()) return null;
+-        return loadTileData(f);
++        try {
++            return loadTileData(f);
++        } catch (IOException e) {
++            if (e.getMessage() == null
++                    || !e.getMessage().startsWith("Unsupported legacy raw .tile format")) throw e;
++            // Old or interrupted cache files are disposable derivatives of the PMTiles archive.
++            // Remove one and decode it again instead of returning NaN for every affected node.
++            Files.deleteIfExists(f.toPath());
++            return null;
++        }
+     }
+ 
+     /**
+@@ -321,12 +341,15 @@ public class PMTilesElevationProvider implements ElevationProvider {
+ 
+     private PackedTileData loadTileData(File f) throws IOException {
+         try (FileChannel ch = FileChannel.open(f.toPath(), StandardOpenOption.READ)) {
+-            ByteBuffer buf = ch.map(FileChannel.MapMode.READ_ONLY, 0, f.length());
+-            buf.order(ByteOrder.LITTLE_ENDIAN);
+-            if (!PackedTileCodec.isPackedTile(buf)) {
++            // Check before mmap: an invalid/empty file otherwise leaves a failed mapping around
++            // until GC, which magnifies a stale-cache problem into "Too many open files".
++            ByteBuffer marker = ByteBuffer.allocate(1);
++            if (ch.read(marker) != 1 || (marker.get(0) & 0xFF) != 1) {
+                 throw new IOException("Unsupported legacy raw .tile format in " + f
+                         + ". Remove cached .tile files so they can be regenerated as packed tiles.");
+             }
++            ByteBuffer buf = ch.map(FileChannel.MapMode.READ_ONLY, 0, f.length());
++            buf.order(ByteOrder.LITTLE_ENDIAN);
+             return toPackedTileData(buf);
+         }
+     }

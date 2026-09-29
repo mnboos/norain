@@ -83,16 +83,25 @@ nodes, rather than its entire bounding box. It creates `terrain.pmtiles` (zoom 1
 and `fallback.pmtiles` (zoom 12 for gaps), plus metadata, under
 `ROUTING_OSM_IMPORT_DIR/elevation/<hash>/`, then selects it with `elevation/current`.
 
-The estimate reports transfer and archive sizes. Allow extra space for temporary
-extracts, decoded caches, the new graph and the retained previous graph.
+Downloads are split into sequential, independently reusable pieces capped at
+1 GB (1,000,000,000 bytes), for both elevation layers. The estimate reports the
+piece sizes; preparation splits coverage until the estimated payload is below
+900 MB, leaving room for archive metadata, and enforces the 1 GB file limit.
+Pieces are merged locally into the final archives, which can exceed 1 GB.
+Allow space for the retained pieces, per-source merges and final archives to coexist,
+plus decoded caches, the new graph and the retained previous graph.
 
 ### What gets downloaded again?
 
 - **Same coverage and source catalog:** the completed terrain is reused after
   checksum verification. The small source catalog is still fetched.
-- **Interrupted preparation:** completed source extracts that pass verification are
-  reused from `.prepare-<hash>/`. Incomplete or invalid extracts are downloaded again;
-  this is not a tile-by-tile or byte-by-byte resume.
+- **Interrupted preparation:** rerun the same command. Completed pieces and source
+  extracts that pass verification are reused from `.prepare-<hash>/`. Only unfinished
+  or invalid pieces are downloaded again; this is not byte-by-byte resume. Completed
+  pieces survive merge and metadata failures. After publication, downloaded pieces
+  and source extracts remain alongside the final archives in `elevation/<hash>/`;
+  publication does not delete them.
+  Completed source extracts from earlier versions remain reusable.
 - **Changed coverage or catalog:** preparation uses a new hash and downloads new
   extracts, including areas that overlap older downloads. It does not fetch only
   missing tiles. An already completed set with that hash can still be reused.
@@ -105,6 +114,12 @@ separate set rather than automatically choosing a larger existing one.
 
 Failed preparation leaves the previous `elevation/current` unchanged. Updating this
 link does not change a running graph: each graph records its own terrain directory.
+
+To reclaim the space used by retained pieces and regional source extracts after
+successful publication, run `just cleanup-elevation-downloads` and accept its
+confirmation prompt. It cleans every completed terrain release while preserving
+the final `terrain.pmtiles` and `fallback.pmtiles`, metadata, decoded caches, and
+unfinished `.prepare-*` directories.
 
 ## 4. Import without interrupting routing
 
@@ -295,6 +310,12 @@ archive it also decodes every tile, and it records missing tiles and tiles with
 nodata in the manifest's `coverage`: counts and a few examples, never an error.
 Larger areas skip that per-tile pass. Terrain prepared before the fallback existed
 has no `fallback.pmtiles` and still builds and serves as before.
+
+GraphHopper stores decoded tiles in `cache/` and `cache-fallback/`. Imports keep at
+most 512 decoded tiles memory-mapped at once, so continent-sized builds do not exhaust
+native mappings or file descriptors. An empty, interrupted, or legacy-format cache
+file is deleted and regenerated from the retained PMTiles archive when it is read;
+valid cached tiles remain reusable.
 
 The manifest records the coverage-cell hash, source catalog version, source metadata,
 zooms and archive checksums. Mapterhorn attribution is retained as `attribution.json`;

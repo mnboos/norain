@@ -5,15 +5,70 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /** Copied into graphhopper-core's tests by the Dockerfile, which runs it before packaging. */
 class PrefetchedElevationProviderTest {
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void pmtilesCacheEvictsAndReleasesOldMappings() throws Exception {
+        PMTilesElevationProvider provider = new PMTilesElevationProvider(
+                "unused.pmtiles", PMTilesElevationProvider.TerrainEncoding.TERRARIUM,
+                false, 15, "");
+        Class<?> tileClass = Class.forName(
+                "com.graphhopper.reader.dem.PMTilesElevationProvider$PackedTileData");
+        Constructor<?> constructor = tileClass.getDeclaredConstructor(
+                ByteBuffer.class, int.class, int.class, int[].class, int.class);
+        constructor.setAccessible(true);
+        Field data = tileClass.getDeclaredField("data");
+        data.setAccessible(true);
+        Field buffers = PMTilesElevationProvider.class.getDeclaredField("tileBuffers");
+        buffers.setAccessible(true);
+        Map<Long, Object> cache = (Map<Long, Object>) buffers.get(provider);
+
+        Object first = null;
+        Object last = null;
+        for (long i = 0; i <= PMTilesElevationProvider.MAX_CACHED_TILES; i++) {
+            Object tile = constructor.newInstance(
+                    ByteBuffer.allocateDirect(8), 1, 1, new int[]{0, 0}, 0);
+            if (i == 0) first = tile;
+            last = tile;
+            cache.put(i, tile);
+        }
+
+        assertEquals(PMTilesElevationProvider.MAX_CACHED_TILES, cache.size());
+        assertNull(data.get(first), "evicted mapping was not released");
+        assertNotNull(data.get(last), "newest mapping was released");
+    }
+
+    @Test
+    void pmtilesProviderDeletesInvalidCachedTileForRegeneration(@TempDir Path dir) throws Exception {
+        PMTilesElevationProvider provider = new PMTilesElevationProvider(
+                "unused.pmtiles", PMTilesElevationProvider.TerrainEncoding.TERRARIUM,
+                false, 15, dir.toString());
+        Field tileDir = PMTilesElevationProvider.class.getDeclaredField("tileDir");
+        tileDir.setAccessible(true);
+        tileDir.set(provider, dir.toFile());
+        Path invalid = dir.resolve("123_0.tile");
+        Files.write(invalid, new byte[0]);
+        Method tryMmap = PMTilesElevationProvider.class.getDeclaredMethod(
+                "tryMmapTileFile", long.class);
+        tryMmap.setAccessible(true);
+
+        assertNull(tryMmap.invoke(provider, 123L));
+        assertFalse(Files.exists(invalid), "invalid tile was not removed for regeneration");
+    }
 
     /** Height from the coordinates, so a wrong key shows up as a wrong height. */
     static class RecordingProvider implements ElevationProvider {

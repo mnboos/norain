@@ -3,6 +3,8 @@
 import importlib.util
 import io
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,7 +23,9 @@ spec.loader.exec_module(terrain)
 def archive(path, tiles, zoom=15):
     with path.open("wb") as stream:
         writer = Writer(stream)
-        for x, y, color in tiles:
+        for x, y, color in sorted(
+            tiles, key=lambda tile: zxy_to_tileid(zoom, tile[0], tile[1])
+        ):
             image = Image.new("RGB", (512, 512), color)
             if color == (130, 0, 0):
                 image.putpixel((7, 9), (0, 0, 0))  # a single nodata pixel
@@ -220,11 +224,315 @@ class TerrainTests(unittest.TestCase):
                     },
                 ),
                 patch.object(terrain, "run", side_effect=OSError("interrupted")),
+                patch.object(
+                    terrain, "extract_piece", side_effect=OSError("interrupted")
+                ),
             ):
                 with self.assertRaises(OSError):
                     terrain.prepare(Path("test.osm.pbf"), root)
             self.assertEqual((root / "current").resolve(), (root / "old").resolve())
             self.assertTrue(list(root.glob(".prepare-*")))
+
+
+class DownloadPieceTests(unittest.TestCase):
+    def setUp(self):
+        self.source = {
+            "name": "test",
+            "url": "https://download.mapterhorn.com/test.pmtiles",
+        }
+
+    def test_partition_is_deterministic_and_preserves_cells(self):
+        cells = [(4, 7), (2, 7), (3, 7)]
+        children = terrain.split_cells(cells, 11, 15)
+        self.assertEqual(children, terrain.split_cells(list(reversed(cells)), 11, 15))
+        self.assertEqual(
+            sorted(c for group, _ in children for c in group), sorted(cells)
+        )
+        children = terrain.split_cells([(2, 7)], 11, 15)
+        self.assertEqual(
+            {c for group, _ in children for c in group},
+            {(4, 14), (4, 15), (5, 14), (5, 15)},
+        )
+        self.assertTrue(all(z == 12 for _, z in children))
+        with self.assertRaisesRegex(ValueError, "single terrain tile"):
+            terrain.split_cells([(2, 7)], 12, 12)
+
+    def test_cleanup_removes_only_published_download_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            published = root / "published"
+            published.mkdir()
+            (published / "manifest.json").write_text("{}")
+            (published / "terrain.pmtiles").write_bytes(b"terrain")
+            (published / "fallback.pmtiles").write_bytes(b"fallback")
+            (published / "part-0.pmtiles").write_bytes(b"source")
+            (published / "cache").mkdir()
+            (published / "cache" / "tile").write_bytes(b"cache")
+            (published / "pieces").mkdir()
+            (published / "pieces" / "a.pmtiles").write_bytes(b"piece")
+            (root / "current").symlink_to("published")
+            staging = root / ".prepare-next"
+            (staging / "pieces").mkdir(parents=True)
+            (staging / "pieces" / "resume.pmtiles").write_bytes(b"resume")
+
+            self.assertEqual(terrain.cleanup_downloads(root), (2, 11))
+            self.assertFalse((published / "pieces").exists())
+            self.assertFalse((published / "part-0.pmtiles").exists())
+            self.assertEqual((published / "terrain.pmtiles").read_bytes(), b"terrain")
+            self.assertEqual((published / "fallback.pmtiles").read_bytes(), b"fallback")
+            self.assertEqual((published / "cache" / "tile").read_bytes(), b"cache")
+            self.assertEqual(
+                (staging / "pieces" / "resume.pmtiles").read_bytes(), b"resume"
+            )
+            self.assertTrue((root / "current").is_symlink())
+
+    def test_cleanup_missing_root_is_a_noop(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(
+                terrain.cleanup_downloads(Path(directory) / "missing"), (0, 0)
+            )
+
+    def test_estimate_rounding_and_unknown_output(self):
+        for message, expected in [
+            ("archive size of 899 MB", 900_000_000),
+            ("archive size of 1.1 GB", 1_200_000_000),
+        ]:
+            with patch.object(
+                terrain,
+                "extract_output",
+                return_value=subprocess.CompletedProcess([], 0, message),
+            ):
+                result = terrain.extract_piece(
+                    self.source, 15, Path("out"), Path("region"), True
+                )
+                self.assertAlmostEqual(result, expected)
+        with (
+            patch.object(
+                terrain,
+                "extract_output",
+                return_value=subprocess.CompletedProcess([], 0, "unknown"),
+            ),
+            self.assertRaisesRegex(ValueError, "unbounded"),
+        ):
+            terrain.extract_piece(self.source, 15, Path("out"), Path("region"), True)
+
+    def test_restart_reuses_completed_piece_after_failure(self):
+        for zoom in (12, 15):
+            with self.subTest(zoom=zoom), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                downloads = []
+
+                def extract(
+                    source, z, output, region, dry_run=False, downloads=downloads
+                ):
+                    polygons = json.loads(region.read_text())["coordinates"]
+                    if dry_run:
+                        return 1000 if len(polygons) > 1 else 10
+                    downloads.append(output.name)
+                    output.write_bytes(b"data")
+                    if len(downloads) == 2:
+                        raise OSError("connection lost")
+
+                with (
+                    patch.object(terrain, "ESTIMATE_PIECE_BYTES", 100),
+                    patch.object(terrain, "extract_piece", side_effect=extract),
+                    patch.object(terrain, "run"),
+                ):
+                    with self.assertRaises(OSError):
+                        terrain.download_pieces(
+                            self.source, zoom, [(0, 0), (2, 0)], root
+                        )
+                    first = downloads[0]
+                    parts = terrain.download_pieces(
+                        self.source, zoom, [(2, 0), (0, 0)], root
+                    )
+                    self.assertEqual(len(parts), 2)
+                    self.assertEqual(downloads.count(first), 1)
+                    self.assertFalse(list(root.glob("*.partial.pmtiles")))
+
+    def test_hard_limit_splits_and_corrupt_cache_is_replaced(self):
+        with tempfile.TemporaryDirectory() as directory:
+            downloads = []
+
+            def extract(source, zoom, output, region, dry_run=False):
+                if dry_run:
+                    return 1
+                downloads.append(output)
+                output.write_bytes(b"data")
+                if len(downloads) == 1:
+                    raise terrain.PieceTooLarge("too large")
+
+            with (
+                patch.object(terrain, "extract_piece", side_effect=extract),
+                patch.object(terrain, "run"),
+            ):
+                parts = terrain.download_pieces(
+                    self.source, 12, [(0, 0)], Path(directory)
+                )
+                self.assertEqual(len(parts), 4)
+                self.assertFalse(list(Path(directory).glob("*.partial.pmtiles")))
+            with (
+                patch.object(terrain, "extract_piece", side_effect=extract),
+                patch.object(
+                    terrain,
+                    "run",
+                    side_effect=[
+                        subprocess.CalledProcessError(1, "verify"),
+                        None,
+                        None,
+                        None,
+                        None,
+                    ],
+                ),
+            ):
+                terrain.download_pieces(self.source, 12, [(0, 0)], Path(directory))
+            self.assertEqual(len(downloads), 6)
+
+    def test_merge_failure_keeps_pieces_and_previous_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parts = [root / "a.pmtiles", root / "b.pmtiles"]
+            for part in parts:
+                part.write_bytes(b"piece")
+            output = root / "terrain.pmtiles"
+            output.write_bytes(b"previous")
+            with (
+                patch.object(terrain, "run", side_effect=OSError("merge failed")),
+                self.assertRaises(OSError),
+            ):
+                terrain.merge_pieces(parts, output)
+            self.assertEqual(output.read_bytes(), b"previous")
+            self.assertTrue(all(part.exists() for part in parts))
+
+    def test_metadata_failure_keeps_inputs_and_retry_reuses_legacy_extracts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "old").mkdir()
+            (root / "current").symlink_to("old")
+            source = dict(
+                self.source,
+                min_lon=5,
+                max_lon=12,
+                min_lat=45,
+                max_lat=50,
+                min_zoom=13,
+                max_zoom=17,
+            )
+            catalog = {
+                "version": "test",
+                "items": [source, dict(source, name="planet", min_zoom=0, max_zoom=12)],
+            }
+
+            def download(source, zoom, cells, directory):
+                directory.mkdir(exist_ok=True)
+                part = directory / f"{zoom}.pmtiles"
+                part.write_bytes(b"piece")
+                return [part]
+
+            with (
+                patch.object(
+                    terrain, "osm_bounds", return_value=[9.51, 47.12, 9.54, 47.145]
+                ),
+                patch.object(terrain, "node_cells", return_value={(1078, 719)}),
+                patch.object(terrain, "run"),
+                patch.object(terrain, "verify_coverage", return_value={}),
+                patch.object(
+                    terrain, "download_pieces", side_effect=download
+                ) as downloads,
+                patch.object(
+                    terrain,
+                    "download_json",
+                    side_effect=[catalog, OSError("attribution offline"), catalog, {}],
+                ),
+            ):
+                with self.assertRaisesRegex(OSError, "attribution offline"):
+                    terrain.prepare(Path("test.osm.pbf"), root)
+                stage = next(root.glob(".prepare-*"))
+                self.assertEqual((root / "current").resolve(), (root / "old").resolve())
+                self.assertTrue((stage / "part-0.pmtiles").exists())
+                self.assertEqual(len(list((stage / "pieces").glob("*.pmtiles"))), 2)
+                terrain.prepare(Path("test.osm.pbf"), root)
+                self.assertEqual(downloads.call_count, 2)
+                self.assertNotEqual(
+                    (root / "current").resolve(), (root / "old").resolve()
+                )
+                published = root / "current"
+                self.assertEqual(len(list((published / "pieces").glob("*.pmtiles"))), 2)
+                self.assertEqual((published / "part-0.pmtiles").read_bytes(), b"piece")
+                self.assertEqual(
+                    (published / "fallback.pmtiles").read_bytes(), b"piece"
+                )
+
+    def test_dry_run_never_downloads_payloads(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(terrain, "extract_piece", return_value=10) as extract,
+        ):
+            terrain.download_pieces(
+                self.source, 15, [(0, 0)], Path(directory), dry_run=True
+            )
+            self.assertTrue(
+                all(call.kwargs.get("dry_run") for call in extract.call_args_list)
+            )
+            self.assertFalse(list(Path(directory).glob("*.pmtiles")))
+
+    @unittest.skipUnless(shutil.which("pmtiles"), "requires pinned pmtiles CLI")
+    def test_cli_enforces_hard_limit_before_publication(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.pmtiles"
+            archive(source, [(1078 * 16, 719 * 16, (131, 10, 20))])
+            region = root / "region.geojson"
+            region.write_text(
+                json.dumps(terrain.region_geojson(terrain.cell_boxes([(1078, 719)])))
+            )
+            output = root / "partial.pmtiles"
+            with (
+                patch.object(terrain, "MAX_PIECE_BYTES", 64),
+                self.assertRaises(terrain.PieceTooLarge),
+            ):
+                terrain.extract_piece(
+                    dict(self.source, url=str(source)), 15, output, region
+                )
+            self.assertLessEqual(output.stat().st_size, 64)
+
+    @unittest.skipUnless(shutil.which("pmtiles"), "requires pinned pmtiles CLI")
+    def test_local_extraction_splits_and_merges_with_small_limit(self):
+        for zoom in (12, 15):
+            with self.subTest(zoom=zoom), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                source = root / "source.pmtiles"
+                # Nonadjacent cells exercise coverage boundaries; distinct payloads avoid deduplication.
+                cells = [(1078, 719), (1080, 719)]
+                k = 2 ** (zoom - terrain.MASK_ZOOM)
+                tiles = [
+                    (x * k, y * k, color)
+                    for (x, y), color in zip(cells, [(131, 10, 20), (132, 30, 40)])
+                ]
+                archive(source, tiles, zoom)
+                item = dict(self.source, url=str(source))
+                with terrain.archive_reader(source) as reader:
+                    payload = max(len(reader.get(zoom, x, y)) for x, y, _ in tiles)
+                with (
+                    patch.object(terrain, "ESTIMATE_PIECE_BYTES", payload + 1),
+                    patch.object(terrain, "MAX_PIECE_BYTES", 4096),
+                ):
+                    parts = terrain.download_pieces(item, zoom, cells, root / "pieces")
+                self.assertEqual(len(parts), 2)
+                self.assertTrue(all(p.stat().st_size <= 4096 for p in parts))
+                merged = root / "merged.pmtiles"
+                terrain.merge_pieces(parts, merged)
+                with (
+                    terrain.archive_reader(source) as original,
+                    terrain.archive_reader(merged) as result,
+                ):
+                    for x, y, _ in tiles:
+                        self.assertEqual(
+                            result.get(zoom, x, y), original.get(zoom, x, y)
+                        )
+                    self.assertIsNone(
+                        result.get(zoom, (cells[0][0] + 1) * k, cells[0][1] * k)
+                    )
 
 
 if __name__ == "__main__":

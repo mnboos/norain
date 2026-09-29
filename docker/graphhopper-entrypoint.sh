@@ -63,6 +63,10 @@ terrain() {
     python /graphhopper/terrain.py prepare "$BIKE_DATA_FILE" "$@"
 }
 
+terrain_cleanup() {
+    python /graphhopper/terrain.py cleanup
+}
+
 build() {
     python /graphhopper/memory.py "$GRAPHHOPPER_BUILD_HEAP"
     if ! [[ "$GRAPHHOPPER_BUILD_THREADS" =~ ^[1-9][0-9]*$ ]]; then
@@ -132,9 +136,10 @@ serve() {
 
 case "${1:-serve}" in
     terrain) shift; terrain "$@" ;;
+    terrain-cleanup) terrain_cleanup ;;
     build) build ;;
     serve) serve "${2:-current}" ;;
     activate) python /graphhopper/artifact.py activate "${2:-candidate}" ;;
     rollback) python /graphhopper/artifact.py rollback previous ;;
-    *) echo "Unknown command: $1 (expected terrain, build, serve, activate or rollback)" >&2; exit 2 ;;
+    *) echo "Unknown command: $1 (expected terrain, terrain-cleanup, build, serve, activate or rollback)" >&2; exit 2 ;;
 esac

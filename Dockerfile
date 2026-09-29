@@ -82,6 +82,9 @@ RUN sed -i '/environment.jersey().register(new RootResource());/a\        enviro
 COPY docker/graphhopper/FallbackElevationProvider.java docker/graphhopper/PrefetchedElevationProvider.java \
     /source/core/src/main/java/com/graphhopper/reader/dem/
 COPY docker/graphhopper/PrefetchedElevationProviderTest.java /source/core/src/test/java/com/graphhopper/reader/dem/
+COPY docker/graphhopper/pmtiles-bounded-cache.patch /source/
+RUN git apply --check pmtiles-bounded-cache.patch && git apply pmtiles-bounded-cache.patch \
+    && grep -q 'MAX_CACHED_TILES = 512' core/src/main/java/com/graphhopper/reader/dem/PMTilesElevationProvider.java
 RUN sed -i 's/ElevationProvider elevationProvider = createElevationProvider(ghConfig);/ElevationProvider elevationProvider = com.graphhopper.reader.dem.PrefetchedElevationProvider.forImport(com.graphhopper.reader.dem.FallbackElevationProvider.withFallback(createElevationProvider(ghConfig), ghConfig, ghConfig.getString("graph.elevation.pmtiles.fallback.cache_dir", "")), ghConfig);/' \
     core/src/main/java/com/graphhopper/GraphHopper.java \
     && grep -q 'PrefetchedElevationProvider.forImport(com.graphhopper.reader.dem.FallbackElevationProvider.withFallback' core/src/main/java/com/graphhopper/GraphHopper.java

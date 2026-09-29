@@ -17,10 +17,15 @@ import json
 import math
 import mmap
 import os
+import re
+import resource
+import shutil
+import signal
 import subprocess
 import tempfile
 import urllib.request
 from contextlib import contextmanager
+from decimal import Decimal
 from functools import lru_cache
 from pathlib import Path
 
@@ -35,6 +40,189 @@ VERIFY_MAX_TILES = 250_000
 CATALOG_URL = "https://download.mapterhorn.com/download_urls.json"
 ATTRIBUTION_URL = "https://download.mapterhorn.com/attribution.json"
 MAX_LAT = 85.0511287798066
+MAX_PIECE_BYTES = 1_000_000_000
+ESTIMATE_PIECE_BYTES = 900_000_000
+PARTITION_VERSION = 1
+
+
+class PieceTooLarge(ValueError):
+    pass
+
+
+def extract_output(args, limit_size=None):
+    """Keep CLI progress visible while retaining diagnostics for size-limit failures."""
+    with subprocess.Popen(
+        args,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        preexec_fn=limit_size,  # noqa: PLW1509 -- preparation is single-threaded
+    ) as process:
+        lines = []
+        for line in process.stdout:
+            print(line, end="", flush=True)
+            lines.append(line)
+        return subprocess.CompletedProcess(args, process.wait(), "".join(lines))
+
+
+def extract_piece(source, zoom, output, region_file, dry_run=False):
+    """Limit only downloads, never local merges. The preparation process is single-threaded."""
+
+    def limit_size():
+        resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_PIECE_BYTES, MAX_PIECE_BYTES))
+
+    args = [
+        "pmtiles",
+        "extract",
+        source["url"],
+        str(output),
+        f"--region={region_file}",
+        f"--minzoom={zoom}",
+        f"--maxzoom={zoom}",
+        "--overfetch=0",
+        "--download-threads=1",
+    ]
+    if dry_run:
+        args.append("--dry-run")
+    result = extract_output(args, None if dry_run else limit_size)
+    if result.returncode:
+        if not dry_run and (
+            result.returncode == -signal.SIGXFSZ
+            or "file too large" in result.stdout.lower()
+        ):
+            raise PieceTooLarge("Terrain piece reached the 1 GB file limit")
+        raise subprocess.CalledProcessError(result.returncode, args, result.stdout)
+    if not dry_run:
+        if output.stat().st_size > MAX_PIECE_BYTES:
+            raise PieceTooLarge("Terrain piece exceeded the 1 GB file limit")
+        return
+    # go-pmtiles v1.31.2 reports humanized decimal tile payload bytes, not metadata.
+    match = re.search(
+        r"archive size of ([\d.]+) (B|kB|MB|GB|TB|PB|EB)\b", result.stdout
+    )
+    if not match:
+        raise ValueError(
+            "Cannot read pmtiles dry-run archive size; refusing an unbounded download"
+        )
+    value, unit = match.groups()
+    scale = 1000 ** ("B", "kB", "MB", "GB", "TB", "PB", "EB").index(unit)
+    # Add one unit of displayed precision to bound rounding upwards.
+    precision = len(value.split(".")[1]) if "." in value else 0
+    return int((Decimal(value) + Decimal(10) ** -precision) * scale)
+
+
+def split_cells(cells, cell_zoom, zoom):
+    ordered = sorted(cells)
+    if len(ordered) > 1:
+        middle = len(ordered) // 2
+        return [(ordered[:middle], cell_zoom), (ordered[middle:], cell_zoom)]
+    if cell_zoom >= zoom:
+        raise ValueError(
+            "A single terrain tile cannot fit within the 1 GB download limit"
+        )
+    x, y = ordered[0]
+    return [
+        ([(2 * x + dx, 2 * y + dy)], cell_zoom + 1)
+        for dx in range(2)
+        for dy in range(2)
+    ]
+
+
+def download_pieces(source, zoom, cells, directory, dry_run=False, cell_zoom=MASK_ZOOM):
+    """Stable subdivision tree: completed leaves survive changed estimates and retries."""
+    directory.mkdir(parents=True, exist_ok=True)
+    identity = [PARTITION_VERSION, source, zoom, cell_zoom, sorted(cells)]
+    key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:24]
+    part = directory / f"{key}.pmtiles"
+    split = directory / f"{key}.split"
+    if part.exists() and not dry_run:
+        try:
+            if part.stat().st_size > MAX_PIECE_BYTES:
+                raise PieceTooLarge("Oversized cached piece")
+            run("pmtiles", "verify", part)
+            print(f"Reusing completed terrain piece: {part.name}", flush=True)
+            return [part]
+        except (ValueError, subprocess.CalledProcessError):
+            part.unlink()
+    region_file = directory / f"{key}.geojson"
+    temporary = directory / f"{key}.partial.pmtiles"
+    temporary.unlink(missing_ok=True)
+    if not split.exists():
+        region_file.write_text(json.dumps(region_geojson(cell_boxes(cells, cell_zoom))))
+        size = extract_piece(source, zoom, temporary, region_file, dry_run=True)
+        if size <= ESTIMATE_PIECE_BYTES:
+            print(
+                f"Terrain piece {source['name']} zoom {zoom}: at most ~{size / 1e6:.1f} MB payload",
+                flush=True,
+            )
+            if dry_run:
+                return [part]
+            try:
+                extract_piece(source, zoom, temporary, region_file)
+                run("pmtiles", "verify", temporary)
+                temporary.replace(part)
+                return [part]
+            except PieceTooLarge:
+                temporary.unlink(missing_ok=True)
+        # Persist subdivision before downloading children, including size-limit splits.
+        children = split_cells(cells, cell_zoom, zoom)
+        split.touch()
+    else:
+        children = split_cells(cells, cell_zoom, zoom)
+    parts = []
+    for child_cells, child_zoom in children:
+        parts.extend(
+            download_pieces(source, zoom, child_cells, directory, dry_run, child_zoom)
+        )
+    return parts
+
+
+def merge_pieces(parts, output):
+    temporary = output.with_suffix(".partial.pmtiles")
+    temporary.unlink(missing_ok=True)
+    if len(parts) == 1:
+        shutil.copyfile(parts[0], temporary)
+    else:
+        run("pmtiles", "merge", *parts, temporary)
+    run("pmtiles", "verify", temporary)
+    temporary.replace(output)
+
+
+def cleanup_downloads(root):
+    """Remove retained inputs from published terrain sets, preserving resumable staging."""
+    root = Path(root)
+    removed_files = 0
+    removed_bytes = 0
+    if not root.exists():
+        print(f"No elevation directory exists at {root}.")
+        return removed_files, removed_bytes
+    for directory in sorted(root.iterdir()):
+        # `current` is a symlink to one of these directories. Process each release once.
+        if not directory.is_dir() or directory.is_symlink():
+            continue
+        # A manifest exists only after successful publication. Incomplete preparations
+        # retain their pieces so the next preparation can resume.
+        if not (directory / "manifest.json").is_file():
+            continue
+        pieces = directory / "pieces"
+        if pieces.is_symlink():
+            raise ValueError(f"Refusing to clean symlinked pieces directory: {pieces}")
+        if pieces.is_dir():
+            files = [path for path in pieces.rglob("*") if path.is_file()]
+            removed_files += len(files)
+            removed_bytes += sum(path.stat().st_size for path in files)
+            shutil.rmtree(pieces)
+        for part in directory.glob("part-*.pmtiles"):
+            if not part.is_file() or part.is_symlink():
+                continue
+            removed_files += 1
+            removed_bytes += part.stat().st_size
+            part.unlink()
+    print(
+        f"Removed {removed_files} retained elevation download file(s) "
+        f"({removed_bytes / 1_000_000_000:.2f} GB). Final terrain archives were preserved."
+    )
+    return removed_files, removed_bytes
 
 
 def run(*args, capture=False):
@@ -391,30 +579,10 @@ def prepare(pbf, root, dry_run=False):
     # The fallback comes last.
     extracts = [(source, ZOOM) for source in sources] + [(fallback, FALLBACK_ZOOM)]
 
-    def extract(source, zoom, output, region_file, *extra):
-        run(
-            "pmtiles",
-            "extract",
-            source["url"],
-            output,
-            f"--region={region_file}",
-            f"--minzoom={zoom}",
-            f"--maxzoom={zoom}",
-            *extra,
-        )
-
     if dry_run:
         with tempfile.TemporaryDirectory() as directory:
-            region_file = Path(directory) / "region.geojson"
-            region_file.write_text(region)
             for source, zoom in extracts:
-                extract(
-                    source,
-                    zoom,
-                    Path(directory) / "estimate.pmtiles",
-                    region_file,
-                    "--dry-run",
-                )
+                download_pieces(source, zoom, cells, Path(directory), dry_run=True)
         return
     root.mkdir(parents=True, exist_ok=True)
     # A failed download never replaces the previous current directory.
@@ -442,22 +610,16 @@ def prepare(pbf, root, dry_run=False):
                 except (OSError, subprocess.CalledProcessError):
                     part.unlink(missing_ok=True)
             if not part.exists():
-                extract(source, zoom, part, region_file)
+                pieces = download_pieces(source, zoom, cells, stage / "pieces")
+                merge_pieces(pieces, part)
             parts.append(part)
         *parts, fallback_path = parts
         terrain = stage / "terrain.pmtiles"
-        terrain.unlink(missing_ok=True)
-        if len(parts) == 1:
-            parts[0].rename(terrain)
-        else:
-            run("pmtiles", "merge", *parts, terrain)
-        run("pmtiles", "verify", terrain)
+        merge_pieces(parts, terrain)
         coverage = [
             verify_coverage(terrain, cells),
             verify_coverage(fallback_path, cells, FALLBACK_ZOOM),
         ]
-        for part in parts:
-            part.unlink(missing_ok=True)
         spec["sha256"] = digest(terrain)
         spec["fallback_sha256"] = digest(fallback_path)
         spec["coverage"] = coverage
@@ -468,6 +630,7 @@ def prepare(pbf, root, dry_run=False):
         (stage / "manifest.json").write_text(json.dumps(spec, indent=2) + "\n")
         # Rename the completed directory. Never overwrite another process's archive.
         stage.rename(target)
+        # Retain downloaded pieces and source extracts alongside the published archives.
     temporary = root / f".current-{os.getpid()}"
     try:
         temporary.symlink_to(target.name, target_is_directory=True)
@@ -479,12 +642,16 @@ def prepare(pbf, root, dry_run=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("prepare", "check"))
-    parser.add_argument("pbf", type=Path)
+    parser.add_argument("command", choices=("prepare", "check", "cleanup"))
+    parser.add_argument("pbf", type=Path, nargs="?")
     parser.add_argument("--root", type=Path, default=Path("/osm_data/elevation"))
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    if args.command == "prepare":
+    if args.command == "cleanup":
+        cleanup_downloads(args.root)
+    elif args.pbf is None:
+        parser.error(f"the {args.command} command requires pbf")
+    elif args.command == "prepare":
         # Serialize preparation, including current-symlink changes, across containers.
         if args.dry_run:
             prepare(args.pbf, args.root, True)

@@ -142,6 +142,12 @@ routing-terrain-estimate filtered_pbf:
 download-elevation-for filtered_pbf:
     {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper terrain
 
+[doc("Delete retained elevation download pieces from completed releases while preserving final terrain archives and resumable preparations.")]
+[group('geodata')]
+[confirm("This permanently deletes retained elevation download pieces from every completed release in ROUTING_OSM_IMPORT_DIR/elevation. Final archives and incomplete preparations are preserved. Continue?")]
+cleanup-elevation-downloads:
+    {{ container }} compose run --rm --no-deps graphhopper terrain-cleanup
+
 [doc("Import a candidate graph using prepared Mapterhorn terrain. Does not stop, delete or activate the current graph.")]
 [group('geodata')]
 build-graphhopper-graph-from filtered_pbf:
