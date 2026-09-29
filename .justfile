@@ -18,6 +18,12 @@ image_prefix := "ghcr.io/mnboos/norain"
 # `docker=podman` doesn't count: recipes run in a non-interactive shell); override with CONTAINER_ENGINE.
 container := env("CONTAINER_ENGINE", if os_family() == "windows" { "podman" } else { `command -v docker >/dev/null && echo docker || echo podman` })
 
+# How the task recipes run manage.py: on the host's virtualenv, or, with a prod COMPOSE_FILE, in
+# a one-off worker-default container (the backend image has GDAL, the VPS host none). compose
+# resolves COMPOSE_FILE against the current directory, hence the cd; -e route_id hands the
+# recipe's argument to the container.
+manage_py := if env("COMPOSE_FILE", "") =~ 'prod' { "cd " + quote(justfile_directory()) + " && " + container + " compose run --rm --pull never --no-deps -e route_id worker-default python manage.py" } else { "uv run python manage.py" }
+
 # podman-docker provides a `docker` executable, so the choice above can still reach `podman compose`.
 # Prefer podman-compose when it is installed: legacy docker-compose 1.x sends Docker's removed
 # HostConfig.Links field and current Podman rejects every `compose run` with "link is not supported".
@@ -76,11 +82,11 @@ backend:
 frontend:
     npm run dev
 
-[doc("Run any Django management command locally, e.g. just manage showmigrations.")]
+[doc("Run any Django management command, e.g. just manage showmigrations. With a prod COMPOSE_FILE it runs in worker-default, else in the host's virtualenv.")]
 [group('tasks')]
 [working-directory("backend")]
 manage +args:
-    uv run python manage.py {{ args }}
+    {{ manage_py }} {{ args }}
 
 [doc("Update the backend's English catalog (core/locale/en) from the German msgids, then compile it. Needs GNU gettext (apt install gettext, winget install mlocati.GetText). Commit the .po and the .mo.")]
 [group('tasks')]
@@ -100,31 +106,31 @@ worker queue='*':
 [group('tasks')]
 [working-directory("backend")]
 forecast-refresh-all:
-    uv run python manage.py refresh_forecasts
+    {{ manage_py }} refresh_forecasts
 
 [doc("Queue missing/stale forecast cells for a route's next three departures. Requires geometry and default/cells workers; reuses fresh cells.")]
 [group('tasks')]
 [working-directory("backend")]
 forecast-refresh $route_id:
-    uv run python manage.py shell -c "import os; from core.models import RecurringRoute; from core.tasks import scan_route_forecasts; route = RecurringRoute.objects.get(id=os.environ['route_id']); print('Queued route scan:', scan_route_forecasts.enqueue(str(route.id)).id)"
+    {{ manage_py }} shell -c "import os; from core.models import RecurringRoute; from core.tasks import scan_route_forecasts; route = RecurringRoute.objects.get(id=os.environ['route_id']); print('Queued route scan:', scan_route_forecasts.enqueue(str(route.id)).id)"
 
 [doc("Queue a geometry refresh for one route against the current routing graph. Requires a default worker.")]
 [group('tasks')]
 [working-directory("backend")]
 routing-refresh-route $route_id:
-    uv run python manage.py shell -c "import os; from core.models import RecurringRoute; from core.tasks import refresh_route_geometry; route = RecurringRoute.objects.get(id=os.environ['route_id']); print('Queued geometry refresh:', refresh_route_geometry.enqueue(str(route.id)).id)"
+    {{ manage_py }} shell -c "import os; from core.models import RecurringRoute; from core.tasks import refresh_route_geometry; route = RecurringRoute.objects.get(id=os.environ['route_id']); print('Queued geometry refresh:', refresh_route_geometry.enqueue(str(route.id)).id)"
 
 [doc("Queue a route thumbnail rebuild using cached weather. Requires a default worker.")]
 [group('tasks')]
 [working-directory("backend")]
 thumbnail-refresh $route_id:
-    uv run python manage.py shell -c "import os; from core.models import RecurringRoute; from core.tasks import refresh_route_thumbnail; route = RecurringRoute.objects.get(id=os.environ['route_id']); print('Queued thumbnail refresh:', refresh_route_thumbnail.enqueue(str(route.id)).id)"
+    {{ manage_py }} shell -c "import os; from core.models import RecurringRoute; from core.tasks import refresh_route_thumbnail; route = RecurringRoute.objects.get(id=os.environ['route_id']); print('Queued thumbnail refresh:', refresh_route_thumbnail.enqueue(str(route.id)).id)"
 
 [doc("Preview missing route timings; pass --enqueue to queue repairs, optionally --route-id UUID or --limit N.")]
 [group('tasks')]
 [working-directory("backend")]
 routing-backfill *args:
-    uv run python manage.py backfill_route_vertex_times {{ args }}
+    {{ manage_py }} backfill_route_vertex_times {{ args }}
 
 [doc("Estimate the zoom-15 Mapterhorn download for a filtered OSM file. The file must already exist in ROUTING_OSM_IMPORT_DIR.")]
 [group('geodata')]
@@ -180,7 +186,7 @@ routing-speeds *args:
 [group('geodata')]
 [working-directory("backend")]
 routing-refresh-routes:
-    uv run python manage.py shell -c "from core.models import RecurringRoute; from core.tasks import refresh_route_geometry; print(sum(refresh_route_geometry.enqueue(str(i)) is not None for i in RecurringRoute.objects.values_list('id', flat=True)), 'routes queued')"
+    {{ manage_py }} shell -c "from core.models import RecurringRoute; from core.tasks import refresh_route_geometry; print(sum(refresh_route_geometry.enqueue(str(i)) is not None for i in RecurringRoute.objects.values_list('id', flat=True)), 'routes queued')"
 
 [doc("Filter raw .osm.pbf files for bikes and merge them into ROUTING_OSM_FILE_FILTERED (e.g. bike-europe-cycling.osm.pbf) in ROUTING_OSM_IMPORT_DIR, plus the matching POI file, e.g. just osm-filter-many-raw-pbf-into-one ~/osm/germany-latest.osm.pbf ~/osm/austria-latest.osm.pbf. Builds no graph: prepare terrain with download-elevation-for, then import, validate and activate the candidate.")]
 [group('geodata')]
