@@ -29,10 +29,12 @@ backend/          Django 6 + Channels (async ASGI via daphne)
                      coverage.py (the public coverage page)
     public_routes.py the public view of a route: privacy zones, public_geometry
     coverage.py      the coverage page: votes (anonymous too), double opt-in "tell me when" mails
+    fingerprinting.py  browser recognition: challenge, proof-of-work, lie checks, tiers, receipts
     countries.py     votable ISO country codes + de/en names for the mails (generated from ICU)
     photos.py        upload re-encoding (no EXIF/GPS); signals.py deletes the files with the row
     auth/            backend.py (session_auth), adapter.py (allauth rules), signals.py,
-                     views.py (session, sign-up step 2, profile), lockout.py
+                     views.py (session, sign-up step 2, profile), lockout.py,
+                     device_throttle.py (sign-up / code requests per recognised browser)
     entitlements.py  every tier limit, in one place
     thumbnails.py    route-list glyph: path simplification + cache-only weather
     ride_quality.py  ride-quality curves + RIDE_QUALITY config (secret; scored on read)
@@ -54,7 +56,8 @@ frontend/         Vue 3 + Quasar + @tanstack/vue-query
   src/
     services/        http.ts (shared fetch+CSRF, allauthRequest), auth.ts, billing.ts — the
                      plain-Django and allauth endpoints; the ninja API goes through the
-                     generated @norain/api client
+                     generated @norain/api client; browserRecognition.ts (on-demand proof)
+    lib/browser-fingerprint/  our own recognition library: probes, lie checks, SHA-256 + PoW
     composables/     useSession, useEntitlements, useLocale (detect, switch and save the language)
     i18n/index.ts    vue-i18n instance, t/te for .ts modules, intlLocale(), dateFnsLocale()
     locales/         de.json (source) + en.json; __tests__ checks both have the same keys
@@ -882,6 +885,8 @@ Rules that hold this together:
   visitor as `anon:` + a hash of the random token in the httpOnly `meteolane_voter` cookie.
   Against cookie clearing, the IP counts in the cache only (30 votes an hour, one anonymous vote
   per area a day, released when withdrawn). Both fail open, like the other per-minute limits.
+  On top of that, a recognised browser votes once per area for 30 days, and unrecognised or
+  suspicious ones share 3 votes per IP a day (see "Browser recognition").
 - **Double opt-in.** Anyone can type anyone's address, so nothing but the confirmation goes to
   it until its link was used; the reply is `pending` whether the address was new, pending or
   confirmed, and a confirmation is sent at most once per `RESEND_AFTER`. Only a signed-in
@@ -897,6 +902,55 @@ Rules that hold this together:
   the visitor asked from. Don't hand-edit that table; regenerate it.
 - The mail-sending, token and vote endpoints have Caddy flood limits in
   `deploy/auth-ratelimit.caddy`, like the auth endpoints.
+
+### Browser recognition
+
+Our own library (`frontend/src/lib/browser-fingerprint`, `core/fingerprinting.py`; no
+fingerprinting package, ever), used for anonymous coverage votes and for the sign-up and
+sign-in-code throttle (`core/auth/device_throttle.py`, middleware in front of allauth). The
+protocol and tables are in `docs/reference/browser-fingerprinting.md`. Rules that hold this together:
+
+- **The server is the arbiter; every probe value is the client's word.** Robustness comes
+  from what the server can check: a signed single-use challenge, a SHA-256 proof-of-work
+  (`BROWSER_POW_BITS`, dearer while one IP churns new keys, capped at 20 bits: a phone's
+  ~4 s, the SPA's wait), consistency
+  against a worker, a fresh iframe (whose clean `Function.prototype.toString` inspects the
+  page's getters), the engine's own error wording and the request's `Sec-CH-UA*` headers.
+  Scripted forgery can only be made expensive and stays bounded by the per-IP limits, which
+  all remain. Say so; do not claim more.
+- **Nothing diagnostic goes to the client.** `verify` answers `{expiresIn}` only; the
+  assessment sits in the cache behind a random receipt id in an HttpOnly cookie. Read it
+  with `get_browser_assessment(request)`. Never add tier or indicators to a reply or a
+  readable cookie: they tell a forger which check to fix. The one exception is
+  `GET /api/system/browser` (the "Browser-Erkennung" panel on `/system`): behind
+  `has_system_access`, and only the requesting browser's own result, with id prefixes only.
+- **Tiers.** `suspicious`: a lie (or automation). `low`: honest but shared by many devices
+  or degraded (iOS, canvas noise, a canvas-only iframe difference, software rendering,
+  missing client hints, ephemeral key, unavailable checks). `high`: the rest. **A `low` browser never deduplicates on its
+  fingerprint**, only on its own key (`device_keys`): look-alike devices would block each
+  other. Churn raises the proof-of-work, never the tier (CGNAT and campus networks).
+- **The stable set excludes what changes by itself.** `fingerprintId` hashes canvas (unless
+  noisy), audio, graphics, fonts, hardware, math and media. `display` (no DPR) and `locale`
+  (no languages) count towards similarity only. Don't add viewport, zoom, battery or network.
+- **Claims stack on the IP limits and are recorded per voter**, so a withdrawal releases
+  exactly what was claimed. The device claim runs before the IP claim and is released when
+  the IP claim refuses.
+- **Protected browsers claim per network too.** A `low` browser that randomises on purpose or
+  cannot keep its key (`fingerprinting.PROTECTED`: Safari's private tabs, each with its own
+  storage and per-tab noise) gets a `coarsePrint`, and `device_keys(assessment, ip)` adds a
+  `p:` key = coarse print + IP (IPv6 /64) + UTC day. A new private tab is not a new device;
+  look-alikes behind one CGNAT share it for a day, never stricter than the per-IP fallback.
+  Pass the IP wherever `device_keys` is called. Canvas and audio noise are found by known
+  answers (`canvasIntegrity`, `audioIsExact`); `repeated` cannot see a noise salted per tab.
+- **Collect on demand only.** The SPA calls `prewarmRecognition()` where a vote or sign-up
+  may follow and `ensureRecognized()` (waits ≤ 6 s, never rejects) before the request;
+  there is no background collection on other pages.
+- **Raw probe values are never logged or stored**; log tier and indicator names at most.
+  Everything fails open on a Redis error, except the nonce claim, which is the replay guard.
+- Under `manage.py test`, `BROWSER_FINGERPRINT_ENABLED` is off (`settings/development.py`);
+  recognition tests switch it on per class with locmem `CACHES`. The proof-of-work encoding
+  is pinned for Python and TypeScript alike by `__tests__/pow-vector.json`; Playwright
+  (`playwright.fingerprint.config.ts`) runs the real library in Chromium, Firefox and WebKit.
 
 ### Recurring routes
 

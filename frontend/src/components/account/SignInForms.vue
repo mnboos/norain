@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 
 import { authApi, pendingFlows, signedIn } from "@/services/auth";
+import { prewarmRecognition } from "@/services/browserRecognition";
 import { ApiError } from "@/services/http";
 
 import { samePassword } from "./passwordRules";
@@ -150,7 +151,10 @@ const resendCode = () =>
 
 const sendCode = () =>
     run(async () => {
-        await authApi.requestLoginCode(identifier.value);
+        if (signedIn(await authApi.requestLoginCode(identifier.value))) {
+            emit("signed-in");
+            return;
+        }
         codeSent.value = true;
         message.value = t("auth.loginCodeSent", { email: identifier.value });
     }, t("auth.codeSendFailed"));
@@ -216,6 +220,8 @@ const submitLabel = computed(() => {
 });
 
 onMounted(async () => {
+    // Sign-up and sign-in codes are limited per browser; recognise it before the click.
+    prewarmRecognition();
     // Sign-up mails used to carry a link. Those links no longer work; a sign-in code
     // verifies the address just as well.
     if (typeof route.query.verify_key === "string") {

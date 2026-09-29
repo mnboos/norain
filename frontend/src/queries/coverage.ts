@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { CoverageApi } from "@norain/api/apis";
 import type { CoverageOut, VoteOut } from "@norain/api/models";
+import { useSession } from "@/composables/useSession";
+import { ensureRecognized } from "@/services/browserRecognition";
 
 const coverageApi = new CoverageApi();
 
@@ -20,9 +22,14 @@ export function useCoverage() {
 /** Cast or withdraw a vote; the reply's count goes straight into the list. */
 export function useCoverageVote() {
     const client = useQueryClient();
+    const { isAuthenticated } = useSession();
     return useMutation({
-        mutationFn: ({ code, voted }: { code: string; voted: boolean }) =>
-            voted ? coverageApi.coreApiCoverageVote({ code }) : coverageApi.coreApiCoverageWithdrawVote({ code }),
+        mutationFn: async ({ code, voted }: { code: string; voted: boolean }) => {
+            if (!voted) return coverageApi.coreApiCoverageWithdrawVote({ code });
+            // An anonymous vote counts once per recognised browser (core/coverage.py).
+            if (!isAuthenticated.value) await ensureRecognized();
+            return coverageApi.coreApiCoverageVote({ code });
+        },
         onSuccess: (reply: VoteOut) => {
             client.setQueryData<CoverageOut>(coverageKeys.all, data => {
                 if (!data) return data;

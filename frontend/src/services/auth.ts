@@ -1,4 +1,5 @@
-import { type AllauthReply, allauthRequest, isRecord, type Parse, request } from "@/services/http";
+import { ensureRecognized } from "@/services/browserRecognition";
+import { ApiError, type AllauthReply, allauthRequest, isRecord, type Parse, request } from "@/services/http";
 import { type AppLocale, isAppLocale } from "@/i18n";
 
 export interface SessionUser {
@@ -85,6 +86,22 @@ export function signedIn(reply: AllauthReply): boolean {
     return reply.status === 200 && reply.meta.is_authenticated === true;
 }
 
+/**
+ * allauth answers 409 to a sign-in, sign-up or code request from a browser that is already
+ * signed in (another tab, or a session the page did not know about yet). That is a success:
+ * the session's own reply stands in for the refused one. Any other 409 stays an error.
+ */
+async function orAlreadySignedIn(call: () => Promise<AllauthReply>): Promise<AllauthReply> {
+    try {
+        return await call();
+    } catch (err) {
+        if (!(err instanceof ApiError && err.status === 409)) throw err;
+        const session = await allauthRequest("/auth/session");
+        if (signedIn(session)) return session;
+        throw err;
+    }
+}
+
 export const authApi = {
     /** Our own endpoint: the session as the app needs it, and the CSRF cookie. */
     session: () => request<SessionState>("/api/auth/session", parseSession),
@@ -109,8 +126,11 @@ export const authApi = {
             ...(changes.language ? { language: changes.language } : {}),
         }),
 
-    /** Step 1 of sign-up: allauth creates the account and mails a code. */
-    signup: (email: string) => allauthRequest("/auth/signup", "POST", { email }),
+    /** Step 1 of sign-up: allauth creates the account and mails a code. Limited per browser. */
+    signup: async (email: string) => {
+        await ensureRecognized();
+        return orAlreadySignedIn(() => allauthRequest("/auth/signup", "POST", { email }));
+    },
     /** The code from the sign-up mail. Only works in the session that started the sign-up. */
     verifyEmailCode: (code: string) => allauthRequest("/auth/email/verify", "POST", { key: code }),
     /** A new sign-up code; allauth allows two, at least 10 s apart. */
@@ -121,8 +141,12 @@ export const authApi = {
      * has to guess from an "@" (usernames may contain one).
      */
     login: (identifier: string, password: string) =>
-        allauthRequest("/auth/login", "POST", { username: identifier, password }),
-    requestLoginCode: (email: string) => allauthRequest("/auth/code/request", "POST", { email }),
+        orAlreadySignedIn(() => allauthRequest("/auth/login", "POST", { username: identifier, password })),
+    /** Mails a sign-in code. Limited per browser, like `signup`. */
+    requestLoginCode: async (email: string) => {
+        await ensureRecognized();
+        return orAlreadySignedIn(() => allauthRequest("/auth/code/request", "POST", { email }));
+    },
     confirmLoginCode: (code: string) => allauthRequest("/auth/code/confirm", "POST", { code }),
     requestPasswordReset: (email: string) => allauthRequest("/auth/password/request", "POST", { email }),
     resetPassword: (key: string, password: string) => allauthRequest("/auth/password/reset", "POST", { key, password }),

@@ -41,6 +41,7 @@ jobs:
           --health-retries 10
     env:
       REDIS_URL: redis://localhost:6379
+      BROWSER_FINGERPRINT_REDIS_TEST_URL: redis://localhost:6379/1
       DB_NAME: norain
       DB_HOST: localhost
       DB_PORT: 5432
@@ -77,6 +78,12 @@ jobs:
           fi
       - run: uv run --no-project --with pmtiles==3.8.1 --with pillow==12.3.0 python -m unittest discover -s docker/tests -v
       - run: cd frontend && npm ci && npm run build
+      - name: Browser recognition tests
+        run: |
+          cd frontend
+          npx vitest run src/lib/browser-fingerprint/__tests__
+          npx playwright install --with-deps chromium firefox webkit
+          npx playwright test --config playwright.fingerprint.config.ts
 
   publish:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -114,6 +121,7 @@ jobs:
             SENTRY_DSN_FRONTEND=${{ vars.SENTRY_DSN_FRONTEND }}
             SENTRY_ORG=${{ vars.SENTRY_ORG }}
             SENTRY_PROJECT_FRONTEND=${{ vars.SENTRY_PROJECT_FRONTEND }}
+            VITE_BROWSER_FINGERPRINT_ENABLED=${{ vars.VITE_BROWSER_FINGERPRINT_ENABLED || 'true' }}
           secrets: |
             sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
 

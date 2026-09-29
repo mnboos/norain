@@ -5,6 +5,7 @@ from math import isfinite
 from typing import Literal
 from uuid import UUID
 
+from django.conf import settings
 from django.contrib.gis.db.models import Extent, GeometryField
 from django.contrib.gis.geos import Polygon
 from django.db.models import Count, Max, Min, Q
@@ -17,7 +18,9 @@ from ninja.errors import HttpError
 from ninja.utils import check_csrf
 from pydantic import Field
 
+from .. import fingerprinting
 from ..auth.admin_access import has_system_access
+from ..auth.lockout import client_ip
 from ..departures import cell_covers, instant
 from ..geo import simplify_line
 from ..grid import ENSEMBLE_MODELS, ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE
@@ -135,6 +138,52 @@ def cell_feature(row, kind):
 
 
 CELL_FIELDS = ("id", "lat_r", "lon_r", "fetched_at", "day_key", "forecast_days")
+
+
+class SystemBrowserAssessment(CamelSchema):
+    tier: Literal["high", "low", "suspicious"]
+    indicators: list[str]
+    persistent: bool
+    continuity: bool
+    similarity: float | None
+    # Short prefixes only: enough to see a key or fingerprint stay the same across checks.
+    browser_id: str
+    fingerprint_id: str | None
+    # Per probe, so two checks show which one moved (Safari's private tabs salt their noise per tab).
+    components: dict[str, str]
+    # The claim keys this browser holds on this network: a new private tab keeps its ``p:`` key.
+    keys: list[str]
+
+
+class SystemBrowser(CamelSchema):
+    enabled: bool
+    pow_bits: int
+    assessment: SystemBrowserAssessment | None
+
+
+@router.get("/browser", response=SystemBrowser)
+def browser(request):
+    """The requesting browser's own recognition result. The one place it reaches a client: only
+    behind system access, and only for the browser that asks (docs/reference/browser-fingerprinting.md)."""
+    assessment = fingerprinting.get_browser_assessment(request)
+    if assessment is not None:
+        keys = fingerprinting.device_keys(assessment, client_ip(request))
+        assessment = {
+            "tier": assessment["tier"],
+            "indicators": assessment["indicators"],
+            "persistent": assessment["persistent"],
+            "continuity": assessment["continuity"],
+            "similarity": assessment["similarity"],
+            "browser_id": assessment["browserId"][:8],
+            "fingerprint_id": (assessment["fingerprintId"] or "")[:8] or None,
+            "components": {name: value[:8] for name, value in assessment.get("components", {}).items()},
+            "keys": [f"{key[:2]}{key[2:10]}" for key in keys],
+        }
+    return {
+        "enabled": settings.BROWSER_FINGERPRINT_ENABLED,
+        "pow_bits": fingerprinting.pow_bits(client_ip(request)),
+        "assessment": assessment,
+    }
 
 
 @router.get("/summary", response=SystemSummary)

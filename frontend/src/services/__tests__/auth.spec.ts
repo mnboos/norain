@@ -89,6 +89,38 @@ describe("allauth replies", () => {
         expect(signedIn(reply(200, {}, {}))).toBe(false);
     });
 
+    it("treats a sign-in refused as already signed in as success", async () => {
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify({ status: 409, errors: [] }), { status: 409 }))
+            .mockResolvedValueOnce(
+                new Response(JSON.stringify({ status: 200, data: {}, meta: { is_authenticated: true } }), {
+                    status: 200,
+                }),
+            );
+        vi.stubGlobal("fetch", fetchMock);
+        expect(signedIn(await authApi.login("rider", "secret"))).toBe(true);
+        expect(fetchMock).toHaveBeenLastCalledWith(
+            expect.stringMatching(/\/auth\/session$/),
+            expect.objectContaining({ method: "GET" }),
+        );
+        vi.unstubAllGlobals();
+    });
+
+    it("keeps a 409 an error when the session is not signed in", async () => {
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValueOnce(new Response(JSON.stringify({ status: 409, errors: [] }), { status: 409 }))
+            .mockResolvedValueOnce(
+                new Response(JSON.stringify({ status: 401, data: {}, meta: { is_authenticated: false } }), {
+                    status: 401,
+                }),
+            );
+        vi.stubGlobal("fetch", fetchMock);
+        await expect(authApi.login("rider", "secret")).rejects.toMatchObject({ status: 409 });
+        vi.unstubAllGlobals();
+    });
+
     it("sends every sign-in identity as `username`", async () => {
         const fetchMock = vi
             .fn()

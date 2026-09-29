@@ -1,0 +1,9 @@
+{
+    "challenge": "eyJub25jZSI6ImV4YW1wbGUifQ:1tVector:signature",
+    "payload": "{\"version\":2,\"persistent\":true,\"signals\":{\"canvas\":{\"status\":\"ok\",\"value\":\"Ω é 🚲\"}}}",
+    "payloadDigest": "f0cbd9d9709bd270ca0efd1b0db549484e2420df104077e452ec881bb5199423",
+    "seed": "de972362e029657eabeaccda3041899db88dcafdcda5f4bae5ec27fb54c7452c",
+    "bits": 12,
+    "nonce": "1980",
+    "digest": "0009c08e1d22165ea0a594ada2cb4a231d635d40ee6e7ff2c35cb89a38ff8f1f"
+}

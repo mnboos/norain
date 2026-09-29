@@ -29,6 +29,7 @@ import {
     useCoverage,
     useCoverageVote,
 } from "@/queries/coverage";
+import { prewarmRecognition } from "@/services/browserRecognition";
 import { apiErrorMessage } from "@/services/http";
 import { areaName, areaNote, flagCode, rankedWishes, voteOptions, type AreaOption } from "@/utils/coverage";
 
@@ -177,6 +178,8 @@ function askToNotify(area: CoverageAreaOut) {
 const linkResult = ref<{ type: "positive" | "negative"; text: string } | null>(null);
 
 onMounted(async () => {
+    // An anonymous vote counts once per recognised browser; recognise it before the click.
+    if (!session.value.authenticated) prewarmRecognition();
     const confirm = typeof route.query.confirm === "string" ? route.query.confirm : null;
     const unsubscribe = typeof route.query.unsubscribe === "string" ? route.query.unsubscribe : null;
     if (!confirm && !unsubscribe) return;

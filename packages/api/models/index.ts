@@ -2,6 +2,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export * from './BreakOut';
+export * from './Challenge';
 export * from './CommentIn';
 export * from './CommentOut';
 export * from './ConfirmOut';
@@ -43,6 +44,7 @@ export * from './PublicRouteDetail';
 export * from './PublicRouteSummary';
 export * from './RandomPrefsIn';
 export * from './RandomPrefsOut';
+export * from './Receipt';
 export * from './RecurringRouteIn';
 export * from './RecurringRouteOut';
 export * from './RoadPrefsIn';
@@ -59,8 +61,11 @@ export * from './RoutingProfile';
 export * from './SaveVariantIn';
 export * from './SharingIn';
 export * from './SharingOut';
+export * from './Submission';
 export * from './SubscribeIn';
 export * from './SubscribeOut';
+export * from './SystemBrowser';
+export * from './SystemBrowserAssessment';
 export * from './SystemCacheCount';
 export * from './SystemCoverage';
 export * from './SystemCoveragePoint';

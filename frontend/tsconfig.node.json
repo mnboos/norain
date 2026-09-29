@@ -2,10 +2,12 @@
   "extends": "@tsconfig/node22/tsconfig.json",
   "include": [
     "vite.config.*",
+    "vite.fingerprint.config.ts",
     "vitest.config.*",
     "cypress.config.*",
     "nightwatch.conf.*",
     "playwright.config.*",
+    "playwright.fingerprint.config.ts",
     "eslint.config.*"
   ],
   "compilerOptions": {

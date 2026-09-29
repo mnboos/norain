@@ -2319,6 +2319,29 @@
                 }
             }
         },
+        "/api/system/browser": {
+            "get": {
+                "operationId": "core_api_system_browser",
+                "summary": "Browser",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemBrowser"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "The requesting browser's own recognition result. The one place it reaches a client: only\nbehind system access, and only for the browser that asks (docs/reference/browser-fingerprinting.md).",
+                "tags": [
+                    "system"
+                ]
+            }
+        },
         "/api/system/summary": {
             "get": {
                 "operationId": "core_api_system_summary",
@@ -2671,6 +2694,60 @@
                 "tags": [
                     "system"
                 ]
+            }
+        },
+        "/api/fingerprint/challenge": {
+            "post": {
+                "operationId": "core_api_fingerprint_challenge",
+                "summary": "Challenge",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Challenge"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "fingerprint"
+                ]
+            }
+        },
+        "/api/fingerprint/verify": {
+            "post": {
+                "operationId": "core_api_fingerprint_verify",
+                "summary": "Verify",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Receipt"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "fingerprint"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Submission"
+                            }
+                        }
+                    },
+                    "required": true
+                }
             }
         }
     },
@@ -6918,6 +6995,116 @@
                 "title": "TokenIn",
                 "type": "object"
             },
+            "SystemBrowser": {
+                "properties": {
+                    "enabled": {
+                        "title": "Enabled",
+                        "type": "boolean"
+                    },
+                    "pow_bits": {
+                        "title": "Pow Bits",
+                        "type": "integer"
+                    },
+                    "assessment": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/SystemBrowserAssessment"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "enabled",
+                    "pow_bits",
+                    "assessment"
+                ],
+                "title": "SystemBrowser",
+                "type": "object"
+            },
+            "SystemBrowserAssessment": {
+                "properties": {
+                    "tier": {
+                        "enum": [
+                            "high",
+                            "low",
+                            "suspicious"
+                        ],
+                        "title": "Tier",
+                        "type": "string"
+                    },
+                    "indicators": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Indicators",
+                        "type": "array"
+                    },
+                    "persistent": {
+                        "title": "Persistent",
+                        "type": "boolean"
+                    },
+                    "continuity": {
+                        "title": "Continuity",
+                        "type": "boolean"
+                    },
+                    "similarity": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Similarity"
+                    },
+                    "browser_id": {
+                        "title": "Browser Id",
+                        "type": "string"
+                    },
+                    "fingerprint_id": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Fingerprint Id"
+                    },
+                    "components": {
+                        "additionalProperties": {
+                            "type": "string"
+                        },
+                        "title": "Components",
+                        "type": "object"
+                    },
+                    "keys": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Keys",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "tier",
+                    "indicators",
+                    "persistent",
+                    "continuity",
+                    "similarity",
+                    "browser_id",
+                    "fingerprint_id",
+                    "components",
+                    "keys"
+                ],
+                "title": "SystemBrowserAssessment",
+                "type": "object"
+            },
             "SystemCacheCount": {
                 "properties": {
                     "kind": {
@@ -7532,6 +7719,80 @@
                     "stall_timeout_seconds"
                 ],
                 "title": "SystemJobsPage",
+                "type": "object"
+            },
+            "Challenge": {
+                "properties": {
+                    "challenge": {
+                        "title": "Challenge",
+                        "type": "string"
+                    },
+                    "expiresIn": {
+                        "title": "Expiresin",
+                        "type": "integer"
+                    },
+                    "difficulty": {
+                        "title": "Difficulty",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "challenge",
+                    "expiresIn",
+                    "difficulty"
+                ],
+                "title": "Challenge",
+                "type": "object"
+            },
+            "Receipt": {
+                "properties": {
+                    "expiresIn": {
+                        "title": "Expiresin",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "expiresIn"
+                ],
+                "title": "Receipt",
+                "type": "object"
+            },
+            "Submission": {
+                "properties": {
+                    "challenge": {
+                        "maxLength": 1024,
+                        "title": "Challenge",
+                        "type": "string"
+                    },
+                    "payload": {
+                        "maxLength": 16000,
+                        "title": "Payload",
+                        "type": "string"
+                    },
+                    "publicKey": {
+                        "maxLength": 256,
+                        "title": "Publickey",
+                        "type": "string"
+                    },
+                    "signature": {
+                        "maxLength": 128,
+                        "title": "Signature",
+                        "type": "string"
+                    },
+                    "pow": {
+                        "maxLength": 16,
+                        "title": "Pow",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "challenge",
+                    "payload",
+                    "publicKey",
+                    "signature",
+                    "pow"
+                ],
+                "title": "Submission",
                 "type": "object"
             }
         }

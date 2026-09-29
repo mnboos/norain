@@ -14,6 +14,11 @@
 
 import * as runtime from '../runtime';
 import {
+    type SystemBrowser,
+    SystemBrowserFromJSON,
+    SystemBrowserToJSON,
+} from '../models/SystemBrowser';
+import {
     type SystemCoverage,
     SystemCoverageFromJSON,
     SystemCoverageToJSON,
@@ -126,6 +131,45 @@ export interface SystemApiCoreApiSystemMapFeaturesRequest {
  * 
  */
 export class SystemApi extends runtime.BaseAPI {
+
+    /**
+     * Creates request options for coreApiSystemBrowser without sending the request
+     */
+    async coreApiSystemBrowserRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/api/system/browser`;
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * The requesting browser\'s own recognition result. The one place it reaches a client: only behind system access, and only for the browser that asks (docs/reference/browser-fingerprinting.md).
+     * Browser
+     */
+    async coreApiSystemBrowserRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<SystemBrowser>> {
+        const requestOptions = await this.coreApiSystemBrowserRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => SystemBrowserFromJSON(jsonValue));
+    }
+
+    /**
+     * The requesting browser\'s own recognition result. The one place it reaches a client: only behind system access, and only for the browser that asks (docs/reference/browser-fingerprinting.md).
+     * Browser
+     */
+    async coreApiSystemBrowser(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SystemBrowser> {
+        const response = await this.coreApiSystemBrowserRaw(initOverrides);
+        return await response.value();
+    }
 
     /**
      * Creates request options for coreApiSystemCellHistory without sending the request

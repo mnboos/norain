@@ -109,6 +109,16 @@ export function useSystemJobs(offset: MaybeRefOrGetter<number>, enabled: MaybeRe
     });
 }
 
+/** The requesting browser's own recognition result; no change notice touches it. */
+export function useSystemBrowser(enabled: MaybeRefOrGetter<boolean>) {
+    return useQuery({
+        queryKey: [...systemKey, "browser"],
+        enabled,
+        retry: false,
+        queryFn: ({ signal }) => api.coreApiSystemBrowser({ signal }),
+    });
+}
+
 /**
  * Keep the system queries current from the server's change notices instead of polling.
  *

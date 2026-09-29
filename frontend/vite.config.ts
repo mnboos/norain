@@ -29,6 +29,9 @@ export default defineConfig(({ command, mode }) => {
             "import.meta.env.VITE_BACKEND_PORT": JSON.stringify(backendPort),
             "import.meta.env.VITE_SENTRY_DSN_FRONTEND": JSON.stringify(env.SENTRY_DSN_FRONTEND ?? ""),
             "import.meta.env.VITE_VUE_APP_VERSION": JSON.stringify(env.SENTRY_RELEASE ?? ""),
+            "import.meta.env.VITE_BROWSER_FINGERPRINT_ENABLED": JSON.stringify(
+                env.VITE_BROWSER_FINGERPRINT_ENABLED ?? "true",
+            ),
         },
         build: {
             // "hidden": the maps are written but the bundles carry no sourceMappingURL.

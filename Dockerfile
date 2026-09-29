@@ -25,6 +25,7 @@ ARG SENTRY_DSN_FRONTEND=""
 ARG SENTRY_RELEASE=""
 ARG SENTRY_ORG=""
 ARG SENTRY_PROJECT_FRONTEND=""
+ARG VITE_BROWSER_FINGERPRINT_ENABLED="true"
 RUN --mount=type=secret,id=sentry_auth_token,env=SENTRY_AUTH_TOKEN npm run build-only
 # Source maps belong to Sentry, never to the web server. The plugin already deletes them
 # after the upload; this makes sure none reaches /srv even if that step did not run.

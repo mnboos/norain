@@ -9,6 +9,12 @@ covered. Rules that hold this together:
   counts in the cache only: ``VOTES_PER_IP_PER_HOUR`` over all areas, and one anonymous vote
   per area and IP a day. Both fail open, like the other per-minute limits: this is a wish
   list, not an election.
+- **A recognised browser votes once per area for 30 days**, whatever its cookie or network
+  (``claim_device_vote``, keys from ``core.fingerprinting.device_keys``). This stacks on the
+  IP limits, never replaces them. A ``low`` browser claims only its key, never its
+  fingerprint: look-alike devices (iPhones of one model) must not block each other. An
+  unknown or suspicious one shares ``SUSPICIOUS_VOTES_PER_IP_PER_DAY`` with its IP. The claim
+  is recorded per voter, so withdrawing releases exactly what was claimed.
 - **An address is confirmed before anything else is sent to it** (double opt-in): anyone can
   type anyone's address. The confirmation mail goes at most once per ``RESEND_AFTER``, and the
   reply is the same whether the address was new, pending or confirmed, so the form reveals
@@ -19,6 +25,7 @@ covered. Rules that hold this together:
 
 import hashlib
 import secrets
+from contextlib import suppress
 from datetime import UTC, datetime, timedelta
 
 from allauth.account.models import EmailAddress
@@ -31,6 +38,7 @@ from django.utils.translation import gettext
 from loguru import logger
 from redis.exceptions import RedisError
 
+from core import fingerprinting
 from core.countries import COUNTRY_NAMES
 from core.models import CoverageArea, CoverageSubscription, User
 
@@ -38,6 +46,9 @@ VOTER_COOKIE = "meteolane_voter"
 VOTER_COOKIE_MAX_AGE = 2 * 365 * 24 * 3600
 VOTES_PER_IP_PER_HOUR = 30
 SUBSCRIBE_PER_IP_PER_HOUR = 10
+# Anonymous votes from a browser that could not be recognised, or lied, per IP and day.
+SUSPICIOUS_VOTES_PER_IP_PER_DAY = 3
+DEVICE_VOTE_TTL = 30 * 24 * 3600
 RESEND_AFTER = timedelta(minutes=10)
 # Unconfirmed addresses are dropped after this (``tasks._purge_unconfirmed_coverage``).
 COVERAGE_CONFIRM_RETENTION = timedelta(days=7)
@@ -113,6 +124,59 @@ def release_anonymous_vote(ip: str | None, code: str) -> None:
         cache.delete(_anonymous_vote_key(ip, code))
     except (RedisError, OSError) as exc:
         logger.warning(f"Coverage vote claim unavailable: {exc}")
+
+
+def _device_vote_key(key: str, code: str) -> str:
+    return f"coverage:devvote:{key}:{code}"
+
+
+def _device_claim_key(voter: str, code: str) -> str:
+    return f"coverage:devvote-of:{voter}:{code}"
+
+
+def claim_device_vote(voter: str, assessment: dict | None, ip: str | None, code: str) -> str | None:
+    """One vote per recognised browser and area; a shared daily count for the rest. Fails open.
+
+    Returns None when the vote may go ahead, else why not: ``"device"`` (this browser already
+    voted for the area) or ``"limit"`` (the unrecognised browsers of this IP used today's
+    votes). Whatever is claimed is remembered under the voter, so ``release_device_vote``
+    undoes it after the receipt has long expired.
+    """
+    if not settings.BROWSER_FINGERPRINT_ENABLED:
+        return None
+    try:
+        if not fingerprinting.is_trusted(assessment):
+            bucket = f"coverage:suspvote:{_ip_key(ip)}:{datetime.now(tz=UTC).date().isoformat()}"
+            cache.add(bucket, 0, 25 * 3600)
+            if cache.incr(bucket) > SUSPICIOUS_VOTES_PER_IP_PER_DAY:
+                cache.decr(bucket)
+                return "limit"
+            cache.set(_device_claim_key(voter, code), {"keys": [], "bucket": bucket}, DEVICE_VOTE_TTL)
+            return None
+        claimed: list[str] = []
+        for key in fingerprinting.device_keys(assessment, ip):
+            if not cache.add(_device_vote_key(key, code), 1, DEVICE_VOTE_TTL):
+                cache.delete_many([_device_vote_key(k, code) for k in claimed])
+                return "device"
+            claimed.append(key)
+        cache.set(_device_claim_key(voter, code), {"keys": claimed, "bucket": None}, DEVICE_VOTE_TTL)
+    except (RedisError, OSError, ValueError) as exc:
+        logger.warning(f"Coverage device claim unavailable: {exc}")
+    return None
+
+
+def release_device_vote(voter: str, code: str) -> None:
+    """Undo ``claim_device_vote`` for a withdrawn or refused vote."""
+    try:
+        claim = cache.get(_device_claim_key(voter, code))
+        if not isinstance(claim, dict):
+            return
+        cache.delete_many([_device_vote_key(k, code) for k in claim.get("keys", [])] + [_device_claim_key(voter, code)])
+        if claim.get("bucket"):
+            with suppress(ValueError):  # the day's count already expired
+                cache.decr(claim["bucket"])
+    except (RedisError, OSError) as exc:
+        logger.warning(f"Coverage device claim unavailable: {exc}")
 
 
 def _link(action: str, token: str) -> str:

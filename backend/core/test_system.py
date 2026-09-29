@@ -33,6 +33,7 @@ from .models import (
 )
 from .schedule import LOCAL_TZ
 from .system_events import notify_system
+from .test_fingerprinting import LOCMEM, recognise
 from .test_signup import TEST_SETTINGS
 
 
@@ -129,7 +130,14 @@ class SystemApiTests(TestCase):
         return model.objects.create(**(defaults | kwargs))
 
     def test_all_endpoints_enforce_admin_otp(self):
-        endpoints = ["summary", "map?layer=routes", "cells?lat=47&lon=8", f"coverage/route/{self.route.pk}", "jobs"]
+        endpoints = [
+            "summary",
+            "map?layer=routes",
+            "cells?lat=47&lon=8",
+            f"coverage/route/{self.route.pk}",
+            "jobs",
+            "browser",
+        ]
         for path in endpoints:
             self.get(path)
         session = self.client.session
@@ -153,6 +161,25 @@ class SystemApiTests(TestCase):
         del session["otp_device_id"]
         session.save()
         self.assertFalse(self.client.get("/api/auth/session").json()["system"]["allowed"])
+
+    @override_settings(CACHES=LOCMEM, BROWSER_FINGERPRINT_ENABLED=True, BROWSER_POW_BITS=4)
+    def test_browser_shows_only_the_requesting_browsers_own_assessment(self):
+        unknown = self.get("browser")
+        self.assertEqual(unknown, {"enabled": True, "pow_bits": 4, "assessment": None})
+        recognise(self.client, "high", browser="b" * 64, fingerprint="f" * 64)
+        assessment = self.get("browser")["assessment"]
+        self.assertEqual(assessment["tier"], "high")
+        self.assertEqual(assessment["indicators"], [])
+        # Prefixes only, never the full keyed ids.
+        self.assertEqual(assessment["browser_id"], "b" * 8)
+        self.assertEqual(assessment["fingerprint_id"], "f" * 8)
+        self.assertEqual(assessment["keys"], ["b:" + "b" * 8, "f:" + "f" * 8])
+        self.assertEqual(assessment["components"], {})
+        recognise(self.client, "low", browser="c" * 64)
+        self.assertIsNone(self.get("browser")["assessment"]["fingerprint_id"])
+        with self.settings(BROWSER_FINGERPRINT_ENABLED=False):
+            self.assertEqual(self.get("browser")["enabled"], False)
+            self.assertIsNone(self.get("browser")["assessment"])
 
     def test_latest_cells_filters_history_and_global_counts(self):
         older = self.cell(day_key=self.now.date() - timedelta(days=1))

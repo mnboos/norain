@@ -50,6 +50,7 @@ services:
         SENTRY_RELEASE: ${SENTRY_RELEASE:-}
         SENTRY_ORG: ${SENTRY_ORG:-}
         SENTRY_PROJECT_FRONTEND: ${SENTRY_PROJECT_FRONTEND:-}
+        VITE_BROWSER_FINGERPRINT_ENABLED: ${VITE_BROWSER_FINGERPRINT_ENABLED:-true}
       secrets:
         - sentry_auth_token
     restart: unless-stopped

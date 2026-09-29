@@ -25,7 +25,9 @@ import {
     useSystemCellHistory,
     useSystemJobs,
     useSystemEvents,
+    useSystemBrowser,
 } from "@/queries/system";
+import { recheckRecognition } from "@/services/browserRecognition";
 
 definePage({ meta: { requiresAuth: true, requiresSystem: true, titleKey: "pages.system" } });
 const { t } = useI18n();
@@ -74,9 +76,11 @@ const cells = useSystemLayer(
 const coverage = useSystemCoverage(selected, allowed);
 const history = useSystemCellHistory(selected, historyOffset, allowed);
 const jobs = useSystemJobs(jobsOffset, allowed);
+const browser = useSystemBrowser(allowed);
+const checkingBrowser = ref(false);
 const { live } = useSystemEvents(allowed);
 const allFeatures = computed(() => [...routes.items.value, ...journeys.items.value, ...cells.items.value]);
-const queries = [summary, routes.query, journeys.query, cells.query, coverage, history, jobs];
+const queries = [summary, routes.query, journeys.query, cells.query, coverage, history, jobs, browser];
 const failed = computed(() => queries.some(query => query.isError.value));
 const refreshing = computed(() => queries.some(query => query.isFetching.value));
 const mapLoading = computed(
@@ -146,6 +150,16 @@ function stalled(job: SystemJob) {
     if (job.possiblyStalled) return true;
     if (timeout === undefined || ["done", "failed"].includes(job.status)) return false;
     return now.value.getTime() - job.updatedAt.getTime() > timeout * 1000;
+}
+const TIER_COLORS: Record<string, string> = { high: "positive", low: "warning", suspicious: "negative" };
+async function checkBrowser() {
+    checkingBrowser.value = true;
+    try {
+        await recheckRecognition();
+        await browser.refetch();
+    } finally {
+        checkingBrowser.value = false;
+    }
 }
 function choose(feature: SystemFeature) {
     selected.value = feature;
@@ -323,7 +337,11 @@ onBeforeUnmount(() => {
                         <span v-if="mapLoading">{{ t("common.loading") }}</span>
                         <span v-else-if="!total">{{ t("system.noMatches") }}</span>
                     </div>
-                    <q-linear-progress v-if="mapLoading" indeterminate />
+                    <!-- A fixed slot: the bar coming and going would resize the map, whose moveend
+                         sets a new viewport, which loads again. -->
+                    <div class="map-progress">
+                        <q-linear-progress v-if="mapLoading" indeterminate />
+                    </div>
                     <SystemMap
                         v-if="summary.data.value"
                         :items="allFeatures"
@@ -565,6 +583,72 @@ onBeforeUnmount(() => {
                             />
                         </div>
                     </q-expansion-item>
+                    <q-expansion-item :label="t('system.browser.title')" class="bordered-panel">
+                        <div class="q-pa-sm text-caption">{{ t("system.browser.hint") }}</div>
+                        <div class="q-pa-sm">
+                            <div v-if="browser.data.value && !browser.data.value.enabled" class="text-caption">
+                                {{ t("system.browser.disabled") }}
+                            </div>
+                            <template v-else-if="browser.data.value?.assessment">
+                                <q-chip
+                                    dense
+                                    square
+                                    :color="TIER_COLORS[browser.data.value.assessment.tier]"
+                                    text-color="white"
+                                    :label="browser.data.value.assessment.tier"
+                                />
+                                <div class="text-caption q-mt-xs">
+                                    {{ t("system.browser.indicators") }}:
+                                    {{ browser.data.value.assessment.indicators.join(", ") || "–" }}
+                                </div>
+                                <div class="text-caption">
+                                    {{
+                                        t("system.browser.ids", {
+                                            browser: browser.data.value.assessment.browserId,
+                                            fingerprint: browser.data.value.assessment.fingerprintId ?? "–",
+                                        })
+                                    }}
+                                </div>
+                                <div class="text-caption">
+                                    {{
+                                        t("system.browser.continuity", {
+                                            persistent: browser.data.value.assessment.persistent ? "✓" : "✗",
+                                            continuity: browser.data.value.assessment.continuity ? "✓" : "✗",
+                                            similarity: browser.data.value.assessment.similarity ?? "–",
+                                        })
+                                    }}
+                                </div>
+                                <div class="text-caption">
+                                    {{ t("system.browser.keys") }}:
+                                    {{ browser.data.value.assessment.keys.join(" · ") || "–" }}
+                                </div>
+                                <div class="text-caption">
+                                    {{ t("system.browser.components") }}:
+                                    {{
+                                        Object.entries(browser.data.value.assessment.components)
+                                            .map(([name, value]) => `${name} ${value}`)
+                                            .join(" · ") || "–"
+                                    }}
+                                </div>
+                            </template>
+                            <div v-else-if="browser.data.value" class="text-caption">
+                                {{ t("system.browser.none") }}
+                            </div>
+                            <div v-if="browser.data.value" class="text-caption">
+                                {{ t("system.browser.pow", { bits: browser.data.value.powBits }) }}
+                            </div>
+                            <q-btn
+                                class="q-mt-sm"
+                                outline
+                                dense
+                                no-caps
+                                :label="t('system.browser.check')"
+                                :loading="checkingBrowser"
+                                :disable="browser.data.value?.enabled === false"
+                                @click="checkBrowser"
+                            />
+                        </div>
+                    </q-expansion-item>
                 </aside>
             </div>
         </template>
@@ -599,6 +683,10 @@ onBeforeUnmount(() => {
     overflow: hidden;
     border: 1px solid #8885;
     border-radius: 8px;
+}
+.map-progress {
+    flex: none;
+    height: 4px;
 }
 .map-panel :deep(.system-map) {
     flex: 1;
