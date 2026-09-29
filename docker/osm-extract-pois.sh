@@ -37,8 +37,12 @@ for extract in "$@"; do
     i=$((i + 1))
 done
 if [ $# -gt 1 ]; then
-    # Objects on a shared border are in both files; merge keeps them once.
-    osmium merge "$parts"/[0-9]*.osm.pbf --overwrite --output-format pbf -o "$parts/all.osm.pbf"
+    # Objects on a shared border are in several extracts. If the snapshots were
+    # made at different times, merge emits each version and export rejects the
+    # result as a history file. Collapse that stream back to the newest visible
+    # version of every object before exporting it.
+    osmium merge -H "$parts"/[0-9]*.osm.pbf --output-format pbf \
+        | osmium time-filter -F pbf --overwrite --output-format pbf -o "$parts/all.osm.pbf" -
 else
     mv "$parts/0.osm.pbf" "$parts/all.osm.pbf"
 fi
