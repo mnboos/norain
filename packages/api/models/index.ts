@@ -64,6 +64,8 @@ export * from './SharingOut';
 export * from './Submission';
 export * from './SubscribeIn';
 export * from './SubscribeOut';
+export * from './SystemBrowser';
+export * from './SystemBrowserAssessment';
 export * from './SystemCacheCount';
 export * from './SystemCoverage';
 export * from './SystemCoveragePoint';

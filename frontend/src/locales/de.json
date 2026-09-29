@@ -812,7 +812,18 @@
             "updated": "Aktualisiert: {time}",
             "count": "{n} Aufträge"
         },
-        "mapPartial": "Ein Teil der Karte konnte nicht geladen werden."
+        "mapPartial": "Ein Teil der Karte konnte nicht geladen werden.",
+        "browser": {
+            "title": "Browser-Erkennung",
+            "hint": "Was der Server über diesen Browser geschlossen hat. Nur hier sichtbar und nur für den eigenen Browser.",
+            "disabled": "Die Browser-Erkennung ist ausgeschaltet (BROWSER_FINGERPRINT_ENABLED).",
+            "none": "Keine gültige Prüfung für diesen Browser. Eine Prüfung gilt 15 Minuten.",
+            "indicators": "Hinweise",
+            "ids": "Schlüssel {browser}… · Fingerabdruck {fingerprint}",
+            "continuity": "Dauerhafter Schlüssel {persistent} · gleicher Schlüssel wie zuvor {continuity} · Ähnlichkeit {similarity}",
+            "pow": "Proof-of-Work für diese Adresse: {bits} Bit",
+            "check": "Diesen Browser prüfen"
+        }
     },
     "freshness": {
         "failed": "Aktualisierung fehlgeschlagen",

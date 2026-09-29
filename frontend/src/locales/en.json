@@ -812,7 +812,18 @@
             "updated": "Updated: {time}",
             "count": "{n} jobs"
         },
-        "mapPartial": "Part of the map could not be loaded."
+        "mapPartial": "Part of the map could not be loaded.",
+        "browser": {
+            "title": "Browser recognition",
+            "hint": "What the server concluded about this browser. Shown only here, and only for your own browser.",
+            "disabled": "Browser recognition is switched off (BROWSER_FINGERPRINT_ENABLED).",
+            "none": "No valid check for this browser. A check is valid for 15 minutes.",
+            "indicators": "Indicators",
+            "ids": "Key {browser}… · fingerprint {fingerprint}",
+            "continuity": "Persistent key {persistent} · same key as before {continuity} · similarity {similarity}",
+            "pow": "Proof of work for this address: {bits} bits",
+            "check": "Check this browser"
+        }
     },
     "freshness": {
         "failed": "Update failed",

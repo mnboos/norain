@@ -913,7 +913,9 @@ protocol and tables are in `docs/reference/browser-fingerprinting.md`. Rules tha
 - **Nothing diagnostic goes to the client.** `verify` answers `{expiresIn}` only; the
   assessment sits in the cache behind a random receipt id in an HttpOnly cookie. Read it
   with `get_browser_assessment(request)`. Never add tier or indicators to a reply or a
-  readable cookie: they tell a forger which check to fix.
+  readable cookie: they tell a forger which check to fix. The one exception is
+  `GET /api/system/browser` (the "Browser-Erkennung" panel on `/system`): behind
+  `has_system_access`, and only the requesting browser's own result, with id prefixes only.
 - **Tiers.** `suspicious`: a lie (or automation). `low`: honest but shared by many devices
   or degraded (iOS, canvas noise, a canvas-only iframe difference, software rendering,
   missing client hints, ephemeral key, unavailable checks). `high`: the rest. **A `low` browser never deduplicates on its

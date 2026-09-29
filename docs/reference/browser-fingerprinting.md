@@ -162,6 +162,17 @@ Configuration:
 
 ## Verification
 
+On a running site, an admin can open `/system` and use the "Browser-Erkennung" panel.
+"Diesen Browser prüfen" runs a fresh proof, and the panel then shows what the server
+concluded about that browser: tier, indicators, continuity, similarity, the current
+proof-of-work bits and the first 8 characters of the key and fingerprint ids.
+`GET /api/system/browser` is the only reply the app serves that carries an assessment. It requires system
+access (staff plus the admin's OTP) and only ever shows the requesting browser's own receipt,
+so only an admin account can use it as an oracle. An honest desktop browser should read
+`high` with no indicators; iOS reads `low` (`ios`), and a browser that cannot keep its key
+(some private windows) reads `low` with `ephemeral_key`. Each check is also logged as
+`Browser assessed: <tier> <indicators>`.
+
 `cd backend && uv run python manage.py test core.test_fingerprinting --noinput`
 
 `cd frontend && npx vitest run src/lib/browser-fingerprint src/services/__tests__/browserRecognition.spec.ts`

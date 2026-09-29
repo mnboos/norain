@@ -74,6 +74,8 @@ models/SharingOut.ts
 models/Submission.ts
 models/SubscribeIn.ts
 models/SubscribeOut.ts
+models/SystemBrowser.ts
+models/SystemBrowserAssessment.ts
 models/SystemCacheCount.ts
 models/SystemCoverage.ts
 models/SystemCoveragePoint.ts

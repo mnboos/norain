@@ -62,6 +62,12 @@ export async function ensureRecognized(): Promise<void> {
     clearTimeout(timer);
 }
 
+/** The system page's "check this browser": a fresh proof now, even when the receipt is recent. */
+export function recheckRecognition(): Promise<void> {
+    recognisedAt = 0;
+    return ensureRecognized();
+}
+
 /** For tests: forget the last receipt. */
 export function resetRecognition(): void {
     client = undefined;

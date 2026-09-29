@@ -151,7 +151,10 @@ const resendCode = () =>
 
 const sendCode = () =>
     run(async () => {
-        await authApi.requestLoginCode(identifier.value);
+        if (signedIn(await authApi.requestLoginCode(identifier.value))) {
+            emit("signed-in");
+            return;
+        }
         codeSent.value = true;
         message.value = t("auth.loginCodeSent", { email: identifier.value });
     }, t("auth.codeSendFailed"));

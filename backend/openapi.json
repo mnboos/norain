@@ -2319,6 +2319,29 @@
                 }
             }
         },
+        "/api/system/browser": {
+            "get": {
+                "operationId": "core_api_system_browser",
+                "summary": "Browser",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemBrowser"
+                                }
+                            }
+                        }
+                    }
+                },
+                "description": "The requesting browser's own recognition result. The one place it reaches a client: only\nbehind system access, and only for the browser that asks (docs/reference/browser-fingerprinting.md).",
+                "tags": [
+                    "system"
+                ]
+            }
+        },
         "/api/system/summary": {
             "get": {
                 "operationId": "core_api_system_summary",
@@ -6970,6 +6993,100 @@
                     "token"
                 ],
                 "title": "TokenIn",
+                "type": "object"
+            },
+            "SystemBrowser": {
+                "properties": {
+                    "enabled": {
+                        "title": "Enabled",
+                        "type": "boolean"
+                    },
+                    "pow_bits": {
+                        "title": "Pow Bits",
+                        "type": "integer"
+                    },
+                    "assessment": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/SystemBrowserAssessment"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "enabled",
+                    "pow_bits",
+                    "assessment"
+                ],
+                "title": "SystemBrowser",
+                "type": "object"
+            },
+            "SystemBrowserAssessment": {
+                "properties": {
+                    "tier": {
+                        "enum": [
+                            "high",
+                            "low",
+                            "suspicious"
+                        ],
+                        "title": "Tier",
+                        "type": "string"
+                    },
+                    "indicators": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Indicators",
+                        "type": "array"
+                    },
+                    "persistent": {
+                        "title": "Persistent",
+                        "type": "boolean"
+                    },
+                    "continuity": {
+                        "title": "Continuity",
+                        "type": "boolean"
+                    },
+                    "similarity": {
+                        "anyOf": [
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Similarity"
+                    },
+                    "browser_id": {
+                        "title": "Browser Id",
+                        "type": "string"
+                    },
+                    "fingerprint_id": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Fingerprint Id"
+                    }
+                },
+                "required": [
+                    "tier",
+                    "indicators",
+                    "persistent",
+                    "continuity",
+                    "similarity",
+                    "browser_id",
+                    "fingerprint_id"
+                ],
+                "title": "SystemBrowserAssessment",
                 "type": "object"
             },
             "SystemCacheCount": {

@@ -1,5 +1,5 @@
 import { ensureRecognized } from "@/services/browserRecognition";
-import { type AllauthReply, allauthRequest, isRecord, type Parse, request } from "@/services/http";
+import { ApiError, type AllauthReply, allauthRequest, isRecord, type Parse, request } from "@/services/http";
 import { type AppLocale, isAppLocale } from "@/i18n";
 
 export interface SessionUser {
@@ -86,6 +86,22 @@ export function signedIn(reply: AllauthReply): boolean {
     return reply.status === 200 && reply.meta.is_authenticated === true;
 }
 
+/**
+ * allauth answers 409 to a sign-in, sign-up or code request from a browser that is already
+ * signed in (another tab, or a session the page did not know about yet). That is a success:
+ * the session's own reply stands in for the refused one. Any other 409 stays an error.
+ */
+async function orAlreadySignedIn(call: () => Promise<AllauthReply>): Promise<AllauthReply> {
+    try {
+        return await call();
+    } catch (err) {
+        if (!(err instanceof ApiError && err.status === 409)) throw err;
+        const session = await allauthRequest("/auth/session");
+        if (signedIn(session)) return session;
+        throw err;
+    }
+}
+
 export const authApi = {
     /** Our own endpoint: the session as the app needs it, and the CSRF cookie. */
     session: () => request<SessionState>("/api/auth/session", parseSession),
@@ -113,7 +129,7 @@ export const authApi = {
     /** Step 1 of sign-up: allauth creates the account and mails a code. Limited per browser. */
     signup: async (email: string) => {
         await ensureRecognized();
-        return allauthRequest("/auth/signup", "POST", { email });
+        return orAlreadySignedIn(() => allauthRequest("/auth/signup", "POST", { email }));
     },
     /** The code from the sign-up mail. Only works in the session that started the sign-up. */
     verifyEmailCode: (code: string) => allauthRequest("/auth/email/verify", "POST", { key: code }),
@@ -125,11 +141,11 @@ export const authApi = {
      * has to guess from an "@" (usernames may contain one).
      */
     login: (identifier: string, password: string) =>
-        allauthRequest("/auth/login", "POST", { username: identifier, password }),
+        orAlreadySignedIn(() => allauthRequest("/auth/login", "POST", { username: identifier, password })),
     /** Mails a sign-in code. Limited per browser, like `signup`. */
     requestLoginCode: async (email: string) => {
         await ensureRecognized();
-        return allauthRequest("/auth/code/request", "POST", { email });
+        return orAlreadySignedIn(() => allauthRequest("/auth/code/request", "POST", { email }));
     },
     confirmLoginCode: (code: string) => allauthRequest("/auth/code/confirm", "POST", { code }),
     requestPasswordReset: (email: string) => allauthRequest("/auth/password/request", "POST", { email }),
