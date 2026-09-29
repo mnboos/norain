@@ -35,6 +35,7 @@ from core.grid import (
     _get_ensemble_cell_sync,
     _get_forecast_cell_sync,
     _nearest_index,
+    ensemble_cell,
     extract_sample,
 )
 from core.jobs import (
@@ -887,9 +888,10 @@ class RouteThumbnailTests(TestCase):
         times = [f"{self.departure.date().isoformat()}T{h:02d}:00" for h in range(24)]
         for sp in self.sample_points:
             self._warm_cell(sp)
+            lat_e, lon_e = ensemble_cell(sp["lat_r"], sp["lon_r"])
             EnsembleCell.objects.update_or_create(
-                lat_r=sp["lat_r"],
-                lon_r=sp["lon_r"],
+                lat_r=lat_e,
+                lon_r=lon_e,
                 day_key=self.departure.date(),
                 defaults={
                     "forecast_days": 16,
@@ -1800,11 +1802,12 @@ class ForecastJobTests(TestCase):
         ):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
 
-        # Three sample points, two distinct cells, one deterministic + one ensemble each.
+        # Three sample points, two distinct cells, one deterministic each; both lie in one
+        # ensemble cell (grid.ensemble_cell), fetched once.
         self.assertEqual(forecast_enqueue.await_count, 2)
-        self.assertEqual(ensemble_enqueue.await_count, 2)
+        self.assertEqual(ensemble_enqueue.await_count, 1)
         job.refresh_from_db()
-        self.assertEqual(job.cells_total, 4)
+        self.assertEqual(job.cells_total, 3)
         self.assertEqual(job.status, ForecastJob.Status.FETCHING)
 
     def test_scan_skips_cells_another_pass_already_claimed(self):

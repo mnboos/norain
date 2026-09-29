@@ -29,6 +29,7 @@ from core.entitlements import (
 from core.forecast_schemas import RouteWeatherOut
 from core.gpx import exact_geometry
 from core.grid import (
+    ensemble_cell,
     get_cached_cell_keys,
     get_or_fetch_ensemble_cell,
     get_or_fetch_forecast_cell,
@@ -376,6 +377,20 @@ def _cell_set(sample_points: list[dict]) -> list[tuple[float, float]]:
     return list(seen)
 
 
+def _cell_kinds(cells: list[tuple[float, float]], warm_forecasts: set, warm_ensembles: set) -> tuple:
+    """``(kind, cells, warm keys, task)`` per cell kind, the ensemble on its own coarser lattice.
+
+    ``get_cached_cell_keys`` keys both warm sets by forecast cell; here each ensemble cell is
+    one unit however many forecast cells it covers, so it is enqueued and counted once.
+    """
+    ensemble_cells = list(dict.fromkeys(ensemble_cell(lat, lon) for lat, lon in cells))
+    warm_ensemble_cells = {(*ensemble_cell(lat, lon), day) for lat, lon, day in warm_ensembles}
+    return (
+        ("forecast", cells, warm_forecasts, refresh_forecast_cell),
+        ("ensemble", ensemble_cells, warm_ensemble_cells, refresh_ensemble_cell),
+    )
+
+
 async def _job_geometry(job: ForecastJob) -> dict | None:
     """Resolve the job's route geometry, or None while a saved route is still waiting.
 
@@ -516,14 +531,15 @@ async def _plan_forecast_job_async(job_id: str) -> None:
     cells = _cell_set(sample_points)
     with_stations = await _wants_stations(job, geometry.get("total_seconds"))
     warm_forecasts, warm_ensembles = await get_cached_cell_keys(cells, windows)
+    kinds = _cell_kinds(cells, warm_forecasts, warm_ensembles)
 
     # Both counters and the status must be committed before the first task is enqueued: a
     # `cells` worker is fast enough to settle a cell while this function is still running,
     # and a settle against cells_total=0 would hand the job to assembly with no data.
     job.geometry = geometry
-    # deterministic + ensemble per cell per window, plus one unit for the station fetch.
-    job.cells_total = len(cells) * len(windows) * 2 + (1 if with_stations else 0)
-    job.cells_settled = len(warm_forecasts) + len(warm_ensembles)
+    # Every forecast and ensemble cell per window, plus one unit for the station fetch.
+    job.cells_total = sum(len(kind_cells) for _, kind_cells, _, _ in kinds) * len(windows) + (1 if with_stations else 0)
+    job.cells_settled = sum(len(warm_keys) for _, _, warm_keys, _ in kinds)
     job.cells_failed = 0
     job.status = ForecastJob.Status.FETCHING
     await job.asave(update_fields=["geometry", "cells_total", "cells_settled", "cells_failed", "status", "updated_at"])
@@ -541,13 +557,10 @@ async def _plan_forecast_job_async(job_id: str) -> None:
 
     for day_key, days in windows:
         day = date.fromisoformat(day_key)
-        for lat_r, lon_r in cells:
-            # Ensemble cells are fetched for every tier: `pop` and `rain_if_wet` are not gated,
-            # only the spread is, and the cells are shared between accounts anyway.
-            for kind, warm_keys, cell_task in (
-                ("forecast", warm_forecasts, refresh_forecast_cell),
-                ("ensemble", warm_ensembles, refresh_ensemble_cell),
-            ):
+        # Ensemble cells are fetched for every tier: `pop` and `rain_if_wet` are not gated,
+        # only the spread is, and the cells are shared between accounts anyway.
+        for kind, kind_cells, warm_keys, cell_task in kinds:
+            for lat_r, lon_r in kind_cells:
                 if (lat_r, lon_r, day) in warm_keys:
                     continue
                 # Enqueued even when the claim is held elsewhere. The holder is usually the
@@ -1085,11 +1098,8 @@ async def _scan_route_forecasts_async(route_id: str) -> dict:
             day = date.fromisoformat(day_key)
             # No station readings here: they are only good for minutes and this scan runs
             # hourly, so it would spend the Weather Underground budget on data nobody reads.
-            for lat_r, lon_r in cells:
-                for kind, warm_keys, cell_task in (
-                    ("forecast", warm_forecasts, refresh_forecast_cell),
-                    ("ensemble", warm_ensembles, refresh_ensemble_cell),
-                ):
+            for kind, kind_cells, warm_keys, cell_task in _cell_kinds(cells, warm_forecasts, warm_ensembles):
+                for lat_r, lon_r in kind_cells:
                     if (lat_r, lon_r, day) in warm_keys:
                         continue
                     # The claim is what stops the same cell being enqueued once per sample

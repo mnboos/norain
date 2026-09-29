@@ -14,7 +14,7 @@ from django.test.utils import CaptureQueriesContext
 from core import departures
 from core.claims import claim_cell
 from core.entitlements import allowed_route_ids, briefing_route_ids, briefing_route_ids_by_owner
-from core.grid import ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE, get_cached_cell_keys, get_cached_cells
+from core.grid import ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE, ensemble_cell, get_cached_cell_keys, get_cached_cells
 from core.models import EnsembleCell, ForecastCell, ForecastJob, Plan, RecurringRoute, Subscription, User, route_point
 from core.schedule import LOCAL_TZ, local_today
 from core.tasks import _plan_forecast_job_async, _prewarm_routes, _scan_route_forecasts_async, _settle_cell
@@ -58,7 +58,8 @@ class BulkCellAvailabilityTests(TestCase):
             with self.subTest(count=count), self.assertNumQueries(2) as queries:
                 forecasts, ensembles = self.lookup([(47.0, round(9 + i / 100, 2)) for i in range(count)])
                 self.assertEqual(forecasts, {(47.0, 9.0, self.day)})
-                self.assertEqual(ensembles, forecasts)
+                # One ensemble cell answers for every forecast cell on its 0.05° lattice point.
+                self.assertEqual(ensembles, {(47.0, round(9 + i / 100, 2), self.day) for i in range(min(count, 3))})
             for query in queries.captured_queries:
                 projection = query["sql"].split(" FROM ")[0]
                 self.assertNotIn('"data"', projection)
@@ -69,8 +70,8 @@ class BulkCellAvailabilityTests(TestCase):
             self.assertEqual(self.lookup([(47, 9)], []), (set(), set()))
         self.forecast(lon=14)
         self.ensemble(lon=14)
-        with self.assertNumQueries(4):
-            forecasts, ensembles = self.lookup([(47.0, round(9 + i / 100, 2)) for i in range(501)])
+        with self.assertNumQueries(4):  # 501 cells on the ensemble lattice: two batches of each
+            forecasts, ensembles = self.lookup([(47.0, round(9 + i * 0.05, 2)) for i in range(501)])
         self.assertEqual(forecasts, {(47.0, 14.0, self.day)})
         self.assertEqual(ensembles, forecasts)
 
@@ -83,17 +84,21 @@ class BulkCellAvailabilityTests(TestCase):
         )
         self.forecast(lon=9.03, forecast_days=2)
         self.forecast(lon=9.04, source="unrecognized")
+        # Ensemble cells on their 0.05° lattice.
         self.ensemble()
-        self.ensemble(lon=9.01, data={"_norain_request_version": ENSEMBLE_REQUEST_VERSION - 1})
-        self.ensemble(lon=9.02, data={})
-        stale_ensemble = self.ensemble(lon=9.03)
+        self.ensemble(lon=9.05, data={"_norain_request_version": ENSEMBLE_REQUEST_VERSION - 1})
+        self.ensemble(lon=9.1, data={})
+        stale_ensemble = self.ensemble(lon=9.15)
         EnsembleCell.objects.filter(pk=stale_ensemble.pk).update(
             fetched_at=datetime.now(UTC) - MAX_CELL_AGE - timedelta(seconds=1)
         )
-        self.ensemble(lon=9.04, forecast_days=2)
-        forecasts, ensembles = self.lookup([(47, round(9 + i / 100, 2)) for i in range(6)])
+        self.ensemble(lon=9.2, forecast_days=2)
+        forecasts, ensembles = self.lookup(
+            [(47, round(9 + i / 100, 2)) for i in range(6)] + [(47, round(9 + i * 0.05, 2)) for i in range(2, 5)]
+        )
         self.assertEqual(forecasts, {(47, 9, self.day), (47, 9.01, self.day)})
-        self.assertEqual(ensembles, {(47, 9, self.day)})
+        # 9.01 and 9.02 lie in the cell of 9.0; 9.03 to 9.05 in the outdated one of 9.05.
+        self.assertEqual(ensembles, {(47, 9, self.day), (47, 9.01, self.day), (47, 9.02, self.day)})
 
     def test_fallback_when_primary_is_inadequate_and_primary_metric_preference(self):
         self.forecast(forecast_days=2)
@@ -120,7 +125,8 @@ class BulkCellAvailabilityTests(TestCase):
                 [(self.day.isoformat(), 2), (self.day, 3), (tomorrow, 5)],
             )
         self.assertEqual(forecasts, {(47, 9, tomorrow)})
-        self.assertEqual(ensembles, forecasts)
+        # (47.01, 9.01) has no forecast cell of its own, but lies in the ensemble cell of (47, 9).
+        self.assertEqual(ensembles, {(47, 9, tomorrow), (47.01, 9.01, tomorrow)})
 
     def test_freshness_cutoff_is_inclusive(self):
         now = datetime.now(UTC)
@@ -344,12 +350,13 @@ class TaskQueryTests(TestCase):
         self.departure = datetime.now(UTC).astimezone(LOCAL_TZ) + timedelta(minutes=30)
 
     def points(self, count):
+        # 0.05° apart: each point in a forecast and an ensemble cell of its own (grid.ensemble_cell).
         return [
             {
                 "lat": 47.0,
-                "lon": round(9 + i / 100, 2),
+                "lon": round(9 + i * 0.05, 2),
                 "lat_r": 47.0,
-                "lon_r": round(9 + i / 100, 2),
+                "lon_r": round(9 + i * 0.05, 2),
                 "elapsed_s": i * 60,
                 "idx": i,
             }
@@ -506,7 +513,7 @@ class TaskQueryTests(TestCase):
         with self.scan_queues() as (forecast, ensemble, _, _):
             result = async_to_sync(_scan_route_forecasts_async)(str(route.pk))
             forecast.assert_not_awaited()
-            ensemble.assert_awaited_once_with(47, 9.01, day, days)
+            ensemble.assert_awaited_once_with(47, 9.05, day, days)
         self.assertEqual(result, {"cells_enqueued": 0, "ensembles_enqueued": 1})
         with self.queues() as (forecast, ensemble, _, compute):
             async_to_sync(_plan_forecast_job_async)(str(job.pk))
@@ -514,3 +521,42 @@ class TaskQueryTests(TestCase):
             self.assertEqual(ensemble.await_count, 2)
             self.assertEqual({call.args[-1] for call in ensemble.await_args_list}, {str(job.pk)})
             compute.assert_not_awaited()
+
+    # Ensemble cells lie on a coarser lattice than forecast cells: fetched and counted once each.
+    def fine_job(self, lons):
+        points = [
+            {"lat": 47.0, "lon": lon, "lat_r": 47.0, "lon_r": lon, "elapsed_s": i * 60, "idx": i}
+            for i, lon in enumerate(lons)
+        ]
+        return ForecastJob.objects.create(
+            kind=ForecastJob.Kind.ADHOC,
+            owner=self.owner,
+            key=f"lattice-{ForecastJob.objects.count()}",
+            params={"departure_time": self.departure.isoformat()},
+            geometry={"sample_points": points, "polyline": [], "total_seconds": len(points) * 60},
+        )
+
+    def test_the_ensemble_lattice(self):
+        self.assertEqual(ensemble_cell(47.01, 9.02), (47.0, 9.0))
+        self.assertEqual(ensemble_cell(47.03, 9.07), (47.05, 9.05))
+        self.assertEqual(ensemble_cell(-33.87, 151.21), (-33.85, 151.2))
+        self.assertEqual(ensemble_cell(*ensemble_cell(46.98, 7.46)), ensemble_cell(46.98, 7.46))
+
+    def test_planning_enqueues_one_ensemble_task_per_lattice_cell(self):
+        job = self.fine_job([9.0, 9.01, 9.02, 9.03, 9.04])  # ensemble cells 9.0 and 9.05
+        with self.queues() as (forecast, ensemble, _, _):
+            async_to_sync(_plan_forecast_job_async)(str(job.pk))
+        self.assertEqual(forecast.await_count, 5)
+        self.assertEqual(sorted(call.args[:2] for call in ensemble.await_args_list), [(47.0, 9.0), (47.0, 9.05)])
+        job.refresh_from_db()
+        self.assertEqual((job.cells_settled, job.cells_total), (0, 7))
+
+    def test_a_warm_lattice_cell_counts_once_for_the_forecast_cells_it_covers(self):
+        job = self.fine_job([9.0, 9.01, 9.02])
+        self.warm([{"lat_r": 47.0, "lon_r": 9.0}], ensembles=True)
+        with self.queues() as (forecast, ensemble, _, _):
+            async_to_sync(_plan_forecast_job_async)(str(job.pk))
+        ensemble.assert_not_awaited()
+        self.assertEqual(forecast.await_count, 2)
+        job.refresh_from_db()
+        self.assertEqual((job.cells_settled, job.cells_total), (2, 4))

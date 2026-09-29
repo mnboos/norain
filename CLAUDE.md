@@ -478,20 +478,23 @@ In tests, patch `core.stations._fetch_nearby` / `_fetch_observation`, and set
 
 `core/ratelimit.py` budgets every external weather call in shared cache counters (the four
 `cells` replicas fetch side by side, so a per-process limit would mean nothing). A `Limit` is a
-set of fixed windows in the provider's own *weighted* calls. Open-Meteo counts a request with
-more than 10 variables or 14 days as several (`grid.open_meteo_weight`), so one forecast cell
-costs ~2.3. `acquire` spends against every window or refuses and returns the wait.
+set of fixed windows in the provider's own *weighted* calls. Open-Meteo counts a request as
+variables × members of every model / 10, times days / 14, at least 1 (`grid.open_meteo_weight`,
+its own `calculateQueryWeight`): one forecast cell costs ~2.3, one **ensemble cell 36**
+(5 variables × 72 members, `ENSEMBLE_MEMBERS`; keep the counts in step with `ENSEMBLE_MODELS`).
+`acquire` spends against every window or refuses and returns the wait.
 Rules that hold this together:
 
 - **The gate sits in `grid._fetch_and_store_*`, inside the fetch lease and outside `@provider`.**
   That covers every caller, and a skipped call is `provider.throttled`, never a
   `provider.request`.
 - **Adaptive.** A 429 goes through `record_throttle`. That starts one cooldown shared by every
-  worker: `Retry-After`, else the hour/day the reply's `reason` names, else doubling from 60 s.
+  worker: `Retry-After`, else the end of the minute/hour/day the reply's `reason` names, else
+  doubling from 60 s. "Too many concurrent requests" (the free API's per-IP limit on requests in
+  flight) only pauses `CONCURRENCY_COOLDOWN` and adapts nothing: it says nothing about the budget.
   It also halves a factor on the *shortest* window, which climbs back 0.1 a quiet minute (halving
   the hour would lock a half-spent hour and send every cell to OWM over a minute-level 429). The first 429
-  of a burst adapts, the rest don't. This is what corrects a weight we guessed too low (the ensemble's weighting is
-  undocumented).
+  of a burst adapts, the rest don't. This is what corrects a weight we guessed too low.
 - **Fail open for Open-Meteo, closed for OWM and Weather Underground**, for the same reasons as
   `claims.py` and `_spend_call` (which is now a thin wrapper over `ratelimit`). Open-Meteo's
   forecast and ensemble APIs share one budget.
@@ -522,6 +525,15 @@ stored `forecast_days` is less than what the caller needs.
 - `get_or_fetch_forecast_cell()` — returns fresh cell (DB cache or live fetch)
 - `extract_sample(cell_data, eta, source)` — source-aware dispatcher: "open-meteo" or "openweathermap"
 - `get_or_fetch_ensemble_cell()` — same pattern for ensemble POP data
+
+**Ensemble cells sit on a 0.05° lattice** (`grid.ensemble_cell`, `ENSEMBLE_CELL_DEG`), not the
+forecast cells' 0.01°: at 36 weighted calls each, one per forecast cell spent the hourly budget on
+a few routes. The ensemble accessors take a forecast cell's coordinates and snap them themselves;
+`get_cached_cell_keys` / `get_cached_cells` key their ensemble result by the forecast cells asked
+for, so readers look up both kinds by the sample's `lat_r`/`lon_r`. Only planning and the scan
+work in ensemble cells (`tasks._cell_kinds`): one task and one `cells_total` unit per ensemble
+cell, however many forecast cells it covers. Anything else that reads `EnsembleCell` rows directly
+(the system dashboard) must snap too.
 
 ### Data format difference (critical)
 

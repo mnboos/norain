@@ -443,14 +443,15 @@ class StationJobTests(_NearNowRoute, TestCase):
         with patch.dict(os.environ, WITH_KEY):
             station_enqueue = self.plan(job)
         station_enqueue.assert_awaited_once_with(str(job.id))
-        self.assertEqual(job.cells_total, 2 * 2 + 1)
+        # Two forecast cells, one ensemble cell holding both (grid.ensemble_cell), the stations.
+        self.assertEqual(job.cells_total, 2 + 1 + 1)
 
     def test_planning_skips_stations_for_free_accounts(self):
         job = self.make_job()
         with patch.dict(os.environ, WITH_KEY):
             station_enqueue = self.plan(job)
         station_enqueue.assert_not_awaited()
-        self.assertEqual(job.cells_total, 4)
+        self.assertEqual(job.cells_total, 2 + 1)
 
     def test_planning_skips_stations_without_a_key(self):
         self.make_pro()

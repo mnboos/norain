@@ -51,7 +51,16 @@ MAX_CELL_AGE = timedelta(hours=2)
 # within 2 h, otherwise fall through to hourly.
 MINUTELY_15_MAX_DELTA = timedelta(hours=2)
 
-ENSEMBLE_MODELS = "icon_seamless_eps,meteoswiss_icon_ch1_ensemble,meteoswiss_icon_ch2_ensemble"
+# Members per ensemble model. Open-Meteo weighs an ensemble request by variables x members
+# (not x models): these three are 72 members, so one cell with five variables counts as 36
+# calls, not 1.5. Keep the counts in step with the models.
+ENSEMBLE_MEMBERS = {"icon_seamless_eps": 40, "meteoswiss_icon_ch1_ensemble": 11, "meteoswiss_icon_ch2_ensemble": 21}
+ENSEMBLE_MODELS = ",".join(ENSEMBLE_MEMBERS)
+# Ensemble cells sit on a coarser lattice than the ~1 km forecast cells. At 36 calls a cell,
+# fetching one per forecast cell spent the hourly budget on a few routes; the ensemble only
+# feeds pop, rain_if_wet, the spread and the central estimate, which vary far less over a
+# few kilometres than the models' members do among themselves.
+ENSEMBLE_CELL_DEG = 0.05
 POP_MEMBER_MM = 0.1
 ENSEMBLE_REQUEST_VERSION = 2
 CELL_LOOKUP_BATCH_SIZE = 500
@@ -92,17 +101,26 @@ def owm_limit() -> Limit:
     return Limit("openweathermap", ((86400, _env_number("OPENWEATHERMAP_DAILY_CAP", OWM_DAILY_CAP)),), fail_open=False)
 
 
-def open_meteo_weight(variables: int, forecast_days: int, models: int = 1) -> float:
+def open_meteo_weight(variables: int, forecast_days: int, members: int = 1) -> float:
     """How many calls Open-Meteo counts one request as: more than 10 variables or 14 days is more than one.
 
-    The ensemble API may count its members too; that is not documented. A weight that is too
-    low shows up as 429s, and ``core.ratelimit`` then scales the budget down by itself.
+    As Open-Meteo computes it (``calculateQueryWeight``): variables times the members of every
+    requested model, over 10, scaled by days over 14, at least 1. A weight that is too low
+    shows up as 429s, and ``core.ratelimit`` then scales the budget down by itself.
     """
-    return max(1.0, variables * models / 10) * max(1.0, forecast_days / 14)
+    return max(1.0, variables * members / 10) * max(1.0, forecast_days / 14)
 
 
 FORECAST_VARIABLES = len(_OM_VARS) * 2  # minutely_15 and hourly both count
-ENSEMBLE_MODEL_COUNT = len(ENSEMBLE_MODELS.split(","))
+ENSEMBLE_MEMBER_COUNT = sum(ENSEMBLE_MEMBERS.values())
+
+
+def ensemble_cell(lat_r: float, lon_r: float) -> tuple[float, float]:
+    """The ensemble cell holding a forecast cell: its coordinates snapped to ENSEMBLE_CELL_DEG."""
+    return (
+        round(round(lat_r / ENSEMBLE_CELL_DEG) * ENSEMBLE_CELL_DEG, 2),
+        round(round(lon_r / ENSEMBLE_CELL_DEG) * ENSEMBLE_CELL_DEG, 2),
+    )
 
 
 def _open_meteo_request(url: str, params: dict) -> tuple[str, dict]:
@@ -428,7 +446,11 @@ def _cached_cell_keys_sync(
     load_data: bool = False,
     include_ensemble: bool = True,
 ):
-    """Read availability or full cells with bounded queries over exact cell keys."""
+    """Read availability or full cells with bounded queries over exact cell keys.
+
+    Both results are keyed by the forecast cells asked for, the ensemble one too: a warm
+    ensemble cell answers for every forecast cell on its coarser lattice (``ensemble_cell``).
+    """
     requirements: dict[CellKey, int] = {}
     for day_key, days in windows:
         day = date.fromisoformat(day_key) if isinstance(day_key, str) else day_key
@@ -438,17 +460,11 @@ def _cached_cell_keys_sync(
 
     cutoff = datetime.now(tz=UTC) - MAX_CELL_AGE
     forecasts: set[CellKey] = set()
-    ensembles: set[CellKey] = set()
     forecast_cells = {}
-    ensemble_cells = {}
     for batch in batched(requirements.items(), CELL_LOOKUP_BATCH_SIZE, strict=False):
-        requested = Q(
-            *(Q(lat_r=lat, lon_r=lon, day_key=day, forecast_days__gte=days) for (lat, lon, day), days in batch),
-            _connector=Q.OR,
-        )
         sources: dict[CellKey, str] = {}
         forecast_query = ForecastCell.objects.filter(
-            requested, fetched_at__gte=cutoff, source__in=("open-meteo", "openweathermap")
+            _requested(batch), fetched_at__gte=cutoff, source__in=("open-meteo", "openweathermap")
         )
         rows = (
             ((cell.lat_r, cell.lon_r, cell.day_key, cell.source, cell) for cell in forecast_query)
@@ -462,27 +478,45 @@ def _cached_cell_keys_sync(
                 if load_data:
                     forecast_cells[key] = cell
         forecasts.update(sources)
-        warm_ensembles = set()
-        if include_ensemble:
-            ensemble_query = EnsembleCell.objects.filter(
-                requested, fetched_at__gte=cutoff, data___norain_request_version=ENSEMBLE_REQUEST_VERSION
-            )
-            if load_data:
-                for cell in ensemble_query:
-                    key = (cell.lat_r, cell.lon_r, cell.day_key)
-                    ensemble_cells[key] = cell
-                    warm_ensembles.add(key)
-            else:
-                warm_ensembles = set(ensemble_query.values_list("lat_r", "lon_r", "day_key"))
-        ensembles.update(warm_ensembles)
         for key, _ in batch:
             if source := sources.get(key):
                 emit("count", "cache.lookup", kind="forecast", outcome="hit", source=source)
             else:
                 emit("count", "cache.lookup", kind="forecast", outcome="miss")
-            if include_ensemble:
-                emit("count", "cache.lookup", kind="ensemble", outcome="hit" if key in warm_ensembles else "miss")
+
+    ensembles: set[CellKey] = set()
+    ensemble_cells = {}
+    if include_ensemble:
+        covers: dict[CellKey, list[CellKey]] = {}
+        ensemble_requirements: dict[CellKey, int] = {}
+        for (lat, lon, day), days in requirements.items():
+            key = (*ensemble_cell(lat, lon), day)
+            covers.setdefault(key, []).append((lat, lon, day))
+            ensemble_requirements[key] = max(ensemble_requirements.get(key, days), days)
+        for batch in batched(ensemble_requirements.items(), CELL_LOOKUP_BATCH_SIZE, strict=False):
+            ensemble_query = EnsembleCell.objects.filter(
+                _requested(batch), fetched_at__gte=cutoff, data___norain_request_version=ENSEMBLE_REQUEST_VERSION
+            )
+            if load_data:
+                loaded = {(cell.lat_r, cell.lon_r, cell.day_key): cell for cell in ensemble_query}
+            else:
+                loaded = dict.fromkeys(ensemble_query.values_list("lat_r", "lon_r", "day_key"))
+            for key, _ in batch:
+                for covered in covers[key]:
+                    emit("count", "cache.lookup", kind="ensemble", outcome="hit" if key in loaded else "miss")
+                    if key in loaded:
+                        ensembles.add(covered)
+                        if load_data:
+                            ensemble_cells[covered] = loaded[key]
     return (forecast_cells, ensemble_cells) if load_data else (forecasts, ensembles)
+
+
+def _requested(batch) -> Q:
+    """Cells matching any of *batch*'s ``((lat, lon, day), days)`` with at least that many days."""
+    return Q(
+        *(Q(lat_r=lat, lon_r=lon, day_key=day, forecast_days__gte=days) for (lat, lon, day), days in batch),
+        _connector=Q.OR,
+    )
 
 
 async def get_cached_cells(
@@ -642,9 +676,13 @@ async def _fetch_and_store_forecast(
 async def get_cached_ensemble_cell(
     lat_r: float, lon_r: float, day_key: str | date, forecast_days: int
 ) -> EnsembleCell | None:
-    """Return a fresh EnsembleCell already in the DB, without ever fetching."""
+    """Return a fresh EnsembleCell already in the DB, without ever fetching.
+
+    Takes a forecast cell's coordinates (or an ensemble cell's): see ``ensemble_cell``.
+    """
     if isinstance(day_key, str):
         day_key = date.fromisoformat(day_key)
+    lat_r, lon_r = ensemble_cell(lat_r, lon_r)
     cell = await sync_to_async(_get_ensemble_cell_sync)(lat_r, lon_r, day_key, forecast_days)
     emit("count", "cache.lookup", kind="ensemble", outcome="hit" if cell is not None else "miss")
     return cell
@@ -657,9 +695,11 @@ async def get_or_fetch_ensemble_cell(
 
     At most one caller per cell fetches at a time; concurrent callers get what it stored.
     A rate-limited Open-Meteo returns None, or raises ``ProviderThrottled`` if asked to.
+    Takes a forecast cell's coordinates (or an ensemble cell's): see ``ensemble_cell``.
     """
     if isinstance(day_key, str):
         day_key = date.fromisoformat(day_key)
+    lat_r, lon_r = ensemble_cell(lat_r, lon_r)
 
     cell = await get_cached_ensemble_cell(lat_r, lon_r, day_key, forecast_days)
     if cell is not None:
@@ -681,7 +721,7 @@ async def _fetch_and_store_ensemble(
 ) -> EnsembleCell | None:
     data = None
     limit = open_meteo_limit()
-    wait = acquire(limit, open_meteo_weight(len(ENSEMBLE_VARIABLES), forecast_days, ENSEMBLE_MODEL_COUNT))
+    wait = acquire(limit, open_meteo_weight(len(ENSEMBLE_VARIABLES), forecast_days, ENSEMBLE_MEMBER_COUNT))
     if not wait:
         try:
             data = await _fetch_ensemble(lat_r, lon_r, forecast_days, day_key.isoformat())

@@ -23,7 +23,7 @@ from ..auth.admin_access import has_system_access
 from ..auth.lockout import client_ip
 from ..departures import cell_covers, instant
 from ..geo import simplify_line
-from ..grid import ENSEMBLE_MODELS, ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE
+from ..grid import ENSEMBLE_CELL_DEG, ENSEMBLE_MODELS, ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE, ensemble_cell
 from ..jobs import JOB_STALL_TIMEOUT
 from ..models import EnsembleCell, ForecastCell, ForecastJob, Journey, JourneyStage, RecurringRoute
 from ..schedule import LOCAL_TZ, next_departure
@@ -117,9 +117,9 @@ def viewport_boxes(value):
     return [(west, south, east, north)] if west <= east else [(west, south, 180, north), (-180, south, east, north)]
 
 
-def cell_ring(lat, lon):
-    west, east = max(-180, lon - 0.005), min(180, lon + 0.005)
-    south, north = max(-90, lat - 0.005), min(90, lat + 0.005)
+def cell_ring(lat, lon, half=0.005):
+    west, east = max(-180, lon - half), min(180, lon + half)
+    south, north = max(-90, lat - half), min(90, lat + half)
     return [[west, south], [east, south], [east, north], [west, north], [west, south]]
 
 
@@ -127,7 +127,7 @@ def cell_feature(row, kind):
     return {
         "id": f"{kind}:{row['id']}",
         "kind": kind,
-        "coordinates": cell_ring(row["lat_r"], row["lon_r"]),
+        "coordinates": cell_ring(row["lat_r"], row["lon_r"], ENSEMBLE_CELL_DEG / 2 if kind == "ensemble" else 0.005),
         "lat": row["lat_r"],
         "lon": row["lon_r"],
         "source": row.get("source", "open-meteo-ensemble"),
@@ -331,8 +331,9 @@ def cell_history(request, lat: float, lon: float, offset: int = 0, limit: int = 
         .annotate(kind=Value("forecast", output_field=CharField()))
         .values(*fields)
     )
+    ensemble_lat, ensemble_lon = ensemble_cell(lat, lon)  # the ensemble cell covering this one
     ensembles = (
-        EnsembleCell.objects.filter(lat_r=lat, lon_r=lon)
+        EnsembleCell.objects.filter(lat_r=ensemble_lat, lon_r=ensemble_lon)
         .annotate(
             source=Value("open-meteo-ensemble", output_field=CharField()),
             kind=Value("ensemble", output_field=CharField()),
@@ -443,9 +444,11 @@ def coverage(request, kind: Literal["route", "stage"], item_id: UUID):
         from itertools import batched
 
         for batch in batched(list(etas), 500, strict=False):
-            locations = Q(*(Q(lat_r=lat, lon_r=lon) for lat, lon in batch), _connector=Q.OR)
             grouped = []
-            for model in (ForecastCell, EnsembleCell):
+            # Ensemble cells sit on their own coarser lattice (grid.ensemble_cell).
+            for model, locate in ((ForecastCell, lambda lat, lon: (lat, lon)), (EnsembleCell, ensemble_cell)):
+                keys = {locate(lat, lon) for lat, lon in batch}
+                locations = Q(*(Q(lat_r=lat, lon_r=lon) for lat, lon in keys), _connector=Q.OR)
                 cells = {}
                 for cell in model.objects.filter(locations, day_key=day):
                     cells.setdefault((cell.lat_r, cell.lon_r), []).append(cell)
@@ -457,7 +460,9 @@ def coverage(request, kind: Literal["route", "stage"], item_id: UUID):
                         "lat": lat,
                         "lon": lon,
                         "forecast": coverage_state(grouped[0].get(key, []), days, etas[key], now),
-                        "ensemble": coverage_state(grouped[1].get(key, []), days, etas[key], now, ensemble=True),
+                        "ensemble": coverage_state(
+                            grouped[1].get(ensemble_cell(lat, lon), []), days, etas[key], now, ensemble=True
+                        ),
                     }
                 )
     return {

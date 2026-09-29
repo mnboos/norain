@@ -302,7 +302,7 @@ class ForecastCell(models.Model):
 
 
 class EnsembleCell(models.Model):
-    """Cached ensemble precipitation probability for a ~1 km² grid cell.
+    """Cached ensemble data for a ~5 km grid cell (``grid.ENSEMBLE_CELL_DEG``).
 
     Stores the full ensemble API response (hourly, multi-model) so POP
     can be computed for any ETA within the forecast window.
