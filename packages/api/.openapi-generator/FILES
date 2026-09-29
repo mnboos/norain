@@ -1,5 +1,6 @@
 apis/CoverageApi.ts
 apis/ElevationApi.ts
+apis/FingerprintApi.ts
 apis/GPXApi.ts
 apis/JourneysApi.ts
 apis/PlacesApi.ts
@@ -11,6 +12,7 @@ apis/SystemApi.ts
 apis/index.ts
 index.ts
 models/BreakOut.ts
+models/Challenge.ts
 models/CommentIn.ts
 models/CommentOut.ts
 models/ConfirmOut.ts
@@ -52,6 +54,7 @@ models/PublicRouteDetail.ts
 models/PublicRouteSummary.ts
 models/RandomPrefsIn.ts
 models/RandomPrefsOut.ts
+models/Receipt.ts
 models/RecurringRouteIn.ts
 models/RecurringRouteOut.ts
 models/RoadPrefsIn.ts
@@ -68,6 +71,7 @@ models/RoutingProfile.ts
 models/SaveVariantIn.ts
 models/SharingIn.ts
 models/SharingOut.ts
+models/Submission.ts
 models/SubscribeIn.ts
 models/SubscribeOut.ts
 models/SystemCacheCount.ts

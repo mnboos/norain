@@ -2672,6 +2672,60 @@
                     "system"
                 ]
             }
+        },
+        "/api/fingerprint/challenge": {
+            "post": {
+                "operationId": "core_api_fingerprint_challenge",
+                "summary": "Challenge",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Challenge"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "fingerprint"
+                ]
+            }
+        },
+        "/api/fingerprint/verify": {
+            "post": {
+                "operationId": "core_api_fingerprint_verify",
+                "summary": "Verify",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Receipt"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "fingerprint"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Submission"
+                            }
+                        }
+                    },
+                    "required": true
+                }
+            }
         }
     },
     "components": {
@@ -7532,6 +7586,80 @@
                     "stall_timeout_seconds"
                 ],
                 "title": "SystemJobsPage",
+                "type": "object"
+            },
+            "Challenge": {
+                "properties": {
+                    "challenge": {
+                        "title": "Challenge",
+                        "type": "string"
+                    },
+                    "expiresIn": {
+                        "title": "Expiresin",
+                        "type": "integer"
+                    },
+                    "difficulty": {
+                        "title": "Difficulty",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "challenge",
+                    "expiresIn",
+                    "difficulty"
+                ],
+                "title": "Challenge",
+                "type": "object"
+            },
+            "Receipt": {
+                "properties": {
+                    "expiresIn": {
+                        "title": "Expiresin",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "expiresIn"
+                ],
+                "title": "Receipt",
+                "type": "object"
+            },
+            "Submission": {
+                "properties": {
+                    "challenge": {
+                        "maxLength": 1024,
+                        "title": "Challenge",
+                        "type": "string"
+                    },
+                    "payload": {
+                        "maxLength": 16000,
+                        "title": "Payload",
+                        "type": "string"
+                    },
+                    "publicKey": {
+                        "maxLength": 256,
+                        "title": "Publickey",
+                        "type": "string"
+                    },
+                    "signature": {
+                        "maxLength": 128,
+                        "title": "Signature",
+                        "type": "string"
+                    },
+                    "pow": {
+                        "maxLength": 16,
+                        "title": "Pow",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "challenge",
+                    "payload",
+                    "publicKey",
+                    "signature",
+                    "pow"
+                ],
+                "title": "Submission",
                 "type": "object"
             }
         }

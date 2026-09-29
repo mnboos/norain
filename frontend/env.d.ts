@@ -5,6 +5,7 @@ interface ImportMetaEnv {
     readonly VITE_BACKEND_PORT: string;
     readonly VITE_SENTRY_DSN_FRONTEND?: string;
     readonly VITE_VUE_APP_VERSION?: string;
+    readonly VITE_BROWSER_FINGERPRINT_ENABLED?: string;
 }
 
 declare module "*.vue" {

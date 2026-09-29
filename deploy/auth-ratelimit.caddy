@@ -118,6 +118,18 @@
 			events 60
 			window 1m
 		}
+		# Browser recognition (core/fingerprinting.py): each challenge is signed and each proof
+		# verified with an ECDSA check. Django allows 120 a minute per IP; a browser needs two
+		# calls per vote or sign-up, so this only stops a flood.
+		zone fingerprint {
+			match {
+				path /api/fingerprint/challenge /api/fingerprint/verify
+				method POST
+			}
+			key {client_ip}
+			events 60
+			window 1m
+		}
 		# The test notification sends a push right away. Django allows one per account every
 		# 30 s; this caps one address across the accounts it may hold.
 		zone push_test_ip {

@@ -21,7 +21,7 @@ from ninja import Router
 from ninja.errors import HttpError
 from pydantic import Field, field_validator
 
-from .. import coverage
+from .. import coverage, fingerprinting
 from ..auth.backend import optional_session_auth
 from ..auth.lockout import client_ip
 from ..countries import COUNTRY_NAMES
@@ -180,10 +180,26 @@ async def vote(request: HttpRequest, response: HttpResponse, code: str):
     ip = client_ip(request)
     if not coverage.within_hourly_limit("vote", ip, coverage.VOTES_PER_IP_PER_HOUR):
         raise HttpError(429, gettext("Zu viele Stimmen. Bitte versuche es später noch einmal."))
-    if user is None and not coverage.claim_anonymous_vote(ip, code):
-        raise HttpError(
-            429, gettext("Von hier aus wurde heute schon für dieses Gebiet gestimmt. Melde dich an, um mitzustimmen.")
-        )
+    if user is None:
+        # The browser's claim first: a refused one leaves nothing behind, and a refused IP
+        # claim below releases it again.
+        refused = coverage.claim_device_vote(voter, fingerprinting.get_browser_assessment(request), ip, code)
+        if refused == "device":
+            raise HttpError(
+                429,
+                gettext("Mit diesem Browser wurde schon für dieses Gebiet gestimmt. Melde dich an, um mitzustimmen."),
+            )
+        if refused == "limit":
+            raise HttpError(
+                429,
+                gettext("Von hier aus wurden heute schon viele Stimmen abgegeben. Melde dich an, um mitzustimmen."),
+            )
+        if not coverage.claim_anonymous_vote(ip, code):
+            coverage.release_device_vote(voter, code)
+            raise HttpError(
+                429,
+                gettext("Von hier aus wurde heute schon für dieses Gebiet gestimmt. Melde dich an, um mitzustimmen."),
+            )
     with suppress(IntegrityError):  # a parallel request cast the same vote
         await CoverageVote.objects.acreate(area_code=code, voter=voter)
     return await _vote_out(code, voted=True)
@@ -197,6 +213,7 @@ async def withdraw_vote(request: HttpRequest, code: str):
         deleted, _ = await CoverageVote.objects.filter(area_code=code, voter=voter).adelete()
         if deleted and _viewer(request) is None:
             coverage.release_anonymous_vote(client_ip(request), code)
+            coverage.release_device_vote(voter, code)
     return await _vote_out(code, voted=False)
 
 

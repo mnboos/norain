@@ -1,3 +1,4 @@
+import { ensureRecognized } from "@/services/browserRecognition";
 import { type AllauthReply, allauthRequest, isRecord, type Parse, request } from "@/services/http";
 import { type AppLocale, isAppLocale } from "@/i18n";
 
@@ -109,8 +110,11 @@ export const authApi = {
             ...(changes.language ? { language: changes.language } : {}),
         }),
 
-    /** Step 1 of sign-up: allauth creates the account and mails a code. */
-    signup: (email: string) => allauthRequest("/auth/signup", "POST", { email }),
+    /** Step 1 of sign-up: allauth creates the account and mails a code. Limited per browser. */
+    signup: async (email: string) => {
+        await ensureRecognized();
+        return allauthRequest("/auth/signup", "POST", { email });
+    },
     /** The code from the sign-up mail. Only works in the session that started the sign-up. */
     verifyEmailCode: (code: string) => allauthRequest("/auth/email/verify", "POST", { key: code }),
     /** A new sign-up code; allauth allows two, at least 10 s apart. */
@@ -122,7 +126,11 @@ export const authApi = {
      */
     login: (identifier: string, password: string) =>
         allauthRequest("/auth/login", "POST", { username: identifier, password }),
-    requestLoginCode: (email: string) => allauthRequest("/auth/code/request", "POST", { email }),
+    /** Mails a sign-in code. Limited per browser, like `signup`. */
+    requestLoginCode: async (email: string) => {
+        await ensureRecognized();
+        return allauthRequest("/auth/code/request", "POST", { email });
+    },
     confirmLoginCode: (code: string) => allauthRequest("/auth/code/confirm", "POST", { code }),
     requestPasswordReset: (email: string) => allauthRequest("/auth/password/request", "POST", { email }),
     resetPassword: (key: string, password: string) => allauthRequest("/auth/password/reset", "POST", { key, password }),

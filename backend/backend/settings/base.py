@@ -61,6 +61,11 @@ CORS_ALLOW_HEADERS = (
 )
 
 SESSION_COOKIE_HTTPONLY = True
+# First-party browser recognition (core/fingerprinting.py). It never signs anyone in; it
+# decides how far anonymous votes and sign-ups from one browser are trusted.
+BROWSER_FINGERPRINT_ENABLED = os.environ.get("BROWSER_FINGERPRINT_ENABLED", "true").lower() == "true"
+# Leading zero bits of each challenge's proof-of-work, the base before churn makes it dearer.
+BROWSER_POW_BITS = int(os.environ.get("BROWSER_POW_BITS", "16"))
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SECURE = True
@@ -172,6 +177,8 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "core.middleware.UserLanguageMiddleware",
+    # Per-browser limits on sign-up and sign-in codes, answered before allauth sees the request.
+    "core.auth.device_throttle.DeviceThrottleMiddleware",
     "allauth.account.middleware.AccountMiddleware",
     "django_otp.middleware.OTPMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",

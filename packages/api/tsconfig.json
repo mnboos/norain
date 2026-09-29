@@ -1,5 +1,7 @@
 {
-    "include": ["./**/*.ts"],
+    "include": [
+        "./**/*.ts"
+    ],
     "compilerOptions": {
         "composite": true,
         "outDir": "./node_modules/.tmp/out-api",
@@ -13,5 +15,7 @@
         "strictNullChecks": true,
         "skipLibCheck": true
     },
-    "exclude": ["node_modules"]
+    "exclude": [
+        "node_modules"
+    ]
 }

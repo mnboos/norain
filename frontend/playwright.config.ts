@@ -13,6 +13,7 @@ const devPort = Number(
  */
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: 'fingerprint.spec.ts', // Uses its own isolated backend fixture and config.
   /* Maximum time one test can run for. */
   timeout: 30 * 1000,
   expect: {

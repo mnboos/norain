@@ -23,3 +23,6 @@ ADMIN_OTP = os.environ.get("DJANGO_ADMIN_OTP", "true").strip().lower() not in {"
 # Match the browser's Vite environment; never send test failures to the live DSN.
 if "test" not in sys.argv:
     initialize_sentry("development")
+else:
+    # Browser-recognition tests opt in per class, so no other suite meets its per-browser limits.
+    BROWSER_FINGERPRINT_ENABLED = False
