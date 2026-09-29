@@ -17,7 +17,9 @@ just routing-backfill --route-id UUID --enqueue # queue a repair
 just manage showmigrations          # arbitrary Django management command
 ```
 
-These recipes use `uv run` in `backend/` and your local environment. Refresh recipes
+These recipes use `uv run` in `backend/` and your local environment. With a prod
+`COMPOSE_FILE` (on the VPS), every one except `just worker` runs in a one-off
+`worker-default` container instead, because Django needs GDAL and the host has none. Refresh recipes
 print the queued task ID and return; `just worker` processes the tasks. Use
 `just worker cells` (or `default`, `compute`, `forecasts`) to serve only one queue.
 The route-specific forecast scan requires existing geometry and examines the next

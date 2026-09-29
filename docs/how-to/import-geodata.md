@@ -29,7 +29,7 @@ since, so it is also how you get fresh data later. `data/downloads/` is not comm
 
 ## 2. Build the routing graph
 
-Follow [path B of the routing-graph guide](build-routing-graph.md#2-prepare-osm).
+Follow [the OSM preparation steps in the routing-graph guide](build-routing-graph.md#2-prepare-osm).
 In short:
 
 ```bash
@@ -91,6 +91,10 @@ just download-elevation-for bike-europe-cycling.osm.pbf
 just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
 just photon-import data/downloads/photon/*.jsonl.zst
 ```
+
+Terrain preparation reuses an identical completed set, but changed coverage or source
+catalogs trigger new extracts, including overlapping areas. See
+[download reuse](build-routing-graph.md#what-gets-downloaded-again).
 
 After a change to `data/graphhopper/graphhopper-config.yaml` or the models, only the build
 is needed: see [build again after changing the config](build-routing-graph.md#4-import-without-interrupting-routing).

@@ -20,15 +20,18 @@ HTTPS (443) in the VPS firewall. Install Docker Engine, the Docker Compose plugi
 Git, and Restic. Create a non-root `norain` deployment user in the `docker` group,
 then clone this repository at `/srv/norain`.
 
-GraphHopper never builds its routing graph by itself: before the first start, build it with
-`just build-graphhopper-graph-from FILE`
-([path C: build on the VPS](build-routing-graph.md#4-import-without-interrupting-routing)), or
-copy one in. Until then the container stops with an error. Building needs more memory than serving:
+GraphHopper never builds its routing graph by itself: before the first start, prepare
+terrain, build, validate and activate it
+([build on the VPS](build-routing-graph.md#choose-where-to-build)), or
+ship a locally built graph and its matching terrain with `just routing-ship-candidate`.
+After shipping, validate and activate on the VPS. Shipping includes elevation data;
+no separate terrain download on the VPS is needed. Until a graph is activated, the
+container stops with an error. Building needs more memory than serving:
 Switzerland needs a build heap (`GRAPHHOPPER_BUILD_HEAP`) of about 6 GB, DACH 16–24 GB.
 Serving uses `GRAPHHOPPER_DATAACCESS=MMAP`, so a 3 GB serving heap is enough for either (with `RAM_STORE`, DACH would
 need 10–14 GB). `GRAPHHOPPER_MEM_LIMIT` must fit the build heap.
 If the VPS cannot hold the build, [build the graph on another
-machine](build-routing-graph.md#4-import-without-interrupting-routing) and copy it in. Prepare Photon with a manual
+machine](build-routing-graph.md#build-elsewhere-serve-in-production) and copy it in. Prepare Photon with a manual
 import before first startup (see below), using
 `PHOTON_IMPORT_HEAP` (4 GB by default). The published images are built for
 both amd64 and arm64, so ARM hosts such as Oracle's Ampere A1 work. Do not expose
@@ -82,8 +85,11 @@ sudo install -d -o norain -g norain -m 0750 \
 ```
 
 `graphhopper/osm` is `ROUTING_OSM_IMPORT_DIR`, the folder GraphHopper imports from. It keeps the
-filtered OSM file, the downloaded extract and elevation tiles, so a rebuild does
-not download them again; allow disk space for them next to the graph in `graphhopper/cache`.
+terrain archives used for coordinate elevation lookups, and any OSM files retained
+for rebuilding. A server receiving a built graph needs its matching terrain archives,
+but not the OSM files or decoded terrain caches. Allow disk space for the graph and
+terrain, including those retained for rollback. See
+[files to keep](build-routing-graph.md#files-to-keep-on-production).
 
 The supplied Compose file expects these internal endpoints:
 

@@ -1,7 +1,7 @@
 # Configuration and services
 
 This page describes the checked-in configuration. Sources:
-[settings.py](../../backend/backend/settings.py),
+[settings](../../backend/backend/settings/),
 [Compose base](../../docker-compose.base.yml), and
 [Compose development](../../docker-compose.dev.yml).
 
@@ -157,7 +157,7 @@ only the factor is ours, in `bike_speed.json`, which must stay **last** in
 ### Changing a speed
 
 1. Edit the factor (or the cap, or a slope rule) in the profile's file.
-2. Prepare terrain if the OSM extent changed, then run
+2. Prepare terrain if the selected terrain no longer covers the OSM file, then run
    `just build-graphhopper-graph-from <filtered .osm.pbf>`. This builds a separate
    candidate and retains the active graph. Run `just routing-validate-candidate`
    with endpoints inside it, then `just routing-activate` to use the new speeds.
@@ -168,7 +168,7 @@ only the factor is ours, in `bike_speed.json`, which must stay **last** in
 
 On production, deploy the changed files, then run `just build-graphhopper-graph-from` there
 with the filtered file; the container never rebuilds by itself. On a VPS without the
-memory for that, [build the graph elsewhere](../how-to/build-routing-graph.md#4-import-without-interrupting-routing). Step 4
+memory for that, [build the graph elsewhere](../how-to/build-routing-graph.md#build-elsewhere-serve-in-production). Step 4
 applies there too.
 
 ## Deployment boundary

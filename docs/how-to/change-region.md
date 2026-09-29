@@ -8,7 +8,7 @@ several countries at once, or to build from files you already have, follow
 [build routing and search from downloaded files](import-geodata.md) instead.
 
 1. Keep the current routing service running while preparing its replacement. Ensure
-   there is disk and memory for both graphs and the zoom-15 terrain data.
+   there is disk and memory for both graphs and the terrain archives (zoom 15 and zoom-12 fallback).
 
 2. Set `OSM_DATA_URL` in `.env` to the new region's Geofabrik `.osm.pbf` URL.
    Set `PHOTON_INDEX_URL` to a matching Photon regional dump or prebuilt index.
@@ -20,7 +20,8 @@ several countries at once, or to build from files you already have, follow
    [routing-graph guide](build-routing-graph.md). Run `routing-terrain-estimate`,
    `download-elevation-for` and `build-graphhopper-graph-from` with the same filtered
    OSM filename. Validate endpoints inside the new region, then run
-   `routing-activate`. Zoom-15 terrain must cover the entire OSM extent.
+   `routing-activate`. The prepared terrain must cover the file’s cells; zoom 12
+   fills gaps in zoom 15. Existing terrain can be reused if it already covers them.
 4. For search, move `data/photon` to a backup location and recreate the empty directory:
    Photon only imports when its index directory is absent. Adjust `PHOTON_IMPORT_HEAP`
    as needed. Then recreate Photon and follow its import:
@@ -31,8 +32,10 @@ several countries at once, or to build from files you already have, follow
    ```
 
 5. On production, do the same on the VPS
-   ([path C](build-routing-graph.md#4-import-without-interrupting-routing)), or build the graph on another computer and copy
-   it over ([path D](build-routing-graph.md#4-import-without-interrupting-routing)).
+   ([build on the VPS](build-routing-graph.md#choose-where-to-build)), or build the graph on another computer and copy
+   it and its matching terrain over with `just routing-ship-candidate`
+   ([build elsewhere](build-routing-graph.md#build-elsewhere-serve-in-production)).
+   Shipping includes elevation data; do not download it separately on the VPS.
 
 6. Search for a town within the new area and create a short route between covered
    locations. Confirm geometry is computed and a weather forecast loads.
