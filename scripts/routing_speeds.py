@@ -23,10 +23,12 @@ DEFAULT_ROUTES = {
 }
 
 # What the checked-in models aim for on a mixed road route; see docs/reference/configuration.md.
-TARGET_KMH = {"bike": 18, "ebike": 22, "fast_ebike": 32}
+TARGET_KMH = {"bike": 18, "ebike": 22, "fast_ebike": 32, "hike": 4}
 
 
-def average_speed(base_url: str, profile: str, start: tuple, dest: tuple) -> float | None:
+def average_speed(
+    base_url: str, profile: str, start: tuple, dest: tuple
+) -> float | None:
     """km/h over the whole route, or None when GraphHopper cannot route it."""
     body = {
         "profile": profile,
@@ -35,7 +37,9 @@ def average_speed(base_url: str, profile: str, start: tuple, dest: tuple) -> flo
         "instructions": False,
     }
     request = urllib.request.Request(
-        f"{base_url}/route", json.dumps(body).encode(), {"Content-Type": "application/json"}
+        f"{base_url}/route",
+        json.dumps(body).encode(),
+        {"Content-Type": "application/json"},
     )
     try:
         path = json.load(urllib.request.urlopen(request, timeout=60))["paths"][0]
@@ -50,29 +54,42 @@ def average_speed(base_url: str, profile: str, start: tuple, dest: tuple) -> flo
 def parse_route(spec: str) -> tuple[str, tuple, tuple]:
     name, _, points = spec.partition("=")
     start, _, dest = points.partition(">")
-    to_pair = lambda p: tuple(float(v) for v in p.split(","))  # noqa: E731
+    to_pair = lambda p: tuple(float(v) for v in p.split(","))
     return name, to_pair(start), to_pair(dest)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--url", default=os.environ.get("GRAPHHOPPER_API_URL", "http://localhost:8989"))
-    parser.add_argument("--profile", action="append", dest="profiles", choices=list(TARGET_KMH))
-    parser.add_argument("--route", action="append", dest="routes", metavar="NAME=lat,lon>lat,lon")
+    parser.add_argument(
+        "--url", default=os.environ.get("GRAPHHOPPER_API_URL", "http://localhost:8989")
+    )
+    parser.add_argument(
+        "--profile", action="append", dest="profiles", choices=list(TARGET_KMH)
+    )
+    parser.add_argument(
+        "--route", action="append", dest="routes", metavar="NAME=lat,lon>lat,lon"
+    )
     args = parser.parse_args()
 
     profiles = args.profiles or list(TARGET_KMH)
-    routes = [parse_route(spec) for spec in args.routes] if args.routes else [
-        (name, start, dest) for name, (start, dest) in DEFAULT_ROUTES.items()
-    ]
+    routes = (
+        [parse_route(spec) for spec in args.routes]
+        if args.routes
+        else [(name, start, dest) for name, (start, dest) in DEFAULT_ROUTES.items()]
+    )
 
     print(f"{args.url}\n")
     width = max(len(name) for name, _, _ in routes) + 2
     print(" " * width + "".join(f"{p:>14}" for p in profiles))
-    print(" " * width + "".join(f"{'(~' + str(TARGET_KMH[p]) + ' km/h)':>14}" for p in profiles))
+    print(
+        " " * width
+        + "".join(f"{'(~' + str(TARGET_KMH[p]) + ' km/h)':>14}" for p in profiles)
+    )
     for name, start, dest in routes:
         speeds = [average_speed(args.url, p, start, dest) for p in profiles]
-        cells = "".join(f"{s:>14.1f}" if s is not None else f"{'-':>14}" for s in speeds)
+        cells = "".join(
+            f"{s:>14.1f}" if s is not None else f"{'-':>14}" for s in speeds
+        )
         print(f"{name:{width}}{cells}")
 
 

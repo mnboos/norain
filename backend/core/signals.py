@@ -1,10 +1,12 @@
 """Model signal receivers that are not allauth's (those live in core/auth/signals.py)."""
 
 from django.db import transaction
-from django.db.models.signals import post_delete
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
+from loguru import logger
 
-from .models import RoutePhoto
+from .models import CoverageArea, RoutePhoto
+from .tasks import notify_area_covered
 
 
 @receiver(post_delete, sender=RoutePhoto)
@@ -21,3 +23,23 @@ def delete_photo_files(sender, instance: RoutePhoto, **kwargs):
             storage.delete(name)
 
     transaction.on_commit(remove)
+
+
+@receiver(post_save, sender=CoverageArea)
+def notify_coverage_subscribers(sender, instance: CoverageArea, **kwargs):
+    """An area saved as covered mails everyone who asked about it, whoever saved it.
+
+    Every save of a covered area enqueues the task; it only mails confirmed addresses that
+    are still waiting and deletes each one it mailed, so a second save sends nothing twice.
+    """
+    if instance.status != CoverageArea.Status.COVERED:
+        return
+    code = instance.code
+
+    def enqueue():
+        try:
+            notify_area_covered.enqueue(code)
+        except Exception:  # noqa: BLE001 -- the admin's save worked; the next save retries
+            logger.exception(f"Could not enqueue notify_area_covered for {code}")
+
+    transaction.on_commit(enqueue)

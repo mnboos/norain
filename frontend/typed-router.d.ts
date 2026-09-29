@@ -52,6 +52,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    'coverage': RouteRecordInfo<
+      'coverage',
+      '/coverage',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     'explore': RouteRecordInfo<
       'explore',
       '/explore',
@@ -147,6 +154,14 @@ declare module 'vue-router/auto-routes' {
     'src/pages/account.vue': {
       routes:
         | 'account'
+      views:
+        | never
+      pathParamNames:
+        | never
+    }
+    'src/pages/coverage.vue': {
+      routes:
+        | 'coverage'
       views:
         | never
       pathParamNames:

@@ -6,7 +6,7 @@ import { duration, km } from "@/utils/journeys";
  * core/random_rides.py NOMINAL_SPEED_KMH). Only for the form's rough "≈" hint: the server
  * sizes every ride by the riding time GraphHopper actually returns.
  */
-export const NOMINAL_SPEED_KMH: Record<string, number> = { bike: 18, ebike: 22, fast_ebike: 32 };
+export const NOMINAL_SPEED_KMH: Record<string, number> = { bike: 18, ebike: 22, fast_ebike: 32, hike: 4 };
 
 const HEADINGS = [null, 0, 45, 90, 135, 180, 225, 270, 315] as const;
 

@@ -1,7 +1,7 @@
-# Meteolane — Bike-route weather forecaster
+# MeteoLane — Bike-route weather forecaster
 
-Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo
-(primary, free) with OpenWeatherMap One Call 3.0 as fallback.
+Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo (primary, free) with OpenWeatherMap One
+Call 3.0 as fallback.
 
 ## Project layout
 
@@ -52,8 +52,8 @@ stored `forecast_days` is less than what the caller needs.
 
 ### Data format difference (critical)
 
-**Open-Meteo**: `hourly` = `{"time": [...], "temperature_2m": [...], ...}` — dict of parallel arrays
-**OpenWeatherMap**: `hourly` = `[{"dt": 123, "temp": 15, ...}, ...]` — list of objects
+**Open-Meteo**: `hourly` = `{"time": [...], "temperature_2m": [...], ...}` — dict of parallel arrays **OpenWeatherMap**:
+`hourly` = `[{"dt": 123, "temp": 15, ...}, ...]` — list of objects
 
 `_from_open_meteo()` expects dict blocks; `_from_owm()` expects a list. Both have
 `isinstance` guards rejecting the wrong format. `extract_sample()` routes directly based
@@ -84,6 +84,16 @@ Users configure routes with cron schedules. `next_departure()` computes the next
 tasks (`refresh_upcoming_forecasts`) pre-warm forecast cells for upcoming departures.
 
 ## Testing
+
+### Generated API
+
+- After changing API endpoints or schemas, run `just update-api` on the feature branch.
+- Commit `backend/openapi.json` and all changes under `packages/api`, including added
+  and deleted files. Do not fix generated files by hand.
+- After merging or rebasing main, regenerate from the combined backend code instead
+  of choosing one branch's generated files when resolving conflicts.
+- CI regenerates the schema and TypeScript client and fails the `test` job if they
+  differ from the committed files.
 
 - `SimpleTestCase` for pure functions (no DB)
 - `TestCase` for DB-dependent tests (CellCacheTests)

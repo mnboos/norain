@@ -15,6 +15,7 @@ export interface RouteDraft {
 export function routingProfile(value: string): RoutingProfile {
     if (value === "ebike") return RoutingProfile.Ebike;
     if (value === "fast_ebike") return RoutingProfile.FastEbike;
+    if (value === "hike") return RoutingProfile.Hike;
     return RoutingProfile.Bike;
 }
 

@@ -78,6 +78,7 @@ export const briefingsApi = {
         request("/api/briefings/preferences", parse, "POST", { routeId, channel }),
     subscribe: (subscription: PushSubscriptionJSON) => request("/api/briefings/push", ok, "POST", subscription),
     unsubscribe: (endpoint: string) => request("/api/briefings/push", ok, "DELETE", { endpoint }),
+    test: (endpoint: string) => request("/api/briefings/push/test", ok, "POST", { endpoint }),
 };
 
 export function pushSupported() {
@@ -103,6 +104,13 @@ export async function enablePush(publicKey: string) {
             applicationServerKey: bytes,
         }));
     await briefingsApi.subscribe(subscription.toJSON());
+}
+/** Sends a test notification to this browser, not to the account's other devices. */
+export async function testPush() {
+    const registration = pushSupported() ? await navigator.serviceWorker.getRegistration("/") : undefined;
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) throw new Error(t("briefings.pushNotOnDevice"));
+    await briefingsApi.test(subscription.endpoint);
 }
 export async function disablePush() {
     if (!("serviceWorker" in navigator)) return;

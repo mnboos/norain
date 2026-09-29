@@ -29,7 +29,7 @@ from .weather_routing import LATTICE_STEP, CellKey
 
 # The pace a profile's GraphHopper model gives on mixed roads (see "Ride speed" in CLAUDE.md),
 # only for the first guess at how far a time target reaches. Sizing corrects it.
-NOMINAL_SPEED_KMH = {"bike": 18.0, "ebike": 22.0, "fast_ebike": 32.0}
+NOMINAL_SPEED_KMH = {"bike": 18.0, "ebike": 22.0, "fast_ebike": 32.0, "hike": 4.0}
 # The variants a rider picks from when the ride does not consider the weather (every tier).
 PICK_VARIANTS = 3
 # A candidate within this share of its target is long enough.

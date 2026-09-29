@@ -1,0 +1,4 @@
+<properties>
+  <property id="server" type="string">http://localhost:8000</property>
+  <property id="token" type="string"></property>
+</properties>

@@ -18,7 +18,7 @@ router = Router(auth=optional_session_auth, tags=["Route weather"])
 
 # The profiles GraphHopper is configured with (data/graphhopper/graphhopper-config.yaml). Checked on
 # input so an unknown one is a 422 here rather than a failed routing call on a worker.
-ROUTING_PROFILES = ("bike", "ebike", "fast_ebike")
+ROUTING_PROFILES = ("bike", "ebike", "fast_ebike", "hike")
 
 
 def check_routing_profile(profile: str) -> str:

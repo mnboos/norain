@@ -1,4 +1,14 @@
 {
+    "garmin": {
+        "title": "Garmin-Uhr",
+        "intro": "Zeige die nächste regelmässige Fahrt oder geplante Tour auf deiner Forerunner 255.",
+        "create": "Uhr-Token erstellen",
+        "replace": "Uhr-Token ersetzen",
+        "revoke": "Uhr trennen",
+        "token": "Uhr-Token",
+        "help": "Kopiere diesen Token jetzt und trage ihn in den Einstellungen der MeteoLane Connect-IQ-App ein. Ersetzen oder Trennen deaktiviert den bisherigen Token.",
+        "connected": "Ein Uhr-Token ist aktiv."
+    },
     "errors": {
         "requestFailed": "Die Anfrage ist fehlgeschlagen.",
         "unexpectedReply": "Unerwartete Antwort vom Server.",
@@ -153,13 +163,13 @@
         }
     },
     "app": {
-        "logoAlt": "Meteolane Logo",
+        "logoAlt": "MeteoLane Logo",
         "system": "Systemübersicht",
         "account": "Konto",
         "lightTheme": "Helles Design",
         "darkTheme": "Dunkles Design",
-        "title": "{page} – Meteolane",
-        "defaultTitle": "Meteolane – Wetter entlang deiner Route"
+        "title": "{page} – MeteoLane",
+        "defaultTitle": "MeteoLane – Wetter entlang deiner Route"
     },
     "nav": {
         "dashboard": "Dashboard",
@@ -181,7 +191,8 @@
         "publicRoute": "Öffentliche Route",
         "randomRides": "Zufallsrunden",
         "route": "Route",
-        "system": "Systemübersicht"
+        "system": "Systemübersicht",
+        "coverage": "Abdeckung"
     },
     "account": {
         "passwordMismatch": "Die Passwörter stimmen nicht überein.",
@@ -228,14 +239,14 @@
         "loopFrom": "Rundkurs ab {start} · {length}",
         "new": "Neue Runde",
         "empty": "Noch keine Zufallsrunde.",
-        "emptyHint": "Keine Idee, wohin? Sag, ob du im Kreis oder zu einem Ziel fahren willst und wie lange oder wie weit. Meteolane würfelt die Strecke und zeigt das Wetter darauf."
+        "emptyHint": "Keine Idee, wohin? Sag, ob du im Kreis oder zu einem Ziel fahren willst und wie lange oder wie weit. MeteoLane würfelt die Strecke und zeigt das Wetter darauf."
     },
     "weatherRouting": {
         "title": "Um schlechtes Wetter herum fahren",
         "avoidRain": "Regen ausweichen",
         "avoidHeadwind": "Starken Gegenwind meiden",
-        "explanation": "Für Fahrten in den nächsten drei Tagen legt Meteolane die Strecke dorthin, wo es trocken ist und der Wind weniger bläst, zur Zeit, zu der du dort bist. Aus: die Strecke folgt nur deinen Wünschen an die Strasse.",
-        "plusOnly": "Mit Plus kann Meteolane die Strecke um Regen und Gegenwind herum legen.",
+        "explanation": "Für Fahrten in den nächsten drei Tagen legt MeteoLane die Strecke dorthin, wo es trocken ist und der Wind weniger bläst, zur Zeit, zu der du dort bist. Aus: die Strecke folgt nur deinen Wünschen an die Strasse.",
+        "plusOnly": "Mit Plus kann MeteoLane die Strecke um Regen und Gegenwind herum legen.",
         "seePlus": "Plus ansehen"
     },
     "windBar": {
@@ -261,7 +272,7 @@
         },
         "new": "Neue Reise",
         "empty": "Noch keine Reise.",
-        "emptyHint": "Gib Start, Ziel und wie weit du am Tag fahren willst an. Meteolane schlägt Etappen, Pausen mit Wasser und Toiletten, Übernachtungen und die beste Abfahrtszeit vor.",
+        "emptyHint": "Gib Start, Ziel und wie weit du am Tag fahren willst an. MeteoLane schlägt Etappen, Pausen mit Wasser und Toiletten, Übernachtungen und die beste Abfahrtszeit vor.",
         "days": "{n} Tag | {n} Tage",
         "reason": {
             "tooLong": "~{minutes} min zu lang",
@@ -301,7 +312,7 @@
         "tryPlus": "Plus 14 Tage kostenlos testen",
         "tryAgain": "Bitte versuche es erneut.",
         "email": "E-Mail",
-        "label": "Meteolane Tarife",
+        "label": "MeteoLane Tarife",
         "pitch": "Finde eine bessere Abfahrtszeit und erhalte deine Vorhersage vor der Fahrt.",
         "activeRoutes": "{count} / {max} aktive Routen",
         "complimentary": "Plus geschenkt bis {date}. Keine automatische Zahlung.",
@@ -331,11 +342,13 @@
         "briefingsTitle": "Vor der Fahrt informiert",
         "briefingsHint": "Ein Briefing je Hinfahrt und Rückfahrt etwa 60 Minuten vor der frühesten Abfahrt in deinem Zeitfenster. Bis zu 10 Briefings pro Tag. Keine laufenden Wetterwarnungen.",
         "briefingsNeedPlus": "Aktiviere Plus, um Briefings einzurichten.",
-        "noPush": "Dieser Browser unterstützt Push hier nicht. Nutze E-Mail. Auf dem iPhone installierst du Meteolane zuerst über „Zum Home-Bildschirm“.",
+        "noPush": "Dieser Browser unterstützt Push hier nicht. Nutze E-Mail. Auf dem iPhone installierst du MeteoLane zuerst über „Zum Home-Bildschirm“.",
         "pushOn": "Push auf diesem Gerät aktivieren",
         "pushOnDone": "Gerät verbunden. Wähle jetzt Push für deine Route.",
         "pushOff": "Push auf diesem Gerät ausschalten",
         "pushOffDone": "Push auf diesem Gerät ausgeschaltet.",
+        "pushTest": "Testbenachrichtigung senden",
+        "pushTestDone": "Testbenachrichtigung gesendet. Sie sollte gleich erscheinen.",
         "briefingsLoadFailed": "Briefing-Einstellungen konnten nicht geladen werden.",
         "deliveryMissing": "Der Versand ist noch nicht eingerichtet. Deine Vorhersagen sind weiterhin in der App verfügbar.",
         "briefingSaved": "Briefing-Einstellung gespeichert.",
@@ -458,8 +471,9 @@
         "frost": "Frost"
     },
     "briefings": {
-        "pushUnavailable": "Push ist hier nicht verfügbar. Nutze E-Mail oder installiere Meteolane auf deinem Startbildschirm.",
-        "allowNotifications": "Bitte erlaube Benachrichtigungen in den Browser-Einstellungen."
+        "pushUnavailable": "Push ist hier nicht verfügbar. Nutze E-Mail oder installiere MeteoLane auf deinem Startbildschirm.",
+        "allowNotifications": "Bitte erlaube Benachrichtigungen in den Browser-Einstellungen.",
+        "pushNotOnDevice": "Push ist auf diesem Gerät nicht aktiviert."
     },
     "details": {
         "title": "Details",
@@ -535,7 +549,8 @@
     "profiles": {
         "bike": "Velo",
         "ebike": "E-Bike",
-        "fast_ebike": "S-Pedelec"
+        "fast_ebike": "S-Pedelec",
+        "hike": "Wandern"
     },
     "randomForm": {
         "length": {
@@ -554,15 +569,15 @@
         "defaultNameTo": "Nach {dest}",
         "editTitle": "Runde bearbeiten",
         "newTitle": "Neue Zufallsrunde",
-        "intro": "Sag, wie lange oder wie weit du fahren willst. Meteolane würfelt eine Strecke und prüft das Wetter darauf.",
+        "intro": "Sag, wie lange oder wie weit du fahren willst. MeteoLane würfelt eine Strecke und prüft das Wetter darauf.",
         "profile": "Profil (bestimmt das Tempo)",
         "headingLoop": "Richtung zuerst",
         "headingDetour": "Umweg auf der Seite",
         "pois": "Unterwegs möchte ich vorbei an",
-        "poisHint": "Optional: Meteolane legt einen Halt auf die Strecke",
+        "poisHint": "Optional: MeteoLane legt einen Halt auf die Strecke",
         "weather": "Wetter",
         "considerWeather": "Wetter berücksichtigen",
-        "weatherOn": "Meteolane berechnet die Vorhersage für jede Variante und empfiehlt die mit dem besten Wetter.",
+        "weatherOn": "MeteoLane berechnet die Vorhersage für jede Variante und empfiehlt die mit dem besten Wetter.",
         "weatherOff": "Du bekommst drei Varianten ohne Wetter und wählst, welche du als Routen speichern willst. Die Vorhersage gibt es dann für jede gespeicherte Route.",
         "saveAndReplan": "Speichern und neu planen",
         "roll": "Varianten würfeln"
@@ -601,7 +616,7 @@
         "windowLater": "bis {minutes} min später",
         "windowFixed": "Fix",
         "editTitle": "Reise bearbeiten",
-        "intro": "Meteolane schlägt Tagesetappen, Pausen und Abfahrtszeiten vor, nach Wetter und deinen Wünschen.",
+        "intro": "MeteoLane schlägt Tagesetappen, Pausen und Abfahrtszeiten vor, nach Wetter und deinen Wünschen.",
         "profile": "Profil",
         "firstDay": "Erster Tag",
         "earliestStart": "Frühester Start",
@@ -613,7 +628,7 @@
         "poisHint": "Jede Auswahl muss auf jeder Etappe vorkommen",
         "lodging": "Übernachten in",
         "lodgingHint": "Leer: jede Art",
-        "plusPitch": "Mit Plus vergleicht Meteolane bis zu drei Varianten pro Tag und schlägt die beste Abfahrtszeit vor.",
+        "plusPitch": "Mit Plus vergleicht MeteoLane bis zu drei Varianten pro Tag und schlägt die beste Abfahrtszeit vor.",
         "shiftDeparture": "Abfahrt verschieben",
         "plan": "Reise planen"
     },
@@ -635,8 +650,8 @@
         "noBreak": "Keine Pause nötig.",
         "nothingWanted": "Hier gibt es nichts Gewünschtes.",
         "detourTo": "Umweg zu {poi}",
-        "noForecastRandom": "Für diesen Tag gibt es noch keine Vorhersage. Würfle die Runde näher am Termin neu, dann empfiehlt Meteolane die Strecke mit dem besten Wetter.",
-        "noForecastJourney": "Für diesen Tag gibt es noch keine Vorhersage. Plane die Reise näher am Termin neu, dann richtet Meteolane Strecke und Abfahrt nach dem Wetter.",
+        "noForecastRandom": "Für diesen Tag gibt es noch keine Vorhersage. Würfle die Runde näher am Termin neu, dann empfiehlt MeteoLane die Strecke mit dem besten Wetter.",
+        "noForecastJourney": "Für diesen Tag gibt es noch keine Vorhersage. Plane die Reise näher am Termin neu, dann richtet MeteoLane Strecke und Abfahrt nach dem Wetter.",
         "weatherLoadFailed": "Wetterdaten konnten nicht geladen werden.",
         "chosen": "{label} (gewählt)",
         "otherVariants": "weitere Varianten",
@@ -676,9 +691,7 @@
     "routeList": {
         "noDeparture": "Keine Abfahrt",
         "past": "Vergangen",
-        "inMinutes": "in {n} min",
-        "inHours": "in {n}h",
-        "tomorrow": "morgen",
+        "now": "jetzt",
         "computing": "Route wird berechnet …",
         "add": "Route hinzufügen",
         "randomRide": "Zufallsrunde",
@@ -694,6 +707,7 @@
         "label": "Kennzahlen der Fahrt",
         "felt": "Gefühlt Ø",
         "windEffort": "Wind­aufwand max.",
+        "maxGust": "Böen max.",
         "noFrost": "kein",
         "rainMax": "Regen max.",
         "headwindMax": "Gegenwind max.",
@@ -764,7 +778,7 @@
         },
         "mapLoaded": "Kartenausschnitt: {loaded} / {total} Objekte geladen.",
         "noMatches": "Keine passenden Daten.",
-        "gridHint": "Meteolane-Cachegitter: 0.01° × 0.01°. Routen oder Zellen anklicken für Details.",
+        "gridHint": "MeteoLane-Cachegitter: 0.01° × 0.01°. Routen oder Zellen anklicken für Details.",
         "diagnostics": "Systemdiagnostik",
         "cell": "Wetterzelle",
         "selection": "Auswahl",
@@ -838,7 +852,7 @@
         "reroll": "Neu würfeln",
         "replan": "Neu planen",
         "notFound": "Nicht gefunden.",
-        "rolling": "Wird gewürfelt… Meteolane sucht Strecken in der gewünschten Länge.",
+        "rolling": "Wird gewürfelt… MeteoLane sucht Strecken in der gewünschten Länge.",
         "planning": "{status}… Etappen, Pausen und Unterkünfte werden gesucht."
     },
     "routeEditor": {
@@ -1011,5 +1025,40 @@
         "submitButtonLabel": "Senden",
         "confirmButtonLabel": "Bestätigen",
         "successMessageText": "Danke für dein Feedback!"
+    },
+    "coverage": {
+        "title": "Wo Meteolane funktioniert",
+        "intro": "Routenplanung, Ortssuche und Wetter entlang der Strecke gibt es in diesen Gebieten. Fehlt deins? Stimm dafür ab – auch ohne Konto.",
+        "covered": "Abgedeckt",
+        "noneCovered": "Noch keine Gebiete.",
+        "since": "seit {date}",
+        "planned": "In Arbeit",
+        "wish": "Wünsch dir ein Gebiet",
+        "wishHint": "Wähle ein Land oder eine Region. Die Stimmen helfen uns zu entscheiden, wo es als Nächstes weitergeht.",
+        "pick": "Land oder Region",
+        "noMatch": "Nichts gefunden.",
+        "notifyMe": "Benachrichtige mich per E-Mail, sobald es so weit ist",
+        "email": "E-Mail-Adresse",
+        "emailHint": "Du bekommst zuerst eine Mail zum Bestätigen. Nach der Nachricht löschen wir die Adresse.",
+        "emailInvalid": "Bitte gib eine gültige E-Mail-Adresse ein.",
+        "submit": "Abstimmen",
+        "notifySubmit": "Benachrichtigen",
+        "alreadyVoted": "Du hast schon dafür gestimmt.",
+        "voted": "Danke! Deine Stimme für {area} ist gezählt.",
+        "notifyPending": "Danke! Bitte bestätige die Benachrichtigung über den Link, den wir an {email} geschickt haben.",
+        "notifyConfirmed": "Danke! Wir schreiben dir, sobald Meteolane {area} abdeckt.",
+        "voteFailed": "Die Stimme konnte nicht gespeichert werden.",
+        "ranking": "Meistgewünscht",
+        "noVotes": "Noch keine Stimmen. Mach den Anfang!",
+        "votes": "keine Stimmen | eine Stimme | {n} Stimmen",
+        "voteShort": "Stimmen",
+        "votedShort": "Stimme zurückziehen",
+        "voteFor": "Für {area} stimmen",
+        "withdraw": "Stimme für {area} zurückziehen",
+        "notifyFor": "Benachrichtigung für {area}",
+        "confirmed": "Bestätigt. Wir schreiben dir, sobald Meteolane {area} abdeckt.",
+        "unsubscribed": "Abbestellt. Deine Adresse ist gelöscht.",
+        "linkFailed": "Der Link hat nicht funktioniert. Vielleicht ist er abgelaufen.",
+        "loadFailed": "Die Abdeckung konnte nicht geladen werden."
     }
 }

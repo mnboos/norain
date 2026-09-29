@@ -6,6 +6,7 @@ from urllib.parse import urlsplit
 from uuid import UUID
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.http import JsonResponse
 from django.utils.translation import gettext
@@ -15,10 +16,9 @@ from django.views.decorators.http import require_http_methods
 from core import telemetry
 from core.entitlements import allowed_route_ids, briefing_route_ids, entitlements_for_sync
 from core.models import PushSubscription, RecurringRoute, RideBriefing, User
+from core.push import push_configured, send_push
 
-
-def push_configured():
-    return bool(settings.VAPID_PUBLIC_KEY and settings.VAPID_PRIVATE_KEY and settings.VAPID_SUBJECT)
+PUSH_TEST_COOLDOWN_SECONDS = 30
 
 
 def _payload(user):
@@ -114,7 +114,11 @@ def validate_subscription(data):
         or parsed.password
         or parsed.fragment
         or parsed.port not in {None, 443}
-        or parsed.hostname not in settings.PUSH_ENDPOINT_HOSTS
+        or not parsed.hostname
+        or (
+            parsed.hostname not in settings.PUSH_ENDPOINT_HOSTS
+            and not parsed.hostname.endswith(settings.PUSH_ENDPOINT_HOST_SUFFIXES)
+        )
     ):
         raise ValueError
     keys = data["keys"]
@@ -166,4 +170,47 @@ def push_view(request):
         if not existing and PushSubscription.objects.filter(user=user).count() >= 5:
             return JsonResponse({"detail": gettext("Höchstens fünf Push-Geräte pro Konto.")}, status=400)
         PushSubscription.objects.update_or_create(endpoint=endpoint, defaults={"user": user, "keys": keys})
+    return JsonResponse({"ok": True})
+
+
+def _test_cooldown_free(user):
+    """One test per account per cooldown. Fails open: a cache outage costs the limit, not the test."""
+    try:
+        return cache.add(f"push-test:{user.pk}", 1, PUSH_TEST_COOLDOWN_SECONDS)
+    except Exception:  # noqa: BLE001
+        return True
+
+
+@require_http_methods(["POST"])
+@csrf_protect
+def push_test_view(request):
+    """Send a test notification to this browser's registration, right away."""
+    user = request.user
+    if not isinstance(user, User):
+        return JsonResponse({"detail": gettext("Anmeldung erforderlich.")}, status=401)
+    try:
+        endpoint = json.loads(request.body)["endpoint"]
+        if not isinstance(endpoint, str):
+            raise ValueError
+    except ValueError, TypeError, KeyError:
+        return JsonResponse({"detail": gettext("Ungültige Push-Anmeldung des Browsers.")}, status=400)
+    if not entitlements_for_sync(user).is_pro:
+        return JsonResponse({"detail": gettext("Push-Briefings brauchen Plus.")}, status=402)
+    if not push_configured():
+        return JsonResponse({"detail": gettext("Push ist nicht eingerichtet.")}, status=503)
+    device = PushSubscription.objects.filter(user=user, endpoint=endpoint).first()
+    if device is None:
+        return JsonResponse({"detail": gettext("Push ist auf diesem Gerät nicht aktiviert.")}, status=404)
+    if not _test_cooldown_free(user):
+        return JsonResponse({"detail": gettext("Warte kurz, bevor du erneut testest.")}, status=429)
+    sent = send_push(
+        [device],
+        gettext("MeteoLane – Testbenachrichtigung"),
+        gettext("Push-Benachrichtigungen funktionieren auf diesem Gerät."),
+        f"{settings.FRONTEND_URL.rstrip('/')}/account",
+        "test",
+    )
+    telemetry.event("briefing.push_test", outcome="sent" if sent else "failed", **telemetry.user_context(user))
+    if not sent:
+        return JsonResponse({"detail": gettext("Der Push-Dienst hat die Nachricht abgelehnt.")}, status=502)
     return JsonResponse({"ok": True})

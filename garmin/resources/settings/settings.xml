@@ -1,0 +1,4 @@
+<settings>
+  <setting propertyKey="@Properties.server" title="@Strings.ServerLabel"><settingConfig type="alphaNumeric"/></setting>
+  <setting propertyKey="@Properties.token" title="@Strings.TokenLabel"><settingConfig type="alphaNumeric"/></setting>
+</settings>

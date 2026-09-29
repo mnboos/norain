@@ -1,17 +1,17 @@
 # Build and deploy the routing graph
 
-Meteolane builds **GraphHopper 12.0-SNAPSHOT** from commit
+MeteoLane builds **GraphHopper 12.0-SNAPSHOT** from commit
 `d9506cd7d36d5d068d9118b19b86cf0609dbe773` with Java 25. Its native PMTiles
 provider reads **Mapterhorn zoom 15**, using bilinear interpolation. Photon keeps
 its own Java runtime. Both amd64 and arm64 images are built from the same Java source.
 
 There are three separate artifacts:
 
-| Artifact | Container location | Purpose |
-| --- | --- | --- |
-| Filtered OSM | `/osm_data/bike-*.osm.pbf` | Roads and bike-route relations |
-| Terrain | `/osm_data/elevation/<manifest-hash>/` | Zoom-15 and zoom-12 fallback PMTiles, attribution, and reusable decoded caches |
-| Routing graph | `/graph-cache/releases/<id>/` | Graph, configuration snapshot, models, and build identity |
+| Artifact      | Container location                     | Purpose                                                                        |
+|---------------|----------------------------------------|--------------------------------------------------------------------------------|
+| Filtered OSM  | `/osm_data/bike-*.osm.pbf`             | Roads and paths, bike- and hiking-route relations                              |
+| Terrain       | `/osm_data/elevation/<manifest-hash>/` | Zoom-15 and zoom-12 fallback PMTiles, attribution, and reusable decoded caches |
+| Routing graph | `/graph-cache/releases/<id>/`          | Graph, configuration snapshot, models, and build identity                      |
 
 `/graph-cache/current` selects the active graph. `candidate` selects the newest
 successful import; `previous` retains the last activated managed graph. Graph
