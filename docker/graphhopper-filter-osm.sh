@@ -32,7 +32,9 @@ if [ $# -eq 1 ]; then
     bike_filter "$1" "$out.tmp"
 else
     # Several extracts (e.g. one per country) become one: filter each, then merge the small
-    # results. Objects on a shared border are in both files; merge keeps them once.
+    # results. A border object can have different versions when the source snapshots were
+    # made at different times. Collapse the merged history back to the newest visible
+    # version of every object so GraphHopper receives a normal snapshot.
     parts=$(mktemp -d "$(dirname "$out")/.filter-XXXXXX")
     trap 'rm -rf -- "$parts"' EXIT
     i=0
@@ -42,6 +44,7 @@ else
         i=$((i + 1))
     done
     echo "Merging ${#} filtered extracts"
-    osmium merge "$parts"/*.osm.pbf --overwrite --output-format pbf -o "$out.tmp"
+    osmium merge -H "$parts"/*.osm.pbf --output-format pbf \
+        | osmium time-filter -F pbf --overwrite --output-format pbf -o "$out.tmp" -
 fi
 mv "$out.tmp" "$out"
