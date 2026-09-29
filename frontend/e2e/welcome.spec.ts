@@ -53,6 +53,14 @@ for (const width of [375, 1280]) {
                                 .map(element => element.textContent || element.tagName),
                         ),
                     ).toEqual([]);
+                    // The product shots are lazy-loaded, including the wind card below the fold.
+                    for (const image of await page.locator(".welcome img").all()) {
+                        await image.scrollIntoViewIfNeeded();
+                        await expect
+                            .poll(() => image.evaluate(el => el instanceof HTMLImageElement && el.naturalWidth > 0))
+                            .toBe(true);
+                    }
+                    await page.locator("h1").scrollIntoViewIfNeeded();
                     expect(
                         await page
                             .locator(".welcome img")
@@ -77,6 +85,10 @@ for (const width of [375, 1280]) {
                     await expect(page.locator(".welcome")).toHaveAttribute("lang", german ? "en" : "de");
                     await expect(page.locator("h1")).toHaveText(
                         german ? "The weather along your route." : "Das Wetter entlang deiner Route.",
+                    );
+                    await expect(page.locator("#features img").first()).toHaveAttribute(
+                        "src",
+                        `/landing/route-${german ? "en" : "de"}.png`,
                     );
                     if (width > 1023) {
                         await page.locator('a[href="#pricing"]').click();

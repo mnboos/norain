@@ -322,13 +322,13 @@ download-photon-dumps:
     wsl bash -c "chmod +x scripts/download-photon-dumps.sh && ./scripts/download-photon-dumps.sh"
 
 [doc("Download the OSM extracts into data/downloads/osm (only what changed since); filter them with just osm-filter-many-raw-pbf-into-one, then just build-graphhopper-graph-from <that file>.")]
-[linux]
+[unix]
 download-pbf:
     chmod +x scripts/download-pbf.sh
     ./scripts/download-pbf.sh
 
 [doc("Download the Photon dumps into data/downloads/photon (only what changed since); build the index from them with just photon-import.")]
-[linux]
+[unix]
 download-photon-dumps:
     chmod +x scripts/download-photon-dumps.sh
     ./scripts/download-photon-dumps.sh

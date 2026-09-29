@@ -81,6 +81,7 @@ const props = defineProps<{
 const { routeWeather, abfahrtsort, zielort } = toRefs(props);
 
 const emit = defineEmits<{
+    ready: [];
     mapView: [view: { zoom: number; lat: number; lng: number }];
     selectPosition: [position: number];
     selectLocation: [point: { lng: number; lat: number }];
@@ -970,6 +971,7 @@ onMounted(() => {
         });
 
         mapInstance = map;
+        map.once("idle", () => { emit("ready"); });
         resizeObserver = new ResizeObserver(() => map.resize());
         resizeObserver.observe(mapContainer.value);
         map.on("click", event => {

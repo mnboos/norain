@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parseDate } from "@norain/api/runtime";
 import { cronWeekday, weeklyCron, weeklyDescription } from "../weeklySchedule";
 
 describe("weeklySchedule", () => {
@@ -14,7 +15,7 @@ describe("weeklySchedule", () => {
     });
 
     it("reads the weekday of a server date as cron counts it", () => {
-        expect(cronWeekday(new Date("2026-09-28T00:00:00Z"))).toBe(1); // a Monday
-        expect(cronWeekday(new Date("2026-10-04T00:00:00Z"))).toBe(7); // a Sunday
+        expect(cronWeekday(parseDate("2026-09-28"))).toBe(1); // a Monday
+        expect(cronWeekday(parseDate("2026-10-04"))).toBe(7); // a Sunday
     });
 });

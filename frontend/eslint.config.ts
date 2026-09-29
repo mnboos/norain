@@ -53,8 +53,8 @@ export default defineConfigWithVueTs(
         },
     },
     {
-        // The landing page carries its own de/en copy object (and placeholders for shots to come).
-        files: ["src/pages/welcome.vue"],
+        // The landing page and screenshot studio carry their own de/en marketing copy.
+        files: ["src/pages/welcome.vue", "tools/landing/LandingStudio.vue"],
         rules: { "@intlify/vue-i18n/no-raw-text": "off" },
     },
     {
@@ -83,10 +83,10 @@ export default defineConfigWithVueTs(
         },
     },
     {
-        // Plain scripts served as they are (the service worker). No tsconfig covers them, so
+        // Plain JavaScript (service worker and screenshot runner). No tsconfig covers them, so
         // they are linted without type information. Must come after the projectService block.
         ...ts.configs.disableTypeChecked,
-        files: ["public/**/*.js"],
+        files: ["public/**/*.js", "tools/landing/*.mjs"],
     },
     {
         // Standalone CommonJS build scripts are linted without a TypeScript project.

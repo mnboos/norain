@@ -80,7 +80,7 @@ export default defineConfig(({ command, mode }) => {
                 strictMessage: false,
             }),
             // Dev-only tooling; it has no place in a production bundle.
-            ...(command === "serve"
+            ...(command === "serve" && mode !== "landing"
                 ? [
                       vueDevTools({
                           launchEditor: "pycharm",

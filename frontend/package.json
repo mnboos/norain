@@ -5,6 +5,7 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
+        "screenshots:landing": "node tools/landing/capture.mjs",
         "build": "npm run type-check && npm run build-only",
         "preview": "vite preview",
         "test:unit": "vitest",

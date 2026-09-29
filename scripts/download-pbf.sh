@@ -18,6 +18,7 @@ PBF_URLS=(
   "https://download.geofabrik.de/europe/netherlands-latest.osm.pbf"
   "https://download.geofabrik.de/europe/belgium-latest.osm.pbf"
   "https://download.geofabrik.de/europe/denmark-latest.osm.pbf"
+  "https://download.geofabrik.de/europe/italy/centro-latest.osm.pbf"
 )
 
 if ! command -v wget &> /dev/null; then

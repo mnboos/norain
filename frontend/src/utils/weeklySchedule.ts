@@ -28,7 +28,7 @@ export function weeklyDescription(days: number[], time: string): string {
     return t("schedule.daysAt", { days: names.join(", "), time: clock });
 }
 
-/** The weekday of a date as the ride's server sends it (midnight UTC of that day). */
+/** Date-only API values are parsed as local midnight by the generated client. */
 export function cronWeekday(date: Date): number {
-    return ((date.getUTCDay() + 6) % 7) + 1;
+    return ((date.getDay() + 6) % 7) + 1;
 }

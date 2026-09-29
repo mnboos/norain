@@ -3,7 +3,7 @@ import { GeometrySource } from "@norain/api/models";
 import { computed, ref, watch, type Ref } from "vue";
 import { QSelect } from "quasar";
 import { useI18n } from "vue-i18n";
-import { symSharpSchedule } from "@quasar/extras/material-symbols-sharp";
+import { symSharpSchedule, symSharpSyncAlt, symSharpArrowForward } from "@quasar/extras/material-symbols-sharp";
 import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import RouteEditorDialog from "@/components/RouteEditorDialog.vue";
 import DepartureFlexibility from "@/components/DepartureFlexibility.vue";
@@ -18,7 +18,8 @@ import { routePlace, type RouteDraft } from "@/services/gpx";
 import { useSession } from "@/composables/useSession";
 import { BIKE_PROFILE_OPTIONS } from "@/utils/bikeProfiles";
 import type { LonLat } from "@/utils/routeEditing";
-import { weekdayLabels, weeklyDescription } from "@/utils/weeklySchedule";
+import WeekdaySelector from "@/components/WeekdaySelector.vue";
+import { weeklyDescription } from "@/utils/weeklySchedule";
 
 const props = defineProps<{
     modelValue: boolean;
@@ -46,19 +47,26 @@ const importedDuration = ref(0);
 const exact = computed(() => imported.value?.plan.geometrySource === GeometrySource.Imported);
 function applyImport(draft: RouteDraft) {
     const points = draft.plan.coordinates;
-    const first = points[0], last = points.at(-1);
+    const first = points[0],
+        last = points.at(-1);
     if (!first || !last) return;
     imported.value = draft;
     name.value = draft.plan.name ?? t("routeForm.importedName");
     start.value = routePlace(first, t("routeForm.start"));
     dest.value = routePlace(last, t("routeForm.dest"));
     profile.value = draft.plan.profile ?? defaultProfile.value;
-    viaPoints.value = draft.plan.geometrySource === GeometrySource.Graphhopper ? points.slice(1, -1).map(p => [p[0] ?? 0, p[1] ?? 0]) : [];
+    viaPoints.value =
+        draft.plan.geometrySource === GeometrySource.Graphhopper
+            ? points.slice(1, -1).map(p => [p[0] ?? 0, p[1] ?? 0])
+            : [];
     importedDuration.value = draft.plan.durationSeconds ?? draft.preview.timeS;
 }
-watch(() => props.modelValue, open => {
-    if (open && props.initialDraft) applyImport(props.initialDraft);
-});
+watch(
+    () => props.modelValue,
+    open => {
+        if (open && props.initialDraft) applyImport(props.initialDraft);
+    },
+);
 
 function lonLat(place: PlacesSearchResult | null): LonLat | null {
     const [lon, lat] = place?.geometry.coordinates ?? [];
@@ -68,7 +76,7 @@ const startLonLat = computed(() => lonLat(start.value));
 const destLonLat = computed(() => lonLat(dest.value));
 const days = ref<number[]>([1, 2, 3, 4, 5]);
 const time = ref("08:00");
-const twoWay = ref(false);
+const twoWay = ref(true);
 const returnTime = ref("17:00");
 // The return journey rides on the outbound days, never its own: a restriction on purpose.
 const returnValid = computed(() => /^([01]\d|2[0-3]):[0-5]\d$/.test(returnTime.value));
@@ -107,17 +115,6 @@ function selectInputText(e: Event) {
     if (e.target instanceof HTMLInputElement) e.target.select();
 }
 
-function toggleDay(day: number) {
-    const idx = days.value.indexOf(day);
-    if (idx >= 0) {
-        days.value = days.value.filter(d => d !== day);
-    } else {
-        days.value = [...days.value, day].sort();
-    }
-}
-
-const dayLabels = computed(() => weekdayLabels());
-
 // The input uses fill-mask, so a half-typed time is still five characters ("17:__").
 // Only a complete HH:MM counts; anything else would reach the cron string as NaN.
 const parsedTime = computed(() => {
@@ -137,7 +134,14 @@ const scheduleCron = computed(() => {
 const profileOptions = BIKE_PROFILE_OPTIONS;
 
 const isValid = computed(
-    () => (!exact.value || (importedDuration.value > 0 && importedDuration.value <= 1382400)) && !!name.value.length && !!start.value && !!dest.value && !!days.value.length && !!parsedTime.value && (!twoWay.value || returnValid.value),
+    () =>
+        (!exact.value || (importedDuration.value > 0 && importedDuration.value <= 1382400)) &&
+        !!name.value.length &&
+        !!start.value &&
+        !!dest.value &&
+        !!days.value.length &&
+        !!parsedTime.value &&
+        (!twoWay.value || returnValid.value),
 );
 
 function onSave() {
@@ -154,13 +158,15 @@ function onSave() {
         viaPoints: viaPoints.value,
         profile: profile.value,
         geometrySource: exact.value ? GeometrySource.Imported : GeometrySource.Graphhopper,
-        importedCoordinates: exact.value ? imported.value?.plan.coordinates ?? [] : [],
+        importedCoordinates: exact.value ? (imported.value?.plan.coordinates ?? []) : [],
         durationSeconds: exact.value ? importedDuration.value : null,
         scheduleCron: scheduleCron.value,
         departureFlexBeforeMinutes: flexBefore.value,
         departureFlexAfterMinutes: flexAfter.value,
         scheduleDescription: scheduleDescription.value,
-        returnScheduleCron: twoWay.value ? `${Number(returnTime.value.slice(3))} ${Number(returnTime.value.slice(0, 2))} * * ${days.value.join(",")}` : null,
+        returnScheduleCron: twoWay.value
+            ? `${Number(returnTime.value.slice(3))} ${Number(returnTime.value.slice(0, 2))} * * ${days.value.join(",")}`
+            : null,
         returnScheduleDescription: twoWay.value ? weeklyDescription(days.value, returnTime.value) : "",
     });
     emit("update:modelValue", false);
@@ -195,7 +201,13 @@ function onClose() {
                     :rules="[(val: string) => !!val || t('common.required')]"
                 />
 
-                <q-input v-model="description" :label="t('routeForm.descriptionOptional')" outlined dense type="textarea" />
+                <q-input
+                    v-model="description"
+                    :label="t('routeForm.descriptionOptional')"
+                    outlined
+                    dense
+                    type="textarea"
+                />
 
                 <q-select
                     v-model="start"
@@ -276,19 +288,7 @@ function onClose() {
 
                 <div>
                     <div class="text-caption q-mb-sm">{{ t("routeForm.days") }}</div>
-                    <q-btn-group stretch class="full-width" flat>
-                        <q-btn
-                            v-for="(label, i) in dayLabels"
-                            :key="i"
-                            class="full-width"
-                            :label="label"
-                            :outline="!days.includes(i + 1)"
-                            :color="days.includes(i + 1) ? 'primary' : 'grey'"
-                            size="sm"
-                            dense
-                            @click="toggleDay(i + 1)"
-                        />
-                    </q-btn-group>
+                    <WeekdaySelector v-model="days" />
                 </div>
 
                 <q-input
@@ -310,19 +310,48 @@ function onClose() {
                     </template>
                 </q-input>
 
-                <q-toggle v-model="twoWay" :label="t('routeForm.twoWay')" />
-                <div v-if="twoWay" class="q-gutter-sm">
+                <q-btn-toggle
+                    v-model="twoWay"
+                    class="journey-direction"
+                    spread
+                    unelevated
+                    no-caps
+                    toggle-color="primary"
+                    :aria-label="t('routeForm.direction')"
+                    :options="[
+                        {
+                            value: true,
+                            label: $q.screen.xs ? undefined : t('routeForm.twoWay'),
+                            icon: $q.screen.xs ? symSharpSyncAlt : undefined,
+                            attrs: { 'aria-label': t('routeForm.twoWay'), title: t('routeForm.twoWay') },
+                        },
+                        {
+                            value: false,
+                            label: $q.screen.xs ? undefined : t('routeForm.oneWay'),
+                            icon: $q.screen.xs ? symSharpArrowForward : undefined,
+                            attrs: { 'aria-label': t('routeForm.oneWay'), title: t('routeForm.oneWay') },
+                        },
+                    ]"
+                />
+                <div class="q-gutter-sm">
                     <q-input
-v-model="returnTime" :label="t('routeForm.returnTime')" outlined dense mask="##:##" fill-mask
-                        :rules="[() => returnValid || t('routeForm.validTime')]" />
-                    <q-item-label caption>{{ t("routeForm.returnHint") }}</q-item-label>
+                        :disable="!twoWay"
+                        v-model="returnTime"
+                        :label="t('routeForm.returnTime')"
+                        outlined
+                        dense
+                        mask="##:##"
+                        fill-mask
+                        :rules="[() => returnValid || t('routeForm.validTime')]"
+                    />
+                    <!--                    <q-item-label caption>{{ t("routeForm.returnHint") }}</q-item-label>-->
                 </div>
 
                 <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
 
-                <div v-if="scheduleDescription" class="text-body2 text-muted">
-                    {{ scheduleDescription }}
-                </div>
+                <!--                <div v-if="scheduleDescription" class="text-body2 text-muted">-->
+                <!--                    {{ scheduleDescription }}-->
+                <!--                </div>-->
 
                 <div>
                     <div class="text-caption q-mb-sm">{{ t("journeyForm.profile") }}</div>
@@ -337,3 +366,15 @@ v-model="returnTime" :label="t('routeForm.returnTime')" outlined dense mask="##:
         </q-card>
     </q-dialog>
 </template>
+
+<style scoped>
+.journey-direction {
+    padding: 4px;
+    border-radius: 14px;
+    background: var(--q-tint-neutral);
+}
+.journey-direction :deep(.q-btn) {
+    min-height: 44px;
+    border-radius: 10px;
+}
+</style>

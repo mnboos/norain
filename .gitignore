@@ -10,6 +10,7 @@ node_modules
 db
 .cache
 
+.claude/settings.local.json
 *.osm.pbf
 *.jsonl.zst
 backend/db.sqlite3

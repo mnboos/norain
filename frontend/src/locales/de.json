@@ -319,7 +319,9 @@
         "trialUntil": "Testphase bis {date}. Danach automatisch Free, ohne Zahlung.",
         "endsOn": "Dein Abo endet am {date}.",
         "feature": {
-            "twoWay": "Hin- und Rückfahrt zählen zusammen als eine Route.",
+            "twoWay": "Hin- & Rückfahrt",
+        "oneWay": "Einfache Fahrt",
+        "direction": "Fahrtrichtung",
             "free": "Free: 2 Routen, Wetterkarten, Regenrisiko, Temperatur und Wind.",
             "plus": "Plus: 20 Routen, automatischer Abfahrtsvergleich und Wetterdetails.",
             "briefings": "Plus: Briefings für bis zu 5 Routen, per E-Mail oder Push."
@@ -505,7 +507,9 @@
         "days": "Tage",
         "departureTime": "Abfahrtszeit",
         "timeAsHhMm": "Uhrzeit als HH:MM",
-        "twoWay": "Hin- und Rückfahrt als eine Route speichern",
+        "twoWay": "Hin- & Rückfahrt",
+        "oneWay": "Einfache Fahrt",
+        "direction": "Fahrtrichtung",
         "returnTime": "Abfahrtszeit der Rückfahrt",
         "validTime": "Gültige Uhrzeit angeben",
         "returnHint": "Die Rückfahrt fährt an denselben Tagen wie die Hinfahrt und wird vom Ziel zum Start separat berechnet. Beide Fahrten zählen zusammen als eine Route."

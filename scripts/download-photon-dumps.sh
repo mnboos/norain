@@ -18,6 +18,7 @@ URLS=(
   "https://download1.graphhopper.com/public/europe/netherlands/photon-dump-netherlands-1.0-latest.jsonl.zst"
   "https://download1.graphhopper.com/public/europe/belgium/photon-dump-belgium-1.0-latest.jsonl.zst"
   "https://download1.graphhopper.com/public/europe/denmark/photon-dump-denmark-1.0-latest.jsonl.zst"
+  "https://download1.graphhopper.com/public/europe/italy/photon-dump-italy-1.0-latest.jsonl.zst"
 )
 
 if ! command -v wget &> /dev/null; then

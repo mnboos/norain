@@ -33,19 +33,30 @@ const copy = {
             {
                 title: "Route festlegen",
                 body: "Start und Ziel suchen, auf der Karte anpassen oder eine GPX-Datei importieren.",
-                shot: "route editor",
+                shot: "route",
+                alt: "Beispielroute von Vevey nach Montreux am Genfersee",
             },
             {
                 title: "Abfahrt wählen",
                 body: "Einmalig oder wiederkehrend nach Wochentag – Hin- und Rückfahrt mit eigenen Zeiten.",
-                shot: "departure schedule",
+                shot: "schedule",
+                alt: "Abfahrt an Werktagen um 08:00 und Rückfahrt um 17:00",
             },
             {
                 title: "Prognose entlang der Strecke",
-                body: "Regenrisiko, Temperatur und Wind für jeden Abschnitt – zu der Zeit, in der du dort bist.",
-                shot: "forecast sections",
+                body: "Hier siehst du die Wetterübersicht: Regenrisiko, Temperatur und Wind für jeden Abschnitt – zur passenden Zeit.",
+                shot: "forecast",
+                alt: "Ausschnitt der Prognose: Wetterübersicht mit einer kurzen Regenphase zwischen trockenen Abschnitten",
             },
         ],
+        detailsTitle: "Deine Fahrt im Detail.",
+        detailsBody: "Die Wetterübersicht ist nur ein Teil deiner Prognose. Diagramme zeigen den Verlauf von Temperatur, Regen und Wind; das Höhenprofil ergänzt die Strecke. In der Tourenplanung findest du außerdem passende Stopps und POIs.",
+        details: [
+            { shot: "temperature", title: "Temperatur & Regen", alt: "Temperatur- und Regenverlauf entlang der Beispielroute" },
+            { shot: "elevation", title: "Höhenprofil", alt: "Beispielhaftes Höhenprofil mit Anstiegen und Abfahrten" },
+            { shot: "places", title: "Stopps & POIs", alt: "Karte mit beispielhaften Stopps für Trinkwasser und Verpflegung" },
+        ],
+        windAlt: "Beispielhafte Windverteilung mit Gegen-, Seiten- und Rückenwind",
         windTitle: "Wind, gemessen an deiner Fahrtrichtung.",
         windBody:
             "Eine Windangabe für den Ort sagt wenig. MeteoLane rechnet Gegen- und Seitenwind entlang jeder Kurve deiner Route und zeigt den Windaufwand als Stufe – von niedrig bis sehr hoch.",
@@ -101,19 +112,30 @@ const copy = {
             {
                 title: "Set your route",
                 body: "Search start and destination, adjust it on the map, or import a GPX file.",
-                shot: "route editor",
+                shot: "route",
+                alt: "Example route from Vevey to Montreux along Lake Geneva",
             },
             {
                 title: "Pick a departure",
                 body: "One-off or recurring by weekday – outward and return rides with their own times.",
-                shot: "departure schedule",
+                shot: "schedule",
+                alt: "Weekday departures at 08:00 and return rides at 17:00",
             },
             {
                 title: "Forecast along the way",
-                body: "Rain risk, temperature and wind for every section – at the time you’ll actually be there.",
-                shot: "forecast sections",
+                body: "This is the weather summary: rain risk, temperature and wind for every section – right when you’ll be there.",
+                shot: "forecast",
+                alt: "Part of the forecast: weather summary with a brief shower between dry sections",
             },
         ],
+        detailsTitle: "Your ride in detail.",
+        detailsBody: "The weather summary is just one part of your forecast. Charts show how temperature, rain and wind change along the way; the elevation profile adds the terrain. In the tour planner, you can also find stops and points of interest.",
+        details: [
+            { shot: "temperature", title: "Temperature & rain", alt: "Temperature and rain chart along the example route" },
+            { shot: "elevation", title: "Elevation profile", alt: "Illustrative elevation profile showing climbs and descents" },
+            { shot: "places", title: "Stops & points of interest", alt: "Map with example drinking water and food stops" },
+        ],
+        windAlt: "Example distribution of headwind, crosswind and tailwind",
         windTitle: "Wind, measured against your direction.",
         windBody:
             "A wind reading for a town tells you little. MeteoLane works out headwind and crosswind along every bend of your route and shows the wind effort as a level – from low to very high.",
@@ -258,15 +280,15 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
                     <div v-for="(step, i) in t.steps" :key="i" class="col-12 col-md-4">
                         <q-card tag="article" flat :dark="false" class="brand-surface full-height">
                             <q-card-section class="q-pa-lg">
-                                <q-responsive :ratio="16 / 10" class="shot rounded-borders q-mb-md">
-                                    <div class="flex flex-center">
-                                        <span
-                                            class="text-caption bg-white text-brand-faint rounded-borders q-px-sm q-py-xs"
-                                        >
-                                            {{ step.shot }}
-                                        </span>
-                                    </div>
-                                </q-responsive>
+                                <img
+                                    class="shot rounded-borders q-mb-md"
+                                    :src="`/landing/${step.shot}-${lang}.png`"
+                                    :alt="step.alt"
+                                    width="1280"
+                                    height="800"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
                                 <div class="text-caption text-weight-bold text-brand-navy q-mb-sm">
                                     {{ t.stepWord }} {{ i + 1 }}
                                 </div>
@@ -274,6 +296,19 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
                                 <p class="text-brand-muted q-ma-none">{{ step.body }}</p>
                             </q-card-section>
                         </q-card>
+                    </div>
+                </div>
+            </q-card-section>
+
+            <q-card-section id="ride-details" class="section-space q-pa-none">
+                <h2 class="text-heading text-brand-navy q-ma-none q-mb-md">{{ t.detailsTitle }}</h2>
+                <p class="details-intro text-body1 text-brand-muted q-mb-lg">{{ t.detailsBody }}</p>
+                <div class="row q-col-gutter-lg">
+                    <div v-for="detail in t.details" :key="detail.shot" class="col-12 col-md-4">
+                        <figure class="detail-preview q-ma-none">
+                            <img class="shot rounded-borders" :src="`/landing/${detail.shot}-${lang}.png`" :alt="detail.alt" width="1280" height="800" loading="lazy" decoding="async" />
+                            <figcaption class="text-body2 text-weight-medium text-brand-navy q-mt-md">{{ detail.title }}</figcaption>
+                        </figure>
                     </div>
                 </div>
             </q-card-section>
@@ -287,15 +322,15 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
                                 <p class="text-body1 text-brand-muted q-ma-none">{{ t.windBody }}</p>
                             </div>
                             <div class="col-12 col-md-6">
-                                <q-responsive :ratio="4 / 3" class="shot rounded-borders">
-                                    <div class="flex flex-center">
-                                        <span
-                                            class="text-caption bg-white text-brand-faint rounded-borders q-px-sm q-py-xs"
-                                        >
-                                            screenshot — wind distribution bar
-                                        </span>
-                                    </div>
-                                </q-responsive>
+                                <img
+                                    class="shot rounded-borders"
+                                    :src="`/landing/wind-${lang}.png`"
+                                    :alt="t.windAlt"
+                                    width="1280"
+                                    height="960"
+                                    loading="lazy"
+                                    decoding="async"
+                                />
                             </div>
                         </div>
                     </q-card-section>
@@ -462,10 +497,17 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
     font-size: 28px;
 }
 .shot {
-    background: repeating-linear-gradient(135deg, var(--q-brand-placeholder) 0 10px, var(--q-brand-stripe) 10px 20px);
-    span {
-        font-family: ui-monospace, monospace;
-    }
+    display: block;
+    width: 100%;
+    height: auto;
+    background: white;
+}
+.details-intro {
+    max-width: 850px;
+    line-height: 1.7;
+}
+.detail-preview .shot {
+    border: 1px solid #dce3eb;
 }
 .footer-brand {
     font-size: 17px;

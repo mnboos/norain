@@ -12,7 +12,8 @@ import { isQuotaExceeded } from "@/services/http";
 import { duration, km } from "@/utils/journeys";
 import { type MapPoi, poiCategory } from "@/utils/poiCategories";
 import { alternativeColor } from "@/utils/rideQuality";
-import { cronWeekday, weekdayLabels, weeklyCron, weeklyDescription } from "@/utils/weeklySchedule";
+import WeekdaySelector from "@/components/WeekdaySelector.vue";
+import { cronWeekday, weeklyCron, weeklyDescription } from "@/utils/weeklySchedule";
 
 /**
  * A random ride without the weather mode: its variants, no forecast. The rider picks one or more
@@ -98,9 +99,6 @@ const name = ref(props.ride.name);
 // The ride's own day and departure, as a weekly schedule the rider can change.
 const days = ref<number[]>([cronWeekday(props.ride.startDate)]);
 const time = ref(props.ride.earliestStart.slice(0, 5));
-function toggleDay(day: number) {
-    days.value = days.value.includes(day) ? days.value.filter(d => d !== day) : [...days.value, day].sort();
-}
 const scheduleCron = computed(() => weeklyCron(days.value, time.value));
 const scheduleDescription = computed(() => weeklyDescription(days.value, time.value));
 
@@ -213,21 +211,7 @@ async function onSave() {
 
             <div>
                 <div class="text-caption q-mb-xs">{{ t("variants.when") }}</div>
-                <div class="row q-gutter-xs">
-                    <q-btn
-                        v-for="(label, i) in weekdayLabels()"
-                        :key="label"
-                        :label="label"
-                        size="sm"
-                        dense
-                        no-caps
-                        :unelevated="days.includes(i + 1)"
-                        :outline="!days.includes(i + 1)"
-                        color="primary"
-                        :aria-pressed="days.includes(i + 1)"
-                        @click="toggleDay(i + 1)"
-                    />
-                </div>
+                <WeekdaySelector v-model="days" />
                 <q-input
                     v-model="time"
                     class="q-mt-sm"

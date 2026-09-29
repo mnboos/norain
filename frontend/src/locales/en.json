@@ -319,7 +319,9 @@
         "trialUntil": "Trial until {date}. Then automatically Free, without payment.",
         "endsOn": "Your subscription ends on {date}.",
         "feature": {
-            "twoWay": "Outbound and return count together as one route.",
+            "twoWay": "Round trip",
+        "oneWay": "One-way",
+        "direction": "Journey direction",
             "free": "Free: 2 routes, weather maps, rain risk, temperature and wind.",
             "plus": "Plus: 20 routes, automatic departure comparison and weather details.",
             "briefings": "Plus: briefings for up to 5 routes, by email or push."
@@ -505,7 +507,9 @@
         "days": "Days",
         "departureTime": "Departure time",
         "timeAsHhMm": "Time as HH:MM",
-        "twoWay": "Save outbound and return as one route",
+        "twoWay": "Round trip",
+        "oneWay": "One-way",
+        "direction": "Journey direction",
         "returnTime": "Departure time of the return",
         "validTime": "Enter a valid time",
         "returnHint": "The return runs on the same days as the outbound ride and is calculated separately from the destination to the start. Both rides count together as one route."
