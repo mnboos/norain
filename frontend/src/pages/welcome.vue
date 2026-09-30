@@ -12,6 +12,7 @@ import { computed } from "vue";
 import { symSharpAdd, symSharpRemove } from "@quasar/extras/material-symbols-sharp";
 import { useSession } from "@/composables/useSession";
 import { useLocale } from "@/composables/useLocale";
+import RainRouteSimulation from "@/components/landing/RainRouteSimulation.vue";
 
 type Lang = "de" | "en";
 
@@ -267,7 +268,7 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
                         </q-card>
                     </div>
                     <div class="hero-visual">
-                        <img class="hero-mark" src="/brand/mark-master%20-%20Copy.png" alt="" fetchpriority="high" />
+                        <RainRouteSimulation :lang="lang" />
                     </div>
                 </div>
             </q-card-section>
@@ -472,16 +473,8 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
     padding-bottom: 72px;
 }
 .hero-visual {
-    align-self: end;
-    display: flex;
-    justify-content: center;
-    margin-top: -24px;
-}
-.hero-mark {
-    display: block;
-    width: 100%;
-    max-width: 500px;
-    height: auto;
+    min-width: 0;
+    padding-bottom: 56px;
 }
 .main-content {
     padding-top: 80px;
@@ -511,6 +504,20 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
 }
 .footer-brand {
     font-size: 17px;
+}
+@media (max-width: 943px) {
+    .hero-content {
+        padding-top: 48px;
+    }
+    .hero-grid {
+        gap: 32px;
+    }
+    .hero-copy {
+        padding-bottom: 0;
+    }
+    .hero-visual {
+        padding-bottom: 40px;
+    }
 }
 @media (max-width: 599px) {
     .hero .q-toolbar {
