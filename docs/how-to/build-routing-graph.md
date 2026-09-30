@@ -187,6 +187,44 @@ starts, the container rejects a cgroup memory limit smaller than the heap plus
 native-memory headroom (at least 2 GiB or 10% of the heap), with an actionable
 `GRAPHHOPPER_MEM_LIMIT` error instead of a later exit 137.
 
+### Large areas: memory and the file system
+
+For a large area (all of Europe, say) on a machine with little memory, build with
+`GRAPHHOPPER_BUILD_DATAACCESS=MMAP`. The graph is then written to files in
+`/graph-cache/releases/<id>/graph/`, and the OS keeps what it can of them in the page
+cache. What counts:
+
+- **The heap still needs room.** It holds the OSM reader's node map and the height
+  table (about 30 bytes per node: ~5 GB for 167 million nodes). A Europe build used
+  up to 11 GB of a 12 GB heap while reading the file. Give it about 10 GB.
+- **The rest of the limit is page cache.** `GRAPHHOPPER_MEM_LIMIT` covers the heap
+  *and* the cached graph files. The landmark step (LM) reads and writes one file per
+  profile all over the place (2.8 GB each for Europe, three profiles at once), and
+  the edges and nodes besides. When those don't fit, every step waits for the disk.
+  For Europe: heap 10 GB, limit 24 GB, and close big programs on the machine during
+  the build.
+- **On btrfs, turn off copy-on-write for the graph folder** (Fedora puts `/home` on
+  btrfs, often with `compress=zstd`). With copy-on-write, every page LM writes
+  becomes a new, compressed extent. A Europe landmark file had 630,000 extents
+  after five hours; the threads spent their time waiting to read it back, at under
+  0.1 CPU cores, and LM would not finish. Before the first build:
+
+  ```sh
+  chattr +C data/graphhopper/cache/releases
+  ```
+
+  New release folders and their files inherit it (`lsattr -d` shows a `C`). It does
+  not change files that already exist, so set it before a build, never during one.
+  It also turns off compression for these files, which is what you want here. Other
+  file systems (ext4, xfs) need nothing.
+- **A running build can get more memory without a restart**:
+  `podman update --memory 24g --memory-swap 32g <container>` (or `docker update`).
+  It does not help a build that is slowed by copy-on-write.
+
+To see whether a build is still working, look at its CPU use (`podman stats`) and the
+state of its threads. LM logs nothing between its start and its end. Threads that
+stay in state `D` at almost no CPU are waiting for the disk.
+
 If the selected terrain does not cover the filtered file, the build stops with an
 error. Run `download-elevation-for` for that file, then retry the build.
 
@@ -288,6 +326,26 @@ The commands never enqueue `routing-refresh-routes`: that command recalculates
 saved geometry and is not part of this migration.
 
 ## Rollback
+
+### Undo an activation, keep the app
+
+When the graph you activated is bad but the app release is fine:
+
+```sh
+just routing-undo-activate
+```
+
+`routing-activate` keeps the graph it replaced as `previous`. This points `current`
+back at it and restarts only GraphHopper, with the image that runs now. It first
+checks that image can load the previous graph (same GraphHopper revision, unchanged
+config); if not, it stops before touching anything. The bad graph stays in
+`releases/` and becomes `previous`, so running the command again switches back to it.
+Run it once.
+
+The previous graph keeps its own config. A profile added since, such as `hike`, is
+missing until a new graph is built and activated; requests for it fail.
+
+### Roll back the engine too
 
 Before activating, record the old immutable image ID:
 

@@ -193,6 +193,11 @@ routing-activate:
 routing-rollback image:
     CONTAINER={{ quote(container) }} uv run --no-project python scripts/routing-switch.py rollback {{ quote(image) }}
 
+[doc("Undo the last routing-activate: point the graph back at the previous one and restart GraphHopper with the image that runs now. The app is not touched. Checks the previous graph against that image before stopping anything. The replaced graph becomes previous, so a second run switches back.")]
+[group('geodata')]
+routing-undo-activate:
+    CONTAINER={{ quote(container) }} uv run --no-project python scripts/routing-switch.py rollback
+
 [doc("Print each bike profile's average speed on a few reference routes. Run it after routing-activate to see what a speed change did.")]
 [group('geodata')]
 routing-speeds *args:

@@ -643,6 +643,12 @@ An import looks up every node's height once, in tile order, before it reads the 
 asks way by way, in way-ID order, and a continent's decoded tiles dwarf RAM (Europe: 187 GB), so
 without it nearly every lookup is a random disk read (4 h). The table costs ~30 bytes of heap per node.
 
+A large build (Europe) runs with `GRAPHHOPPER_BUILD_DATAACCESS=MMAP`: the graph lives in files and
+`GRAPHHOPPER_MEM_LIMIT` must hold the heap (~10 GB: node map and height table) plus their page
+cache. On btrfs the releases folder needs `chattr +C` before the build: with copy-on-write and
+compression the landmark step's scattered writes fragment each file into hundreds of thousands of
+extents and LM never finishes (`docs/how-to/build-routing-graph.md`, "Large areas").
+
 Numeric GraphHopper settings never go through `-Ddw.`: Dropwizard passes them as strings and
 `PMap.getInt` ignores a string, so the default applies silently (0 urban-density threads fails the
 import after pass 2). The entrypoint writes the build thread counts into a copy of the config instead.
