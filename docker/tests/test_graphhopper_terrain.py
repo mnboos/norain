@@ -5,6 +5,7 @@ import io
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -318,6 +319,87 @@ class DownloadPieceTests(unittest.TestCase):
         ):
             terrain.extract_piece(self.source, 15, Path("out"), Path("region"), True)
 
+    def test_extract_passes_overfetch_and_threads(self):
+        with (
+            patch.object(terrain, "OVERFETCH", 0.4),
+            patch.object(terrain, "DOWNLOAD_THREADS", 3),
+            patch.object(
+                terrain,
+                "extract_output",
+                return_value=subprocess.CompletedProcess([], 0, "archive size of 1 MB"),
+            ) as extract,
+        ):
+            terrain.extract_piece(self.source, 15, Path("out"), Path("region"), True)
+        args = extract.call_args.args[0]
+        self.assertIn("--overfetch=0.4", args)
+        self.assertIn("--download-threads=3", args)
+
+    def test_stalled_extract_is_killed_and_retried(self):
+        stalls = [
+            sys.executable,
+            "-c",
+            "import sys, time\n"
+            "sys.stdout.write('fetching chunks (5/9 MB, 1 MB/s)\\r'); sys.stdout.flush()\n"
+            "sys.stdout.write('fetching chunks (5/9 MB, 9 kB/s)\\r'); sys.stdout.flush()\n"
+            "time.sleep(30)",
+        ]
+        with patch.object(terrain, "STALL_SECONDS", 0.5):
+            with self.assertRaises(terrain.DownloadStalled):
+                terrain.extract_output(stalls)
+            with (
+                patch.object(
+                    terrain,
+                    "extract_output",
+                    side_effect=[
+                        terrain.DownloadStalled("stalled"),
+                        subprocess.CompletedProcess([], 0, ""),
+                    ],
+                ) as extract,
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                output = Path(directory) / "out.pmtiles"
+                output.write_bytes(b"x")
+                terrain.extract_piece(self.source, 15, output, Path("region"))
+            self.assertEqual(extract.call_count, 2)
+
+    def test_failed_extract_is_retried_but_size_limit_is_not(self):
+        reset = subprocess.CompletedProcess(
+            [], 1, "stream error: stream ID 33; INTERNAL_ERROR; received from peer"
+        )
+        done = subprocess.CompletedProcess([], 0, "")
+        too_large = subprocess.CompletedProcess([], 1, "write: file too large")
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "out.pmtiles"
+            output.write_bytes(b"x")
+            with patch.object(
+                terrain, "extract_output", side_effect=[reset, done]
+            ) as extract:
+                terrain.extract_piece(self.source, 15, output, Path("region"))
+            self.assertEqual(extract.call_count, 2)
+            with (
+                patch.object(
+                    terrain, "extract_output", side_effect=[reset] * 3
+                ) as extract,
+                self.assertRaises(subprocess.CalledProcessError),
+            ):
+                terrain.extract_piece(self.source, 15, output, Path("region"))
+            self.assertEqual(extract.call_count, terrain.DOWNLOAD_ATTEMPTS)
+            with (
+                patch.object(
+                    terrain, "extract_output", side_effect=[too_large, done]
+                ) as extract,
+                self.assertRaises(terrain.PieceTooLarge),
+            ):
+                terrain.extract_piece(self.source, 15, output, Path("region"))
+            self.assertEqual(extract.call_count, 1)
+
+    def test_extract_output_keeps_lines_and_return_code(self):
+        result = terrain.extract_output(
+            [sys.executable, "-c", "print('a'); print('b', end='\\r'); print('c', end='')"]
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "a\nb\nc")
+
     def test_empty_piece_skips_download_and_verification(self):
         with (
             tempfile.TemporaryDirectory() as directory,
@@ -516,6 +598,94 @@ class DownloadPieceTests(unittest.TestCase):
                 all(call.kwargs.get("dry_run") for call in extract.call_args_list)
             )
             self.assertFalse(list(Path(directory).glob("*.pmtiles")))
+
+    def test_whole_mode_uses_no_pieces_and_publishes_the_same_key(self):
+        source = dict(
+            self.source,
+            min_lon=5,
+            max_lon=12,
+            min_lat=45,
+            max_lat=50,
+            min_zoom=13,
+            max_zoom=17,
+        )
+        catalog = {
+            "version": "test",
+            "items": [source, dict(source, name="planet", min_zoom=0, max_zoom=12)],
+        }
+
+        def whole(source, zoom, output, region_file):
+            output.write_bytes(b"whole")
+            return True
+
+        def pieces(source, zoom, cells, directory):
+            directory.mkdir(exist_ok=True)
+            part = directory / f"{zoom}.pmtiles"
+            part.write_bytes(b"piece")
+            return [part]
+
+        published = []
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(
+                terrain, "osm_bounds", return_value=[9.51, 47.12, 9.54, 47.145]
+            ),
+            patch.object(terrain, "node_cells", return_value={(1078, 719)}),
+            patch.object(terrain, "run"),
+            patch.object(terrain, "verify_coverage", return_value={}),
+            patch.object(terrain, "download_json", side_effect=lambda url: catalog),
+            patch.object(terrain, "extract_whole", side_effect=whole) as extract,
+            patch.object(terrain, "download_pieces", side_effect=pieces) as download,
+        ):
+            for mode, is_whole in (("whole", True), ("pieces", False)):
+                root = Path(directory) / mode
+                terrain.prepare(Path("test.osm.pbf"), root, whole=is_whole)
+                published.append((root / "current").resolve().name)
+                if is_whole:
+                    self.assertEqual(extract.call_count, 2)
+                    download.assert_not_called()
+                    self.assertEqual(
+                        (root / "current" / "fallback.pmtiles").read_bytes(), b"whole"
+                    )
+                    self.assertFalse((root / "current" / "pieces").exists())
+        self.assertEqual(published[0], published[1])
+
+    def test_whole_mode_skips_an_empty_source(self):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(terrain, "extract_piece", return_value=0) as estimate,
+            patch.object(terrain, "run") as run,
+        ):
+            output = Path(directory) / "part-0.pmtiles"
+            self.assertFalse(
+                terrain.extract_whole(self.source, 15, output, Path("region.geojson"))
+            )
+            self.assertTrue(estimate.call_args.kwargs["dry_run"])
+            run.assert_not_called()
+            self.assertFalse(output.exists())
+
+    @unittest.skipUnless(shutil.which("pmtiles"), "requires pinned pmtiles CLI")
+    def test_whole_mode_extracts_a_real_archive_in_one_piece(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.pmtiles"
+            archive(source, [(1078 * 16, 719 * 16, (131, 10, 20))])
+            region = root / "region.geojson"
+            region.write_text(
+                json.dumps(terrain.region_geojson(terrain.cell_boxes([(1078, 719)])))
+            )
+            output = root / "part-0.pmtiles"
+            # A 64-byte piece limit must not apply here.
+            with patch.object(terrain, "MAX_PIECE_BYTES", 64):
+                self.assertTrue(
+                    terrain.extract_whole(
+                        dict(self.source, url=str(source)), 15, output, region
+                    )
+                )
+            self.assertGreater(output.stat().st_size, 64)
+            self.assertFalse(list(root.glob("*.partial.pmtiles")))
+            with terrain.archive_reader(output) as reader:
+                self.assertTrue(reader.get(15, 1078 * 16, 719 * 16))
 
     @unittest.skipUnless(shutil.which("pmtiles"), "requires pinned pmtiles CLI")
     def test_cli_enforces_hard_limit_before_publication(self):

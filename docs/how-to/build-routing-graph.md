@@ -88,8 +88,53 @@ Downloads are split into sequential, independently reusable pieces capped at
 piece sizes; preparation splits coverage until the estimated payload is below
 900 MB, leaving room for archive metadata, and enforces the 1 GB file limit.
 Pieces are merged locally into the final archives, which can exceed 1 GB.
+The download log shows overall progress by completed source archives (including
+empty or reused sources), followed by progress for the current piece. The overall
+percentage counts sources, not bytes or remaining time: source sizes vary. After
+downloads reach 100%, final merging, verification and publication still run and
+are shown as separate phases.
+A piece is a few large range requests. Now and then one connection stalls at a few
+kB/s near the end, while a fresh one is fast again, and `pmtiles extract` has no timeout.
+So a download whose byte count has not moved for 90 s is stopped and the piece starts
+again, up to three times. A piece whose download fails, for example when the host
+resets the connection (`INTERNAL_ERROR; received from peer`), starts again the same
+way. Two settings in `.env`: `TERRAIN_DOWNLOAD_THREADS` (default 8,
+requests at once) and `TERRAIN_OVERFETCH` (default 0: the share of extra bytes fetched
+to merge nearby chunks; merged requests are longer, and long ones are what stall).
 Allow space for the retained pieces, per-source merges and final archives to coexist,
 plus decoded caches, the new graph and the retained previous graph.
+
+### Download each source in one piece instead
+
+```sh
+just routing-terrain-estimate-whole bike-switzerland-latest.osm.pbf
+just download-elevation-whole-for bike-switzerland-latest.osm.pbf
+```
+
+This is the old way: one `pmtiles extract` per source archive (and one for the
+zoom-12 fallback), however large, with no 1 GB pieces and no stall restarts.
+It makes fewer requests, so it suits a fast, stable connection. The result is the
+same terrain with the same hash, and the build does not care which command made it.
+
+**You can mix the two, one source at a time.** Each source becomes one file in
+`elevation/.prepare-<hash>/`: `part-N.pmtiles`, or `fallback.pmtiles` for the zoom-12
+source. Both commands use the same folder and reuse any finished file there, whichever
+command made it. Within one source they do not mix: a failed whole download leaves a
+useless `part-N.partial.pmtiles`, and the pieces in `pieces/` are merged only by
+`download-elevation-for`.
+
+A whole download that fails starts over from zero when you run it again. The
+connection can drop late, after many GB. To finish in pieces instead, delete the
+partial file (`download-elevation-for` does not remove it) and switch commands:
+
+```sh
+rm "$ROUTING_OSM_IMPORT_DIR"/elevation/.prepare-<hash>/part-<N>.partial.pmtiles
+just download-elevation-for bike-switzerland-latest.osm.pbf
+```
+
+The finished sources are kept; only the rest is downloaded, in pieces. Pieces left
+over from a source that was later finished whole stay until
+`just cleanup-elevation-downloads`.
 
 ### What gets downloaded again?
 

@@ -142,6 +142,16 @@ routing-terrain-estimate filtered_pbf:
 download-elevation-for filtered_pbf:
     {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper terrain
 
+[doc("Estimate the Mapterhorn download of download-elevation-whole-for: one size per source, no pieces. The file must already exist in ROUTING_OSM_IMPORT_DIR.")]
+[group('geodata')]
+routing-terrain-estimate-whole filtered_pbf:
+    {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper terrain --dry-run --whole
+
+[doc("Like download-elevation-for, but the old way: one download per Mapterhorn source, however large, instead of pieces of at most 1 GB. An interrupted source starts over. Gives the same terrain (same key). If a source fails, delete its part-N.partial.pmtiles and finish with download-elevation-for: finished sources are reused.")]
+[group('geodata')]
+download-elevation-whole-for filtered_pbf:
+    {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper terrain --whole
+
 [doc("Delete retained elevation download pieces from completed releases while preserving final terrain archives and resumable preparations.")]
 [group('geodata')]
 [confirm("This permanently deletes retained elevation download pieces from every completed release in ROUTING_OSM_IMPORT_DIR/elevation. Final archives and incomplete preparations are preserved. Continue?")]
