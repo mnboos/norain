@@ -169,6 +169,7 @@ class GridGateTests(TestCase):
         with (
             patch.dict(os.environ, {"OPENWEATHERMAP_API_KEY": "k"}),
             patch.object(grid, "_fetch_open_meteo", AsyncMock(side_effect=_status_error(503))),
+            patch.object(grid, "_fetch_met", AsyncMock(side_effect=_status_error(503))),
             patch.object(grid, "_fetch_owm", owm),
         ):
             cell = self._get(allow_fallback=False)
@@ -178,6 +179,7 @@ class GridGateTests(TestCase):
         with (
             patch.dict(os.environ, {"OPENWEATHERMAP_API_KEY": "k", "OPENWEATHERMAP_DAILY_CAP": "0"}),
             patch.object(grid, "_fetch_open_meteo", AsyncMock(side_effect=_status_error())),
+            patch.object(grid, "_fetch_met", AsyncMock(side_effect=_status_error(503))),
             patch.object(grid, "_fetch_owm", AsyncMock(side_effect=AssertionError("over budget"))),
         ):
             self.assertIsNone(self._get(allow_fallback=True))

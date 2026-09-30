@@ -219,6 +219,7 @@ class BulkCellDataTests(BulkCellAvailabilityTests):
                     include_segments=False,
                 )
             self.assertEqual(len(result.samples), count)
+            self.assertEqual(result.summary.sources, ["open-meteo"])  # for the attribution
             current = result.samples[0].model_dump()
             if baseline is None:
                 baseline = current

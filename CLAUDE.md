@@ -1,7 +1,7 @@
 # MeteoLane — Bike-route weather forecaster
 
-Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo (primary, free) with OpenWeatherMap One
-Call 3.0 as fallback. Multi-user with
+Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo (primary, free) with MET Norway
+(yr.no, free) and then OpenWeatherMap One Call 3.0 as fallbacks. Multi-user with
 email/username sign-in, and a free/Pro subscription tier backed by Stripe.
 
 ## Project layout
@@ -319,7 +319,7 @@ lease held waits for it, then only reads what the holder stored. If the holder s
 nothing, the waiter returns `None` and does not fetch. It fetches only when the stored cell
 covers fewer `forecast_days` than it needs. Never make a waiter wait on the enqueue claim
 instead: a task still in the queue holds that, possibly behind the waiter itself.
-`LEASE_TTL` must stay above the Open-Meteo + OWM timeouts combined.
+`LEASE_TTL` must stay above the Open-Meteo + MET Norway + OWM timeouts combined.
 
 **Imports go at module scope — keep the layering that allows it.** The forecast payload
 schemas live in `core/forecast_schemas.py`, outside the `core.api` package, because the
@@ -495,7 +495,7 @@ Rules that hold this together:
   It also halves a factor on the *shortest* window, which climbs back 0.1 a quiet minute (halving
   the hour would lock a half-spent hour and send every cell to OWM over a minute-level 429). The first 429
   of a burst adapts, the rest don't. This is what corrects a weight we guessed too low.
-- **Fail open for Open-Meteo, closed for OWM and Weather Underground**, for the same reasons as
+- **Fail open for Open-Meteo and MET Norway, closed for OWM and Weather Underground**, for the same reasons as
   `claims.py` and `_spend_call` (which is now a thin wrapper over `ratelimit`). Open-Meteo's
   forecast and ensemble APIs share one budget.
 - **`ProviderThrottled` must not subclass `httpx.HTTPError`/`ValueError`/`KeyError`**, or the
@@ -538,11 +538,38 @@ cell, however many forecast cells it covers. Anything else that reads `EnsembleC
 ### Data format difference (critical)
 
 **Open-Meteo**: `hourly` = `{"time": [...], "temperature_2m": [...], ...}` — dict of parallel arrays **OpenWeatherMap**:
-`hourly` = `[{"dt": 123, "temp": 15, ...}, ...]` — list of objects
+`hourly` = `[{"dt": 123, "temp": 15, ...}, ...]` — list of objects. **MET Norway**: `properties.timeseries` =
+`[{"time": "…Z", "data": {"instant": {...}, "next_1_hours": {...}}}, ...]` — no `hourly` at all
 
-`_from_open_meteo()` expects dict blocks; `_from_owm()` expects a list. Both have
-`isinstance` guards rejecting the wrong format. `extract_sample()` routes directly based
-on `cell.source` to avoid confusing the two.
+`_from_open_meteo()` expects dict blocks; `_from_owm()` expects a list; `_from_met()` expects
+`properties.timeseries`. All have `isinstance` guards rejecting the wrong format. `extract_sample()`
+routes directly based on `cell.source` to avoid confusing them, and `departures.cell_covers` has
+one branch per source.
+
+### MET Norway fallback
+
+`grid._met_fallback`, tried after Open-Meteo fails and before the paid OWM (`FORECAST_SOURCES`
+is the order, for fetching and for a cache read that finds several sources). Free, commercial use
+allowed, CC BY 4.0. Rules that hold this together:
+
+- **MET's terms.** Every request sends `MET_USER_AGENT` (app and contact; without one MET
+  answers 403). A place's last response is reused for the conditional request: its
+  `_met_last_modified` goes out as `If-Modified-Since`, and a 304 (`MET_NOT_MODIFIED`) stores that
+  response again under the new day. MET answers the same for any day, so any earlier row of the
+  place will do. Budget `met_limit()`: far below the 20 requests a second MET asks to be told about.
+- **Coarser than Open-Meteo.** Outside the Nordics it is a global model; steps are hourly for
+  about 2.5 days, then six-hourly. `_from_met` gives a six-hourly step its own
+  `precipitation_interval_s` (21600), so the rain rate stays right. Don't make it primary.
+- **Symbol codes become WMO codes** (`MET_SYMBOLS`, `met_weather_code`), so the frost floor and
+  the SPA's weather words work. WMO has no sleet: it counts as snow; snow with thunder stays snow.
+- **A throttled Open-Meteo still defers first.** MET is only asked when the fallback is allowed
+  (a failure, a long wait, the last attempt), like OWM before it.
+- **Credit it.** `summary.sources` lists every provider a forecast used, and
+  `ForecastSummaryCard` names and links them (`utils/weatherProviders.ts`). Open-Meteo's and
+  MET's licences both ask for that.
+
+In tests, patch `core.grid._fetch_met` on every path where Open-Meteo fails, or the test calls
+api.met.no.
 
 ### `_from_open_meteo` clamping
 

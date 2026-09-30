@@ -435,6 +435,7 @@
         "title": "Forecast",
         "explain": "Figures explained",
         "noData": "There is no weather data for this ride yet.",
+        "dataFrom": "Weather data:",
         "riskUnavailable": "The rain risk is not available right now.",
         "peakRisk": "Highest rain risk along the route: {percent} %",
         "note": "The rain risk shows the highest value at one point of the route, not for the whole ride. Rain and headwind show the highest expected values. When rain is expected, rain shows how much it will probably rain if it rains. The wind effort shows as a level (low to very high) how much extra power you need for your pace. It is estimated. Frost shows as a level (light to heavy) how slippery the road is likely to get at its coldest point — from temperature, wetness and weather code together."
@@ -748,7 +749,7 @@
         },
         "filter": {
             "allProfiles": "All profiles",
-            "bothProviders": "Both providers",
+            "allProviders": "All providers",
             "allRoutes": "All routes",
             "activeRoutes": "Active routes",
             "inactiveRoutes": "Inactive routes",

@@ -23,7 +23,14 @@ from ..auth.admin_access import has_system_access
 from ..auth.lockout import client_ip
 from ..departures import cell_covers, instant
 from ..geo import simplify_line
-from ..grid import ENSEMBLE_CELL_DEG, ENSEMBLE_MODELS, ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE, ensemble_cell
+from ..grid import (
+    ENSEMBLE_CELL_DEG,
+    ENSEMBLE_MODELS,
+    ENSEMBLE_REQUEST_VERSION,
+    FORECAST_SOURCES,
+    MAX_CELL_AGE,
+    ensemble_cell,
+)
 from ..jobs import JOB_STALL_TIMEOUT
 from ..models import EnsembleCell, ForecastCell, ForecastJob, Journey, JourneyStage, RecurringRoute
 from ..schedule import LOCAL_TZ, next_departure
@@ -96,7 +103,7 @@ class SystemMapFilter(CamelSchema):
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=500, ge=1, le=1000)
     kind: Literal["forecast", "ensemble"] = "forecast"
-    source: Literal["all", "open-meteo", "openweathermap"] = "all"
+    source: Literal["all", "open-meteo", "met-norway", "openweathermap"] = "all"
     day: date | None = None
     active: bool | None = None
     profile: Literal["bike", "ebike", "fast_ebike", "hike"] | None = None
@@ -374,8 +381,8 @@ class SystemCoverage(CamelSchema):
 def coverage_state(rows, required_days, etas, now, *, ensemble=False):
     if not ensemble:
         rows = sorted(
-            (row for row in rows if row.source in ("open-meteo", "openweathermap")),
-            key=lambda row: row.source != "open-meteo",
+            (row for row in rows if row.source in FORECAST_SOURCES),
+            key=lambda row: FORECAST_SOURCES.index(row.source),
         )
     if not rows:
         return "missing"
@@ -402,8 +409,8 @@ def coverage_state(rows, required_days, etas, now, *, ensemble=False):
                     return "usable"
             except ValueError, TypeError, KeyError, IndexError, OverflowError:
                 return "insufficient"
-            # The cache reader prefers eligible Open-Meteo records even when their
-            # payload is incomplete; do not suggest OWM will be chosen in that case.
+            # The cache reader prefers the best eligible source even when its payload is
+            # incomplete; do not suggest a fallback will be chosen in that case.
             return "insufficient"
     return "insufficient"
 

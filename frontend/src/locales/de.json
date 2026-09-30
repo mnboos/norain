@@ -435,6 +435,7 @@
         "title": "Prognose",
         "explain": "Kennzahlen erklärt",
         "noData": "Für diese Fahrt liegen noch keine Wetterdaten vor.",
+        "dataFrom": "Wetterdaten:",
         "riskUnavailable": "Das Regenrisiko ist derzeit nicht verfügbar.",
         "peakRisk": "Höchstes Regenrisiko entlang der Strecke: {percent} %",
         "note": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Fahrt. Regen und Gegenwind zeigen die höchsten erwarteten Werte. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Der Windaufwand zeigt als Stufe (niedrig bis sehr hoch), wie viel zusätzliche Kraft du für dein Tempo brauchst. Er ist geschätzt. Frost zeigt als Stufe (leicht bis stark), wie glatt die Strasse an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen."
@@ -748,7 +749,7 @@
         },
         "filter": {
             "allProfiles": "Alle Profile",
-            "bothProviders": "Beide Anbieter",
+            "allProviders": "Alle Anbieter",
             "allRoutes": "Alle Routen",
             "activeRoutes": "Aktive Routen",
             "inactiveRoutes": "Inaktive Routen",

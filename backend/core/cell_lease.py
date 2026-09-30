@@ -25,8 +25,8 @@ from django.db import IntegrityError, transaction
 
 from core.models import CellFetchLease
 
-# The forecast worst case is Open-Meteo and then OWM, 30 s timeout each (grid.py), plus
-# the store. The lease must outlive that, or a slow holder loses it mid-fetch and a
+# The forecast worst case is Open-Meteo (30 s), then MET Norway (20 s), then OWM (30 s)
+# (grid.py), plus the store. The lease must outlive that, or a slow holder loses it mid-fetch and a
 # waiter fetches the same cell again. Keep it above the sum if a timeout moves.
 LEASE_TTL = timedelta(seconds=90)
 POLL_INTERVAL = 0.5

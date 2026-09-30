@@ -30,6 +30,10 @@ from .wind import finite_number
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 OWM_ONECALL_URL = "https://api.openweathermap.org/data/3.0/onecall"
+MET_URL = "https://api.met.no/weatherapi/locationforecast/2.0/complete"
+# MET Norway's terms: identify the application and a contact, or every request gets a 403.
+MET_USER_AGENT = "MeteoLane/1.0 admin@obsthalde.ch"
+MET_TIMEOUT = 20  # core.cell_lease.LEASE_TTL covers Open-Meteo + MET + OWM in a row
 ENSEMBLE_URL = "https://ensemble-api.open-meteo.com/v1/ensemble"
 
 _OM_VARS = {
@@ -73,6 +77,12 @@ OPEN_METEO_LIMITS = {"MINUTE": (60, 600), "HOUR": (3600, 5000), "DAY": (86400, 1
 OPEN_METEO_MARGIN = 0.8
 # One Call 3.0 is free for 1000 calls a day and billed beyond that.
 OWM_DAILY_CAP = 900
+# MET Norway is free and has no fixed quota, but asks for a special agreement above 20
+# requests a second per application. Well below that.
+MET_LIMITS = ((1, 10), (60, 300))
+
+# Where a cell comes from, best first: a cache read that finds several prefers the earlier.
+FORECAST_SOURCES = ("open-meteo", "met-norway", "openweathermap")
 
 type CellKey = tuple[float, float, date]
 
@@ -99,6 +109,11 @@ def open_meteo_limit() -> Limit:
 
 def owm_limit() -> Limit:
     return Limit("openweathermap", ((86400, _env_number("OPENWEATHERMAP_DAILY_CAP", OWM_DAILY_CAP)),), fail_open=False)
+
+
+def met_limit() -> Limit:
+    """Open like Open-Meteo: MET Norway costs nothing, so a cache outage costs only pacing."""
+    return Limit("met-norway", MET_LIMITS, fail_open=True)
 
 
 def open_meteo_weight(variables: int, forecast_days: int, members: int = 1) -> float:
@@ -201,6 +216,36 @@ async def _fetch_owm(lat_r: float, lon_r: float) -> dict | None:
         resp = await client.get(OWM_ONECALL_URL, params=params, timeout=30)
         resp.raise_for_status()
         return resp.json()
+
+
+# What _fetch_met returns for a 304: the previous response is still current. A dict, so the
+# provider telemetry counts it as the successful answer it is.
+MET_NOT_MODIFIED: dict = {}
+
+
+@provider("met-norway")
+async def _fetch_met(lat_r: float, lon_r: float, last_modified: str | None = None) -> dict:
+    """MET Norway Locationforecast 2.0 (yr.no), the free fallback.
+
+    Sends ``If-Modified-Since`` when an earlier response for this place is known, as MET's
+    terms ask, and returns ``MET_NOT_MODIFIED`` on a 304. The reply's ``Last-Modified`` is
+    kept in the stored data under ``_met_last_modified`` for the next request.
+    """
+    headers = {"User-Agent": MET_USER_AGENT}
+    if last_modified:
+        headers["If-Modified-Since"] = last_modified
+    async with httpx.AsyncClient() as client:
+        # At most four decimals, as MET asks; ours have two.
+        resp = await client.get(MET_URL, params={"lat": lat_r, "lon": lon_r}, headers=headers, timeout=MET_TIMEOUT)
+    if resp.status_code == 304:
+        return MET_NOT_MODIFIED
+    resp.raise_for_status()
+    if resp.status_code == 203:
+        # MET's notice that this product version is deprecated: still valid data, but it will go.
+        logger.warning("MET Norway answered 203: Locationforecast 2.0 is deprecated, move to its successor")
+    data = resp.json()
+    data["_met_last_modified"] = resp.headers.get("Last-Modified")
+    return data
 
 
 # =============================================================================
@@ -323,6 +368,134 @@ def _from_owm(data: dict, eta: datetime) -> dict | None:
     }
 
 
+# MET Norway's symbol codes as the WMO codes Open-Meteo sends, so the frost floor
+# (ride_quality.FROST_CODES) and the SPA's weather words work on either source. WMO has no
+# sleet: it counts as snow, which keeps the frost floor under it.
+MET_SYMBOLS = {
+    "clearsky": 0,
+    "fair": 1,
+    "partlycloudy": 2,
+    "cloudy": 3,
+    "fog": 45,
+    "lightrain": 61,
+    "rain": 63,
+    "heavyrain": 65,
+    "lightrainshowers": 80,
+    "rainshowers": 81,
+    "heavyrainshowers": 82,
+    "lightsleet": 71,
+    "sleet": 71,
+    "heavysleet": 73,
+    "lightsleetshowers": 85,
+    "sleetshowers": 85,
+    "heavysleetshowers": 86,
+    "lightsnow": 71,
+    "snow": 73,
+    "heavysnow": 75,
+    "lightsnowshowers": 85,
+    "snowshowers": 85,
+    "heavysnowshowers": 86,
+}
+_SNOW_CODES = frozenset({71, 73, 75, 77, 85, 86})
+
+
+def met_weather_code(symbol: str | None) -> int | None:
+    """The WMO code for a MET Norway ``symbol_code`` (``lightrainshowers_day`` …), None if unknown."""
+    if not isinstance(symbol, str):
+        return None
+    name = symbol.split("_")[0]
+    thunder = name.endswith("andthunder")
+    if thunder:
+        # MET spells two of them "lightssleet…" / "lightssnow…".
+        name = name.removesuffix("andthunder").replace("lightss", "lights")
+    code = MET_SYMBOLS.get(name)
+    if thunder and code is not None:
+        # Snow in a thunderstorm stays snow: the frost floor matters more on a bike than the thunder.
+        return code if code in _SNOW_CODES else 95
+    return code
+
+
+def _met_period(data: dict) -> tuple[dict, int] | None:
+    """The shortest precipitation period of a MET time step and its length in seconds."""
+    for name, seconds in (("next_1_hours", 3600), ("next_6_hours", 21600), ("next_12_hours", 43200)):
+        period = data.get(name)
+        if isinstance(period, dict):
+            return period, seconds
+    return None
+
+
+def _met_timeseries(data: dict) -> list[dict] | None:
+    series = (data.get("properties") or {}).get("timeseries") if isinstance(data.get("properties"), dict) else None
+    if not isinstance(series, list) or not series or not all(isinstance(step, dict) for step in series):
+        return None
+    return series
+
+
+def _met_nearest(series: list[dict], eta: datetime) -> tuple[dict, datetime]:
+    if eta.tzinfo is None:  # naive ETAs are Swiss wall time, as for Open-Meteo
+        eta = eta.replace(tzinfo=ZoneInfo("Europe/Zurich"))
+    times = [datetime.fromisoformat(step["time"]) for step in series]
+    i = min(range(len(times)), key=lambda k: abs(times[k] - eta))
+    return series[i], times[i]
+
+
+def _from_met(data: dict, eta: datetime) -> dict | None:
+    """Extract a forecast sample from a MET Norway Locationforecast response.
+
+    ``properties.timeseries`` is a list of steps, hourly for about two and a half days and
+    six-hourly after. Like the Open-Meteo hourly block, it clamps to the nearest step. The
+    rain is the step's shortest period (``next_1_hours``, else ``next_6_hours``) with that
+    period as ``precipitation_interval_s``; wind comes in m/s.
+    """
+    series = _met_timeseries(data)
+    if series is None:
+        return None
+    step, _ = _met_nearest(series, eta)
+    step_data = step.get("data") or {}
+    instant = (step_data.get("instant") or {}).get("details") or {}
+    temp = finite_number(instant.get("air_temperature"))
+    if temp is None:
+        return None
+    rain, interval, symbol, pop = 0.0, 3600, None, None
+    if found := _met_period(step_data):
+        period, interval = found
+        details = period.get("details") or {}
+        rain = finite_number(details.get("precipitation_amount"), nonnegative=True) or 0.0
+        probability = finite_number(details.get("probability_of_precipitation"), nonnegative=True)
+        pop = min(1.0, probability / 100) if probability is not None else None
+        symbol = (period.get("summary") or {}).get("symbol_code")
+    return {
+        "rain_mm": rain,
+        "precipitation_interval_s": interval,
+        "temp": temp,
+        "wind_speed": _wind_value(instant.get("wind_speed"), factor=3.6),
+        "wind_gust": _wind_value(instant.get("wind_speed_of_gust"), factor=3.6),
+        "wind_dir": _wind_value(instant.get("wind_from_direction"), direction=True),
+        "weather_code": met_weather_code(symbol),
+        "pop": pop,
+        "source": "met-norway",
+    }
+
+
+def met_covers(data: dict, eta: datetime) -> bool:
+    """Whether a MET response really has *eta*, rather than a step it would be clamped to."""
+    series = _met_timeseries(data)
+    if series is None:
+        return False
+    step, _ = _met_nearest(series, eta)
+    first, last = datetime.fromisoformat(series[0]["time"]), datetime.fromisoformat(series[-1]["time"])
+    moment = eta if eta.tzinfo is not None else eta.replace(tzinfo=ZoneInfo("Europe/Zurich"))
+    if not first <= moment <= last:
+        return False
+    step_data = step.get("data") or {}
+    found = _met_period(step_data)
+    details = (found[0].get("details") or {}) if found else {}
+    return (
+        finite_number(((step_data.get("instant") or {}).get("details") or {}).get("air_temperature")) is not None
+        and finite_number(details.get("precipitation_amount")) is not None
+    )
+
+
 def _ensemble_at(data: dict, eta: datetime) -> tuple[float, float] | None:
     """(pop, rain_if_wet) at eta's hour, or None if out of range / no data."""
     h = data.get("hourly") or {}
@@ -401,8 +574,8 @@ def _get_ensemble_cell_sync(
 def _find_forecast_cell_sync(
     lat_r: float, lon_r: float, day_key: date, forecast_days: int | None = None
 ) -> ForecastCell | None:
-    """A fresh cell from either source: an OWM fallback cell is as usable as an Open-Meteo one."""
-    for source in ("open-meteo", "openweathermap"):
+    """A fresh cell from any source, the best first: a fallback cell is as usable as an Open-Meteo one."""
+    for source in FORECAST_SOURCES:
         cell = _get_forecast_cell_sync(lat_r, lon_r, day_key, source, forecast_days)
         if cell is not None:
             return cell
@@ -464,7 +637,7 @@ def _cached_cell_keys_sync(
     for batch in batched(requirements.items(), CELL_LOOKUP_BATCH_SIZE, strict=False):
         sources: dict[CellKey, str] = {}
         forecast_query = ForecastCell.objects.filter(
-            _requested(batch), fetched_at__gte=cutoff, source__in=("open-meteo", "openweathermap")
+            _requested(batch), fetched_at__gte=cutoff, source__in=FORECAST_SOURCES
         )
         rows = (
             ((cell.lat_r, cell.lon_r, cell.day_key, cell.source, cell) for cell in forecast_query)
@@ -473,7 +646,7 @@ def _cached_cell_keys_sync(
         )
         for lat, lon, day, source, cell in rows:
             key = (lat, lon, day)
-            if key not in sources or source == "open-meteo":
+            if key not in sources or FORECAST_SOURCES.index(source) < FORECAST_SOURCES.index(sources[key]):
                 sources[key] = source
                 if load_data:
                     forecast_cells[key] = cell
@@ -596,7 +769,7 @@ async def get_or_fetch_forecast_cell(
 ) -> ForecastCell | None:
     """Return a fresh ForecastCell from the DB, or fetch + store and return.
 
-    Tries Open-Meteo first, falls back to OWM. Returns None if both fail. At most one
+    Tries Open-Meteo first, falls back to MET Norway, then OWM. Returns None if all fail. At most one
     caller per cell fetches at a time; concurrent callers get what it stored.
 
     When Open-Meteo is rate-limited (our budget or its 429) and *allow_fallback* is False,
@@ -643,6 +816,10 @@ async def _fetch_and_store_forecast(
 
     if data is None:
         emit("count", "weather.fallback", outcome="needed")
+        source = "met-norway"
+        data = await _met_fallback(lat_r, lon_r)
+
+    if data is None:
         source = "openweathermap"
         # Without a key _fetch_owm makes no call, so it spends no budget either.
         if not os.environ.get("OPENWEATHERMAP_API_KEY") or not acquire(owm_limit()):
@@ -658,7 +835,8 @@ async def _fetch_and_store_forecast(
 
     if data is None:
         logger.warning(
-            "get_or_fetch_forecast_cell: both Open-Meteo and OWM failed for ({}, {}), day_key={}, forecast_days={}",
+            "get_or_fetch_forecast_cell: Open-Meteo, MET Norway and OWM failed for ({}, {}), day_key={}, "
+            "forecast_days={}",
             lat_r,
             lon_r,
             day_key,
@@ -666,11 +844,41 @@ async def _fetch_and_store_forecast(
         )
         return None
 
-    if source == "openweathermap":
-        emit("count", "weather.fallback", outcome="recovered")
+    if source != "open-meteo":
+        emit("count", "weather.fallback", outcome="recovered", source=source)
     cell = await sync_to_async(_store_forecast_cell_sync)(lat_r, lon_r, day_key, forecast_days, data, source)
     await notify_system("cells")
     return cell
+
+
+def _latest_met_data_sync(lat_r: float, lon_r: float) -> dict | None:
+    """The last MET response stored for this place, whatever its day or age: MET answers the same for any day."""
+    return (
+        ForecastCell.objects.filter(lat_r=lat_r, lon_r=lon_r, source="met-norway")
+        .order_by("-fetched_at")
+        .values_list("data", flat=True)
+        .first()
+    )
+
+
+async def _met_fallback(lat_r: float, lon_r: float) -> dict | None:
+    """MET Norway's forecast for the cell, or None. Free, so it comes before the paid OWM."""
+    limit = met_limit()
+    if acquire(limit):
+        logger.warning("get_or_fetch_forecast_cell: MET Norway budget reached, no call")
+        return None
+    previous = await sync_to_async(_latest_met_data_sync)(lat_r, lon_r)
+    try:
+        data = await _fetch_met(lat_r, lon_r, (previous or {}).get("_met_last_modified"))
+    except (httpx.HTTPError, KeyError, ValueError) as exc:
+        _throttle_wait(limit, exc)
+        logger.warning(
+            "get_or_fetch_forecast_cell: MET Norway fetch failed for ({}, {}): {}", lat_r, lon_r, _failure(exc)
+        )
+        return None
+    if data is MET_NOT_MODIFIED:
+        return previous
+    return data if _met_timeseries(data) is not None else None
 
 
 async def get_cached_ensemble_cell(
@@ -754,13 +962,15 @@ def extract_sample(cell_data: dict, eta: datetime, source: str | None = None) ->
     Args:
         cell_data: Raw API response dict (Open-Meteo parallel arrays or OWM list of objects).
         eta: The datetime to look up.
-        source: The forecast source (``"open-meteo"`` or ``"openweathermap"``). When provided,
+        source: The forecast source (one of ``FORECAST_SOURCES``). When provided,
             routes directly to the correct parser, avoiding the guesswork that caused the
             OWM parser to receive Open-Meteo dict-style ``hourly`` data. When ``None``,
             falls back to the heuristic (try Open-Meteo first, then OWM).
     """
     if source == "openweathermap":
         return _from_owm(cell_data, eta)
+    if source == "met-norway":
+        return _from_met(cell_data, eta)
     if source == "open-meteo":
         return _from_open_meteo(cell_data, eta)
     # Fallback heuristic (backward compatible)

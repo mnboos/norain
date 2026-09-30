@@ -2456,6 +2456,7 @@
                             "enum": [
                                 "all",
                                 "open-meteo",
+                                "met-norway",
                                 "openweathermap"
                             ],
                             "title": "Source",
@@ -3773,6 +3774,13 @@
                     "source": {
                         "title": "Source",
                         "type": "string"
+                    },
+                    "sources": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Sources",
+                        "type": "array"
                     },
                     "station_corrected": {
                         "default": false,
@@ -7275,6 +7283,7 @@
                         "enum": [
                             "all",
                             "open-meteo",
+                            "met-norway",
                             "openweathermap"
                         ],
                         "title": "Source",
