@@ -38,6 +38,7 @@ export function useSystemLayer(
         getNextPageParam: page => page.nextOffset ?? undefined,
         enabled,
         retry: false,
+        placeholderData: (previousData) => previousData,
     });
     watch(
         [query.hasNextPage, query.isFetching, query.isError, () => toValue(enabled)],
