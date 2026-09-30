@@ -87,3 +87,20 @@ export function systemQueryAffected(topics: readonly string[], queryKey: readonl
             : (TOPIC_PANELS[topic] ?? []).includes(String(panel)),
     );
 }
+
+/** The daily recognition counts (`/api/system/browser/stats`) summed over every day returned. */
+export function browserStatTotals(days: { counts: Record<string, number> }[]): Record<string, number> {
+    const totals: Record<string, number> = {};
+    for (const { counts } of days) {
+        for (const [name, count] of Object.entries(counts)) totals[name] = (totals[name] ?? 0) + count;
+    }
+    return totals;
+}
+
+/** The totals under one prefix (`tier:`, `refused:`), prefix dropped, largest first. */
+export function statsUnder(totals: Record<string, number>, prefix: string): [string, number][] {
+    return Object.entries(totals)
+        .filter(([name]) => name.startsWith(prefix))
+        .map(([name, count]): [string, number] => [name.slice(prefix.length), count])
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}

@@ -14,6 +14,11 @@ export interface FingerprintOptions {
     csrfToken: () => string;
 }
 
+// backend/core/fingerprinting.py ECHO_STEPS
+const ECHO_STEPS = 3;
+// A slow chain never holds the proof up; it is cut off, and the path then reads as unmeasured.
+const ECHO_BUDGET_MS = 2000;
+
 function encode(bytes: ArrayBuffer): string {
     return btoa(String.fromCharCode(...new Uint8Array(bytes)));
 }
@@ -108,18 +113,41 @@ class FingerprintRequestError extends Error {
 /** A client instance deduplicates overlapping requests. Failure never asserts an identity. */
 export function createBrowserFingerprint(options: FingerprintOptions) {
     let pending: Promise<Receipt> | undefined;
-    async function post(path: string, body?: unknown): Promise<unknown> {
+    async function post(path: string, body?: unknown, signal?: AbortSignal): Promise<unknown> {
         const response = await fetch(`${options.baseUrl.replace(/\/$/, "")}/api/fingerprint/${path}`, {
             method: "POST",
             credentials: "include",
             cache: "no-store",
             headers: { "Content-Type": "application/json", "X-CSRFToken": options.csrfToken() },
             body: JSON.stringify(body ?? {}),
-            signal: AbortSignal.timeout(5000),
+            signal: signal ?? AbortSignal.timeout(5000),
         });
         if (!response.ok) throw new FingerprintRequestError(response.status);
         const value: unknown = await response.json();
         return value;
+    }
+    /**
+     * The relay meter's round trips: each step needs the token of the last reply, and the server
+     * times the gaps itself. A failure costs nothing; the path then reads as unmeasured.
+     */
+    async function echoes(challenge: string): Promise<void> {
+        // Aborted at the budget, so no step arrives after the proof and counts as out of order.
+        const budget = new AbortController();
+        const timer = setTimeout(() => {
+            budget.abort();
+        }, ECHO_BUDGET_MS);
+        let token = "";
+        try {
+            for (let step = 1; step <= ECHO_STEPS; step++) {
+                const reply = await post("echo", { challenge, step, token }, budget.signal);
+                if (!record(reply) || typeof reply.token !== "string") return;
+                token = reply.token;
+            }
+        } catch {
+            // Unmeasured, never refused.
+        } finally {
+            clearTimeout(timer);
+        }
     }
     async function identify(): Promise<Receipt> {
         const { pair, persistent } = await browserKey();
@@ -149,7 +177,11 @@ export function createBrowserFingerprint(options: FingerprintOptions) {
             throw new Error("Invalid browser challenge response");
         const challenge = response.challenge;
         // The cost of each new identity; the server chose it and signed it into the challenge.
-        const pow = await solveProofOfWork(powSeed(challenge, payload), response.difficulty);
+        // The relay meter's echoes run beside it, on the idle main thread (the solve is in a worker).
+        const [pow] = await Promise.all([
+            solveProofOfWork(powSeed(challenge, payload), response.difficulty),
+            response.echo === true ? echoes(challenge) : undefined,
+        ]);
         const signature = await crypto.subtle.sign(
             { name: "ECDSA", hash: "SHA-256" },
             pair.privateKey,

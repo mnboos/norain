@@ -16,7 +16,14 @@ import { useSession } from "@/composables/useSession";
 import { useBackendHost } from "@/utils";
 import { intlLocale } from "@/i18n";
 import { jobErrorText } from "@/utils/serverErrors";
-import { CACHE_COLORS, COVERAGE_COLORS, cacheFreshness, coverageLabels } from "@/utils/systemOverview";
+import {
+    CACHE_COLORS,
+    COVERAGE_COLORS,
+    browserStatTotals,
+    cacheFreshness,
+    coverageLabels,
+    statsUnder,
+} from "@/utils/systemOverview";
 import {
     systemKey,
     useSystemSummary,
@@ -26,8 +33,10 @@ import {
     useSystemJobs,
     useSystemEvents,
     useSystemBrowser,
+    useSystemBrowserStats,
 } from "@/queries/system";
 import { recheckRecognition } from "@/services/browserRecognition";
+import { symSharpRefresh } from "@quasar/extras/material-symbols-sharp";
 
 definePage({ meta: { requiresAuth: true, requiresSystem: true, titleKey: "pages.system" } });
 const { t } = useI18n();
@@ -77,10 +86,12 @@ const coverage = useSystemCoverage(selected, allowed);
 const history = useSystemCellHistory(selected, historyOffset, allowed);
 const jobs = useSystemJobs(jobsOffset, allowed);
 const browser = useSystemBrowser(allowed);
+const browserStats = useSystemBrowserStats(allowed);
+const statTotals = computed(() => browserStatTotals(browserStats.data.value?.days ?? []));
 const checkingBrowser = ref(false);
 const { live } = useSystemEvents(allowed);
 const allFeatures = computed(() => [...routes.items.value, ...journeys.items.value, ...cells.items.value]);
-const queries = [summary, routes.query, journeys.query, cells.query, coverage, history, jobs, browser];
+const queries = [summary, routes.query, journeys.query, cells.query, coverage, history, jobs, browser, browserStats];
 const failed = computed(() => queries.some(query => query.isError.value));
 const refreshing = computed(() => queries.some(query => query.isFetching.value));
 const mapLoading = computed(
@@ -167,33 +178,40 @@ function choose(feature: SystemFeature) {
 }
 watch(allFeatures, items => {
     const current = selected.value;
-    if (!current) return;
+    if (!current) {
+        return;
+    }
     const updated = items.find(
         item =>
             item.kind === current.kind &&
             (isCell.value ? item.lat === current.lat && item.lon === current.lon : item.id === current.id),
     );
-    if (updated) selected.value = updated;
+    if (updated) {
+        selected.value = updated;
+    }
 });
 async function refresh() {
     mapError.value = "";
     await refreshSession();
-    if (allowed.value) await queryClient.invalidateQueries({ queryKey: systemKey });
+    if (allowed.value) {
+      // await queryClient.refetchQueries({ queryKey: systemKey })
+        await queryClient.invalidateQueries({ queryKey: systemKey });
+    }
 }
-watch(failed, () => {
+watch(failed, async () => {
     if (
         queries.some(
             query =>
                 query.error.value instanceof ResponseError && [401, 403].includes(query.error.value.response.status),
         )
     )
-        void refreshSession();
+        await refreshSession();
 });
 watch([showRoutes, showJourneys, showCells, kind, source, day, active, profile, alternatives], () => {
     selected.value = null;
 });
-onBeforeUnmount(() => {
-    void queryClient.cancelQueries({ queryKey: systemKey });
+onBeforeUnmount(async () => {
+    await queryClient.cancelQueries({ queryKey: systemKey });
     queryClient.removeQueries({ queryKey: systemKey });
 });
 </script>
@@ -205,7 +223,14 @@ onBeforeUnmount(() => {
                 <h1 class="text-h5 q-my-none">{{ t("pages.system") }}</h1>
                 <div class="text-caption">{{ t("system.subtitle") }}</div>
             </div>
-            <q-btn outline no-caps :label="t('system.refresh')" :loading="refreshing" @click="refresh" />
+            <q-btn
+                outline
+                :icon="symSharpRefresh"
+                no-caps
+                :label="t('system.refresh')"
+                :disable="refreshing"
+                @click="refresh"
+            />
         </div>
         <q-banner v-if="!allowed" rounded class="bg-amber-2 text-dark">
             {{ t("system.needAdmin") }}
@@ -224,11 +249,7 @@ onBeforeUnmount(() => {
         </q-banner>
         <template v-else>
             <q-banner v-if="failed || mapError" rounded class="bg-amber-2 text-dark q-mb-sm" role="alert">
-                {{
-                    failed
-                        ? t("system.partialFailure")
-                        : mapError
-                }}
+                {{ failed ? t("system.partialFailure") : mapError }}
                 <template #action><q-btn flat no-caps :label="t('common.retry')" @click="refresh" /></template>
             </q-banner>
             <div class="text-caption q-mb-sm">
@@ -366,7 +387,14 @@ onBeforeUnmount(() => {
                                 <h2 class="text-subtitle1 col q-my-none">
                                     {{ selected ? (isCell ? t("system.cell") : selected.name) : t("system.selection") }}
                                 </h2>
-                                <q-btn v-if="selected" flat dense :label="t('common.close')" no-caps @click="selected = null" />
+                                <q-btn
+                                    v-if="selected"
+                                    flat
+                                    dense
+                                    :label="t('common.close')"
+                                    no-caps
+                                    @click="selected = null"
+                                />
                             </div>
                             <p v-if="!selected" class="text-caption q-mb-none">
                                 {{ t("system.selectionHint") }}
@@ -377,7 +405,12 @@ onBeforeUnmount(() => {
                                     {{ selected.source }}
                                 </div>
                                 <div class="text-caption">
-                                    {{ t("system.fetched", { time: dateTime(selected.fetchedAt), age: age(selected.fetchedAt) }) }}
+                                    {{
+                                        t("system.fetched", {
+                                            time: dateTime(selected.fetchedAt),
+                                            age: age(selected.fetchedAt),
+                                        })
+                                    }}
                                 </div>
                                 <div class="text-caption">
                                     {{ t("system.horizon", { days: selected.forecastDays }) }}
@@ -395,7 +428,11 @@ onBeforeUnmount(() => {
                                                 {{ dateTime(record.fetchedAt) }} ·
                                                 {{ t("system.days", { n: record.forecastDays }) }}
                                                 <br />
-                                                {{ t("system.cacheDay", { day: record.dayKey?.toISOString().slice(0, 10) }) }}
+                                                {{
+                                                    t("system.cacheDay", {
+                                                        day: record.dayKey?.toISOString().slice(0, 10),
+                                                    })
+                                                }}
                                             </q-item-label>
                                         </q-item-section>
                                         <q-item-section side>
@@ -446,7 +483,11 @@ onBeforeUnmount(() => {
                                         }}
                                     </div>
                                     <div class="text-caption">
-                                        {{ t("system.geometry", { time: dateTime(coverage.data.value.geometryFetchedAt) }) }}
+                                        {{
+                                            t("system.geometry", {
+                                                time: dateTime(coverage.data.value.geometryFetchedAt),
+                                            })
+                                        }}
                                     </div>
                                     <div class="text-caption">
                                         {{ t("system.departure", { time: dateTime(coverage.data.value.departure) }) }}
@@ -500,11 +541,7 @@ onBeforeUnmount(() => {
                             </template>
                         </q-card-section>
                     </q-card>
-                    <q-expansion-item
-                        :label="t('system.cacheTotal')"
-                        default-opened
-                        class="bordered-panel q-mb-sm"
-                    >
+                    <q-expansion-item :label="t('system.cacheTotal')" default-opened class="bordered-panel q-mb-sm">
                         <div class="q-pa-sm">
                             <div v-if="!summary.data.value?.caches.length" class="text-caption">
                                 {{ t("system.noCells") }}
@@ -572,7 +609,9 @@ onBeforeUnmount(() => {
                                 :disable="!jobsOffset"
                                 @click="jobsOffset = Math.max(0, jobsOffset - 25)"
                             />
-                            <span class="text-caption">{{ t("system.jobs.count", { n: jobs.data.value?.total ?? 0 }) }}</span>
+                            <span class="text-caption">
+                                {{ t("system.jobs.count", { n: jobs.data.value?.total ?? 0 }) }}
+                            </span>
                             <q-btn
                                 flat
                                 dense
@@ -613,6 +652,7 @@ onBeforeUnmount(() => {
                                     {{
                                         t("system.browser.continuity", {
                                             persistent: browser.data.value.assessment.persistent ? "✓" : "✗",
+                                            established: browser.data.value.assessment.established ? "✓" : "✗",
                                             continuity: browser.data.value.assessment.continuity ? "✓" : "✗",
                                             similarity: browser.data.value.assessment.similarity ?? "–",
                                         })
@@ -621,6 +661,15 @@ onBeforeUnmount(() => {
                                 <div class="text-caption">
                                     {{ t("system.browser.keys") }}:
                                     {{ browser.data.value.assessment.keys.join(" · ") || "–" }}
+                                </div>
+                                <div v-if="browser.data.value.assessment.path" class="text-caption">
+                                    {{
+                                        t("system.browser.path", {
+                                            path: browser.data.value.assessment.path,
+                                            transport: browser.data.value.assessment.pathTransport ?? "–",
+                                            excess: browser.data.value.assessment.pathExcess ?? "–",
+                                        })
+                                    }}
                                 </div>
                                 <div class="text-caption">
                                     {{ t("system.browser.components") }}:
@@ -647,6 +696,65 @@ onBeforeUnmount(() => {
                                 :disable="browser.data.value?.enabled === false"
                                 @click="checkBrowser"
                             />
+                        </div>
+                    </q-expansion-item>
+                    <q-expansion-item :label="t('system.browser.stats.title')" class="bordered-panel">
+                        <div class="q-pa-sm text-caption">{{ t("system.browser.stats.hint") }}</div>
+                        <div v-if="browserStats.data.value" class="q-pa-sm text-caption">
+                            <div class="text-weight-medium">{{ t("system.browser.stats.observed") }}</div>
+                            <div v-for="name in browserStats.data.value.observed" :key="name">
+                                {{
+                                    t("system.browser.stats.observedRow", {
+                                        name,
+                                        total: statTotals[`ind:${name}`] ?? 0,
+                                        solo: statTotals[`solo:${name}`] ?? 0,
+                                    })
+                                }}
+                            </div>
+                            <div v-if="!browserStats.data.value.observed.length">–</div>
+                            <div class="q-mt-sm">
+                                {{ t("system.browser.stats.tiers") }}:
+                                {{
+                                    statsUnder(statTotals, "tier:")
+                                        .map(([name, count]) => `${name} ${count}`)
+                                        .join(" · ") || "–"
+                                }}
+                            </div>
+                            <div>
+                                {{ t("system.browser.stats.refused") }}:
+                                {{
+                                    statsUnder(statTotals, "refused:")
+                                        .map(([name, count]) => `${name} ${count}`)
+                                        .join(" · ") || "–"
+                                }}
+                            </div>
+                            <div>
+                                {{ t("system.browser.stats.pow") }}:
+                                {{
+                                    statsUnder(statTotals, "pow:")
+                                        .map(([bits, count]) => `${bits}: ${count}`)
+                                        .join(" · ") || "–"
+                                }}
+                            </div>
+                            <div>
+                                {{ t("system.browser.stats.paths") }}:
+                                {{
+                                    statsUnder(statTotals, "path:")
+                                        .map(([name, count]) => `${name} ${count}`)
+                                        .join(" · ") || "–"
+                                }}
+                            </div>
+                            <div v-for="transport in ['tcp', 'quic']" :key="transport">
+                                {{ t("system.browser.stats.excess", { transport }) }}:
+                                {{
+                                    statsUnder(statTotals, `excess:${transport}:`)
+                                        .map(([bucket, count]) => `${bucket}: ${count}`)
+                                        .join(" · ") || "–"
+                                }}
+                            </div>
+                            <div v-if="statTotals.ip_class_e" class="text-negative">
+                                {{ t("system.browser.stats.classE", { n: statTotals.ip_class_e }) }}
+                            </div>
                         </div>
                     </q-expansion-item>
                 </aside>

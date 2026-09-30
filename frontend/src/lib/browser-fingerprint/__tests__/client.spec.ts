@@ -74,6 +74,38 @@ describe("browser proof transport", () => {
         expect(valid).toBe(true);
     });
 
+    it("runs the relay meter's echo chain, token by token, before the proof", async () => {
+        const fetcher = vi
+            .fn<typeof fetch>()
+            .mockResolvedValueOnce(Response.json({ challenge: "c", difficulty: 0, echo: true }))
+            .mockResolvedValueOnce(Response.json({ token: "one" }))
+            .mockResolvedValueOnce(Response.json({ token: "two" }))
+            .mockResolvedValueOnce(Response.json({ token: "three" }))
+            .mockResolvedValueOnce(Response.json({ expiresIn: 900 }));
+        stubBrowser(fetcher);
+        await createBrowserFingerprint({ baseUrl: "", csrfToken: () => "csrf" }).identify();
+        const paths = fetcher.mock.calls.map(([url]) => (typeof url === "string" ? url.split("/").pop() : null));
+        expect(paths).toEqual(["challenge", "echo", "echo", "echo", "verify"]);
+        expect([1, 2, 3].map(call => [sentBody(fetcher, call).step, sentBody(fetcher, call).token])).toEqual([
+            ["1", ""],
+            ["2", "one"],
+            ["3", "two"],
+        ]);
+    });
+
+    it("never lets a failed echo hold up or refuse the proof", async () => {
+        const fetcher = vi
+            .fn<typeof fetch>()
+            .mockResolvedValueOnce(Response.json({ challenge: "c", difficulty: 0, echo: true }))
+            .mockResolvedValueOnce(Response.json({ detail: "no" }, { status: 400 }))
+            .mockResolvedValueOnce(Response.json({ expiresIn: 900 }));
+        stubBrowser(fetcher);
+        expect(await createBrowserFingerprint({ baseUrl: "", csrfToken: () => "csrf" }).identify()).toEqual({
+            expiresIn: 900,
+        });
+        expect(fetcher).toHaveBeenCalledTimes(3);
+    });
+
     it("does not retry rate limits or accept a malformed challenge or receipt", async () => {
         const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({}, { status: 429 }));
         stubBrowser(fetcher);

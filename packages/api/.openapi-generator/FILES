@@ -21,6 +21,8 @@ models/CoverageAreaOut.ts
 models/CoverageOut.ts
 models/DepartureCandidate.ts
 models/DepartureComparison.ts
+models/EchoIn.ts
+models/EchoOut.ts
 models/ElevationIn.ts
 models/ElevationOut.ts
 models/ElevationPoint.ts
@@ -76,6 +78,8 @@ models/SubscribeIn.ts
 models/SubscribeOut.ts
 models/SystemBrowser.ts
 models/SystemBrowserAssessment.ts
+models/SystemBrowserStats.ts
+models/SystemBrowserStatsDay.ts
 models/SystemCacheCount.ts
 models/SystemCoverage.ts
 models/SystemCoveragePoint.ts

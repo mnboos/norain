@@ -144,6 +144,8 @@ class SystemBrowserAssessment(CamelSchema):
     tier: Literal["high", "low", "suspicious"]
     indicators: list[str]
     persistent: bool
+    # Old enough (BROWSER_KEY_AGE) to claim on its own; a young key also pays its IP's count.
+    established: bool
     continuity: bool
     similarity: float | None
     # Short prefixes only: enough to see a key or fingerprint stay the same across checks.
@@ -153,6 +155,11 @@ class SystemBrowserAssessment(CamelSchema):
     components: dict[str, str]
     # The claim keys this browser holds on this network: a new private tab keeps its ``p:`` key.
     keys: list[str]
+    # The relay meter's verdict for this browser's own path, to calibrate it on one's own devices.
+    path: str | None = None
+    path_transport: str | None = None
+    # The excess round trip over Cloudflare's edge, in 10 ms buckets.
+    path_excess: int | None = None
 
 
 class SystemBrowser(CamelSchema):
@@ -172,17 +179,44 @@ def browser(request):
             "tier": assessment["tier"],
             "indicators": assessment["indicators"],
             "persistent": assessment["persistent"],
+            "established": fingerprinting.is_established(assessment),
             "continuity": assessment["continuity"],
             "similarity": assessment["similarity"],
             "browser_id": assessment["browserId"][:8],
             "fingerprint_id": (assessment["fingerprintId"] or "")[:8] or None,
             "components": {name: value[:8] for name, value in assessment.get("components", {}).items()},
             "keys": [f"{key[:2]}{key[2:10]}" for key in keys],
+            "path": assessment.get("path"),
+            "path_transport": assessment.get("pathTransport"),
+            "path_excess": assessment.get("pathExcess"),
         }
     return {
         "enabled": settings.BROWSER_FINGERPRINT_ENABLED,
         "pow_bits": fingerprinting.pow_bits(client_ip(request)),
         "assessment": assessment,
+    }
+
+
+class SystemBrowserStatsDay(CamelSchema):
+    day: date
+    # "tier:…", "ind:…", "solo:…" (an observed lie that fired alone), "refused:…", "pow:…", "ip_class_e".
+    counts: dict[str, int]
+
+
+class SystemBrowserStats(CamelSchema):
+    # The lie checks that still only observe; each is enforced once its solo count stayed at 0.
+    observed: list[str]
+    days: list[SystemBrowserStatsDay]
+
+
+@router.get("/browser/stats", response=SystemBrowserStats)
+def browser_stats(request):
+    """Recognition counts per UTC day, newest first: counts only, never a browser, key or value."""
+    return {
+        "observed": sorted(settings.BROWSER_OBSERVE_ONLY),
+        "days": [
+            {"day": date.fromisoformat(day), "counts": counts} for day, counts in fingerprinting.read_stats().items()
+        ],
     }
 
 

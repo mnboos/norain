@@ -1026,12 +1026,14 @@ async def _refresh_upcoming_forecasts_async() -> dict:
     stations_purged = await sync_to_async(purge_station_data)()
     signups_purged = await sync_to_async(_purge_abandoned_signups)()
     coverage_purged = await sync_to_async(coverage.purge_unconfirmed)()
+    # Once per UTC day; every other pass returns at once.
+    votes_settled = await sync_to_async(coverage.settle_votes)()
 
     logger.info(
         f"refresh_upcoming_forecasts: {scanned} route scans enqueued, {prebuilds} pre-builds enqueued, "
         f"{purged} stripe events purged, {jobs_purged} forecast jobs purged, "
         f"{stations_purged} station rows purged, {signups_purged} abandoned sign-ups purged, "
-        f"{coverage_purged} unconfirmed coverage addresses purged"
+        f"{coverage_purged} unconfirmed coverage addresses purged, {votes_settled} withdrawn votes settled"
     )
     return {
         "routes": scanned,
@@ -1041,6 +1043,7 @@ async def _refresh_upcoming_forecasts_async() -> dict:
         "station_rows_purged": stations_purged,
         "signups_purged": signups_purged,
         "coverage_subscriptions_purged": coverage_purged,
+        "coverage_votes_settled": votes_settled,
     }
 
 

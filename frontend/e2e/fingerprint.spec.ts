@@ -16,6 +16,11 @@ const LIES = [
     "invalid_worker",
     "invalid_iframe",
     "invalid_integrity",
+    "client_hints_grease_mismatch",
+    "fetch_metadata_mismatch",
+    "graphics_platform_mismatch",
+    "realm_tampered",
+    "native_stack_tampered",
 ];
 
 interface Assessment {
@@ -49,6 +54,15 @@ function toAssessment(value: unknown): Assessment {
         similarity: typeof record.similarity === "number" ? record.similarity : null,
         indicators: indicators.filter((item): item is string => typeof item === "string"),
     };
+}
+
+/**
+ * Headers the browser's network stack sets itself (Sec-Fetch-*, Sec-CH-UA), as a forger would
+ * send them: neither the page nor route.continue may change them, so the fixture server swaps
+ * them in (scripts/fingerprint-test-server.py).
+ */
+function forged(headers: Record<string, string>): Record<string, string> {
+    return { "x-test-headers": JSON.stringify(headers) };
 }
 
 async function setup(page: Page) {
@@ -96,7 +110,7 @@ test("an honest browser shows no lie and every check runs", async ({ page }, tes
         result = await identify(page);
         for (const lie of LIES) expect(result.indicators).not.toContain(lie);
     }
-    for (const check of ["iframe", "integrity", "canvasIntegrity", "engine", "worker", "navigator"]) {
+    for (const check of ["iframe", "integrity", "canvasIntegrity", "engine", "worker", "navigator", "automation"]) {
         expect(result.indicators).not.toContain(`${check}_unavailable`);
         expect(result.indicators).not.toContain(`${check}_timeout`);
     }
@@ -170,8 +184,67 @@ test("a patched native method is a lie, even with a patched toString", async ({ 
     expect(result.indicators).toContain("native_tampered");
     expect(result.indicators).toContain("worker_mismatch");
     expect(result.indicators).toContain("iframe_mismatch");
+    // Called on the wrong object, the replacement answers where the browser's own getter refuses.
+    expect(result.indicators).toContain("realm_tampered");
     expect(result.tier).toBe("suspicious");
     expect(result.fingerprintId).toBeNull();
+});
+
+test("a wrapper that forwards to the native getter shows in the stack", async ({ page }) => {
+    await setup(page);
+    await page.evaluate(() => {
+        const native = Object.getOwnPropertyDescriptor(Navigator.prototype, "platform");
+        const original: unknown = Reflect.get(native ?? {}, "get");
+        if (typeof original !== "function") return;
+        Object.defineProperty(Navigator.prototype, "platform", {
+            get(this: unknown): unknown {
+                return Reflect.apply(original, this, []);
+            },
+            configurable: true,
+            enumerable: true,
+        });
+    });
+    const result = await identify(page);
+    // Same answer, same refusal: only its own frame in the stack gives the wrapper away.
+    expect(result.indicators).not.toContain("realm_tampered");
+    expect(result.indicators).toContain("native_stack_tampered");
+});
+
+test("a frame that is not the page's own is caught", async ({ page }) => {
+    await setup(page);
+    await page.evaluate(() => {
+        // A hooked contentWindow handing back a realm the spoofer prepared (here: the page itself).
+        Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", {
+            get: () => window,
+            configurable: true,
+        });
+    });
+    const result = await identify(page);
+    // The indicator is the finding: a driven test browser is suspicious for automation anyway.
+    expect(result.indicators).toContain("realm_tampered");
+});
+
+test("request headers a JSON fetch cannot carry are a lie", async ({ page }) => {
+    await setup(page);
+    await page.route("**/api/fingerprint/verify", route =>
+        route.continue({ headers: { ...route.request().headers(), ...forged({ "sec-fetch-mode": "navigate" }) } }),
+    );
+    const result = await identify(page);
+    expect(result.indicators).toContain("fetch_metadata_mismatch");
+});
+
+test("a client-hints brand from another Chromium version is a lie", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "Only Chromium sends client hints");
+    await setup(page);
+    await page.route("**/api/fingerprint/verify", route => {
+        const headers = route.request().headers();
+        // Chromium derives the made-up brand from its major; an edited template keeps the old one.
+        const major = /"Chromium";v="(\d+)"/.exec(headers["sec-ch-ua"] ?? "")?.[1] ?? "130";
+        const stale = Number(major) % 3 === 0 ? '"Not?A_Brand";v="99"' : '"Not_A Brand";v="8"';
+        return route.continue({ headers: { ...headers, ...forged({ "sec-ch-ua": `"Chromium";v="${major}", ${stale}` }) } });
+    });
+    const result = await identify(page);
+    expect(result.indicators).toContain("client_hints_grease_mismatch");
 });
 
 test("a navigator override is caught three ways", async ({ page }) => {

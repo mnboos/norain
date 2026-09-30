@@ -828,11 +828,24 @@
             "none": "No valid check for this browser. A check is valid for 15 minutes.",
             "indicators": "Indicators",
             "ids": "Key {browser}… · fingerprint {fingerprint}",
-            "continuity": "Persistent key {persistent} · same key as before {continuity} · similarity {similarity}",
+            "continuity": "Persistent key {persistent} · old enough to claim on its own {established} · same key as before {continuity} · similarity {similarity}",
             "pow": "Proof of work for this address: {bits} bits",
             "check": "Check this browser",
             "keys": "Claim keys (b: key, f: fingerprint, p: coarse print on this network)",
-            "components": "Probe values"
+            "path": "Path (relay meter): {path} over {transport}, excess {excess} ms",
+            "components": "Probe values",
+            "stats": {
+                "title": "Browser recognition, 14 days",
+                "hint": "Counts only, never a browser. A new check observes first; it is enforced only once it never fired on its own for 14 days.",
+                "observed": "Observed checks (fired / of those alone)",
+                "observedRow": "{name}: {total} / {solo}",
+                "tiers": "Tiers",
+                "refused": "Refused proofs",
+                "pow": "Proof-of-work levels issued (bits: count)",
+                "classE": "{n} requests from a class E address: Cloudflare's Pseudo IPv4 overwrites the headers, so the IPv6 limits do not work.",
+                "paths": "Paths (relay meter)",
+                "excess": "Excess over {transport} (ms: count)"
+            }
         }
     },
     "freshness": {
@@ -1056,6 +1069,7 @@
         "planned": "In the works",
         "wish": "Wish for an area",
         "wishHint": "Pick a country or region. The votes help us decide where to go next.",
+        "countedDaily": "Votes are counted once a day. Anonymous votes are checked then; signed in, yours is sure to count.",
         "pick": "Country or region",
         "noMatch": "Nothing found.",
         "notifyMe": "Email me as soon as it's ready",
@@ -1065,7 +1079,7 @@
         "submit": "Vote",
         "notifySubmit": "Notify me",
         "alreadyVoted": "You've already voted for it.",
-        "voted": "Thanks! Your vote for {area} is counted.",
+        "voted": "Thanks! Your vote for {area} is saved.",
         "notifyPending": "Thanks! Please confirm the notification with the link we sent to {email}.",
         "notifyConfirmed": "Thanks! We'll email you once Meteolane covers {area}.",
         "voteFailed": "The vote could not be saved.",

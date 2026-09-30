@@ -19,6 +19,11 @@ import {
     SystemBrowserToJSON,
 } from '../models/SystemBrowser';
 import {
+    type SystemBrowserStats,
+    SystemBrowserStatsFromJSON,
+    SystemBrowserStatsToJSON,
+} from '../models/SystemBrowserStats';
+import {
     type SystemCoverage,
     SystemCoverageFromJSON,
     SystemCoverageToJSON,
@@ -168,6 +173,45 @@ export class SystemApi extends runtime.BaseAPI {
      */
     async coreApiSystemBrowser(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SystemBrowser> {
         const response = await this.coreApiSystemBrowserRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for coreApiSystemBrowserStats without sending the request
+     */
+    async coreApiSystemBrowserStatsRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/api/system/browser/stats`;
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Recognition counts per UTC day, newest first: counts only, never a browser, key or value.
+     * Browser Stats
+     */
+    async coreApiSystemBrowserStatsRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<SystemBrowserStats>> {
+        const requestOptions = await this.coreApiSystemBrowserStatsRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => SystemBrowserStatsFromJSON(jsonValue));
+    }
+
+    /**
+     * Recognition counts per UTC day, newest first: counts only, never a browser, key or value.
+     * Browser Stats
+     */
+    async coreApiSystemBrowserStats(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SystemBrowserStats> {
+        const response = await this.coreApiSystemBrowserStatsRaw(initOverrides);
         return await response.value();
     }
 

@@ -828,11 +828,24 @@
             "none": "Keine gültige Prüfung für diesen Browser. Eine Prüfung gilt 15 Minuten.",
             "indicators": "Hinweise",
             "ids": "Schlüssel {browser}… · Fingerabdruck {fingerprint}",
-            "continuity": "Dauerhafter Schlüssel {persistent} · gleicher Schlüssel wie zuvor {continuity} · Ähnlichkeit {similarity}",
+            "continuity": "Dauerhafter Schlüssel {persistent} · alt genug für eigene Ansprüche {established} · gleicher Schlüssel wie zuvor {continuity} · Ähnlichkeit {similarity}",
             "pow": "Proof-of-Work für diese Adresse: {bits} Bit",
             "check": "Diesen Browser prüfen",
             "keys": "Anspruchsschlüssel (b: Schlüssel, f: Fingerabdruck, p: grober Abdruck in diesem Netz)",
-            "components": "Messwerte"
+            "path": "Weg (Relay-Messung): {path} über {transport}, Umweg {excess} ms",
+            "components": "Messwerte",
+            "stats": {
+                "title": "Browser-Erkennung, 14 Tage",
+                "hint": "Nur Zählungen, nie ein Browser. Eine neue Prüfung beobachtet zuerst; scharf wird sie erst, wenn sie 14 Tage lang nie allein angeschlagen hat.",
+                "observed": "Beobachtete Prüfungen (angeschlagen / davon allein)",
+                "observedRow": "{name}: {total} / {solo}",
+                "tiers": "Stufen",
+                "refused": "Abgelehnte Beweise",
+                "pow": "Ausgegebene Proof-of-Work-Stufen (Bit: Anzahl)",
+                "classE": "{n} Anfragen mit einer Class-E-Adresse: In Cloudflare überschreibt Pseudo IPv4 die Header, die IPv6-Grenzen greifen so nicht.",
+                "paths": "Wege (Relay-Messung)",
+                "excess": "Umweg über {transport} (ms: Anzahl)"
+            }
         }
     },
     "freshness": {
@@ -1056,6 +1069,7 @@
         "planned": "In Arbeit",
         "wish": "Wünsch dir ein Gebiet",
         "wishHint": "Wähle ein Land oder eine Region. Die Stimmen helfen uns zu entscheiden, wo es als Nächstes weitergeht.",
+        "countedDaily": "Stimmen werden einmal am Tag gezählt. Anonyme Stimmen prüfen wir dabei; angemeldet zählt deine sicher.",
         "pick": "Land oder Region",
         "noMatch": "Nichts gefunden.",
         "notifyMe": "Benachrichtige mich per E-Mail, sobald es so weit ist",
@@ -1065,7 +1079,7 @@
         "submit": "Abstimmen",
         "notifySubmit": "Benachrichtigen",
         "alreadyVoted": "Du hast schon dafür gestimmt.",
-        "voted": "Danke! Deine Stimme für {area} ist gezählt.",
+        "voted": "Danke! Deine Stimme für {area} ist gespeichert.",
         "notifyPending": "Danke! Bitte bestätige die Benachrichtigung über den Link, den wir an {email} geschickt haben.",
         "notifyConfirmed": "Danke! Wir schreiben dir, sobald Meteolane {area} abdeckt.",
         "voteFailed": "Die Stimme konnte nicht gespeichert werden.",

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { cacheFreshness, systemGeoJson, coverageGeoJson, systemQueryAffected, SYSTEM_TOPICS } from "../systemOverview";
+import {
+    browserStatTotals,
+    cacheFreshness,
+    systemGeoJson,
+    coverageGeoJson,
+    statsUnder,
+    systemQueryAffected,
+    SYSTEM_TOPICS,
+} from "../systemOverview";
 import { SystemCoveragePointForecastEnum, SystemCoveragePointEnsembleEnum } from "@norain/api/models";
 
 describe("system overview", () => {
@@ -77,5 +85,20 @@ describe("system change notices", () => {
         expect(systemQueryAffected(["journeys"], ["system", "coverage", "stage", "x"])).toBe(true);
         expect(systemQueryAffected(["routes", "journeys"], map("journeys"))).toBe(true);
         expect(systemQueryAffected([...SYSTEM_TOPICS], ["routes", "list"])).toBe(false);
+    });
+});
+
+describe("browser recognition stats", () => {
+    it("sums the days and reads one group at a time", () => {
+        const totals = browserStatTotals([
+            { counts: { "tier:high": 3, "solo:realm_tampered": 1, "refused:pow": 2 } },
+            { counts: { "tier:high": 1, "tier:low": 2 } },
+        ]);
+        expect(totals).toEqual({ "tier:high": 4, "tier:low": 2, "solo:realm_tampered": 1, "refused:pow": 2 });
+        expect(statsUnder(totals, "tier:")).toEqual([
+            ["high", 4],
+            ["low", 2],
+        ]);
+        expect(statsUnder(totals, "ind:")).toEqual([]);
     });
 });

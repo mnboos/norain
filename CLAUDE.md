@@ -890,9 +890,19 @@ Rules that hold this together:
 - **Votes are one per voter and area, and store no IP.** An account votes as `user:<id>`, a
   visitor as `anon:` + a hash of the random token in the httpOnly `meteolane_voter` cookie.
   Against cookie clearing, the IP counts in the cache only (30 votes an hour, one anonymous vote
-  per area a day, released when withdrawn). Both fail open, like the other per-minute limits.
-  On top of that, a recognised browser votes once per area for 30 days, and unrecognised or
-  suspicious ones share 3 votes per IP a day (see "Browser recognition").
+  per area a day, released when a withdrawal is settled). Both fail open, like the other per-minute limits.
+  On top of that, a recognised browser votes once per area for 30 days, and unrecognised,
+  keyless, suspicious or young-key ones share 3 votes per IP a day (see "Browser recognition").
+  An IPv6 address counts by its /56.
+- **The ledger is blind** (`COVERAGE_BLIND_LEDGER`). A vote the limits refused is stored
+  anyway (`CoverageVote.accepted=False`) and shown to its voter as cast; a withdrawal only
+  sets `withdrawn_at`. The daily `coverage.settle_votes` (in the hourly pass, once per UTC day)
+  deletes withdrawn rows, releases their claims and publishes the tallies; without them in the
+  cache, only votes from before the day began show. So no reply says whether a vote counted:
+  don't add a count, a reason or a status that does. Only the per-IP flood limit answers 429.
+  The page tells every voter the same: votes are counted once a day. A refused vote cast again
+  is not tried again (a flip would give it away); signing in is the way to a vote that counts.
+  With `COVERAGE_TALLY_STEP` at 1, a quiet area's next-day change still shows a single vote.
 - **Double opt-in.** Anyone can type anyone's address, so nothing but the confirmation goes to
   it until its link was used; the reply is `pending` whether the address was new, pending or
   confirmed, and a confirmation is sent at most once per `RESEND_AFTER`. Only a signed-in
@@ -924,12 +934,34 @@ protocol and tables are in `docs/reference/browser-fingerprinting.md`. Rules tha
   page's getters), the engine's own error wording and the request's `Sec-CH-UA*` headers.
   Scripted forgery can only be made expensive and stays bounded by the per-IP limits, which
   all remain. Say so; do not claim more.
+- **Never shed keys.** Fewer claim keys mean looser limits, so nothing a browser can trigger
+  at will may leave it with fewer: a `suspicious` browser keeps its own `b:` key and pays the
+  IP's shared count on top (never its `f:` or `p:`: those come from values that lied); every
+  `low` browser gets a `p:` key; a browser without keys pays the IP's count. A new rule that
+  demotes a browser must keep this true.
+- **New lie checks start in observe mode** (`BROWSER_OBSERVE_ONLY`): named and counted, but
+  tier-neutral until their *solo* count (fired with no enforced lie or automation) stayed at 0
+  for 14 days and a real-device matrix was clean. That gate is for lies; the observed `low`
+  ones (`fetch_metadata_missing`, `fingerprint_common`) fire on honest browsers by design and
+  are enforced from their counts by judgement, since enforcing them only trades `f:` for `p:`. Add every new `suspicious` indicator there first,
+  with a Playwright case showing honest Chromium, Firefox, WebKit and Firefox-RFP don't trip it.
+- **Time is a cost too.** A key younger than `BROWSER_KEY_AGE` (20 h, from `browser:seen:…`) is
+  not `established` and pays the IP's count for votes on top of its own keys (sign-ups too with
+  `BROWSER_KEY_AGE_SIGNUPS`). Per-IP counts take an IPv6 address by its /56 (`ip_floor`), which
+  needs Cloudflare's Pseudo IPv4 not to overwrite headers (the stats count class E addresses).
+- **The relay meter observes only** (`BROWSER_PATH_METER`): three server-timed echo round
+  trips against Cloudflare's own edge round trip (a Transform Rule's `X-Ml-Edge`, which Caddy
+  strips from anything not from Cloudflare). It never changes a tier or a limit; enforcing it
+  is a separate change behind the PoC gates in the reference doc, and must fail open.
 - **Nothing diagnostic goes to the client.** `verify` answers `{expiresIn}` only; the
   assessment sits in the cache behind a random receipt id in an HttpOnly cookie. Read it
   with `get_browser_assessment(request)`. Never add tier or indicators to a reply or a
   readable cookie: they tell a forger which check to fix. The one exception is
   `GET /api/system/browser` (the "Browser-Erkennung" panel on `/system`): behind
   `has_system_access`, and only the requesting browser's own result, with id prefixes only.
+  `GET /api/system/browser/stats` (same access) serves daily counts under fixed names, never
+  a browser, key or value. The sign-up limit is the same per key and per IP, so the number of
+  accepted requests does not reveal the tier either.
 - **Tiers.** `suspicious`: a lie (or automation). `low`: honest but shared by many devices
   or degraded (iOS, canvas noise, a canvas-only iframe difference, software rendering,
   missing client hints, ephemeral key, unavailable checks). `high`: the rest. **A `low` browser never deduplicates on its
@@ -941,13 +973,20 @@ protocol and tables are in `docs/reference/browser-fingerprinting.md`. Rules tha
 - **Claims stack on the IP limits and are recorded per voter**, so a withdrawal releases
   exactly what was claimed. The device claim runs before the IP claim and is released when
   the IP claim refuses.
-- **Protected browsers claim per network too.** A `low` browser that randomises on purpose or
-  cannot keep its key (`fingerprinting.PROTECTED`: Safari's private tabs, each with its own
-  storage and per-tab noise) gets a `coarsePrint`, and `device_keys(assessment, ip)` adds a
-  `p:` key = coarse print + IP (IPv6 /64) + UTC day. A new private tab is not a new device;
-  look-alikes behind one CGNAT share it for a day, never stricter than the per-IP fallback.
-  Pass the IP wherever `device_keys` is called. Canvas and audio noise are found by known
-  answers (`canvasIntegrity`, `audioIsExact`); `repeated` cannot see a noise salted per tab.
+- **Every `low` browser claims per network too.** It gets a `coarsePrint` (what renderer
+  noise leaves alone, plus the user agent; the user agent alone when nothing else was read),
+  and `device_keys(assessment, ip)` adds a `p:` key = coarse print + IP (IPv6 /64) + UTC day.
+  A new Safari private tab (own storage, per-tab noise) is not a new device; look-alikes
+  behind one CGNAT share it for a day, never stricter than the per-IP fallback. A `high`
+  fingerprint shared too widely (`note_fingerprint`: 3 networks, or 5 new keys an hour) turns
+  `fingerprint_common`; once that is enforced, it trades `f:` for this `p:`. Pass the IP wherever `device_keys` is
+  called. Canvas and audio noise are found by known answers (`canvasIntegrity`,
+  `audioIsExact`); `repeated` cannot see a noise salted per tab.
+- **Tamper checks compare with the clean frame, not with wording.** A native called on the
+  wrong object throws; only whether it threw and the error's kind count (V8 words Intl's
+  refusal per realm). The stack check needs a *method* as marker that does not call in tail
+  position: Safari's proper tail calls drop such frames, and JavaScriptCore leaves arrows under
+  computed keys unnamed. Only Playwright in all three engines shows whether a check is honest.
 - **Collect on demand only.** The SPA calls `prewarmRecognition()` where a vote or sign-up
   may follow and `ensureRecognized()` (waits ≤ 6 s, never rejects) before the request;
   there is no background collection on other pages.

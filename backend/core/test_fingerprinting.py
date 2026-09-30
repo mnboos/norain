@@ -23,6 +23,7 @@ from redis.exceptions import RedisError
 from . import coverage
 from . import fingerprinting as fp
 from .auth import device_throttle
+from .models import CoverageVote
 
 LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 CHROME_UA = (
@@ -41,6 +42,10 @@ CHROME_HEADERS = {
     "Sec-CH-UA": '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"',
     "Sec-CH-UA-Mobile": "?0",
     "Sec-CH-UA-Platform": '"Windows"',
+    # What a JSON fetch POST from the page carries.
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Dest": "empty",
 }
 # Each engine's real wording, read from Playwright's Chromium, Firefox and WebKit.
 V8 = ["Invalid array length", "toFixed() digits argument must be between 0 and 100", "Invalid count value: -1", "v8"]
@@ -82,7 +87,9 @@ def evidence(signals, persistent=True):
     return fp.parse_evidence(json.dumps({"version": 2, "persistent": persistent, "signals": signals}))
 
 
-def recognise(client, tier, browser="browser", fingerprint="fingerprint", persistent=True, coarse=None):
+def recognise(
+    client, tier, browser="browser", fingerprint="fingerprint", persistent=True, coarse=None, established=True
+):
     """Give a test client a stored receipt, as a verified browser of ``tier`` would have."""
     response = HttpResponse()
     context = f"context-{browser}"
@@ -90,6 +97,7 @@ def recognise(client, tier, browser="browser", fingerprint="fingerprint", persis
     assessment = {
         "browserId": browser,
         "persistent": persistent,
+        "established": established,
         "fingerprintId": fingerprint if tier == "high" else None,
         "coarsePrint": coarse,
         "tier": tier,
@@ -379,14 +387,20 @@ class FingerprintTests(SimpleTestCase):
             clock.now.return_value = datetime(2030, 1, 2, tzinfo=UTC)
             self.assertNotEqual(fp.device_keys(tab, "203.0.113.7")[-1], here)
 
-    def test_only_a_protected_browser_gets_a_coarse_print(self):
-        self.assertIsNone(self.assess()["coarsePrint"])
+    def test_every_low_browser_gets_a_coarse_print(self):
+        self.assertIsNone(self.assess()["coarsePrint"], "high claims on its fingerprint")
+        # Whatever made it low: dropping the fingerprint must never leave it without a network key.
         self.signals["audio"] = {"status": "timeout"}
-        self.assertIsNone(self.assess()["coarsePrint"], "degraded, not protected")
+        self.assertIsNotNone(self.assess()["coarsePrint"])
         self.signals = {**honest_signals(), "canvasIntegrity": {"status": "ok", "value": "noise:3"}}
         self.assertIsNotNone(self.assess()["coarsePrint"])
         self.assertIsNotNone(fp.assess("b", evidence(honest_signals(), False), CHROME_HEADERS)["coarsePrint"])
-        self.signals["integrity"] = {"status": "ok", "value": '["Navigator.userAgent"]'}
+        # Nothing coarse left to read: the user agent alone, still bound to network and day.
+        self.signals = {name: {"status": "unavailable"} for name in fp.SIGNALS}
+        keyless = fp.assess("b", evidence(self.signals, False), CHROME_HEADERS)
+        self.assertEqual(keyless["tier"], "low")
+        self.assertTrue(fp.device_keys(keyless, "203.0.113.7")[0].startswith("p:"))
+        self.signals = {**honest_signals(), "integrity": {"status": "ok", "value": '["Navigator.userAgent"]'}}
         self.assertEqual(self.assess()["tier"], "suspicious")
         self.assertIsNone(self.assess()["coarsePrint"])
 
@@ -395,7 +409,9 @@ class FingerprintTests(SimpleTestCase):
         self.assertEqual(fp.device_keys(high), ["b:b", "f:f"])
         self.assertEqual(fp.device_keys({**high, "tier": "low", "fingerprintId": None}), ["b:b"])
         self.assertEqual(fp.device_keys({**high, "tier": "low", "persistent": False}), [])
-        self.assertEqual(fp.device_keys({**high, "tier": "suspicious"}), [])
+        # A lie never frees a browser: it keeps its own key, never the fingerprint.
+        self.assertEqual(fp.device_keys({**high, "tier": "suspicious"}), ["b:b"])
+        self.assertEqual(fp.device_keys({**high, "tier": "suspicious", "coarsePrint": "c"}, "10.0.0.1"), ["b:b"])
         self.assertEqual(fp.device_keys(None), [])
 
     def test_weighted_similarity_and_frozen_baseline(self):
@@ -514,7 +530,356 @@ class FingerprintTests(SimpleTestCase):
             self.verify({**data, "signature": base64.b64encode(bytes(64)).decode()})
 
 
-@override_settings(CACHES=LOCMEM, BROWSER_FINGERPRINT_ENABLED=True)
+@override_settings(CACHES=LOCMEM, BROWSER_FINGERPRINT_ENABLED=True, BROWSER_OBSERVE_ONLY=frozenset())
+class HardeningTests(SimpleTestCase):
+    """The floors, the checks that start in observe mode (enforced here), and the stats."""
+
+    def setUp(self):
+        cache.clear()
+
+    def assess(self, signals=None, headers=None, browser="browser"):
+        return fp.assess(browser, evidence(signals or honest_signals()), headers or CHROME_HEADERS)
+
+    def test_ipv6_floors_count_a_56_and_leave_ipv4_alone(self):
+        self.assertEqual(fp.ip_floor("203.0.113.7"), "203.0.113.7")
+        self.assertEqual(fp.ip_floor("::ffff:203.0.113.7"), "203.0.113.7")
+        self.assertEqual(fp.ip_floor("2001:db8:1:2::1"), fp.ip_floor("2001:db8:1:ff:aaaa::1"))
+        self.assertNotEqual(fp.ip_floor("2001:db8:1:2::1"), fp.ip_floor("2001:db8:1:100::1"))
+        self.assertEqual(fp.ip_floor(None), "-")
+        # The network key of a private tab stays per /64.
+        self.assertEqual(fp.ip_bucket("2001:db8:1:2::1"), "2001:db8:1:2::/64")
+
+    def test_churn_counts_the_whole_56(self):
+        for n in range(fp.CHURN_FREE):
+            fp.note_new_browser(f"browser-{n}", f"2001:db8:1:{n:x}::1")
+        self.assertGreater(fp.pow_bits("2001:db8:1:ff::9"), settings.BROWSER_POW_BITS)
+        self.assertEqual(fp.pow_bits("2001:db8:2::1"), settings.BROWSER_POW_BITS)
+
+    def test_grease_follows_the_chromium_major(self):
+        for brands in (
+            CHROME_HEADERS["Sec-CH-UA"],
+            '"Opera";v="114", "Chromium";v="128", "Not;A=Brand";v="24"',
+            '"Samsung Internet";v="27.0", "Chromium";v="125", "Not.A/Brand";v="24"',
+            '"Chromium";v="153", "Not_A Brand";v="8", "Google Chrome";v="153"',
+        ):
+            with self.subTest(brands=brands):
+                self.assertTrue(fp._grease_matches(int(fp._brands(brands)["Chromium"]), fp._brands(brands)))
+        stale = '"Chromium";v="153", "Not?A_Brand";v="99", "Google Chrome";v="153"'
+        self.assertFalse(fp._grease_matches(153, fp._brands(stale)))
+        self.assertTrue(fp._grease_matches(110, {}), "before the current GREASE there is nothing to check")
+        ua = CHROME_UA.replace("130", "153")
+        signals = honest_signals(ua=ua)
+        result = self.assess(signals, {**CHROME_HEADERS, "User-Agent": ua, "Sec-CH-UA": stale})
+        self.assertIn("client_hints_grease_mismatch", result["indicators"])
+        self.assertEqual(result["tier"], "suspicious")
+
+    def test_fetch_metadata_of_a_json_post(self):
+        self.assertEqual(self.assess()["indicators"], [])
+        for changes in (
+            {"Sec-Fetch-Mode": "navigate"},
+            {"Sec-Fetch-Dest": "document"},
+            {"Sec-Fetch-Site": "cross-site"},
+            {"Sec-Fetch-Site": "none"},
+            {"Sec-Fetch-User": "?1"},
+        ):
+            with self.subTest(changes=changes):
+                result = self.assess(headers={**CHROME_HEADERS, **changes})
+                self.assertIn("fetch_metadata_mismatch", result["indicators"])
+                self.assertEqual(result["tier"], "suspicious")
+        stripped = {k: v for k, v in CHROME_HEADERS.items() if not k.startswith("Sec-Fetch")}
+        result = self.assess(headers=stripped)
+        self.assertIn("fetch_metadata_missing", result["indicators"])
+        self.assertEqual(result["tier"], "low")
+        # Safari before 16.4 sends none.
+        old_safari = SAFARI_UA.replace("Version/26.0", "Version/16.3")
+        signals = honest_signals(ua=old_safari, platform="MacIntel", engine=JAVASCRIPTCORE)
+        self.assertNotIn("fetch_metadata_missing", self.assess(signals, {"User-Agent": old_safari})["indicators"])
+
+    def test_hardware_that_cannot_exist(self):
+        mac_ua = CHROME_UA.replace("Windows NT 10.0; Win64; x64", "Macintosh; Intel Mac OS X 10_15_7")
+        linux_ua = CHROME_UA.replace("Windows NT 10.0; Win64; x64", "X11; Linux x86_64")
+        arm, x86 = ["7fc00000", "7ff80000"], ["ffc00000", "fff80000"]
+
+        def check(ua, renderer, nan, os_name):
+            profile = fp.user_agent_profile(ua)
+            self.assertEqual(profile["platform"], os_name)
+            return fp.graphics_flags(profile, {"renderer": renderer}, ["a", "b", "c", "d", nan])
+
+        d3d = "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)"
+        metal = "ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)"
+        lies = [
+            (mac_ua, d3d, x86, "macOS"),
+            (linux_ua, d3d, x86, "Linux"),
+            (CHROME_UA, metal, arm, "Windows"),
+            (mac_ua, "ANGLE (Intel, Intel(R) Iris(TM) Plus Graphics OpenGL Engine)", arm, "macOS"),
+        ]
+        for ua, renderer, nan, os_name in lies:
+            with self.subTest(renderer=renderer, os=os_name):
+                self.assertEqual(check(ua, renderer, nan, os_name), ["graphics_platform_mismatch"])
+        honest = [
+            (CHROME_UA, d3d, x86, "Windows"),
+            (mac_ua, metal, arm, "macOS"),
+            # An Intel Mac with its own GPU, and Rosetta: x86 maths on an Apple GPU.
+            (mac_ua, "ANGLE (Intel, Intel(R) Iris(TM) Plus Graphics OpenGL Engine)", x86, "macOS"),
+            (mac_ua, metal, x86, "macOS"),
+            # WSL passes D3D12 to a Linux browser; Windows on ARM runs NVIDIA N1X.
+            (linux_ua, "D3D12 (NVIDIA GeForce RTX 3060)", x86, "Linux"),
+            (CHROME_UA, d3d, arm, "Windows"),
+            # Masked strings name no backend.
+            (mac_ua, "Apple GPU", arm, "macOS"),
+            (CHROME_UA, "Mozilla", x86, "Windows"),
+        ]
+        for ua, renderer, nan, os_name in honest:
+            with self.subTest(renderer=renderer, os=os_name):
+                self.assertEqual(check(ua, renderer, nan, os_name), [])
+        android = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile"
+        self.assertEqual(fp.graphics_flags(fp.user_agent_profile(android), {"renderer": metal}, None), [])
+
+    def test_realm_checks_are_named_by_what_they_caught(self):
+        signals = honest_signals()
+        signals["integrity"]["value"] = json.dumps(["receiver:Navigator.userAgent", "stack:Screen.width", "frame:nan"])
+        indicators = self.assess(signals)["indicators"]
+        self.assertIn("realm_tampered", indicators)
+        self.assertIn("native_stack_tampered", indicators)
+        self.assertNotIn("native_tampered", indicators)
+
+    def test_a_check_that_did_not_run_costs_something(self):
+        for name in fp.CHECKS:
+            with self.subTest(check=name):
+                result = self.assess({**honest_signals(), name: {"status": "unavailable"}})
+                self.assertIn("checks_unavailable", result["indicators"])
+                self.assertNotEqual(result["tier"], "high")
+
+    def test_observed_indicators_do_not_change_the_tier(self):
+        stale = {**CHROME_HEADERS, "Sec-Fetch-Mode": "navigate"}
+        with self.settings(BROWSER_OBSERVE_ONLY=frozenset({"fetch_metadata_mismatch"})):
+            result = self.assess(headers=stale)
+            self.assertIn("fetch_metadata_mismatch", result["indicators"])
+            self.assertEqual(result["tier"], "high")
+            self.assertIsNotNone(result["fingerprintId"])
+        self.assertEqual(self.assess(headers=stale)["tier"], "suspicious")
+
+    def test_a_fingerprint_on_many_networks_or_keys_is_common(self):
+        fp.note_fingerprint("fid", "one", "203.0.113.7")
+        for n in range(5):
+            fp.note_fingerprint("fid", "one", f"198.51.{n}.1")  # one device travelling adds nothing
+        self.assertFalse(fp.fingerprint_is_common("fid"))
+        fp.note_fingerprint("fid", "two", "198.51.100.1")
+        self.assertFalse(fp.fingerprint_is_common("fid"))
+        fp.note_fingerprint("fid", "three", "192.0.2.1")
+        self.assertTrue(fp.fingerprint_is_common("fid"))
+        # Five new keys within an hour on one network: a cloned profile.
+        for n in range(fp.COMMON_BURST):
+            self.assertFalse(fp.fingerprint_is_common("clone"))
+            fp.note_fingerprint("clone", f"key-{n}", "203.0.113.9")
+        self.assertTrue(fp.fingerprint_is_common("clone"))
+        result = self.assess()
+        fp.note_fingerprint(result["fingerprintId"], "x", "10.0.0.1")
+        cache.set(f"browser:fp-common:{result['fingerprintId']}", 1)
+        common = self.assess()
+        self.assertIn("fingerprint_common", common["indicators"])
+        self.assertEqual(common["tier"], "low")
+        # The fingerprint's claim goes, a network key takes its place.
+        self.assertTrue(fp.device_keys(common, "203.0.113.7")[-1].startswith("p:"))
+
+    def test_stats_count_tiers_indicators_and_solo_lies(self):
+        observed = frozenset({"fetch_metadata_mismatch", "client_hints_grease_mismatch"})
+        with self.settings(BROWSER_OBSERVE_ONLY=observed):
+            fp.record_stats({"tier": "high", "indicators": ["fetch_metadata_mismatch"]})
+            fp.record_stats({"tier": "suspicious", "indicators": ["fetch_metadata_mismatch", "automation"]})
+            fp.record_stats({"tier": "suspicious", "indicators": ["fetch_metadata_mismatch", "native_tampered"]})
+            # Two observed lies together (a header-rewriting proxy): neither hides the other.
+            fp.record_stats({"tier": "high", "indicators": ["fetch_metadata_mismatch", "client_hints_grease_mismatch"]})
+            fp.record_stats({"tier": "high", "indicators": ["not-a-known-name"]})
+            fp.count_stat("refused:pow")
+            day = fp._today().isoformat()
+            counts = fp.read_stats()[day]
+        self.assertEqual(counts["tier:high"], 3)
+        self.assertEqual(counts["ind:fetch_metadata_mismatch"], 4)
+        self.assertEqual(counts["solo:fetch_metadata_mismatch"], 2)
+        self.assertEqual(counts["solo:client_hints_grease_mismatch"], 1)
+        self.assertEqual(counts["refused:pow"], 1)
+        self.assertFalse(any("not-a-known-name" in name for name in counts))
+
+    def test_stats_fail_open(self):
+        with patch("core.fingerprinting.cache") as down:
+            down.add.side_effect = RedisError("down")
+            down.get_many.side_effect = RedisError("down")
+            fp.count_stat("tier:high")
+            self.assertEqual(fp.read_stats(), {})
+
+    def test_a_key_is_established_once_it_is_old_enough(self):
+        with patch("core.fingerprinting._now", return_value=1_000_000.0):
+            first = fp.note_new_browser("young", "10.0.0.1")
+            self.assertEqual(first, 1_000_000)
+            self.assertFalse(
+                fp.assess("young", evidence(honest_signals()), CHROME_HEADERS, first_seen=first)["established"]
+            )
+        later = 1_000_000.0 + settings.BROWSER_KEY_AGE
+        with patch("core.fingerprinting._now", return_value=later):
+            self.assertEqual(fp.note_new_browser("young", "10.0.0.1"), first, "the first sight stays")
+            self.assertTrue(
+                fp.assess("young", evidence(honest_signals()), CHROME_HEADERS, first_seen=first)["established"]
+            )
+        # A marker from before the key age held 1: long established.
+        cache.set("browser:seen:legacy", 1)
+        self.assertTrue(
+            fp.assess(
+                "legacy",
+                evidence(honest_signals()),
+                CHROME_HEADERS,
+                first_seen=fp.note_new_browser("legacy", "10.0.0.1"),
+            )["established"]
+        )
+        self.assertTrue(fp.is_established({"tier": "high"}), "receipts from before the key age")
+        self.assertFalse(fp.is_established(None))
+
+    def test_the_key_age_fails_open(self):
+        with patch("core.fingerprinting.cache") as down:
+            down.add.side_effect = RedisError("down")
+            self.assertIsNone(fp.note_new_browser("any", "10.0.0.1"))
+        self.assertTrue(fp.assess("any", evidence(honest_signals()), CHROME_HEADERS, first_seen=None)["established"])
+
+    def held_on_the_ip(self, address="2001:db8:1:2::1", **recognised):
+        """The IP counters a sign-up from ``address`` is held to, for a browser recognised as given."""
+        client = Client()
+        if recognised:
+            recognise(client, **recognised)
+        request = RequestFactory().post("/api/allauth/browser/v1/auth/signup", REMOTE_ADDR=address)
+        request.COOKIES.update({name: morsel.value for name, morsel in client.cookies.items()})
+        return [key for key, _, _ in device_throttle.counters(request) if ":ip:" in key]
+
+    def test_the_signup_throttle_never_frees_a_liar_a_keyless_or_a_young_key(self):
+        self.assertEqual(self.held_on_the_ip(tier="high"), [])
+        self.assertEqual(len(self.held_on_the_ip(tier="suspicious")), 1, "a lie pays the IP's count")
+        self.assertEqual(len(self.held_on_the_ip(tier="low", persistent=False)), 1, "no key: the IP's count")
+        self.assertEqual(len(self.held_on_the_ip()), 1, "unknown")
+        self.assertEqual(self.held_on_the_ip(tier="high", established=False), [], "votes only, by default")
+        with self.settings(BROWSER_KEY_AGE_SIGNUPS=True):
+            self.assertEqual(len(self.held_on_the_ip(tier="high", established=False)), 1)
+        # One /56 is one count; IPv4 keys are as they were.
+        self.assertEqual(self.held_on_the_ip(), self.held_on_the_ip("2001:db8:1:ff::7"))
+        self.assertNotEqual(self.held_on_the_ip(), self.held_on_the_ip("2001:db8:1:100::7"))
+        self.assertIn(fp.keyed_id("auth", "10.0.0.1"), self.held_on_the_ip("10.0.0.1")[0])
+
+    def test_refusals_carry_a_reason_code(self):
+        with self.assertRaises(fp.ProofRefusedError) as refused:
+            fp.verify_proof("not-a-challenge", "context", "{}", "", "", "0")
+        self.assertEqual(refused.exception.reason, "challenge")
+        self.assertIn(refused.exception.reason, fp.REFUSALS)
+        self.assertTrue(fp.is_class_e("240.1.2.3"))
+        self.assertFalse(fp.is_class_e("203.0.113.7"))
+
+
+@override_settings(
+    CACHES=LOCMEM,
+    BROWSER_FINGERPRINT_ENABLED=True,
+    BROWSER_POW_BITS=4,
+    BROWSER_PATH_METER="observe",
+    BROWSER_PATH_DIRECT_MS=25,
+    BROWSER_PATH_RELAYED_MS=60,
+)
+class RelayMeterTests(SimpleTestCase):
+    """The echo chain and the path verdict; observed only, never a tier."""
+
+    setUp = FingerprintTests.setUp
+    payload = FingerprintTests.payload
+    submission = FingerprintTests.submission
+
+    def seed_floor(self, colo="ZRH", sample=40):
+        cache.set(f"browser:colo-floor:{colo}", [sample] * fp.COLO_MIN_SAMPLES)
+
+    def test_the_edge_header_is_read_strictly(self):
+        self.assertEqual(fp._edge("12,0,3303"), (12, 0, 3303))
+        self.assertEqual(fp._edge("0,9,3303"), (0, 9, 3303))
+        for value in ("0,0,3303", "12,0", "a,b,c", "", "12,0,3303,1"):
+            self.assertIsNone(fp._edge(value), value)
+
+    def test_the_chain_needs_every_token_in_order(self):
+        challenge = fp.issue_challenge("context", 4)
+        with patch("core.fingerprinting._now", return_value=1000.0):
+            first = fp.echo(challenge, "context", 1, "", {"X-Ml-Edge": "20,0,3303", "CF-Ray": "abc-ZRH"})
+        with self.assertRaises(fp.ProofRefusedError):
+            fp.echo(challenge, "context", 2, "wrong", {})
+        with self.assertRaises(fp.ProofRefusedError):
+            fp.echo(challenge, "context", 3, first, {})
+        with self.assertRaises(fp.ProofRefusedError):
+            fp.echo(challenge, "other", 2, first, {})
+        with patch("core.fingerprinting._now", return_value=1000.07):
+            second = fp.echo(challenge, "context", 2, first, {})
+        with patch("core.fingerprinting._now", return_value=1000.13):
+            fp.echo(challenge, "context", 3, second, {})
+        record = fp.take_echo(challenge)
+        self.assertEqual(record["rtts"], [70, 60])
+        self.assertEqual((record["edge"], record["colo"]), ((20, 0, 3303), "ZRH"))
+        self.assertIsNone(fp.take_echo(challenge), "taken once")
+
+    def test_the_verdict_follows_the_excess_over_the_edge(self):
+        self.seed_floor()
+        record = {"rtts": [80, 60], "edge": (20, 0, 3303), "colo": "ZRH"}
+        self.assertEqual(fp.path_verdict(record), ("direct", "tcp", 0))
+        # The bot's own leg behind a proxy exit: 90 ms the edge never saw.
+        self.assertEqual(fp.path_verdict({**record, "rtts": [150]})[0], "relayed")
+        self.assertEqual(fp.path_verdict({**record, "rtts": [100]})[0], "unclear")
+        self.assertEqual(fp.path_verdict({**record, "edge": (0, 20, 3303)})[1], "quic")
+        with self.settings(BROWSER_PATH_DIRECT_MS=None, BROWSER_PATH_RELAYED_MS=None):
+            self.assertEqual(fp.path_verdict(record)[0], "unclear", "no thresholds before gate G1")
+        cache.clear()
+        self.assertEqual(fp.path_verdict(record), ("unclear", "tcp", None), "too few samples at this site")
+        self.assertEqual(fp.path_verdict(None)[0], "unmeasured")
+        self.assertEqual(fp.path_verdict({"rtts": [60]})[0], "unmeasured", "no edge header")
+        with self.settings(BROWSER_PATH_METER="off"):
+            self.assertEqual(fp.path_verdict(record)[0], "unmeasured")
+
+    def test_the_receipt_keeps_no_round_trip(self):
+        self.seed_floor()
+        fields = fp.path_fields({"rtts": [83, 61], "edge": (20, 0, 3303), "colo": "ZRH"}, "203.0.113.7")
+        self.assertEqual(fields["path"], "direct")
+        self.assertEqual(fields["pathExcess"], 0)
+        self.assertEqual(fields["pathBucket"], fp.keyed_id("path", "203.0.113.7"))
+        self.assertEqual(fields["asnKey"], fp.keyed_id("asn", "3303"))
+        self.assertFalse({61, 83, 3303} & {value for value in fields.values() if isinstance(value, int)})
+
+    def test_the_http_flow_measures_without_saying_so(self):
+        self.seed_floor()
+        client = Client(enforce_csrf_checks=True)
+        request = RequestFactory().get("/")
+        token = get_token(request)
+        client.cookies["csrftoken"] = request.META["CSRF_COOKIE"]
+        headers = {f"HTTP_{name.upper().replace('-', '_')}": value for name, value in CHROME_HEADERS.items()}
+        headers |= {"HTTP_X_ML_EDGE": "20,0,3303", "HTTP_CF_RAY": "abc-ZRH"}
+
+        def post(path, data):
+            return client.post(
+                f"/api/fingerprint/{path}",
+                data=json.dumps(data),
+                content_type="application/json",
+                HTTP_X_CSRFTOKEN=token,
+                **headers,
+            )
+
+        issued = post("challenge", {}).json()
+        self.assertTrue(issued["echo"])
+        step_token = ""
+        for step in range(1, fp.ECHO_STEPS + 1):
+            reply = post("echo", {"challenge": issued["challenge"], "step": step, "token": step_token})
+            self.assertEqual(reply.status_code, 200, reply.content)
+            self.assertEqual(set(reply.json()), {"token"})
+            step_token = reply.json()["token"]
+        self.assertEqual(post("echo", {"challenge": issued["challenge"], "step": 1, "token": ""}).status_code, 400)
+        submission = self.submission(issued["challenge"])
+        self.assertEqual(post("verify", submission).json(), {"expiresIn": fp.RECEIPT_TTL})
+        request.COOKIES = {name: cookie.value for name, cookie in client.cookies.items()}
+        assessment = fp.get_browser_assessment(request)
+        self.assertIn(assessment["path"], {"direct", "unclear"})
+        self.assertEqual(assessment["tier"], "high", "the path never changes a tier")
+        with self.settings(BROWSER_PATH_METER="off"):
+            self.assertFalse(post("challenge", {}).json()["echo"])
+            self.assertEqual(post("echo", {"challenge": issued["challenge"], "step": 1}).status_code, 400)
+
+
+# The claims themselves; with the blind ledger off, a refused claim still answers 429.
+@override_settings(CACHES=LOCMEM, BROWSER_FINGERPRINT_ENABLED=True, COVERAGE_BLIND_LEDGER=False)
 class DeviceVoteTests(TestCase):
     def setUp(self):
         cache.clear()
@@ -594,6 +959,31 @@ class DeviceVoteTests(TestCase):
             down.add.side_effect = RedisError("down")
             self.assertIsNone(coverage.claim_device_vote("anon:x", None, "10.0.7.1", "DE"))
 
+    def test_a_young_key_also_pays_the_ip_count(self):
+        # Fresh keys from one address share its small daily count, whatever they claim.
+        for n, code in enumerate(["DE", "FR", "IT"]):
+            client = Client()
+            recognise(client, "high", browser=f"young-{n}", fingerprint=f"young-{n}", established=False)
+            self.assertEqual(self.vote(client, code, "10.0.10.1").status_code, 200, n)
+        fresh = Client()
+        recognise(fresh, "high", browser="young-4", fingerprint="young-4", established=False)
+        self.assertEqual(self.vote(fresh, "AT", "10.0.10.1").status_code, 429)
+        # An established key on the same address is not held by that count.
+        old = Client()
+        recognise(old, "high", browser="old", fingerprint="old-device")
+        self.assertEqual(self.vote(old, "AT", "10.0.10.1").status_code, 200)
+
+    def test_the_blind_ledger_answers_a_refused_claim_like_a_counted_one(self):
+        first, second = Client(), Client()
+        recognise(first, "high", browser="one", fingerprint="device")
+        recognise(second, "high", browser="two", fingerprint="device")
+        with self.settings(COVERAGE_BLIND_LEDGER=True):
+            counted, refused = self.vote(first, "DE", "10.0.9.1"), self.vote(second, "DE", "10.0.9.2")
+        self.assertEqual((counted.status_code, counted.json()), (refused.status_code, refused.json()))
+        self.assertEqual(
+            sorted(CoverageVote.objects.filter(area_code="DE").values_list("accepted", flat=True)), [False, True]
+        )
+
 
 @override_settings(CACHES=LOCMEM, BROWSER_FINGERPRINT_ENABLED=True)
 class DeviceThrottleTests(TestCase):
@@ -622,20 +1012,26 @@ class DeviceThrottleTests(TestCase):
         self.assertEqual(self.signup(fresh, 4, "10.1.0.10").status_code, 429)
 
     def test_a_new_private_tab_does_not_start_afresh(self):
-        # The network key gets the IP's allowance (5), not a device's (3).
-        for n in range(5):
+        # The network key gets the IP's allowance, not a device's.
+        allowance = device_throttle.RULES["/api/allauth/browser/v1/auth/signup"][3]
+        for n in range(allowance):
             client = Client()
             recognise(client, "low", browser=f"tab-{n}", coarse="same-safari")
             self.assertNotEqual(self.signup(client, n, "10.1.3.1").status_code, 429, n)
         fresh = Client()
-        recognise(fresh, "low", browser="tab-5", coarse="same-safari")
-        self.assertEqual(self.signup(fresh, 5, "10.1.3.1").status_code, 429)
+        recognise(fresh, "low", browser="tab-new", coarse="same-safari")
+        self.assertEqual(self.signup(fresh, allowance, "10.1.3.1").status_code, 429)
+
+    def test_the_refusal_count_does_not_reveal_the_tier(self):
+        _, _, per_key, per_ip = device_throttle.RULES["/api/allauth/browser/v1/auth/signup"]
+        self.assertEqual(per_key, per_ip)
 
     def test_unknown_browsers_share_a_count_per_ip(self):
-        for n in range(5):
+        allowance = device_throttle.RULES["/api/allauth/browser/v1/auth/signup"][3]
+        for n in range(allowance):
             self.assertNotEqual(self.signup(Client(), n, "10.1.1.1").status_code, 429)
-        self.assertEqual(self.signup(Client(), 5, "10.1.1.1").status_code, 429)
-        self.assertNotEqual(self.signup(Client(), 6, "10.1.1.2").status_code, 429)
+        self.assertEqual(self.signup(Client(), allowance, "10.1.1.1").status_code, 429)
+        self.assertNotEqual(self.signup(Client(), allowance + 1, "10.1.1.2").status_code, 429)
 
     def test_a_refused_request_costs_nothing(self):
         client = Client()

@@ -120,6 +120,16 @@ export function useSystemBrowser(enabled: MaybeRefOrGetter<boolean>) {
     });
 }
 
+/** Recognition counts per UTC day (tiers, indicators, solo lies, refusals); counts only, never a browser. */
+export function useSystemBrowserStats(enabled: MaybeRefOrGetter<boolean>) {
+    return useQuery({
+        queryKey: [...systemKey, "browser", "stats"],
+        enabled,
+        retry: false,
+        queryFn: ({ signal }) => api.coreApiSystemBrowserStats({ signal }),
+    });
+}
+
 /**
  * Keep the system queries current from the server's change notices instead of polling.
  *

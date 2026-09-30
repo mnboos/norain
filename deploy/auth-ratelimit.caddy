@@ -130,6 +130,17 @@
 			events 60
 			window 1m
 		}
+		# The relay meter's echoes, three per proof when it is on, counted apart from the proofs
+		# (Django allows 180 a minute per IP).
+		zone fingerprint_echo {
+			match {
+				path /api/fingerprint/echo
+				method POST
+			}
+			key {client_ip}
+			events 90
+			window 1m
+		}
 		# The test notification sends a push right away. Django allows one per account every
 		# 30 s; this caps one address across the accounts it may hold.
 		zone push_test_ip {
