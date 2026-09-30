@@ -189,25 +189,30 @@ native-memory headroom (at least 2 GiB or 10% of the heap), with an actionable
 
 ### Large areas: memory and the file system
 
-For a large area (all of Europe, say) on a machine with little memory, build with
-`GRAPHHOPPER_BUILD_DATAACCESS=MMAP`. The graph is then written to files in
-`/graph-cache/releases/<id>/graph/`, and the OS keeps what it can of them in the page
-cache. What counts:
+A Europe graph is about 12 GB: edges 2.5 GB, nodes 0.7 GB, geometry 0.7 GB, and
+one landmark file of 2.75 GB per bike profile. The build holds it either in the heap
+(`GRAPHHOPPER_BUILD_DATAACCESS=RAM_STORE`) or in memory-mapped files in
+`/graph-cache/releases/<id>/graph/` (`MMAP`). What counts:
 
-- **The heap still needs room.** It holds the OSM reader's node map and the height
-  table (about 30 bytes per node: ~5 GB for 167 million nodes). A Europe build used
-  up to 11 GB of a 12 GB heap while reading the file. Give it about 10 GB.
-- **The rest of the limit is page cache.** `GRAPHHOPPER_MEM_LIMIT` covers the heap
-  *and* the cached graph files. The landmark step (LM) reads and writes one file per
-  profile all over the place (2.8 GB each for Europe, three profiles at once), and
-  the edges and nodes besides. When those don't fit, every step waits for the disk.
-  For Europe: heap 10 GB, limit 24 GB, and close big programs on the machine during
-  the build.
-- **On btrfs, turn off copy-on-write for the graph folder** (Fedora puts `/home` on
-  btrfs, often with `compress=zstd`). With copy-on-write, every page LM writes
-  becomes a new, compressed extent. A Europe landmark file had 630,000 extents
-  after five hours; the threads spent their time waiting to read it back, at under
-  0.1 CPU cores, and LM would not finish. Before the first build:
+- **The heap needs room besides the graph.** It holds the OSM reader's node map and
+  the height table (about 30 bytes per node: ~5 GB for 167 million nodes). With
+  `MMAP`, a Europe build used up to 11 GB of heap while reading the file.
+- **`GRAPHHOPPER_MEM_LIMIT` covers everything**: the heap, Java's own memory, and,
+  with `MMAP`, the page cache holding the graph files. It must fit on the machine
+  next to everything else running there.
+- **On btrfs, do not build a large area with `MMAP`.** The landmark step (LM) writes
+  into every page of its landmark files again and again, and each time btrfs has to
+  reserve space for the write first. Two Europe builds on btrfs sat in LM for 5.5
+  and 10 hours at under 0.2 CPU cores and never finished; the LM threads waited in
+  btrfs (`handle_reserve_ticket`) and took turns, one at a time. Keeping dirty pages
+  in memory longer (`sysctl vm.dirty_*`) did not help. Use `RAM_STORE` there: LM
+  works in the heap, and the files are written once, in order, at the end. For
+  Europe on a 30 GB machine: heap 20 GB, limit 24 GB, and close big programs during
+  the build. Other file systems (ext4, xfs) have no such problem with `MMAP`.
+- **On btrfs, turn off copy-on-write for the graph folder anyway.** With
+  copy-on-write, every page written through a memory map becomes a new extent, and
+  with `compress=zstd` (Fedora's default for `/home`) a compressed one: a Europe
+  landmark file had 630,000 extents after five hours. Before the first build:
 
   ```sh
   chattr +C data/graphhopper/cache/releases
@@ -215,15 +220,17 @@ cache. What counts:
 
   New release folders and their files inherit it (`lsattr -d` shows a `C`). It does
   not change files that already exist, so set it before a build, never during one.
-  It also turns off compression for these files, which is what you want here. Other
-  file systems (ext4, xfs) need nothing.
+  It also turns off compression for these files. It stopped the fragmentation (about
+  4,800 extents per file) but not the waiting described above.
 - **A running build can get more memory without a restart**:
   `podman update --memory 24g --memory-swap 32g <container>` (or `docker update`).
-  It does not help a build that is slowed by copy-on-write.
+  It helps only when memory is the problem, not the file system.
 
-To see whether a build is still working, look at its CPU use (`podman stats`) and the
-state of its threads. LM logs nothing between its start and its end. Threads that
-stay in state `D` at almost no CPU are waiting for the disk.
+To see whether a build is still working, look at its CPU use (`podman stats`) and at
+its threads (`/proc/<java pid>/task/*/stat` for the state, `wchan` for what they wait
+on). LM logs nothing between `Start calculating 16 landmarks` and `LM … finished`.
+Threads that stay in state `D` at almost no CPU are waiting for the disk or the file
+system.
 
 If the selected terrain does not cover the filtered file, the build stops with an
 error. Run `download-elevation-for` for that file, then retry the build.
