@@ -77,7 +77,10 @@ from core.weather_routing import corridor_cells, weather_field
 from core.wind import valid_vertex_times
 
 
-@task()
+# On `forecasts`, not `default`: someone is usually waiting for a new or edited route, and
+# `default` has one worker shared with journey planning, scans and maintenance. Bulk
+# backfills pass `.using(queue_name="default")` so they never stand in front of that.
+@task(queue_name="forecasts")
 def refresh_route_geometry(route_id: str, *, backfill_only: bool = False) -> None:
     """Fetch the GraphHopper route for a RecurringRoute and store polyline + sample points."""
     async_to_sync(_refresh_route_geometry_async)(route_id, backfill_only=backfill_only)
@@ -123,6 +126,13 @@ async def _refresh_route_geometry_async(route_id: str, *, backfill_only: bool = 
 
     logger.info(f"Route geometry stored for {route.name} ({len(sample_points)} sample points)")
     await notify_system("routes")
+
+    # Forecasts asked for before the line existed wait in `pending` (see _plan_forecast_job_async).
+    # Plan them now instead of at their next retry; the guarded start lets only one planner run.
+    async for job_id in ForecastJob.objects.filter(
+        kind=ForecastJob.Kind.ROUTE, status=ForecastJob.Status.PENDING, params__route_id=str(route.id)
+    ).values_list("id", flat=True):
+        await plan_forecast_job.aenqueue(str(job_id))
 
     # Give the new shape a thumbnail straight away. Scores stay grey until the cells warm.
     await refresh_route_thumbnail.aenqueue(str(route.id))
@@ -406,7 +416,10 @@ async def _job_geometry(job: ForecastJob) -> dict | None:
         if route is None:
             raise ValueError(f"Route {params['route_id']} no longer exists")
         if not route.sample_points:
-            await refresh_route_geometry.aenqueue(str(route.id))
+            # Creating or editing the route already enqueued its geometry, and storing it plans
+            # this job. Ask again only once a wait has passed without it: that task may have failed.
+            if job.attempts:
+                await refresh_route_geometry.aenqueue(str(route.id))
             return None
         return {
             "polyline": route.polyline_coordinates,
@@ -504,7 +517,16 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         await _fail_not_allowed(job, "route_private")
         return
     await telemetry.bind_job(job)
-    await set_status(job, ForecastJob.Status.PLANNING)
+    # One planner per job. The geometry task's kick and a delayed retry can both arrive; only the
+    # one that moves the row out of `pending` plans, or the cells would be counted and fanned out twice.
+    started = datetime.now(tz=UTC)
+    if not await ForecastJob.objects.filter(pk=job.pk, status=ForecastJob.Status.PENDING).aupdate(
+        status=ForecastJob.Status.PLANNING, updated_at=started
+    ):
+        return
+    # As stored: set_status(FAILED) below matches on both.
+    job.status, job.updated_at = ForecastJob.Status.PLANNING, started
+    await publish(job)
 
     try:
         geometry = await _job_geometry(job)
@@ -521,7 +543,11 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         if job.attempts >= MAX_PLAN_ATTEMPTS:
             await set_status(job, ForecastJob.Status.FAILED, error="geometry_failed")
             return
-        await job.asave(update_fields=["attempts", "updated_at"])
+        # Back to `pending`: storing the geometry plans it at once; the delayed retry only
+        # covers a geometry task that never stores anything.
+        job.status = ForecastJob.Status.PENDING
+        await job.asave(update_fields=["attempts", "status", "updated_at"])
+        await publish(job)
         await plan_forecast_job.using(run_after=datetime.now(tz=UTC) + PLAN_RETRY_DELAY).aenqueue(str(job.id))
         return
 

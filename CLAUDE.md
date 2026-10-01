@@ -300,8 +300,16 @@ Four rules hold this together:
   would sit in front of the user as though it were the weather, for the full `MAX_CELL_AGE`.
 
 Queue split, because `db_worker` has no concurrency flag (one process, one task at a time —
-parallelism is replicas): `cells` for the provider fan-out, `forecasts` for planning and
-assembly (someone is waiting), `default` for geometry, thumbnails, scans and maintenance.
+parallelism is replicas): `cells` for the provider fan-out, `forecasts` for planning, assembly and a route's geometry
+(someone is waiting), `default` for thumbnails, scans, journey planning and maintenance (a bulk
+geometry backfill passes `.using(queue_name="default")`).
+
+**A route forecast waits for its geometry in `pending`, and storing the geometry plans it.**
+`_refresh_route_geometry_async` enqueues `plan_forecast_job` for every pending `ROUTE` job of the
+route; the delayed retry (`PLAN_RETRY_DELAY`, `MAX_PLAN_ATTEMPTS`) is only the fallback for a
+geometry task that never stores. Because both can arrive, planning starts with one guarded UPDATE
+from `pending` to `planning`, and only its winner plans; never start planning without it, or a job
+is counted and fanned out twice.
 Queue position no longer implies completion order, so anything that used to rely on FIFO —
 the thumbnail rebuild — now uses `.using(run_after=…)`.
 

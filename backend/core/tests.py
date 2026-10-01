@@ -1703,10 +1703,12 @@ class ForecastJobTests(TestCase):
         with patch("core.management.commands.backfill_route_vertex_times.refresh_route_geometry") as refresh:
             out = StringIO()
             call_command("backfill_route_vertex_times", route_id=self.route.id, stdout=out)
-            refresh.enqueue.assert_not_called()
+            refresh.using.return_value.enqueue.assert_not_called()
             self.assertIn("Matched: 1", out.getvalue())
             call_command("backfill_route_vertex_times", route_id=self.route.id, enqueue=True, stdout=StringIO())
-            refresh.enqueue.assert_called_once_with(str(self.route.id), backfill_only=True)
+            # On `default`: a bulk backfill must not stand in front of routes someone waits for.
+            refresh.using.assert_called_with(queue_name="default")
+            refresh.using.return_value.enqueue.assert_called_once_with(str(self.route.id), backfill_only=True)
             self.route.vertex_times = [0, 300, 600]
             self.route.save(update_fields=["vertex_times"])
             out = StringIO()
@@ -1878,6 +1880,51 @@ class ForecastJobTests(TestCase):
         job.refresh_from_db()
         self.assertEqual(job.status, ForecastJob.Status.FAILED)
         self.assertTrue(job.error)
+
+    def test_a_forecast_waiting_for_geometry_is_planned_when_it_lands(self):
+        """No 20 s retry in between: storing the line plans the waiting job at once."""
+        geometry = {
+            "polyline": self.route.polyline_coordinates,
+            "sample_points": self.sample_points,
+            "vertex_times": [0.0, 300.0, 600.0],
+            "total_seconds": 600,
+            "total_distance_m": 1500,
+        }
+        self.route.sample_points = None
+        self.route.save(update_fields=["sample_points"])
+        job = self._make_job()
+        geometry_task, retry = AsyncMock(), AsyncMock()
+        with (
+            patch("core.tasks.refresh_route_geometry", SimpleNamespace(aenqueue=geometry_task)),
+            patch("core.tasks.plan_forecast_job", SimpleNamespace(using=lambda **kw: SimpleNamespace(aenqueue=retry))),
+        ):
+            async_to_sync(_plan_forecast_job_async)(str(job.id))
+        job.refresh_from_db()
+        self.assertEqual((job.status, job.attempts), (ForecastJob.Status.PENDING, 1))
+        geometry_task.assert_not_awaited()  # creating the route enqueued it already
+        retry.assert_awaited_once()  # only the fallback, for a geometry task that never stores
+
+        kick = AsyncMock()
+        with (
+            patch("core.tasks.build_geometry", AsyncMock(return_value=geometry)),
+            patch("core.tasks.refresh_route_thumbnail", SimpleNamespace(aenqueue=AsyncMock())),
+            patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=kick)),
+        ):
+            async_to_sync(_refresh_route_geometry_async)(str(self.route.id))
+        kick.assert_awaited_once_with(str(job.id))
+
+    def test_only_one_planner_runs_per_job(self):
+        """The kick and the delayed retry can both arrive; the second must not fan out again."""
+        job = self._make_job(status=ForecastJob.Status.PLANNING)
+        forecast_enqueue = AsyncMock()
+        with (
+            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)),
+            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=AsyncMock())),
+        ):
+            async_to_sync(_plan_forecast_job_async)(str(job.id))
+        forecast_enqueue.assert_not_awaited()
+        job.refresh_from_db()
+        self.assertEqual((job.status, job.cells_total), (ForecastJob.Status.PLANNING, 0))
 
     # -- the handoff to assembly --------------------------------------------------
 
