@@ -35,6 +35,10 @@ export interface SystemBrowserAssessment {
     /**
      * 
      */
+    established: boolean;
+    /**
+     * 
+     */
     continuity: boolean;
     /**
      * 
@@ -56,6 +60,18 @@ export interface SystemBrowserAssessment {
      * 
      */
     keys: Array<string>;
+    /**
+     * 
+     */
+    path?: string | null;
+    /**
+     * 
+     */
+    pathTransport?: string | null;
+    /**
+     * 
+     */
+    pathExcess?: number | null;
 }
 
 /**
@@ -76,6 +92,7 @@ export function instanceOfSystemBrowserAssessment(value: object): value is Syste
     if (!('tier' in value) || value['tier'] === undefined) return false;
     if (!('indicators' in value) || value['indicators'] === undefined) return false;
     if (!('persistent' in value) || value['persistent'] === undefined) return false;
+    if (!('established' in value) || value['established'] === undefined) return false;
     if (!('continuity' in value) || value['continuity'] === undefined) return false;
     if (!('similarity' in value) || value['similarity'] === undefined) return false;
     if ((!('browserId' in (value as Record<string, any>)) && !('browser_id' in (value as Record<string, any>))) || ((value as Record<string, any>)['browserId'] === undefined && (value as Record<string, any>)['browser_id'] === undefined)) return false;
@@ -98,12 +115,16 @@ export function SystemBrowserAssessmentFromJSONTyped(json: any, ignoreDiscrimina
         'tier': json['tier'],
         'indicators': json['indicators'],
         'persistent': json['persistent'],
+        'established': json['established'],
         'continuity': json['continuity'],
         'similarity': json['similarity'],
         'browserId': json['browser_id'],
         'fingerprintId': json['fingerprint_id'],
         'components': json['components'],
         'keys': json['keys'],
+        'path': json['path'] === undefined ? undefined : json['path'] === null ? null : json['path'],
+        'pathTransport': json['path_transport'] === undefined ? undefined : json['path_transport'] === null ? null : json['path_transport'],
+        'pathExcess': json['path_excess'] === undefined ? undefined : json['path_excess'] === null ? null : json['path_excess'],
     };
 }
 
@@ -121,12 +142,16 @@ export function SystemBrowserAssessmentToJSONTyped(value?: SystemBrowserAssessme
         'tier': value['tier'],
         'indicators': value['indicators'],
         'persistent': value['persistent'],
+        'established': value['established'],
         'continuity': value['continuity'],
         'similarity': value['similarity'],
         'browser_id': value['browserId'],
         'fingerprint_id': value['fingerprintId'],
         'components': value['components'],
         'keys': value['keys'],
+        'path': value['path'],
+        'path_transport': value['pathTransport'],
+        'path_excess': value['pathExcess'],
     };
 }
 

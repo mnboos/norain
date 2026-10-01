@@ -142,11 +142,31 @@ routing-terrain-estimate filtered_pbf:
 download-elevation-for filtered_pbf:
     {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper terrain
 
+[doc("Estimate the Mapterhorn download of download-elevation-whole-for: one size per source, no pieces. The file must already exist in ROUTING_OSM_IMPORT_DIR.")]
+[group('geodata')]
+routing-terrain-estimate-whole filtered_pbf:
+    {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper terrain --dry-run --whole
+
+[doc("Like download-elevation-for, but the old way: one download per Mapterhorn source, however large, instead of pieces of at most 1 GB. An interrupted source starts over. Gives the same terrain (same key). If a source fails, delete its part-N.partial.pmtiles and finish with download-elevation-for: finished sources are reused.")]
+[group('geodata')]
+download-elevation-whole-for filtered_pbf:
+    {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper terrain --whole
+
 [doc("Delete retained elevation download pieces from completed releases while preserving final terrain archives and resumable preparations.")]
 [group('geodata')]
 [confirm("This permanently deletes retained elevation download pieces from every completed release in ROUTING_OSM_IMPORT_DIR/elevation. Final archives and incomplete preparations are preserved. Continue?")]
 cleanup-elevation-downloads:
     {{ container }} compose run --rm --no-deps graphhopper terrain-cleanup
+
+[doc("Write cell_coverage.json (zoom-15 tiles per road cell) into the terrain of the active graph, for the system dashboard's elevation layer. Terrain prepared since it existed has one already. Uses the graph's road cells (run graph-cells-backfill first for an older graph). Reads the archive's directories only; changes nothing else.")]
+[group('geodata')]
+elevation-coverage-backfill:
+    {{ container }} compose run --rm --no-deps graphhopper terrain-coverage
+
+[doc("Write the road cells of the filtered OSM file the current graph was built from into its release, for the system dashboard's routing layer. Graphs built since then have them already; without them the dashboard shows the terrain's cells, which may cover more.")]
+[group('geodata')]
+graph-cells-backfill filtered_pbf:
+    {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper graph-cells
 
 [doc("Import a candidate graph using prepared Mapterhorn terrain. Does not stop, delete or activate the current graph.")]
 [group('geodata')]
@@ -182,6 +202,11 @@ routing-activate:
 [group('geodata')]
 routing-rollback image:
     CONTAINER={{ quote(container) }} uv run --no-project python scripts/routing-switch.py rollback {{ quote(image) }}
+
+[doc("Undo the last routing-activate: point the graph back at the previous one and restart GraphHopper with the image that runs now. The app is not touched. Checks the previous graph against that image before stopping anything. The replaced graph becomes previous, so a second run switches back.")]
+[group('geodata')]
+routing-undo-activate:
+    CONTAINER={{ quote(container) }} uv run --no-project python scripts/routing-switch.py rollback
 
 [doc("Print each bike profile's average speed on a few reference routes. Run it after routing-activate to see what a speed change did.")]
 [group('geodata')]
@@ -252,6 +277,21 @@ photon-import +files:
 [script("C:/Program Files/Git/bin/bash.exe", "-eu")]
 photon-import +files:
     CONTAINER={{ quote(container) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/photon-import.sh "$@"
+
+[doc("Write the system dashboard's Photon coverage (places per country) from the dumps the current index was built from, without importing them, e.g. just photon-coverage-backfill data/downloads/photon/*.jsonl.zst. Imports since then write it themselves.")]
+[group('geodata')]
+[positional-arguments]
+[unix]
+photon-coverage-backfill +files:
+    COVERAGE_ONLY=1 CONTAINER={{ quote(container) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} bash scripts/photon-import.sh "$@"
+
+[doc("Write the system dashboard's Photon coverage (places per country) from the dumps the current index was built from, without importing them, e.g. just photon-coverage-backfill data/downloads/photon/*.jsonl.zst. Imports since then write it themselves.")]
+[group('geodata')]
+[positional-arguments]
+[windows]
+[script("C:/Program Files/Git/bin/bash.exe", "-eu")]
+photon-coverage-backfill +files:
+    COVERAGE_ONLY=1 CONTAINER={{ quote(container) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/photon-import.sh "$@"
 
 [group('api')]
 [working-directory("backend")]

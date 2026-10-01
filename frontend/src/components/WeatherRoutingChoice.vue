@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { symSharpLock } from "@quasar/extras/material-symbols-sharp";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import { useEntitlements } from "@/composables/useEntitlements";
 
 /**
@@ -11,7 +12,7 @@ import { useEntitlements } from "@/composables/useEntitlements";
 const avoidRain = defineModel<boolean>("avoidRain", { required: true });
 const avoidHeadwind = defineModel<boolean>("avoidHeadwind", { required: true });
 /** Off for hiking: a headwind barely slows a walker, so the server never routes around one. */
-const { headwind } = defineProps<{ headwind: boolean }>();
+const { headwind, profile = "bike" } = defineProps<{ headwind: boolean; profile?: string }>();
 
 const { t } = useI18n();
 const { weatherRouting } = useEntitlements();
@@ -20,7 +21,7 @@ const { weatherRouting } = useEntitlements();
 <template>
     <div data-testid="weather-routing-choice">
         <div class="row items-center q-gutter-x-sm">
-            <span class="text-caption">{{ t("weatherRouting.title") }}</span>
+            <span class="text-caption">{{ tp(profile, "weatherRouting.title") }}</span>
             <q-badge v-if="!weatherRouting" color="accent" label="Plus" />
         </div>
         <q-toggle
@@ -37,12 +38,12 @@ const { weatherRouting } = useEntitlements();
             @update:model-value="avoidHeadwind = $event"
         />
         <div v-if="weatherRouting" class="text-caption text-muted">
-            {{ t("weatherRouting.explanation") }}
+            {{ tp(profile, "weatherRouting.explanation") }}
         </div>
         <div v-else class="row items-center no-wrap q-gutter-x-xs text-caption text-muted">
             <q-icon :name="symSharpLock" />
             <span>
-                {{ t("weatherRouting.plusOnly") }}
+                {{ tp(profile, "weatherRouting.plusOnly") }}
                 <router-link to="/account">{{ t("weatherRouting.seePlus") }}</router-link>
             </span>
         </div>

@@ -48,34 +48,117 @@ class CoverageTests(TestCase):
 
     # -- votes ------------------------------------------------------------------------------
 
+    def _votes(self, code: str) -> tuple[int, bool]:
+        """The area's shown count and whether this client voted; an area nobody lists is (0, False)."""
+        areas = self.client.get("/api/coverage").json()["areas"]
+        area = next((a for a in areas if a["code"] == code), None)
+        return (area["votes"], area["voted"]) if area else (0, False)
+
     def test_an_anonymous_vote_counts_once_and_is_remembered_by_cookie(self):
         reply = self.client.put("/api/coverage/de/vote")
-        self.assertEqual(reply.json(), {"code": "DE", "votes": 1, "voted": True})
+        # Counted at the next settlement, not before.
+        self.assertEqual(reply.json(), {"code": "DE", "votes": 0, "voted": True})
         self.assertIn(coverage.VOTER_COOKIE, reply.cookies)
         self.assertTrue(reply.cookies[coverage.VOTER_COOKIE]["httponly"])
-        self.assertEqual(self.client.put("/api/coverage/DE/vote").json()["votes"], 1)
-        area = next(a for a in self.client.get("/api/coverage").json()["areas"] if a["code"] == "DE")
-        self.assertEqual((area["votes"], area["voted"], area["status"]), (1, True, None))
+        self.assertEqual(self.client.put("/api/coverage/DE/vote").json()["voted"], True)
+        self.assertEqual(self._votes("DE"), (0, True))
+        coverage.settle_votes()
+        self.assertEqual(self._votes("DE"), (1, True))
         self.assertTrue(CoverageVote.objects.get().voter.startswith("anon:"))
 
-    def test_a_new_cookie_from_the_same_address_cannot_vote_twice_the_same_day(self):
-        self.client.put("/api/coverage/DE/vote")
+    def test_a_new_cookie_from_the_same_address_is_answered_alike_but_never_counts(self):
+        counted = self.client.put("/api/coverage/DE/vote")
         other = Client(REMOTE_ADDR="10.0.0.1")
-        self.assertEqual(other.put("/api/coverage/DE/vote").status_code, 429)
+        refused = other.put("/api/coverage/DE/vote")
+        self.assertEqual((refused.status_code, refused.json()), (counted.status_code, counted.json()))
+        # Its voter still sees the vote as cast; it simply never counts.
+        area = next(a for a in other.get("/api/coverage").json()["areas"] if a["code"] == "DE")
+        self.assertTrue(area["voted"])
         self.assertEqual(other.put("/api/coverage/AT/vote").status_code, 200)
-        self.assertEqual(Client(REMOTE_ADDR="10.0.0.2").put("/api/coverage/DE/vote").json()["votes"], 2)
+        Client(REMOTE_ADDR="10.0.0.2").put("/api/coverage/DE/vote")
+        coverage.settle_votes()
+        self.assertEqual(self._votes("DE")[0], 2)
+        self.assertEqual(CoverageVote.objects.filter(accepted=False).count(), 1)
 
-    def test_a_withdrawn_anonymous_vote_can_be_cast_again(self):
+    def test_nothing_anyone_can_see_changes_before_the_settlement(self):
         self.client.put("/api/coverage/DE/vote")
-        self.assertEqual(self.client.delete("/api/coverage/DE/vote").json(), {"code": "DE", "votes": 0, "voted": False})
-        self.assertEqual(self.client.put("/api/coverage/DE/vote").json()["votes"], 1)
+        coverage.settle_votes()
+        Client(REMOTE_ADDR="10.0.0.2").put("/api/coverage/DE/vote")
+        self.assertEqual(coverage.settle_votes(), 0)  # once per UTC day
+        self.assertEqual(self._votes("DE")[0], 1)
+        coverage.settle_votes(now=datetime.now(tz=UTC) + timedelta(days=1))
+        self.assertEqual(self._votes("DE")[0], 2)
+
+    def test_without_settled_tallies_only_votes_from_before_today_show(self):
+        self.client.put("/api/coverage/DE/vote")
+        Client(REMOTE_ADDR="10.0.0.2").put("/api/coverage/DE/vote")
+        two_days_ago = datetime.now(tz=UTC) - timedelta(days=2)
+        CoverageVote.objects.filter(voter__startswith="anon:").update(created_at=two_days_ago)
+        Client(REMOTE_ADDR="10.0.0.3").put("/api/coverage/DE/vote")
+        cache.delete(coverage.TALLY_KEY)
+        self.assertEqual(self._votes("DE")[0], 2)
+
+    def test_without_settled_tallies_a_withdrawal_from_today_changes_nothing_yet(self):
+        self.client.put("/api/coverage/DE/vote")
+        two_days_ago = datetime.now(tz=UTC) - timedelta(days=2)
+        CoverageVote.objects.update(created_at=two_days_ago)
+        self.client.delete("/api/coverage/DE/vote")
+        cache.delete(coverage.TALLY_KEY)
+        self.assertEqual(coverage.published_tallies(), {"DE": 1})
+
+    def test_switching_the_ledger_off_settles_pending_withdrawals_at_once(self):
+        self.client.put("/api/coverage/DE/vote")
+        self.client.delete("/api/coverage/DE/vote")
+        with self.settings(COVERAGE_BLIND_LEDGER=False):
+            self.assertEqual(coverage.settle_votes(), 1)
+        self.assertFalse(CoverageVote.objects.exists())
+        Client(REMOTE_ADDR="10.0.0.1").put("/api/coverage/DE/vote")
+        self.assertTrue(CoverageVote.objects.get().accepted, "its address claim was released")
+
+    def test_a_withdrawal_takes_effect_at_the_settlement(self):
+        self.client.put("/api/coverage/DE/vote")
+        coverage.settle_votes()
+        self.assertEqual(self.client.delete("/api/coverage/DE/vote").json(), {"code": "DE", "votes": 1, "voted": False})
+        self.assertEqual(self._votes("DE"), (1, False))
+        # Cast again before the settlement: the vote simply stands.
+        self.client.put("/api/coverage/DE/vote")
+        self.client.delete("/api/coverage/DE/vote")
+        self.assertEqual(coverage.settle_votes(now=datetime.now(tz=UTC) + timedelta(days=1)), 1)
+        self.assertFalse(CoverageVote.objects.exists())
+        self.assertEqual(self._votes("DE"), (0, False))
+
+    def test_a_settled_withdrawal_releases_the_address_claim(self):
+        self.client.put("/api/coverage/DE/vote")
+        self.client.delete("/api/coverage/DE/vote")
+        coverage.settle_votes()
+        Client(REMOTE_ADDR="10.0.0.1").put("/api/coverage/DE/vote")
+        self.assertTrue(CoverageVote.objects.get().accepted)
+
+    def test_tallies_can_be_published_in_steps(self):
+        for n in range(7):
+            Client(REMOTE_ADDR=f"10.0.1.{n}").put("/api/coverage/DE/vote")
+        for n in range(3):
+            Client(REMOTE_ADDR=f"10.0.2.{n}").put("/api/coverage/AT/vote")
+        with self.settings(COVERAGE_TALLY_STEP=5):
+            coverage.settle_votes()
+        self.assertEqual(coverage.published_tallies(), {"DE": 5})
+
+    def test_without_the_ledger_votes_count_live_and_refusals_answer_429(self):
+        with self.settings(COVERAGE_BLIND_LEDGER=False):
+            self.assertEqual(self.client.put("/api/coverage/DE/vote").json()["votes"], 1)
+            self.assertEqual(Client(REMOTE_ADDR="10.0.0.1").put("/api/coverage/DE/vote").status_code, 429)
+            self.assertEqual(self.client.delete("/api/coverage/DE/vote").json()["votes"], 0)
+            self.assertEqual(self.client.put("/api/coverage/DE/vote").json()["votes"], 1)
+            self.assertEqual(coverage.settle_votes(), 0)
 
     def test_an_account_votes_as_itself(self):
         user = self._user()
         self.client.put("/api/coverage/DE/vote")
         self.client.force_login(user)
         # Same address, but an account's vote is its own.
-        self.assertEqual(self.client.put("/api/coverage/DE/vote").json()["votes"], 2)
+        self.client.put("/api/coverage/DE/vote")
+        coverage.settle_votes()
+        self.assertEqual(self._votes("DE")[0], 2)
         self.assertTrue(CoverageVote.objects.filter(voter=f"user:{user.pk}").exists())
 
     def test_a_covered_or_unknown_area_takes_no_votes(self):

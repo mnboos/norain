@@ -76,6 +76,17 @@ export interface JourneysApiCoreApiJourneyJourneyStageForecastRequest {
     stageId: string;
 }
 
+export interface JourneysApiCoreApiJourneyJourneyStageGpxRequest {
+    /**
+     * 
+     */
+    journeyId: string;
+    /**
+     * 
+     */
+    stageId: string;
+}
+
 export interface JourneysApiCoreApiJourneyJourneyStagePoisRequest {
     /**
      * 
@@ -333,6 +344,60 @@ export class JourneysApi extends runtime.BaseAPI {
     async coreApiJourneyJourneyStageForecast(requestParameters: JourneysApiCoreApiJourneyJourneyStageForecastRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<ForecastJobOut> {
         const response = await this.coreApiJourneyJourneyStageForecastRaw(requestParameters, initOverrides);
         return await response.value();
+    }
+
+    /**
+     * Creates request options for coreApiJourneyJourneyStageGpx without sending the request
+     */
+    async coreApiJourneyJourneyStageGpxRequestOpts(requestParameters: JourneysApiCoreApiJourneyJourneyStageGpxRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['journeyId'] == null) {
+            throw new runtime.RequiredError(
+                'journeyId',
+                'Required parameter "journeyId" was null or undefined when calling coreApiJourneyJourneyStageGpx().'
+            );
+        }
+
+        if (requestParameters['stageId'] == null) {
+            throw new runtime.RequiredError(
+                'stageId',
+                'Required parameter "stageId" was null or undefined when calling coreApiJourneyJourneyStageGpx().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/api/journeys/{journey_id}/stages/{stage_id}/gpx`;
+        urlPath = urlPath.replace('{journey_id}', encodeURIComponent(String(requestParameters['journeyId'])));
+        urlPath = urlPath.replace('{stage_id}', encodeURIComponent(String(requestParameters['stageId'])));
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * One stage as GPX: the line, and the stops it was routed through (breaks, gap-fill detours and the night\'s lodging) as waypoints.
+     * Journey Stage Gpx
+     */
+    async coreApiJourneyJourneyStageGpxRaw(requestParameters: JourneysApiCoreApiJourneyJourneyStageGpxRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<void>> {
+        const requestOptions = await this.coreApiJourneyJourneyStageGpxRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.VoidApiResponse(response);
+    }
+
+    /**
+     * One stage as GPX: the line, and the stops it was routed through (breaks, gap-fill detours and the night\'s lodging) as waypoints.
+     * Journey Stage Gpx
+     */
+    async coreApiJourneyJourneyStageGpx(requestParameters: JourneysApiCoreApiJourneyJourneyStageGpxRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<void> {
+        await this.coreApiJourneyJourneyStageGpxRaw(requestParameters, initOverrides);
     }
 
     /**

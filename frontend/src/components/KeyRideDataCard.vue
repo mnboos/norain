@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, toRefs } from "vue";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import {
     symSharpAcUnit,
     symSharpAir,
@@ -131,7 +132,7 @@ const rows = computed(() =>
 <template>
     <q-card>
         <!-- The grid runs to the card's edges; separators draw the lines between the cells. -->
-        <q-card-section :aria-label="t('keyData.label')" class="q-pa-none">
+        <q-card-section :aria-label="tp(forecast.profile, 'keyData.label')" class="q-pa-none">
             <template v-for="(row, r) in rows" :key="r">
                 <div class="row no-wrap">
                     <template v-for="(stat, c) in row" :key="stat.label">
@@ -170,7 +171,7 @@ const rows = computed(() =>
         </template>
         <q-dialog v-model="showExplanation">
             <q-card>
-                <q-card-section class="text-body2">{{ t("keyData.note") }}</q-card-section>
+                <q-card-section class="text-body2">{{ tp(forecast.profile, "keyData.note") }}</q-card-section>
                 <q-card-actions align="right">
                     <q-btn v-close-popup flat :label="t('common.close')" color="primary" />
                 </q-card-actions>

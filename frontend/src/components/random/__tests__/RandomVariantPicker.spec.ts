@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
 vi.mock("@/queries/journeys", () => ({
     useSaveVariantsAsRoutes: () => ({ mutateAsync: state.save, isPending: { value: false } }),
 }));
+vi.mock("@/composables/useEntitlements", () => ({ useEntitlements: () => ({ entitlements: { value: null } }) }));
 vi.mock("vue-router", () => ({ useRouter: () => ({ push: state.push }) }));
 
 function stage(id: string, distanceM: number, ascentM: number | null = null) {

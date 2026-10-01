@@ -22,8 +22,12 @@ can leave an email address to be told when an area is covered. This guide is for
 
 Votes are counted per account, or per browser cookie for visitors without one; the page
 ranks the areas by them, and *Coverage votes* in the admin lists single votes. No IP address
-is stored. Addresses that were never confirmed are deleted after 7 days by the hourly
-maintenance pass.
+is stored. The page's counts change once a day: the first hourly maintenance pass of each UTC
+day settles the votes, and until then a new vote or a withdrawal shows only to its voter. A
+vote the limits refused is kept as *not accepted* (a column in the admin) and never counts,
+though its voter sees it like any other; the area list in the admin counts the accepted ones
+live. Addresses that were never confirmed are deleted after 7 days by the hourly maintenance
+pass.
 
 The Caddy limits for the page's endpoints are in `deploy/auth-ratelimit.caddy`.
 

@@ -1,7 +1,7 @@
 import type { Data, Layout } from "plotly.js";
 import type { ElevationPoint } from "@norain/api/models";
 
-import { t } from "@/i18n";
+import { t, tp } from "@/i18n";
 
 export interface ElevationSeries {
     points: ElevationPoint[];
@@ -47,6 +47,7 @@ export const ELEVATION_PRIMARY_GROUP = "primary";
 export function elevationFigure(
     series: ElevationSeries[],
     axis: "distance" | "time",
+    profile?: string | null,
 ): { data: Data[]; layout: Partial<Layout> } {
     const ordered = [...series.filter(s => !s.primary), ...series.filter(s => s.primary)];
     return {
@@ -67,7 +68,7 @@ export function elevationFigure(
             showlegend: false,
             uirevision: `elevation-${axis}`,
             xaxis: {
-                title: { text: axis === "distance" ? t("charts.axis.distanceKm") : t("charts.axis.rideMinutes") },
+                title: { text: axis === "distance" ? t("charts.axis.distanceKm") : tp(profile, "charts.axis.rideMinutes") },
                 rangemode: "tozero",
             },
             yaxis: { title: { text: t("charts.axis.elevation") }, autorange: true },

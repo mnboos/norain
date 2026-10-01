@@ -8,7 +8,8 @@ allauth's per-address ones:
   its network: a fresh cookie or another IP does not reset it. A browser that randomises its
   probes (Safari's private tabs) is also counted by its coarse print on its network, so a new
   private tab does not start afresh either.
-- An unknown or suspicious browser shares one tighter count per IP.
+- An unknown, keyless or suspicious browser shares one count per IP (an IPv6 address by its
+  /56). A suspicious browser pays it on top of its own key's: lying never frees a browser.
 
 Only requests allauth accepted are counted (a refused address costs nothing), so parallel
 requests can overshoot a limit by a few. It fails open, like the other per-minute limits:
@@ -30,9 +31,11 @@ from core import fingerprinting as fp
 from core.auth.lockout import client_ip
 
 _PREFIX = "/api/allauth/browser/v1/auth/"
-# path -> (name, window in seconds, per browser key, per IP when unknown or suspicious)
+# path -> (name, window in seconds, per browser key, per IP when unknown or suspicious). The two
+# limits are equal on purpose: after how many requests the refusals start must not say whether
+# the browser was recognised.
 RULES = {
-    f"{_PREFIX}signup": ("signup", 24 * 3600, 3, 5),
+    f"{_PREFIX}signup": ("signup", 24 * 3600, 3, 3),
     f"{_PREFIX}code/request": ("code", 3600, 10, 10),
 }
 
@@ -52,20 +55,36 @@ def counters(request: HttpRequest) -> list[tuple[str, int, int]]:
     name, window, per_key, per_ip = rule
     slot = int(time.time()) // window
     ip = client_ip(request)
-    keys = fp.device_keys(fp.get_browser_assessment(request), ip)
-    if keys:
-        # Every key is counted, so neither a new cookie nor a new key alone starts afresh.
-        # A network key (``p:``) stands for whoever shares the address, so it gets the IP's
-        # allowance: look-alikes behind one CGNAT are never held tighter than without it.
-        return [
-            (
-                f"auth:device:{name}:{fp.keyed_id('auth', key)}:{slot}",
-                per_ip if key.startswith("p:") else per_key,
-                window,
-            )
-            for key in keys
-        ]
-    return [(f"auth:device:{name}:ip:{fp.keyed_id('auth', ip or '-')}:{slot}", per_ip, window)]
+    assessment = fp.get_browser_assessment(request)
+    keys = fp.device_keys(assessment, ip)
+    # Every key is counted, so neither a new cookie nor a new key alone starts afresh. A
+    # network key (``p:``) stands for whoever shares the address, so it gets the IP's
+    # allowance: look-alikes behind one CGNAT are never held tighter than without it.
+    held = [
+        (
+            f"auth:device:{name}:{fp.keyed_id('auth', key)}:{slot}",
+            per_ip if key.startswith("p:") else per_key,
+            window,
+        )
+        for key in keys
+    ]
+    # Becoming common retires f: as an identity, not an already-spent debit. Retain
+    # only a warm counter in THIS rule's fixed slot. Initially-common prints and the
+    # next slot get no lease; low requests cannot create/renew one in a new slot.
+    candidate = assessment.get("debitFingerprint") if assessment else None
+    if candidate and assessment["tier"] == "low" and "fingerprint_common" in assessment["indicators"]:
+        retired = f"auth:device:{name}:{fp.keyed_id('auth', 'f:' + candidate)}:{slot}"
+        try:
+            if (cache.get(retired) or 0) > 0:
+                held.append((retired, per_key, window))
+        except (RedisError, OSError) as exc:
+            logger.warning(f"Device debit lease unavailable: {exc}")
+    young = settings.BROWSER_KEY_AGE_SIGNUPS and not fp.is_established(assessment)
+    if not keys or not fp.is_trusted(assessment) or young:
+        # Unknown, keyless or suspicious: the IP's shared count (an IPv6 address by its /56),
+        # which a suspicious browser pays on top of its own key's.
+        held.append((f"auth:device:{name}:ip:{fp.keyed_id('auth', fp.ip_floor(ip))}:{slot}", per_ip, window))
+    return held
 
 
 def refused(held: list[tuple[str, int, int]]) -> bool:

@@ -65,6 +65,10 @@ services:
       - GRAPHHOPPER_BUILD_HEAP=${GRAPHHOPPER_BUILD_HEAP:-}
       # Threads used by each parallel graph-build phase (CH, LM, urban density and subnetworks).
       - GRAPHHOPPER_BUILD_THREADS=${GRAPHHOPPER_BUILD_THREADS:-3}
+      # Elevation download (just download-elevation-for): parallel requests per piece, and the
+      # share of extra bytes fetched to merge chunks into fewer requests.
+      - TERRAIN_DOWNLOAD_THREADS=${TERRAIN_DOWNLOAD_THREADS:-8}
+      - TERRAIN_OVERFETCH=${TERRAIN_OVERFETCH:-0}
       # How the build holds the graph: RAM_STORE (in the heap) or MMAP (in files, far smaller heap, slower).
       - GRAPHHOPPER_BUILD_DATAACCESS=${GRAPHHOPPER_BUILD_DATAACCESS:-RAM_STORE}
       # MMAP (graph paged in from disk by the OS, small heap) or RAM_STORE (whole graph in the heap).

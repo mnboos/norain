@@ -177,6 +177,9 @@ class RecurringRoute(models.Model):
         max_length=20, default="graphhopper", choices=[("graphhopper", "GraphHopper"), ("imported", "Imported path")]
     )
     imported_coordinates = models.JSONField(default=list, blank=True)
+    # Denormalised POIs (core.pois.PoiHit.as_json) the line was routed through, no FK: a saved
+    # random-ride variant keeps its stops for the GPX download. Cleared when the line changes.
+    stops = models.JSONField(default=list, blank=True)
     duration_seconds = models.PositiveIntegerField(null=True, blank=True)
 
     # Pre-computed route geometry (populated by background task on create/update)
@@ -792,11 +795,18 @@ class CoverageVote(models.Model):
     ``area_code`` is a plain code, not a key: a country needs no ``CoverageArea`` row to be
     voted for. ``voter`` is ``user:<id>`` for an account, else ``anon:`` and a hash of the
     random token in the voter's cookie; no IP address is stored.
+
+    The ledger is blind (``core.coverage``, ``COVERAGE_BLIND_LEDGER``): a vote the limits refused
+    is kept with ``accepted=False``, so its voter sees it like any other, and a withdrawal only
+    sets ``withdrawn_at``. The daily settlement deletes withdrawn rows and publishes the count
+    of the accepted ones.
     """
 
     area_code = models.CharField(max_length=6)
     voter = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True)
+    accepted = models.BooleanField(default=True)
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = (models.UniqueConstraint(fields=["area_code", "voter"], name="core_coveragevote_once"),)

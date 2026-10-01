@@ -88,8 +88,53 @@ Downloads are split into sequential, independently reusable pieces capped at
 piece sizes; preparation splits coverage until the estimated payload is below
 900 MB, leaving room for archive metadata, and enforces the 1 GB file limit.
 Pieces are merged locally into the final archives, which can exceed 1 GB.
+The download log shows overall progress by completed source archives (including
+empty or reused sources), followed by progress for the current piece. The overall
+percentage counts sources, not bytes or remaining time: source sizes vary. After
+downloads reach 100%, final merging, verification and publication still run and
+are shown as separate phases.
+A piece is a few large range requests. Now and then one connection stalls at a few
+kB/s near the end, while a fresh one is fast again, and `pmtiles extract` has no timeout.
+So a download whose byte count has not moved for 90 s is stopped and the piece starts
+again, up to three times. A piece whose download fails, for example when the host
+resets the connection (`INTERNAL_ERROR; received from peer`), starts again the same
+way. Two settings in `.env`: `TERRAIN_DOWNLOAD_THREADS` (default 8,
+requests at once) and `TERRAIN_OVERFETCH` (default 0: the share of extra bytes fetched
+to merge nearby chunks; merged requests are longer, and long ones are what stall).
 Allow space for the retained pieces, per-source merges and final archives to coexist,
 plus decoded caches, the new graph and the retained previous graph.
+
+### Download each source in one piece instead
+
+```sh
+just routing-terrain-estimate-whole bike-switzerland-latest.osm.pbf
+just download-elevation-whole-for bike-switzerland-latest.osm.pbf
+```
+
+This is the old way: one `pmtiles extract` per source archive (and one for the
+zoom-12 fallback), however large, with no 1 GB pieces and no stall restarts.
+It makes fewer requests, so it suits a fast, stable connection. The result is the
+same terrain with the same hash, and the build does not care which command made it.
+
+**You can mix the two, one source at a time.** Each source becomes one file in
+`elevation/.prepare-<hash>/`: `part-N.pmtiles`, or `fallback.pmtiles` for the zoom-12
+source. Both commands use the same folder and reuse any finished file there, whichever
+command made it. Within one source they do not mix: a failed whole download leaves a
+useless `part-N.partial.pmtiles`, and the pieces in `pieces/` are merged only by
+`download-elevation-for`.
+
+A whole download that fails starts over from zero when you run it again. The
+connection can drop late, after many GB. To finish in pieces instead, delete the
+partial file (`download-elevation-for` does not remove it) and switch commands:
+
+```sh
+rm "$ROUTING_OSM_IMPORT_DIR"/elevation/.prepare-<hash>/part-<N>.partial.pmtiles
+just download-elevation-for bike-switzerland-latest.osm.pbf
+```
+
+The finished sources are kept; only the rest is downloaded, in pieces. Pieces left
+over from a source that was later finished whole stay until
+`just cleanup-elevation-downloads`.
 
 ### What gets downloaded again?
 
@@ -141,6 +186,51 @@ for the running graph plus the import, or build on another machine. Before Java
 starts, the container rejects a cgroup memory limit smaller than the heap plus
 native-memory headroom (at least 2 GiB or 10% of the heap), with an actionable
 `GRAPHHOPPER_MEM_LIMIT` error instead of a later exit 137.
+
+### Large areas: memory and the file system
+
+A Europe graph is about 12 GB: edges 2.5 GB, nodes 0.7 GB, geometry 0.7 GB, and
+one landmark file of 2.75 GB per bike profile. The build holds it either in the heap
+(`GRAPHHOPPER_BUILD_DATAACCESS=RAM_STORE`) or in memory-mapped files in
+`/graph-cache/releases/<id>/graph/` (`MMAP`). What counts:
+
+- **The heap needs room besides the graph.** It holds the OSM reader's node map and
+  the height table (about 30 bytes per node: ~5 GB for 167 million nodes). With
+  `MMAP`, a Europe build used up to 11 GB of heap while reading the file.
+- **`GRAPHHOPPER_MEM_LIMIT` covers everything**: the heap, Java's own memory, and,
+  with `MMAP`, the page cache holding the graph files. It must fit on the machine
+  next to everything else running there.
+- **On btrfs, do not build a large area with `MMAP`.** The landmark step (LM) writes
+  into every page of its landmark files again and again, and each time btrfs has to
+  reserve space for the write first. Two Europe builds on btrfs sat in LM for 5.5
+  and 10 hours at under 0.2 CPU cores and never finished; the LM threads waited in
+  btrfs (`handle_reserve_ticket`) and took turns, one at a time. Keeping dirty pages
+  in memory longer (`sysctl vm.dirty_*`) did not help. Use `RAM_STORE` there: LM
+  works in the heap, and the files are written once, in order, at the end. For
+  Europe on a 30 GB machine: heap 20 GB, limit 24 GB, and close big programs during
+  the build. Other file systems (ext4, xfs) have no such problem with `MMAP`.
+- **On btrfs, turn off copy-on-write for the graph folder anyway.** With
+  copy-on-write, every page written through a memory map becomes a new extent, and
+  with `compress=zstd` (Fedora's default for `/home`) a compressed one: a Europe
+  landmark file had 630,000 extents after five hours. Before the first build:
+
+  ```sh
+  chattr +C data/graphhopper/cache/releases
+  ```
+
+  New release folders and their files inherit it (`lsattr -d` shows a `C`). It does
+  not change files that already exist, so set it before a build, never during one.
+  It also turns off compression for these files. It stopped the fragmentation (about
+  4,800 extents per file) but not the waiting described above.
+- **A running build can get more memory without a restart**:
+  `podman update --memory 24g --memory-swap 32g <container>` (or `docker update`).
+  It helps only when memory is the problem, not the file system.
+
+To see whether a build is still working, look at its CPU use (`podman stats`) and at
+its threads (`/proc/<java pid>/task/*/stat` for the state, `wchan` for what they wait
+on). LM logs nothing between `Start calculating 16 landmarks` and `LM … finished`.
+Threads that stay in state `D` at almost no CPU are waiting for the disk or the file
+system.
 
 If the selected terrain does not cover the filtered file, the build stops with an
 error. Run `download-elevation-for` for that file, then retry the build.
@@ -244,6 +334,26 @@ saved geometry and is not part of this migration.
 
 ## Rollback
 
+### Undo an activation, keep the app
+
+When the graph you activated is bad but the app release is fine:
+
+```sh
+just routing-undo-activate
+```
+
+`routing-activate` keeps the graph it replaced as `previous`. This points `current`
+back at it and restarts only GraphHopper, with the image that runs now. It first
+checks that image can load the previous graph (same GraphHopper revision, unchanged
+config); if not, it stops before touching anything. The bad graph stays in
+`releases/` and becomes `previous`, so running the command again switches back to it.
+Run it once.
+
+The previous graph keeps its own config. A profile added since, such as `hike`, is
+missing until a new graph is built and activated; requests for it fail.
+
+### Roll back the engine too
+
 Before activating, record the old immutable image ID:
 
 ```sh
@@ -315,7 +425,25 @@ GraphHopper stores decoded tiles in `cache/` and `cache-fallback/`. Imports keep
 most 512 decoded tiles memory-mapped at once, so continent-sized builds do not exhaust
 native mappings or file descriptors. An empty, interrupted, or legacy-format cache
 file is deleted and regenerated from the retained PMTiles archive when it is read;
-valid cached tiles remain reusable.
+valid cached tiles remain reusable. Elevation prefetch reports node progress at least
+once per minute while moving between tiles; decoding uncached terrain is much slower
+than reading an already populated cache.
+
+Preparation also writes `cell_coverage.json`: for each road cell, how many of its 256 zoom-15
+tiles the archive holds (read from the PMTiles directories, no tile is decoded), and, when the
+tiles were decoded, how many have nodata. It is not part of the terrain key. The system
+dashboard colours the cells from it: zoom 15 complete, partial, or zoom 12 only. For terrain
+prepared before the file existed, run `just elevation-coverage-backfill`. It writes the file
+into the terrain of the active graph, which need not be `elevation/current`, using the graph's
+road cells (so run `graph-cells-backfill` first), else the terrain's, else every cell in the
+bounding box of terrain prepared before cells existed. Ship the file with the terrain.
+
+Each graph release also keeps the road cells of the OSM file it was built from (`cells.json`,
+written by the check before the import) and the file's name, size and date in `artifact.json`.
+GraphHopper serves both, with the terrain's files, at `GET /coverage`, for the system dashboard.
+A release built before that shows the terrain's cells instead, which may cover more; run
+`just graph-cells-backfill FILE` with the file it was built from to add them. Without that file,
+terrain prepared for a bounding box shows the whole box.
 
 The manifest records the coverage-cell hash, source catalog version, source metadata,
 zooms and archive checksums. Mapterhorn attribution is retained as `attribution.json`;

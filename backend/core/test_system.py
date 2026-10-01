@@ -4,6 +4,7 @@ from datetime import UTC, datetime, time, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import httpx
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
@@ -14,7 +15,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 
 from backend.asgi import application
 
-from . import jobs
+from . import data_coverage, jobs
 from .api.system import cell_ring, coverage_state, viewport_boxes
 from .auth.admin_access import has_system_access
 from .consumers import SystemEventsConsumer
@@ -137,7 +138,12 @@ class SystemApiTests(TestCase):
             f"coverage/route/{self.route.pk}",
             "jobs",
             "browser",
+            "data-coverage",
         ]
+        offline = httpx.ConnectError("offline")
+        self.enterContext(patch("core.data_coverage._fetch_graphhopper", side_effect=offline))
+        self.enterContext(patch("core.data_coverage._fetch_photon_status", side_effect=offline))
+        self.enterContext(patch("core.data_coverage._read_photon_manifest", return_value=None))
         for path in endpoints:
             self.get(path)
         session = self.client.session
@@ -431,3 +437,168 @@ class SystemNotifyTests(SimpleTestCase):
         ):
             async_to_sync(jobs.publish)(job)
         notify.assert_awaited_once_with("jobs")
+
+
+GRAPH_REPORT = {
+    "release": "20261001T120000-7",
+    "artifact": {
+        "revision": "abc",
+        "status": "validated",
+        "built_at": "2026-10-01T12:30:00+00:00",
+        "osm_file": {"name": "bike-ch.osm.pbf", "size": 3, "modified": "2026-09-30T08:00:00+00:00"},
+    },
+    "terrain": "0123abcd",
+    "manifest": {
+        "zoom": 15,
+        "fallback_zoom": 12,
+        "catalog_version": "2026-09",
+        "sources": [{"name": "alps", "min_lon": 5, "min_lat": 45, "max_lon": 11, "max_lat": 48}],
+        "fallback_source": {"name": "planet"},
+        "coverage": [
+            {"zoom": 15, "positions": 768, "decoded": True, "missing": 300, "void": 1, "examples": []},
+            {"zoom": 12, "positions": 12, "decoded": False},
+        ],
+    },
+    "cells_source": "graph",
+    # Two neighbours in one row, one cell below; (9, 9) is terrain only, not the graph's.
+    "cells": [[1066, 717], [1067, 717], [1066, 718]],
+    "cell_coverage": {
+        "zoom": 15,
+        "mask_zoom": 11,
+        "per_cell": 256,
+        "cells": [[1066, 717, 256, 0], [1067, 717, 200, None], [1066, 718, 0, None], [9, 9, 256, 0]],
+    },
+}
+PHOTON_STATUS = {"status": "Ok", "import_date": "2026-09-12T23:03:36Z", "version": "1.0.1"}
+PHOTON_MANIFEST = {
+    "imported_at": "2026-09-13T01:00:00Z",
+    "sources": ["photon-dump-switzerland-liechtenstein-1.0-latest.jsonl.zst"],
+    "countries": {"li": 20, "ch": 900},
+}
+
+
+class DataCoverageTests(SimpleTestCase):
+    def test_adjacent_cells_in_a_row_merge_and_rows_stay_apart(self):
+        boxes = data_coverage.merge_cells([(1067, 717), (1066, 717), (1066, 718), (1070, 717)])
+        self.assertEqual(len(boxes), 3)
+        (west, south, east, north), *_ = boxes
+        self.assertLess(west, east)
+        self.assertLess(south, north)
+        # The two-cell run spans twice the width of a single cell.
+        single = boxes[1]
+        self.assertAlmostEqual(east - west, 2 * (single[2] - single[0]), places=4)
+        self.assertEqual(data_coverage.merge_cells([]), [])
+
+    def test_elevation_levels(self):
+        self.assertEqual(data_coverage.elevation_level(256, 0, 256), "full")
+        self.assertEqual(data_coverage.elevation_level(256, None, 256), "full")
+        self.assertEqual(data_coverage.elevation_level(256, 3, 256), "partial")
+        self.assertEqual(data_coverage.elevation_level(17, None, 256), "partial")
+        self.assertEqual(data_coverage.elevation_level(0, None, 256), "fallback")
+
+    def build(self, graph=GRAPH_REPORT, status=PHOTON_STATUS, manifest=PHOTON_MANIFEST):
+        def answer(value):
+            return {"side_effect": value} if isinstance(value, Exception) else {"return_value": value}
+
+        with (
+            patch("core.data_coverage._fetch_graphhopper", **answer(graph)),
+            patch("core.data_coverage._fetch_photon_status", **answer(status)),
+            patch("core.data_coverage._read_photon_manifest", **answer(manifest)),
+        ):
+            return data_coverage.build_data_coverage()
+
+    def test_report_is_summarised_for_the_graph_cells_only(self):
+        result = self.build()
+        self.assertEqual(result["graph"]["cells"], 3)
+        self.assertEqual(result["graph"]["osm_file"], "bike-ch.osm.pbf")
+        self.assertEqual(len(result["road_boxes"]), 2)
+        self.assertEqual(result["terrain"]["cell_counts"], {"full": 1, "partial": 1, "fallback": 1})
+        self.assertEqual([len(result["elevation_boxes"][k]) for k in ("full", "partial", "fallback")], [1, 1, 1])
+        self.assertEqual(result["terrain"]["sources"][0]["bbox"], [5, 45, 11, 48])
+        self.assertEqual(result["terrain"]["checks"][0]["missing"], 300)
+        west, south, east, north = result["bounds"]
+        self.assertTrue(6 < west < east < 8 and 46 < south < north < 48)
+        self.assertEqual(result["photon"]["countries"][0], {"code": "CH", "places": 900})
+        self.assertEqual(result["photon"]["import_date"].year, 2026)
+
+    def test_parts_fail_on_their_own(self):
+        result = self.build(graph=httpx.ConnectError("down"))
+        self.assertIsNone(result["graph"])
+        self.assertIsNone(result["terrain"])
+        self.assertEqual(result["road_boxes"], [])
+        self.assertIsNotNone(result["photon"])
+        result = self.build(status=httpx.ConnectError("down"), manifest=None)
+        self.assertIsNone(result["photon"])
+        self.assertEqual(result["graph"]["cells"], 3)
+        # Photon down but its file is there: the countries still show.
+        result = self.build(status=httpx.ConnectError("down"))
+        self.assertFalse(result["photon"]["reachable"])
+        self.assertEqual(len(result["photon"]["countries"]), 2)
+
+    def test_bounding_box_terrain_without_any_cells(self):
+        manifest = {**GRAPH_REPORT["manifest"], "bounds": [9.0, 47.0, 9.3, 47.1]}
+        report = {**GRAPH_REPORT, "cells": None, "cells_source": "terrain", "manifest": manifest, "cell_coverage": None}
+        result = self.build(graph=report)
+        self.assertEqual(result["graph"]["cells_source"], "bounds")
+        self.assertGreater(result["graph"]["cells"], 0)
+        west, south, east, north = result["bounds"]
+        self.assertTrue(west <= 9.0 and east >= 9.3 and south <= 47.0 and north >= 47.1)
+
+    def test_terrain_without_cell_coverage_and_index_without_file(self):
+        report = {**GRAPH_REPORT, "cell_coverage": None, "cells_source": "terrain"}
+        result = self.build(graph=report, manifest=None)
+        self.assertIsNone(result["terrain"]["cell_counts"])
+        self.assertEqual(result["elevation_boxes"], {"full": [], "partial": [], "fallback": []})
+        self.assertEqual(result["graph"]["cells_source"], "terrain")
+        self.assertFalse(result["photon"]["manifest"])
+        self.assertIsNone(result["photon"]["countries"])
+
+    @override_settings(CACHES=LOCMEM)
+    def test_cached_only_when_every_part_answered(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        with (
+            patch("core.data_coverage._fetch_graphhopper", side_effect=httpx.ConnectError("down")) as graph,
+            patch("core.data_coverage._fetch_photon_status", return_value=PHOTON_STATUS),
+            patch("core.data_coverage._read_photon_manifest", return_value=PHOTON_MANIFEST),
+        ):
+            data_coverage.data_coverage()
+            data_coverage.data_coverage()
+            self.assertEqual(graph.call_count, 2)
+            graph.side_effect, graph.return_value = None, GRAPH_REPORT
+            data_coverage.data_coverage()
+            data_coverage.data_coverage()
+            self.assertEqual(graph.call_count, 3)
+
+    @override_settings(CACHES=LOCMEM)
+    def test_cache_outage_still_answers(self):
+        with (
+            patch("core.data_coverage.cache.get", side_effect=RedisConnectionError("down")),
+            patch("core.data_coverage.cache.set", side_effect=RedisConnectionError("down")),
+            patch("core.data_coverage._fetch_graphhopper", return_value=GRAPH_REPORT),
+            patch("core.data_coverage._fetch_photon_status", return_value=PHOTON_STATUS),
+            patch("core.data_coverage._read_photon_manifest", return_value=PHOTON_MANIFEST),
+        ):
+            self.assertEqual(data_coverage.data_coverage()["graph"]["cells"], 3)
+
+
+@override_settings(**TEST_SETTINGS, ADMIN_OTP=False)
+class DataCoverageApiTests(TestCase):
+    def test_endpoint_serves_the_summary_and_boxes(self):
+        user = User.objects.create_user(
+            username="Operator", email="operator@example.test", is_staff=True, signup_completed=True
+        )
+        self.client.force_login(user)
+        with (
+            patch("core.data_coverage._fetch_graphhopper", return_value=GRAPH_REPORT),
+            patch("core.data_coverage._fetch_photon_status", return_value=PHOTON_STATUS),
+            patch("core.data_coverage._read_photon_manifest", return_value=PHOTON_MANIFEST),
+        ):
+            response = self.client.get("/api/system/data-coverage")
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body["graph"]["cells_source"], "graph")
+        self.assertEqual(body["terrain"]["cell_counts"]["fallback"], 1)
+        self.assertEqual(len(body["road_boxes"]), 2)
+        self.assertEqual(body["photon"]["countries"][1]["code"], "LI")

@@ -16,6 +16,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import corsheaders.defaults
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -66,6 +67,41 @@ SESSION_COOKIE_HTTPONLY = True
 BROWSER_FINGERPRINT_ENABLED = os.environ.get("BROWSER_FINGERPRINT_ENABLED", "true").lower() == "true"
 # Leading zero bits of each challenge's proof-of-work, the base before churn makes it dearer.
 BROWSER_POW_BITS = int(os.environ.get("BROWSER_POW_BITS", "16"))
+# New lie checks start here: named and counted, but tier-neutral until their solo count stayed at
+# 0 for 14 days (docs/reference/browser-fingerprinting.md, "Observe mode"). Comma-separated.
+BROWSER_OBSERVE_ONLY = frozenset(
+    name.strip()
+    for name in os.environ.get(
+        "BROWSER_OBSERVE_ONLY",
+        "client_hints_grease_mismatch,fetch_metadata_mismatch,fetch_metadata_missing,"
+        "graphics_platform_mismatch,realm_tampered,native_stack_tampered,fingerprint_common",
+    ).split(",")
+    if name.strip()
+)
+# A browser key claims on its own only once it is this old (seconds, from its first proof); until
+# then it also pays its IP's shared count. Time is the one resource a GPU cannot compress.
+BROWSER_KEY_AGE = int(os.environ.get("BROWSER_KEY_AGE", "72000"))
+# Whether a young key also pays the IP's count for sign-ups and sign-in codes (votes always do).
+BROWSER_KEY_AGE_SIGNUPS = os.environ.get("BROWSER_KEY_AGE_SIGNUPS", "false").lower() == "true"
+# The relay meter (core/fingerprinting.py): "off" or "observe" (it counts, it never limits).
+# Allowances follow it only after the PoC gates, see docs/reference/browser-fingerprinting.md.
+BROWSER_PATH_METER = os.environ.get("BROWSER_PATH_METER", "off").strip().lower()
+if BROWSER_PATH_METER not in {"off", "observe"}:
+    raise ImproperlyConfigured("BROWSER_PATH_METER must be off or observe.")
+# The header Cloudflare's Transform Rule writes ("tcp_rtt,quic_rtt,asn"); Caddy strips it from
+# anything that did not come through Cloudflare.
+BROWSER_PATH_HEADER = os.environ.get("BROWSER_PATH_HEADER", "X-Ml-Edge")
+# Excess round trip (ms) below which a path is direct and above which it is relayed. Unset until
+# gate G1 measured them; unset, every measured path reads "unclear".
+BROWSER_PATH_DIRECT_MS = int(os.environ["BROWSER_PATH_DIRECT_MS"]) if os.environ.get("BROWSER_PATH_DIRECT_MS") else None
+BROWSER_PATH_RELAYED_MS = (
+    int(os.environ["BROWSER_PATH_RELAYED_MS"]) if os.environ.get("BROWSER_PATH_RELAYED_MS") else None
+)
+# Anonymous coverage votes are recorded blind and counted once a day (core/coverage.py), so
+# the reply to a vote never says whether the limits let it count.
+COVERAGE_BLIND_LEDGER = os.environ.get("COVERAGE_BLIND_LEDGER", "true").lower() == "true"
+# Published tallies are rounded down to this step; above 1 it also blurs the daily change.
+COVERAGE_TALLY_STEP = max(1, int(os.environ.get("COVERAGE_TALLY_STEP", "1")))
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_SECURE = True

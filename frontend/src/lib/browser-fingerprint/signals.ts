@@ -1,5 +1,7 @@
 /** First-party probes. No fingerprinting dependency, network calls or permission prompts. */
-import { canvasIntegrity, engineTells, frameTimeZone, tamperedNatives, withFrame } from "./realm";
+import { canvasIntegrity, engineTells, frameTimeZone, nanBits, tamperedNatives, withFrame } from "./realm";
+
+export { nanBits } from "./realm";
 
 export type Probe = { status: "ok"; value: string } | { status: "unavailable" | "timeout" | "unstable" };
 export type Signals = Record<string, Probe>;
@@ -139,35 +141,6 @@ async function audio(): Promise<string> {
     } finally {
         oscillator.disconnect();
         compressor.disconnect();
-    }
-}
-
-/**
- * `(a, b) => bits(a / b)` for f32 and f64 (high word), as WebAssembly. The sign and payload of
- * the NaN from 0/0 are left to the hardware (x86 and ARM differ), and fingerprinting protection
- * leaves them alone. Parameters, not constants, so no compiler folds the division away.
- */
-const NAN_MODULE = new Uint8Array([
-    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0d, 0x02, 0x60, 0x02, 0x7d, 0x7d, 0x01, 0x7f, 0x60, 0x02,
-    0x7c, 0x7c, 0x01, 0x7f, 0x03, 0x03, 0x02, 0x00, 0x01, 0x07, 0x09, 0x02, 0x01, 0x61, 0x00, 0x00, 0x01, 0x62, 0x00,
-    0x01, 0x0a, 0x17, 0x02, 0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x95, 0xbc, 0x0b, 0x0c, 0x00, 0x20, 0x00, 0x20, 0x01,
-    0xa3, 0xbd, 0x42, 0x20, 0x88, 0xa7, 0x0b,
-]);
-
-export function nanBits(): string[] | null {
-    if (typeof WebAssembly !== "object") return null;
-    try {
-        const { exports } = new WebAssembly.Instance(new WebAssembly.Module(NAN_MODULE));
-        const hex = (name: string) => {
-            const run: unknown = exports[name];
-            if (typeof run !== "function") throw new Error("Missing export");
-            const value: unknown = Reflect.apply(run, undefined, [0, 0]);
-            return (Number(value) >>> 0).toString(16);
-        };
-        return [hex("a"), hex("b")];
-    } catch {
-        // A CSP without wasm-unsafe-eval, or WebAssembly switched off.
-        return null;
     }
 }
 

@@ -4,169 +4,7 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="bdbdeb51-976c-4c55-bcb7-0a403a60168b" name="Changes" comment="feat(coverage): improve layout a little">
-      <change afterPath="$PROJECT_DIR$/.editorconfig" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/core/api/fingerprint.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/core/auth/device_throttle.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/core/fingerprinting.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/backend/core/test_fingerprinting.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/reference/browser-fingerprinting.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/e2e/fingerprint.spec.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/playwright.fingerprint.config.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/lib/browser-fingerprint/__tests__/client.spec.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/lib/browser-fingerprint/__tests__/pow-vector.json" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/lib/browser-fingerprint/__tests__/pow.spec.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/lib/browser-fingerprint/__tests__/realm.spec.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/lib/browser-fingerprint/__tests__/signals.spec.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/lib/browser-fingerprint/index.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/lib/browser-fingerprint/pow.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/lib/browser-fingerprint/pow.worker.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/lib/browser-fingerprint/realm.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/lib/browser-fingerprint/sha256.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/lib/browser-fingerprint/signals.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/services/__tests__/browserRecognition.spec.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/src/services/browserRecognition.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/frontend/vite.fingerprint.config.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/packages/api/apis/FingerprintApi.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/packages/api/models/Challenge.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/packages/api/models/Receipt.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/packages/api/models/Submission.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/scripts/fingerprint-test-server.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.env.template" beforeDir="false" afterPath="$PROJECT_DIR$/.env.template" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.github/workflows/release.yml" beforeDir="false" afterPath="$PROJECT_DIR$/.github/workflows/release.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/runConfigurations/dev.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/runConfigurations/dev.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_28_09_2026_07_26__Changes_.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/backend/settings/base.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/backend/settings/base.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/backend/settings/development.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/backend/settings/development.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/api/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/__init__.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/api/coverage.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/api/coverage.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/coverage.py" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/coverage.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/locale/en/LC_MESSAGES/django.mo" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/locale/en/LC_MESSAGES/django.mo" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/core/locale/en/LC_MESSAGES/django.po" beforeDir="false" afterPath="$PROJECT_DIR$/backend/core/locale/en/LC_MESSAGES/django.po" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/openapi.json" beforeDir="false" afterPath="$PROJECT_DIR$/backend/openapi.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/pyproject.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/uv.lock" beforeDir="false" afterPath="$PROJECT_DIR$/backend/uv.lock" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/deploy/auth-ratelimit.caddy" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/auth-ratelimit.caddy" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docker-compose.prod.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.prod.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/env.d.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/env.d.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/playwright.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/playwright.config.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/components/account/SignInForms.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/account/SignInForms.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/coverage.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/coverage.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/queries/coverage.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/queries/coverage.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/services/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/services/auth.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/tsconfig.node.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/tsconfig.node.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/tsconfig.vitest.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/tsconfig.vitest.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/vite.config.ts" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/vite.config.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/.openapi-generator/FILES" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/.openapi-generator/FILES" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/apis/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/apis/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/DepartureCandidate.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/DepartureCandidate.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/DepartureComparison.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/DepartureComparison.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/EnsembleModelStatistics.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/EnsembleModelStatistics.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/EnsembleRange.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/EnsembleRange.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/ForecastJobOut.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/ForecastJobOut.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/ForecastMapDetailOut.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/ForecastMapDetailOut.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/ForecastSampleOut.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/ForecastSampleOut.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/ForecastUncertainty.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/ForecastUncertainty.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/ForecastUncertaintySummary.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/ForecastUncertaintySummary.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/GeometrySchema.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/GeometrySchema.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/PlacesApi.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/PlacesApi.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/PlacesSearchResult.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/PlacesSearchResult.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/PropertiesSchema.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/PropertiesSchema.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/RecurringRouteIn.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/RecurringRouteIn.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/RecurringRouteOut.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/RecurringRouteOut.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/RecurringRoutesApi.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/RecurringRoutesApi.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/RouteForecastOut.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/RouteForecastOut.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/RoutePreviewIn.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/RoutePreviewIn.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/RoutePreviewOut.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/RoutePreviewOut.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/RouteSection.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/RouteSection.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/RouteThumbnail.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/RouteThumbnail.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/RouteThumbnailSample.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/RouteThumbnailSample.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/RouteWeatherApi.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/RouteWeatherApi.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/RouteWeatherSummary.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/RouteWeatherSummary.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/WeatherSample.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/WeatherSample.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/WindArrow.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/WindArrow.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/WindDistribution.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/WindDistribution.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/docs/WindSegment.md" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/docs/WindSegment.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/BreakOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/BreakOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/CommentIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/CommentIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/CommentOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/CommentOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/ConfirmOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ConfirmOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/CopyIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/CopyIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/CoverageAreaOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/CoverageAreaOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/CoverageOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/CoverageOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/DepartureCandidate.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/DepartureCandidate.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/DepartureComparison.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/DepartureComparison.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/ElevationIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ElevationIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/ElevationOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ElevationOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/ElevationPoint.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ElevationPoint.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/EnsembleModelStatistics.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/EnsembleModelStatistics.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/EnsembleRange.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/EnsembleRange.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/ForecastJobOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ForecastJobOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/ForecastMapDetailOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ForecastMapDetailOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/ForecastSampleOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ForecastSampleOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/ForecastUncertainty.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ForecastUncertainty.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/ForecastUncertaintySummary.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/ForecastUncertaintySummary.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/GapOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/GapOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/GeometrySchema.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/GeometrySchema.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/GeometrySource.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/GeometrySource.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/GpxExportIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/GpxExportIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/GpxPathOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/GpxPathOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/JourneyDayOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/JourneyDayOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/JourneyIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/JourneyIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/JourneyOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/JourneyOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/JourneyReasonOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/JourneyReasonOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/JourneyStageOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/JourneyStageOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/LegOverrunOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/LegOverrunOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/LikeOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/LikeOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/LimitOverrunsOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/LimitOverrunsOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/OverrunOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/OverrunOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/PhotoOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/PhotoOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/PhotoUpdateIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/PhotoUpdateIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/PlacesSearchResult.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/PlacesSearchResult.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/PoiOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/PoiOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/PropertiesSchema.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/PropertiesSchema.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/PublicRouteDetail.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/PublicRouteDetail.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/PublicRouteSummary.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/PublicRouteSummary.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RandomPrefsIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RandomPrefsIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RandomPrefsOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RandomPrefsOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RecurringRouteIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RecurringRouteIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RecurringRouteOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RecurringRouteOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RoadPrefsIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RoadPrefsIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RouteForecastOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RouteForecastOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RoutePlanForecastIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RoutePlanForecastIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RoutePlanIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RoutePlanIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RoutePlanOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RoutePlanOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RoutePreviewIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RoutePreviewIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RoutePreviewOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RoutePreviewOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RouteSection.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RouteSection.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RouteThumbnail.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RouteThumbnail.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RouteWeatherSummary.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RouteWeatherSummary.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/RoutingProfile.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/RoutingProfile.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SaveVariantIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SaveVariantIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SharingIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SharingIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SharingOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SharingOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SubscribeIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SubscribeIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SubscribeOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SubscribeOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SystemCacheCount.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SystemCacheCount.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SystemCoverage.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SystemCoverage.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SystemCoveragePoint.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SystemCoveragePoint.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SystemFeature.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SystemFeature.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SystemJob.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SystemJob.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SystemJobsPage.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SystemJobsPage.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SystemMapFilter.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SystemMapFilter.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SystemMapPage.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SystemMapPage.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/SystemSummary.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/SystemSummary.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/TokenIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/TokenIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/VoteOut.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/VoteOut.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/WeatherPrefsIn.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/WeatherPrefsIn.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/WindArrow.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/WindArrow.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/WindDistribution.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/WindDistribution.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/models/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/models/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/packages/api/tsconfig.json" beforeDir="false" afterPath="$PROJECT_DIR$/packages/api/tsconfig.json" afterDir="false" />
-    </list>
+    <list default="true" id="bdbdeb51-976c-4c55-bcb7-0a403a60168b" name="Changes" comment="feat(coverage): improve layout a little" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -178,6 +16,10 @@
       <option value="repository" />
     </option>
   </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="1501" />
+    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
+  </component>
   <component name="Git.Settings">
     <option name="RECENT_BRANCH_BY_REPOSITORY">
       <map>
@@ -186,16 +28,16 @@
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "mnboos"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;mnboos&quot;
   }
-}]]></component>
+}</component>
   <component name="GithubPullRequestsUISettings"><![CDATA[{
   "selectedUrlAndAccountId": {
     "url": "git@github.com:mnboos/norain.git",
-    "accountId": "1e09e859-377f-4bd5-8229-57d727dba804"
+    "accountId": "57bf1470-7fa6-4c30-bb17-4df684649632"
   }
 }]]></component>
   <component name="McpProjectServerCommands">
@@ -261,10 +103,10 @@
       <entry key="W1" value="104.59454477306002" />
     </decayedShown>
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 7,
-  "fromUser": false
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 7,
+  &quot;fromUser&quot;: false
+}</component>
   <component name="ProjectId" id="3Jy0qQpLVsh0bFZ5RsdBrcwJbay" />
   <component name="ProjectLevelVcsManager">
     <OptionsSetting value="false" id="Update" />
@@ -284,7 +126,7 @@
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "codeWithMe.voiceChat.enabledByDefault": "false",
     "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
-    "git-widget-placeholder": "feature/fingerprint",
+    "git-widget-placeholder": "main",
     "ignore.virus.scanning.warn.message": "true",
     "junie.onboarding.icon.badge.shown": "true",
     "last_opened_file_path": "C:/src/norain",
@@ -320,8 +162,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-js-predefined-d6986cc7102b-4abd2a77f808-JavaScript-PY-262.10968.92" />
-        <option value="bundled-python-sdk-73a66231627c-5bd6d13a2a75-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-262.10968.92" />
+        <option value="bundled-js-predefined-d6986cc7102b-a50aca56a434-JavaScript-PY-263.5701.41" />
+        <option value="bundled-python-sdk-2e97893d68e2-5ef8a7947164-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-263.5701.41" />
       </set>
     </attachedChunks>
   </component>
@@ -365,6 +207,7 @@
       <option name="presentableId" value="Default" />
       <updated>1790618194945</updated>
       <workItem from="1790618200550" duration="4400000" />
+      <workItem from="1790709450598" duration="1844000" />
     </task>
     <option name="localTasksCounter" value="5" />
     <servers />

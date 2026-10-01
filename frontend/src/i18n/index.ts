@@ -64,3 +64,13 @@ export function plotlySeparators(locale: AppLocale = currentLocale()): string {
 export function dateFnsLocale(locale: AppLocale = currentLocale()): DateFnsLocale {
     return locale === "en" ? dateFnsEnGB : dateFnsDe;
 }
+
+/**
+ * Translate for a routing profile: a hike reads `<key>Hike` where the catalogs have one (no
+ * "Fahrt" for a walk), every other profile and any key without a hiking variant reads `key`.
+ * Like `t`, call it where the text is used.
+ */
+export function tp(profile: string | null | undefined, key: string, params: Record<string, unknown> = {}): string {
+    const hikeKey = `${key}Hike`;
+    return t(profile === "hike" && te(hikeKey) ? hikeKey : key, params);
+}

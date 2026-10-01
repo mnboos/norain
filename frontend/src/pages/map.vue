@@ -23,6 +23,7 @@ import CurrentLocationButton from "@/components/CurrentLocationButton.vue";
 import { placeLabel } from "@/utils/placeLabel";
 import { QSelect, useQuasar } from "quasar";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import { useQuery } from "@tanstack/vue-query";
 import { useSession } from "@/composables/useSession";
 import GpxImportDialog from "@/components/GpxImportDialog.vue";
@@ -317,7 +318,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         </div>
                         <template v-if="draft">
                             <div class="text-subtitle2">{{ draft.plan.name }}</div>
-                            <RouteTimingFields v-if="exact" v-model="duration" :distance-m="draft.preview.distanceM" />
+                            <RouteTimingFields v-if="exact" v-model="duration" :profile="profile" :distance-m="draft.preview.distanceM" />
                             <q-btn flat dense no-caps :label="t('mapPage.planNew')" @click="clearImport" />
                         </template>
                         <div v-if="previewError" class="text-negative" role="alert">
@@ -326,7 +327,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         <q-select
                             v-model="abfahrtsort"
                             :disable="exact"
-                            :label="t('mapPage.from')"
+                            :label="tp(profile, 'mapPage.from')"
                             dense
                             outlined
                             rounded
@@ -403,20 +404,21 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         <q-input
                             v-model="departureTime"
                             type="datetime-local"
-                            :label="t('routeForm.departureTime')"
+                            :label="tp(profile, 'routeForm.departureTime')"
                             dense
                             outlined
                             stack-label
                         />
                         <ElevationChart
                             v-if="preview"
+                            :profile="profile"
                             :coordinates="preview.coordinates"
                             :total-seconds="preview.timeS"
                             :vertex-times="preview.vertexTimes"
                             :position="position"
                             @select-position="selectPosition"
                         />
-                        <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
+                        <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" :profile="profile" />
 
                         <q-btn-toggle
                             v-model="profile"
@@ -437,6 +439,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
 
                         <DepartureComparison
                             v-if="departureComparison"
+                            :profile="profile"
                             :comparison="departureComparison"
                             :selected-time="selectedDeparture"
                             @select="selectedDeparture = $event"
@@ -452,7 +455,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             <KeyRideDataCard flat :forecast="routeWeather" :columns="2" />
                             <template v-if="routeWeather.summary.windDistribution">
                                 <div class="text-subtitle2">{{ t("routeDetail.windAlong") }}</div>
-                                <WindDistributionBar :distribution="routeWeather.summary.windDistribution" />
+                                <WindDistributionBar :distribution="routeWeather.summary.windDistribution" :profile="routeWeather.profile" />
                             </template>
                             <ForecastDetails
                                 :selected-sample="selectedSample"

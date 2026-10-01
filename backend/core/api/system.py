@@ -21,6 +21,7 @@ from pydantic import Field
 from .. import fingerprinting
 from ..auth.admin_access import has_system_access
 from ..auth.lockout import client_ip
+from ..data_coverage import data_coverage as read_data_coverage
 from ..departures import cell_covers, instant
 from ..geo import simplify_line
 from ..grid import (
@@ -151,6 +152,8 @@ class SystemBrowserAssessment(CamelSchema):
     tier: Literal["high", "low", "suspicious"]
     indicators: list[str]
     persistent: bool
+    # Old enough (BROWSER_KEY_AGE) to claim on its own; a young key also pays its IP's count.
+    established: bool
     continuity: bool
     similarity: float | None
     # Short prefixes only: enough to see a key or fingerprint stay the same across checks.
@@ -160,6 +163,11 @@ class SystemBrowserAssessment(CamelSchema):
     components: dict[str, str]
     # The claim keys this browser holds on this network: a new private tab keeps its ``p:`` key.
     keys: list[str]
+    # The relay meter's verdict for this browser's own path, to calibrate it on one's own devices.
+    path: str | None = None
+    path_transport: str | None = None
+    # The excess round trip over Cloudflare's edge, in 10 ms buckets.
+    path_excess: int | None = None
 
 
 class SystemBrowser(CamelSchema):
@@ -179,18 +187,130 @@ def browser(request):
             "tier": assessment["tier"],
             "indicators": assessment["indicators"],
             "persistent": assessment["persistent"],
+            "established": fingerprinting.is_established(assessment),
             "continuity": assessment["continuity"],
             "similarity": assessment["similarity"],
             "browser_id": assessment["browserId"][:8],
             "fingerprint_id": (assessment["fingerprintId"] or "")[:8] or None,
             "components": {name: value[:8] for name, value in assessment.get("components", {}).items()},
             "keys": [f"{key[:2]}{key[2:10]}" for key in keys],
+            "path": assessment.get("path"),
+            "path_transport": assessment.get("pathTransport"),
+            "path_excess": assessment.get("pathExcess"),
         }
     return {
         "enabled": settings.BROWSER_FINGERPRINT_ENABLED,
         "pow_bits": fingerprinting.pow_bits(client_ip(request)),
         "assessment": assessment,
     }
+
+
+class SystemBrowserStatsDay(CamelSchema):
+    day: date
+    # "tier:…", "ind:…", "solo:…" (an observed lie that fired alone), "refused:…", "pow:…", "ip_class_e".
+    counts: dict[str, int]
+
+
+class SystemBrowserStats(CamelSchema):
+    # The lie checks that still only observe; each is enforced once its solo count stayed at 0.
+    observed: list[str]
+    days: list[SystemBrowserStatsDay]
+
+
+@router.get("/browser/stats", response=SystemBrowserStats)
+def browser_stats(request):
+    """Recognition counts per UTC day, newest first: counts only, never a browser, key or value."""
+    return {
+        "observed": sorted(settings.BROWSER_OBSERVE_ONLY),
+        "days": [
+            {"day": date.fromisoformat(day), "counts": counts} for day, counts in fingerprinting.read_stats().items()
+        ],
+    }
+
+
+class SystemGraphCoverage(CamelSchema):
+    release: str
+    revision: str
+    status: str
+    built_at: datetime | None
+    osm_file: str | None
+    osm_file_modified: datetime | None
+    # "graph": the build's own road cells; "terrain": an older release, shown with the terrain's
+    # cells, which may cover more than the graph; "bounds": terrain prepared for a bounding box,
+    # every cell in it.
+    cells_source: Literal["graph", "terrain", "bounds"]
+    cells: int
+
+
+class SystemTerrainSource(CamelSchema):
+    name: str
+    bbox: list[float | None]
+
+
+class SystemTerrainCheck(CamelSchema):
+    zoom: int | None
+    positions: int
+    decoded: bool
+    missing: int | None = None
+    # Tiles with nodata pixels ("void" in the terrain manifest; `void` is a TypeScript keyword).
+    nodata: int | None = None
+
+
+class SystemElevationCounts(CamelSchema):
+    full: int
+    partial: int
+    fallback: int
+
+
+class SystemTerrainCoverage(CamelSchema):
+    key: str
+    catalog_version: str
+    zoom: int | None
+    fallback_zoom: int | None
+    sources: list[SystemTerrainSource]
+    fallback_source: str | None
+    checks: list[SystemTerrainCheck]
+    # None until cell_coverage.json exists (just elevation-coverage-backfill).
+    cell_counts: SystemElevationCounts | None
+
+
+class SystemPhotonCountry(CamelSchema):
+    code: str
+    places: int
+
+
+class SystemPhotonCoverage(CamelSchema):
+    reachable: bool
+    import_date: datetime | None
+    version: str | None
+    # False until the import (or just photon-coverage-backfill) wrote meteolane-coverage.json.
+    manifest: bool
+    imported_at: datetime | None
+    sources: list[str] | None
+    countries: list[SystemPhotonCountry] | None
+
+
+class SystemElevationBoxes(CamelSchema):
+    full: list[list[float]]
+    partial: list[list[float]]
+    fallback: list[list[float]]
+
+
+class SystemDataCoverage(CamelSchema):
+    """None for a part that could not be read; the others still answer."""
+
+    graph: SystemGraphCoverage | None
+    terrain: SystemTerrainCoverage | None
+    photon: SystemPhotonCoverage | None
+    # [west, south, east, north] per run of zoom-11 cells in a row.
+    road_boxes: list[list[float]]
+    elevation_boxes: SystemElevationBoxes
+    bounds: list[float] | None
+
+
+@router.get("/data-coverage", response=SystemDataCoverage)
+def data_coverage(request):
+    return read_data_coverage()
 
 
 @router.get("/summary", response=SystemSummary)

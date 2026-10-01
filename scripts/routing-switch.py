@@ -10,9 +10,24 @@ mode = sys.argv[1]
 if mode not in ("activate", "rollback"):
     raise SystemExit("Expected activate or rollback.")
 env = dict(os.environ)
-if mode == "rollback":
-    env["GRAPHHOPPER_IMAGE"] = sys.argv[2]
 compose = [engine, "compose"]
+if mode == "rollback":
+    if len(sys.argv) > 2:
+        env["GRAPHHOPPER_IMAGE"] = sys.argv[2]
+    else:
+        # No image given: undo the last activation with the image that runs now. -a finds a
+        # container that keeps crashing on the bad graph too.
+        running = subprocess.check_output(
+            [*compose, "ps", "-a", "-q", "graphhopper"], text=True
+        ).split()
+        if not running:
+            raise SystemExit(
+                "No GraphHopper container found. Pass the image: routing-rollback IMAGE."
+            )
+        env["GRAPHHOPPER_IMAGE"] = subprocess.check_output(
+            [engine, "inspect", "--format", "{{.Image}}", running[0]], text=True
+        ).strip()
+        print(f"Rolling back with the running image {env['GRAPHHOPPER_IMAGE']}", flush=True)
 artifact = subprocess.check_output(
     [
         *compose,

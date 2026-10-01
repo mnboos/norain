@@ -307,7 +307,7 @@ export class CoverageApi extends runtime.BaseAPI {
     }
 
     /**
-     * Vote for an area Meteolane does not cover yet; voting twice changes nothing.
+     * Vote for an area Meteolane does not cover yet; voting twice changes nothing.  With the blind ledger, a vote the limits refuse is stored as not accepted and answered like any other; it simply never counts (``core.coverage``). Casting it again does not try the limits again: a retry that could flip it would say, by its timing or its tally, that it had been refused. Signing in is the way to a vote that surely counts.
      * Vote
      */
     async coreApiCoverageVoteRaw(requestParameters: CoverageApiCoreApiCoverageVoteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<VoteOut>> {
@@ -318,7 +318,7 @@ export class CoverageApi extends runtime.BaseAPI {
     }
 
     /**
-     * Vote for an area Meteolane does not cover yet; voting twice changes nothing.
+     * Vote for an area Meteolane does not cover yet; voting twice changes nothing.  With the blind ledger, a vote the limits refuse is stored as not accepted and answered like any other; it simply never counts (``core.coverage``). Casting it again does not try the limits again: a retry that could flip it would say, by its timing or its tally, that it had been refused. Signing in is the way to a vote that surely counts.
      * Vote
      */
     async coreApiCoverageVote(requestParameters: CoverageApiCoreApiCoverageVoteRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<VoteOut> {

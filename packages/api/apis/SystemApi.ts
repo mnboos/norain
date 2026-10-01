@@ -19,10 +19,20 @@ import {
     SystemBrowserToJSON,
 } from '../models/SystemBrowser';
 import {
+    type SystemBrowserStats,
+    SystemBrowserStatsFromJSON,
+    SystemBrowserStatsToJSON,
+} from '../models/SystemBrowserStats';
+import {
     type SystemCoverage,
     SystemCoverageFromJSON,
     SystemCoverageToJSON,
 } from '../models/SystemCoverage';
+import {
+    type SystemDataCoverage,
+    SystemDataCoverageFromJSON,
+    SystemDataCoverageToJSON,
+} from '../models/SystemDataCoverage';
 import {
     type SystemJobsPage,
     SystemJobsPageFromJSON,
@@ -172,6 +182,45 @@ export class SystemApi extends runtime.BaseAPI {
     }
 
     /**
+     * Creates request options for coreApiSystemBrowserStats without sending the request
+     */
+    async coreApiSystemBrowserStatsRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/api/system/browser/stats`;
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Recognition counts per UTC day, newest first: counts only, never a browser, key or value.
+     * Browser Stats
+     */
+    async coreApiSystemBrowserStatsRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<SystemBrowserStats>> {
+        const requestOptions = await this.coreApiSystemBrowserStatsRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => SystemBrowserStatsFromJSON(jsonValue));
+    }
+
+    /**
+     * Recognition counts per UTC day, newest first: counts only, never a browser, key or value.
+     * Browser Stats
+     */
+    async coreApiSystemBrowserStats(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SystemBrowserStats> {
+        const response = await this.coreApiSystemBrowserStatsRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
      * Creates request options for coreApiSystemCellHistory without sending the request
      */
     async coreApiSystemCellHistoryRequestOpts(requestParameters: SystemApiCoreApiSystemCellHistoryRequest): Promise<runtime.RequestOpts> {
@@ -288,6 +337,43 @@ export class SystemApi extends runtime.BaseAPI {
      */
     async coreApiSystemCoverage(requestParameters: SystemApiCoreApiSystemCoverageRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SystemCoverage> {
         const response = await this.coreApiSystemCoverageRaw(requestParameters, initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for coreApiSystemDataCoverage without sending the request
+     */
+    async coreApiSystemDataCoverageRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/api/system/data-coverage`;
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Data Coverage
+     */
+    async coreApiSystemDataCoverageRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<SystemDataCoverage>> {
+        const requestOptions = await this.coreApiSystemDataCoverageRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => SystemDataCoverageFromJSON(jsonValue));
+    }
+
+    /**
+     * Data Coverage
+     */
+    async coreApiSystemDataCoverage(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SystemDataCoverage> {
+        const response = await this.coreApiSystemDataCoverageRaw(initOverrides);
         return await response.value();
     }
 

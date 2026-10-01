@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { cacheFreshness, systemGeoJson, coverageGeoJson, systemQueryAffected, SYSTEM_TOPICS } from "../systemOverview";
+import {
+    browserStatTotals,
+    cacheFreshness,
+    systemGeoJson,
+    coverageGeoJson,
+    dataCoverageGeoJson,
+    ELEVATION_COLORS,
+    statsUnder,
+    systemQueryAffected,
+    SYSTEM_TOPICS,
+} from "../systemOverview";
 import { SystemCoveragePointForecastEnum, SystemCoveragePointEnsembleEnum } from "@norain/api/models";
 
 describe("system overview", () => {
@@ -64,6 +74,35 @@ describe("system overview", () => {
     });
 });
 
+describe("map data coverage", () => {
+    const roads = [[8, 46, 9, 47]];
+    const elevation = { full: [[8, 46, 8.5, 47]], partial: [], fallback: [[8.5, 46, 9, 47]] };
+
+    it("draws only the layers switched on, as closed boxes", () => {
+        expect(dataCoverageGeoJson(roads, elevation, { roads: false, elevation: false }).features).toEqual([]);
+        const both = dataCoverageGeoJson(roads, elevation, { roads: true, elevation: true }).features;
+        expect(both.map(feature => String(feature.properties?.layer))).toEqual(["elevation", "elevation", "roads"]);
+        expect(both[1]?.properties?.color).toBe(ELEVATION_COLORS.fallback);
+        const geometry = both[2]?.geometry;
+        expect(geometry?.type === "Polygon" && geometry.coordinates[0]).toEqual([
+            [8, 46],
+            [9, 46],
+            [9, 47],
+            [8, 47],
+            [8, 46],
+        ]);
+    });
+
+    it("draws the roads before the elevation report has loaded", () => {
+        const features = dataCoverageGeoJson(roads, undefined, { roads: true, elevation: true }).features;
+        expect(features).toHaveLength(1);
+    });
+
+    it("is never refetched by a change notice", () => {
+        expect(systemQueryAffected(SYSTEM_TOPICS, ["system", "dataCoverage"])).toBe(false);
+    });
+});
+
 describe("system change notices", () => {
     it("refetch only the panels that read what changed", () => {
         const map = (layer: string) => ["system", "map", { layer, bbox: "7,46,9,48" }];
@@ -77,5 +116,20 @@ describe("system change notices", () => {
         expect(systemQueryAffected(["journeys"], ["system", "coverage", "stage", "x"])).toBe(true);
         expect(systemQueryAffected(["routes", "journeys"], map("journeys"))).toBe(true);
         expect(systemQueryAffected([...SYSTEM_TOPICS], ["routes", "list"])).toBe(false);
+    });
+});
+
+describe("browser recognition stats", () => {
+    it("sums the days and reads one group at a time", () => {
+        const totals = browserStatTotals([
+            { counts: { "tier:high": 3, "solo:realm_tampered": 1, "refused:pow": 2 } },
+            { counts: { "tier:high": 1, "tier:low": 2 } },
+        ]);
+        expect(totals).toEqual({ "tier:high": 4, "tier:low": 2, "solo:realm_tampered": 1, "refused:pow": 2 });
+        expect(statsUnder(totals, "tier:")).toEqual([
+            ["high", 4],
+            ["low", 2],
+        ]);
+        expect(statsUnder(totals, "ind:")).toEqual([]);
     });
 });

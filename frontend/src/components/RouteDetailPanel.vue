@@ -5,7 +5,7 @@ import { GeometrySource } from "@norain/api/models";
 import { computed, ref, toRefs, watch } from "vue";
 import { useQuasar } from "quasar";
 import { useI18n } from "vue-i18n";
-import { te } from "@/i18n";
+import { te, tp } from "@/i18n";
 import {
     symSharpCloudOff,
     symSharpPedalBike,
@@ -245,11 +245,11 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                         <RouteShareDialog v-if="sharingOpen" v-model="sharingOpen" :route-id="route.id" :route-name="route.name" />
                         <template v-if="route.geometrySource === 'imported' && !route.parentRouteId">
                             <div class="q-my-sm">{{ t("routeForm.originalFromGpx") }}</div>
-                            <RouteTimingFields v-model="duration" :distance-m="route.totalDistanceM ?? 0" />
+                            <RouteTimingFields v-model="duration" :profile="route.profile" :distance-m="route.totalDistanceM ?? 0" />
                             <q-btn
                                 flat
                                 no-caps
-                                :label="t('routeDetail.saveDuration')"
+                                :label="tp(route.profile, 'routeDetail.saveDuration')"
                                 :disable="duration <= 0 || duration > 1382400 || duration === route.durationSeconds"
                                 :loading="saveShape.isPending.value"
                                 @click="saveDuration"
@@ -266,7 +266,7 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                         />
                     </q-card-section>
                     <q-separator inset />
-                    <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter">
+                    <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" :profile="route.profile">
                         <q-btn
                             v-if="windowChanged"
                             flat
@@ -282,6 +282,7 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                     <q-card-section v-if="departureComparison">
                         <DepartureComparison
                             better-only
+                            :profile="route.profile"
                             :comparison="departureComparison"
                             :selected-time="selectedDeparture"
                             @select="selectedDeparture = $event"
@@ -314,12 +315,14 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                             <div class="text-subtitle2 q-mb-xs">{{ t("routeDetail.windAlong") }}</div>
                             <WindDistributionBar
                                 v-if="forecast.summary.windDistribution"
+                                :profile="forecast.profile"
                                 :distribution="forecast.summary.windDistribution"
                             />
                         </q-card-section>
                         <q-card-section style="height: 260px" class="q-pa-none">
                             <WeatherChart
                                 kind="headwind"
+                                :profile="forecast.profile"
                                 :version="forecast.version"
                                 :cursor-minutes="positionMinutes"
                                 :samples="forecast.samples"
@@ -334,6 +337,7 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                         <q-card-section class="col q-pa-none" style="min-height: 300px">
                             <WeatherChart
                                 kind="temperature"
+                                :profile="forecast.profile"
                                 :version="forecast.version"
                                 :cursor-minutes="positionMinutes"
                                 :samples="forecast.samples"
@@ -347,6 +351,7 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
             <div v-if="hasGeometry" class="col-12">
                 <ElevationChart
                     :route-id="route.id"
+                    :profile="route.profile"
                     :version="String(route.updatedAt)"
                     :position="position"
                     @select-position="selectPosition"
@@ -370,7 +375,7 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                     <template #avatar>
                         <q-icon :name="symSharpCloudOff" class="text-muted" />
                     </template>
-                    {{ t("routeDetail.tooEarly") }}
+                    {{ tp(route.profile, "routeDetail.tooEarly") }}
                 </q-banner>
             </div>
         </div>

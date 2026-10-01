@@ -23,7 +23,7 @@ const $q = useQuasar();
 const { t } = useI18n();
 const router = useRouter();
 const showAddDialog = ref(false);
-const { maxRoutes, atRouteLimit } = useEntitlements();
+const { maxRoutes, atRouteLimit, entitlements } = useEntitlements();
 
 const { data: routes, isLoading } = useRecurringRoutes();
 // Load the likely next routes' forecasts now, so opening one shows it at once.
@@ -41,7 +41,13 @@ function onRouteSave(data: RecurringRouteIn) {
             if (isQuotaExceeded(err)) {
                 $q.dialog({
                     title: t("quota.title"),
-                    message: t("quota.routes", maxRoutes.value ?? 2),
+                    message: entitlements.value?.offer
+                        ? t(
+                              "quota.routes",
+                              { n: maxRoutes.value ?? 0, plus: entitlements.value.offer.plusRoutes },
+                              maxRoutes.value ?? 0,
+                          )
+                        : undefined,
                     cancel: { label: t("quota.later"), flat: true },
                     ok: { label: t("quota.upgrade"), color: "primary", unelevated: true },
                 }).onOk(() => void router.push("/account"));
