@@ -27,7 +27,9 @@ def fingerprint_auth(request):
             raise HttpError(413, gettext("Die Browser-Daten sind zu gross."))
     except ValueError as error:
         raise HttpError(400, gettext("Die Browser-Prüfung ist fehlgeschlagen.")) from error
-    if not fp.rate_limit("ip", client_ip(request) or "unknown", 120):
+    # The relay meter's echoes count apart: three per proof would crowd out challenges behind CGNAT.
+    scope, limit = ("echo", 180) if request.path.endswith("/echo") else ("ip", 120)
+    if not fp.rate_limit(scope, fp.ip_floor(client_ip(request)), limit):
         raise HttpError(429, gettext("Zu viele Anfragen. Bitte versuche es später noch einmal."))
     return True
 
@@ -40,6 +42,18 @@ class Challenge(CamelSchema):
     expires_in: int
     # Leading zero bits the proof-of-work needs; higher while one address mints new keys.
     difficulty: int
+    # Whether to run the echo chain (the relay meter is on); the same for every browser.
+    echo: bool = False
+
+
+class EchoIn(CamelSchema):
+    challenge: str = Field(max_length=1024)
+    step: int = Field(ge=1, le=fp.ECHO_STEPS)
+    token: str = Field(default="", max_length=32)
+
+
+class EchoOut(CamelSchema):
+    token: str
 
 
 class Submission(CamelSchema):
@@ -64,7 +78,29 @@ def challenge(request, response: HttpResponse):
         raise HttpError(429, gettext("Zu viele Anfragen. Bitte versuche es später noch einmal."))
     fp.set_cookie(response, fp.CONTEXT_COOKIE, context, fp.RETENTION)
     bits = fp.pow_bits(client_ip(request))
-    return {"challenge": fp.issue_challenge(context, bits), "expiresIn": fp.CHALLENGE_TTL, "difficulty": bits}
+    fp.count_stat(f"pow:{bits}")
+    return {
+        "challenge": fp.issue_challenge(context, bits),
+        "expiresIn": fp.CHALLENGE_TTL,
+        "difficulty": bits,
+        "echo": fp.meter_on(),
+    }
+
+
+@router.post("/echo", response=EchoOut, by_alias=True)
+def echo(request, echo_in: EchoIn):
+    """One round trip of the relay meter; the server times it, the reply says nothing about it."""
+    context = fp.read_cookie(request, fp.CONTEXT_COOKIE, fp.RETENTION)
+    if not fp.meter_on() or not isinstance(context, str):
+        raise HttpError(400, gettext("Die Browser-Prüfung ist fehlgeschlagen."))
+    try:
+        token = fp.echo(echo_in.challenge, context, echo_in.step, echo_in.token, request.headers)
+    except ValueError as error:
+        fp.count_stat(f"refused:{getattr(error, 'reason', 'echo')}")
+        raise HttpError(400, gettext("Die Browser-Prüfung ist fehlgeschlagen.")) from error
+    except fp.CACHE_ERRORS as error:
+        raise HttpError(503, gettext("Die Browser-Prüfung ist gerade nicht verfügbar.")) from error
+    return {"token": token}
 
 
 @router.post("/verify", response=Receipt, by_alias=True)
@@ -83,14 +119,23 @@ def verify(request, response: HttpResponse, submission: Submission):
         )
     except ValueError as error:
         logger.info(f"Browser proof refused: {error}")
+        fp.count_stat(f"refused:{getattr(error, 'reason', 'evidence')}")
         raise HttpError(400, gettext("Die Browser-Prüfung ist fehlgeschlagen.")) from error
     except fp.CACHE_ERRORS as error:
         # The nonce claim is the replay guard: without the cache, no receipt.
         logger.warning(f"Browser proof unavailable: {error}")
         raise HttpError(503, gettext("Die Browser-Prüfung ist gerade nicht verfügbar.")) from error
-    fp.note_new_browser(browser_id, client_ip(request))
-    assessment = fp.assess(browser_id, evidence, request.headers, fp.previous_browser(context))
+    ip = client_ip(request)
+    first_seen = fp.note_new_browser(browser_id, ip)
+    assessment = fp.assess(browser_id, evidence, request.headers, fp.previous_browser(context), first_seen)
+    if fp.meter_on():
+        assessment.update(fp.path_fields(fp.take_echo(submission.challenge), ip))
+    fp.note_fingerprint(assessment["fingerprintId"], browser_id, ip)
     fp.log_assessment(assessment)
+    fp.record_stats(assessment)
+    if fp.is_class_e(ip):
+        # Cloudflare's Pseudo IPv4 ("overwrite") hides every IPv6 prefix from the IP floors.
+        fp.count_stat("ip_class_e")
     if not fp.store_receipt(response, context, assessment):
         raise HttpError(503, gettext("Die Browser-Prüfung ist gerade nicht verfügbar."))
     return {"expiresIn": fp.RECEIPT_TTL}

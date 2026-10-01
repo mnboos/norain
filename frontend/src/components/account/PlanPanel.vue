@@ -4,12 +4,16 @@ import { useQuery, useQueryClient } from "@tanstack/vue-query";
 import { useI18n } from "vue-i18n";
 import { intlLocale } from "@/i18n";
 import { useEntitlements } from "@/composables/useEntitlements";
+import { formatPrice } from "@/composables/usePlanOffer";
 import { billingApi } from "@/services/billing";
 import { briefingsApi, enablePush, disablePush, pushSupported, testPush } from "@/services/briefings";
 
 const { t } = useI18n();
 const client = useQueryClient();
 const { entitlements, isPro } = useEntitlements();
+/** The figures the plan texts quote, from the server; texts that need them wait for them. */
+const offer = computed(() => entitlements.value?.offer ?? null);
+const price = (amount: number) => formatPrice(amount, offer.value?.prices.currency ?? "EUR");
 const busy = ref(false);
 const error = ref("");
 const message = ref("");
@@ -84,39 +88,41 @@ function channels(current: string) {
         <p v-if="entitlements?.cancelAtPeriodEnd && entitlements.currentPeriodEnd">
             {{ t("plan.endsOn", { date: date(entitlements.currentPeriodEnd) }) }}
         </p>
-        <ul class="q-pl-md">
-            <li>{{ t("plan.feature.twoWay") }}</li>
-            <li>{{ t("plan.feature.free") }}</li>
-            <li>{{ t("plan.feature.plus") }}</li>
-            <li>{{ t("plan.feature.briefings") }}</li>
-        </ul>
-        <p>
-            <strong>{{ t("plan.perYear") }}</strong>
-            {{ t("plan.or") }}
-            <strong>{{ t("plan.perMonth") }}</strong>
-            .
-        </p>
+        <template v-if="offer">
+            <ul class="q-pl-md">
+                <li>{{ t("plan.feature.twoWay") }}</li>
+                <li>{{ t("plan.feature.free", { routes: offer.freeRoutes }) }}</li>
+                <li>{{ t("plan.feature.plus", { routes: offer.plusRoutes }) }}</li>
+                <li>{{ t("plan.feature.briefings", { routes: offer.plusBriefingRoutes }) }}</li>
+            </ul>
+            <p>
+                <strong>{{ t("plan.perYear", { price: price(offer.prices.annual) }) }}</strong>
+                {{ t("plan.or") }}
+                <strong>{{ t("plan.perMonth", { price: price(offer.prices.monthly) }) }}</strong>
+                .
+            </p>
+        </template>
         <div class="q-gutter-sm">
             <q-btn
-                v-if="entitlements?.trialEligible"
+                v-if="entitlements?.trialEligible && offer"
                 color="primary"
                 no-caps
-                :label="t('plan.startTrial')"
+                :label="t('plan.startTrial', { days: offer.trialDays })"
                 :loading="busy"
                 @click="run(billingApi.trial, t('plan.trialStarted'))"
             />
-            <template v-if="entitlements?.billingConfigured && !entitlements.paidSubscription">
+            <template v-if="entitlements?.billingConfigured && !entitlements.paidSubscription && offer">
                 <q-btn
                     color="primary"
                     no-caps
-                    :label="t('plan.yearly')"
+                    :label="t('plan.yearly', { price: price(offer.prices.annual) })"
                     :loading="busy"
                     @click="run(() => checkout('annual'))"
                 />
                 <q-btn
                     outline
                     no-caps
-                    :label="t('plan.monthly')"
+                    :label="t('plan.monthly', { price: price(offer.prices.monthly) })"
                     :loading="busy"
                     @click="run(() => checkout('monthly'))"
                 />
@@ -145,9 +151,9 @@ function channels(current: string) {
                 multiple
                 emit-value
                 map-options
-                :max-values="2"
+                :max-values="offer?.freeRoutes ?? 0"
                 outlined
-                :label="t('plan.pickFreeRoutes')"
+                :label="t('plan.pickFreeRoutes', { n: offer?.freeRoutes ?? 0 })"
                 :options="routes.filter(r => r.active).map(r => ({ label: r.name, value: r.id }))"
             />
             <q-btn
@@ -160,7 +166,9 @@ function channels(current: string) {
         </template>
 
         <h3 class="text-subtitle1 q-mt-lg">{{ t("plan.briefingsTitle") }}</h3>
-        <p class="text-caption">{{ t("plan.briefingsHint") }}</p>
+        <p v-if="offer" class="text-caption">
+            {{ t("plan.briefingsHint", { minutes: offer.briefingLeadMinutes, count: offer.briefingsPerDay }) }}
+        </p>
         <p v-if="!isPro">{{ t("plan.briefingsNeedPlus") }}</p>
         <p v-if="!pushSupported()" class="text-caption">{{ t("plan.noPush") }}</p>
         <div class="q-gutter-sm q-mb-md">

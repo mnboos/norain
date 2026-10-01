@@ -16,7 +16,18 @@ import { useSession } from "@/composables/useSession";
 import { useBackendHost } from "@/utils";
 import { intlLocale } from "@/i18n";
 import { jobErrorText } from "@/utils/serverErrors";
-import { CACHE_COLORS, COVERAGE_COLORS, cacheFreshness, coverageLabels } from "@/utils/systemOverview";
+import {
+    CACHE_COLORS,
+    COVERAGE_COLORS,
+    browserStatTotals,
+    cacheFreshness,
+    coverageLabels,
+    ELEVATION_COLORS,
+    ROAD_COVERAGE_COLOR,
+    elevationLabels,
+    statsUnder,
+} from "@/utils/systemOverview";
+import { areaName } from "@/utils/coverage";
 import {
     systemKey,
     useSystemSummary,
@@ -26,8 +37,11 @@ import {
     useSystemJobs,
     useSystemEvents,
     useSystemBrowser,
+    useSystemBrowserStats,
+    useSystemDataCoverage,
 } from "@/queries/system";
 import { recheckRecognition } from "@/services/browserRecognition";
+import { symSharpRefresh } from "@quasar/extras/material-symbols-sharp";
 
 definePage({ meta: { requiresAuth: true, requiresSystem: true, titleKey: "pages.system" } });
 const { t } = useI18n();
@@ -38,7 +52,9 @@ const viewport = ref<{ bbox: string; zoom: number } | null>(null);
 const showRoutes = ref(true),
     showJourneys = ref(true),
     showCells = ref(true),
-    alternatives = ref(false);
+    alternatives = ref(false),
+    showRoadCoverage = ref(false),
+    showElevation = ref(false);
 const kind = ref(Kind.Forecast),
     source = ref(Source.All),
     profile = ref<Profile | null>(null);
@@ -77,10 +93,32 @@ const coverage = useSystemCoverage(selected, allowed);
 const history = useSystemCellHistory(selected, historyOffset, allowed);
 const jobs = useSystemJobs(jobsOffset, allowed);
 const browser = useSystemBrowser(allowed);
+const browserStats = useSystemBrowserStats(allowed);
+const dataCoverage = useSystemDataCoverage(allowed);
+const graphCoverage = computed(() => dataCoverage.data.value?.graph ?? null);
+const terrainCoverage = computed(() => dataCoverage.data.value?.terrain ?? null);
+const photonCoverage = computed(() => dataCoverage.data.value?.photon ?? null);
+const photonCountries = computed(() =>
+    (photonCoverage.value?.countries ?? [])
+        .map(country => `${areaName(country.code)} (${number(country.places)})`)
+        .join(" · "),
+);
+const statTotals = computed(() => browserStatTotals(browserStats.data.value?.days ?? []));
 const checkingBrowser = ref(false);
 const { live } = useSystemEvents(allowed);
 const allFeatures = computed(() => [...routes.items.value, ...journeys.items.value, ...cells.items.value]);
-const queries = [summary, routes.query, journeys.query, cells.query, coverage, history, jobs, browser];
+const queries = [
+    summary,
+    routes.query,
+    journeys.query,
+    cells.query,
+    coverage,
+    history,
+    jobs,
+    browser,
+    browserStats,
+    dataCoverage,
+];
 const failed = computed(() => queries.some(query => query.isError.value));
 const refreshing = computed(() => queries.some(query => query.isFetching.value));
 const mapLoading = computed(
@@ -118,8 +156,9 @@ const profileOptions = computed(() => [
     ...Object.values(Profile).map(value => ({ label: value, value })),
 ]);
 const sourceOptions = computed(() => [
-    { label: t("system.filter.bothProviders"), value: Source.All },
+    { label: t("system.filter.allProviders"), value: Source.All },
     { label: "Open-Meteo", value: Source.OpenMeteo },
+    { label: "MET Norway", value: Source.MetNorway },
     { label: "OpenWeatherMap", value: Source.Openweathermap },
 ]);
 const activeOptions = computed(() => [
@@ -136,6 +175,9 @@ function dateTime(value?: Date | null) {
     return value
         ? value.toLocaleString(intlLocale(), { timeZone: "Europe/Zurich", dateStyle: "short", timeStyle: "short" })
         : "–";
+}
+function number(value: number) {
+    return value.toLocaleString(intlLocale());
 }
 function age(value?: Date | null) {
     if (!value) return "–";
@@ -167,33 +209,40 @@ function choose(feature: SystemFeature) {
 }
 watch(allFeatures, items => {
     const current = selected.value;
-    if (!current) return;
+    if (!current) {
+        return;
+    }
     const updated = items.find(
         item =>
             item.kind === current.kind &&
             (isCell.value ? item.lat === current.lat && item.lon === current.lon : item.id === current.id),
     );
-    if (updated) selected.value = updated;
+    if (updated) {
+        selected.value = updated;
+    }
 });
 async function refresh() {
     mapError.value = "";
     await refreshSession();
-    if (allowed.value) await queryClient.invalidateQueries({ queryKey: systemKey });
+    if (allowed.value) {
+      // await queryClient.refetchQueries({ queryKey: systemKey })
+        await queryClient.invalidateQueries({ queryKey: systemKey });
+    }
 }
-watch(failed, () => {
+watch(failed, async () => {
     if (
         queries.some(
             query =>
                 query.error.value instanceof ResponseError && [401, 403].includes(query.error.value.response.status),
         )
     )
-        void refreshSession();
+        await refreshSession();
 });
 watch([showRoutes, showJourneys, showCells, kind, source, day, active, profile, alternatives], () => {
     selected.value = null;
 });
-onBeforeUnmount(() => {
-    void queryClient.cancelQueries({ queryKey: systemKey });
+onBeforeUnmount(async () => {
+    await queryClient.cancelQueries({ queryKey: systemKey });
     queryClient.removeQueries({ queryKey: systemKey });
 });
 </script>
@@ -205,7 +254,14 @@ onBeforeUnmount(() => {
                 <h1 class="text-h5 q-my-none">{{ t("pages.system") }}</h1>
                 <div class="text-caption">{{ t("system.subtitle") }}</div>
             </div>
-            <q-btn outline no-caps :label="t('system.refresh')" :loading="refreshing" @click="refresh" />
+            <q-btn
+                outline
+                :icon="symSharpRefresh"
+                no-caps
+                :label="t('system.refresh')"
+                :disable="refreshing"
+                @click="refresh"
+            />
         </div>
         <q-banner v-if="!allowed" rounded class="bg-amber-2 text-dark">
             {{ t("system.needAdmin") }}
@@ -224,11 +280,7 @@ onBeforeUnmount(() => {
         </q-banner>
         <template v-else>
             <q-banner v-if="failed || mapError" rounded class="bg-amber-2 text-dark q-mb-sm" role="alert">
-                {{
-                    failed
-                        ? t("system.partialFailure")
-                        : mapError
-                }}
+                {{ failed ? t("system.partialFailure") : mapError }}
                 <template #action><q-btn flat no-caps :label="t('common.retry')" @click="refresh" /></template>
             </q-banner>
             <div class="text-caption q-mb-sm">
@@ -255,6 +307,18 @@ onBeforeUnmount(() => {
                     dense
                 />
                 <q-checkbox v-model="showCells" :label="t('system.layer.cells')" dense />
+                <q-checkbox
+                    v-model="showRoadCoverage"
+                    :label="t('system.dataCoverage.roadLayer')"
+                    :disable="!dataCoverage.data.value?.roadBoxes.length"
+                    dense
+                />
+                <q-checkbox
+                    v-model="showElevation"
+                    :label="t('system.dataCoverage.elevationLayer')"
+                    :disable="!terrainCoverage?.cellCounts"
+                    dense
+                />
             </div>
             <div class="filters q-mb-sm">
                 <q-select
@@ -329,6 +393,16 @@ onBeforeUnmount(() => {
                     <i class="legend-line" style="background: #9264cf" />
                     {{ t("pages.journey") }}
                 </span>
+                <span v-if="showRoadCoverage">
+                    <i class="legend-box" :style="{ background: ROAD_COVERAGE_COLOR }" />
+                    {{ t("system.dataCoverage.roadLayer") }}
+                </span>
+                <template v-if="showElevation">
+                    <span v-for="(label, level) in elevationLabels()" :key="level">
+                        <i class="legend-box" :style="{ background: ELEVATION_COLORS[level] }" />
+                        {{ label }}
+                    </span>
+                </template>
             </div>
             <div class="overview-grid">
                 <div class="map-panel">
@@ -351,6 +425,10 @@ onBeforeUnmount(() => {
                         :coverage-kind="kind"
                         :now="now.getTime()"
                         :max-age-seconds="maxAge"
+                        :road-boxes="dataCoverage.data.value?.roadBoxes ?? []"
+                        :elevation-boxes="dataCoverage.data.value?.elevationBoxes"
+                        :show-roads="showRoadCoverage"
+                        :show-elevation="showElevation"
                         @viewport="viewport = $event"
                         @select="choose"
                         @error="mapError = $event"
@@ -366,7 +444,14 @@ onBeforeUnmount(() => {
                                 <h2 class="text-subtitle1 col q-my-none">
                                     {{ selected ? (isCell ? t("system.cell") : selected.name) : t("system.selection") }}
                                 </h2>
-                                <q-btn v-if="selected" flat dense :label="t('common.close')" no-caps @click="selected = null" />
+                                <q-btn
+                                    v-if="selected"
+                                    flat
+                                    dense
+                                    :label="t('common.close')"
+                                    no-caps
+                                    @click="selected = null"
+                                />
                             </div>
                             <p v-if="!selected" class="text-caption q-mb-none">
                                 {{ t("system.selectionHint") }}
@@ -377,7 +462,12 @@ onBeforeUnmount(() => {
                                     {{ selected.source }}
                                 </div>
                                 <div class="text-caption">
-                                    {{ t("system.fetched", { time: dateTime(selected.fetchedAt), age: age(selected.fetchedAt) }) }}
+                                    {{
+                                        t("system.fetched", {
+                                            time: dateTime(selected.fetchedAt),
+                                            age: age(selected.fetchedAt),
+                                        })
+                                    }}
                                 </div>
                                 <div class="text-caption">
                                     {{ t("system.horizon", { days: selected.forecastDays }) }}
@@ -395,7 +485,11 @@ onBeforeUnmount(() => {
                                                 {{ dateTime(record.fetchedAt) }} ·
                                                 {{ t("system.days", { n: record.forecastDays }) }}
                                                 <br />
-                                                {{ t("system.cacheDay", { day: record.dayKey?.toISOString().slice(0, 10) }) }}
+                                                {{
+                                                    t("system.cacheDay", {
+                                                        day: record.dayKey?.toISOString().slice(0, 10),
+                                                    })
+                                                }}
                                             </q-item-label>
                                         </q-item-section>
                                         <q-item-section side>
@@ -446,7 +540,11 @@ onBeforeUnmount(() => {
                                         }}
                                     </div>
                                     <div class="text-caption">
-                                        {{ t("system.geometry", { time: dateTime(coverage.data.value.geometryFetchedAt) }) }}
+                                        {{
+                                            t("system.geometry", {
+                                                time: dateTime(coverage.data.value.geometryFetchedAt),
+                                            })
+                                        }}
                                     </div>
                                     <div class="text-caption">
                                         {{ t("system.departure", { time: dateTime(coverage.data.value.departure) }) }}
@@ -500,11 +598,7 @@ onBeforeUnmount(() => {
                             </template>
                         </q-card-section>
                     </q-card>
-                    <q-expansion-item
-                        :label="t('system.cacheTotal')"
-                        default-opened
-                        class="bordered-panel q-mb-sm"
-                    >
+                    <q-expansion-item :label="t('system.cacheTotal')" default-opened class="bordered-panel q-mb-sm">
                         <div class="q-pa-sm">
                             <div v-if="!summary.data.value?.caches.length" class="text-caption">
                                 {{ t("system.noCells") }}
@@ -525,6 +619,119 @@ onBeforeUnmount(() => {
                             </div>
                             <div class="text-caption">
                                 {{ t("system.locationHint") }}
+                            </div>
+                        </div>
+                    </q-expansion-item>
+                    <q-expansion-item :label="t('system.dataCoverage.title')" class="bordered-panel q-mb-sm">
+                        <div class="q-pa-sm text-caption">
+                            <q-linear-progress v-if="dataCoverage.isFetching.value" indeterminate />
+                            <div class="text-weight-medium">{{ t("system.dataCoverage.graph") }}</div>
+                            <template v-if="graphCoverage">
+                                <div>
+                                    {{
+                                        t("system.dataCoverage.release", {
+                                            release: graphCoverage.release,
+                                            status: graphCoverage.status,
+                                        })
+                                    }}
+                                </div>
+                                <div>
+                                    {{ t("system.dataCoverage.built", { time: dateTime(graphCoverage.builtAt) }) }}
+                                </div>
+                                <div>
+                                    {{
+                                        t("system.dataCoverage.osmFile", {
+                                            file: graphCoverage.osmFile ?? "–",
+                                            time: dateTime(graphCoverage.osmFileModified),
+                                        })
+                                    }}
+                                </div>
+                                <div>{{ t("system.dataCoverage.roadCells", { n: number(graphCoverage.cells) }) }}</div>
+                                <div v-if="graphCoverage.cellsSource === 'terrain'" class="text-warning">
+                                    {{ t("system.dataCoverage.cellsFromTerrain") }}
+                                </div>
+                                <div v-else-if="graphCoverage.cellsSource === 'bounds'" class="text-warning">
+                                    {{ t("system.dataCoverage.cellsFromBounds") }}
+                                </div>
+                            </template>
+                            <div v-else-if="dataCoverage.data.value" class="text-negative">
+                                {{ t("system.dataCoverage.graphUnavailable") }}
+                            </div>
+                            <div class="text-weight-medium q-mt-sm">{{ t("system.dataCoverage.terrain") }}</div>
+                            <template v-if="terrainCoverage">
+                                <div>
+                                    {{
+                                        t("system.dataCoverage.terrainKey", {
+                                            key: terrainCoverage.key,
+                                            version: terrainCoverage.catalogVersion,
+                                        })
+                                    }}
+                                </div>
+                                <div>
+                                    {{ t("system.dataCoverage.sources", { zoom: terrainCoverage.zoom ?? "–" }) }}:
+                                    {{ terrainCoverage.sources.map(source => source.name).join(", ") || "–" }}
+                                </div>
+                                <div>
+                                    {{
+                                        t("system.dataCoverage.fallbackSource", {
+                                            zoom: terrainCoverage.fallbackZoom ?? "–",
+                                            name: terrainCoverage.fallbackSource ?? "–",
+                                        })
+                                    }}
+                                </div>
+                                <template v-if="terrainCoverage.cellCounts">
+                                    <div v-for="(label, level) in elevationLabels()" :key="level">
+                                        <i class="legend-box" :style="{ background: ELEVATION_COLORS[level] }" />
+                                        {{ label }}: {{ number(terrainCoverage.cellCounts[level]) }}
+                                    </div>
+                                </template>
+                                <div v-else class="text-warning">{{ t("system.dataCoverage.noCellCoverage") }}</div>
+                                <div v-for="check in terrainCoverage.checks" :key="check.zoom ?? -1">
+                                    {{
+                                        check.decoded
+                                            ? t("system.dataCoverage.checkDecoded", {
+                                                  zoom: check.zoom ?? "–",
+                                                  positions: number(check.positions),
+                                                  missing: number(check.missing ?? 0),
+                                                  nodata: number(check.nodata ?? 0),
+                                              })
+                                            : t("system.dataCoverage.checkStructure", {
+                                                  zoom: check.zoom ?? "–",
+                                                  positions: number(check.positions),
+                                              })
+                                    }}
+                                </div>
+                            </template>
+                            <div v-else-if="dataCoverage.data.value" class="text-negative">
+                                {{ t("system.dataCoverage.terrainUnavailable") }}
+                            </div>
+                            <div class="text-weight-medium q-mt-sm">{{ t("system.dataCoverage.photon") }}</div>
+                            <template v-if="photonCoverage">
+                                <div v-if="!photonCoverage.reachable" class="text-negative">
+                                    {{ t("system.dataCoverage.photonUnreachable") }}
+                                </div>
+                                <div v-else>
+                                    {{
+                                        t("system.dataCoverage.photonIndex", {
+                                            time: dateTime(photonCoverage.importDate),
+                                            version: photonCoverage.version ?? "–",
+                                        })
+                                    }}
+                                </div>
+                                <template v-if="photonCoverage.manifest">
+                                    <div>
+                                        {{ t("system.dataCoverage.photonSources") }}:
+                                        {{ photonCoverage.sources?.join(", ") || "–" }}
+                                    </div>
+                                    <div>
+                                        {{ t("system.dataCoverage.photonCountries") }}:
+                                        {{ photonCountries || t("system.dataCoverage.photonPrebuilt") }}
+                                    </div>
+                                </template>
+                                <div v-else class="text-warning">{{ t("system.dataCoverage.noPhotonFile") }}</div>
+                            </template>
+                            <div v-else-if="dataCoverage.data.value" class="text-negative">
+                                {{ t("system.dataCoverage.photonUnavailable") }}
                             </div>
                         </div>
                     </q-expansion-item>
@@ -572,7 +779,9 @@ onBeforeUnmount(() => {
                                 :disable="!jobsOffset"
                                 @click="jobsOffset = Math.max(0, jobsOffset - 25)"
                             />
-                            <span class="text-caption">{{ t("system.jobs.count", { n: jobs.data.value?.total ?? 0 }) }}</span>
+                            <span class="text-caption">
+                                {{ t("system.jobs.count", { n: jobs.data.value?.total ?? 0 }) }}
+                            </span>
                             <q-btn
                                 flat
                                 dense
@@ -613,6 +822,7 @@ onBeforeUnmount(() => {
                                     {{
                                         t("system.browser.continuity", {
                                             persistent: browser.data.value.assessment.persistent ? "✓" : "✗",
+                                            established: browser.data.value.assessment.established ? "✓" : "✗",
                                             continuity: browser.data.value.assessment.continuity ? "✓" : "✗",
                                             similarity: browser.data.value.assessment.similarity ?? "–",
                                         })
@@ -621,6 +831,15 @@ onBeforeUnmount(() => {
                                 <div class="text-caption">
                                     {{ t("system.browser.keys") }}:
                                     {{ browser.data.value.assessment.keys.join(" · ") || "–" }}
+                                </div>
+                                <div v-if="browser.data.value.assessment.path" class="text-caption">
+                                    {{
+                                        t("system.browser.path", {
+                                            path: browser.data.value.assessment.path,
+                                            transport: browser.data.value.assessment.pathTransport ?? "–",
+                                            excess: browser.data.value.assessment.pathExcess ?? "–",
+                                        })
+                                    }}
                                 </div>
                                 <div class="text-caption">
                                     {{ t("system.browser.components") }}:
@@ -647,6 +866,65 @@ onBeforeUnmount(() => {
                                 :disable="browser.data.value?.enabled === false"
                                 @click="checkBrowser"
                             />
+                        </div>
+                    </q-expansion-item>
+                    <q-expansion-item :label="t('system.browser.stats.title')" class="bordered-panel">
+                        <div class="q-pa-sm text-caption">{{ t("system.browser.stats.hint") }}</div>
+                        <div v-if="browserStats.data.value" class="q-pa-sm text-caption">
+                            <div class="text-weight-medium">{{ t("system.browser.stats.observed") }}</div>
+                            <div v-for="name in browserStats.data.value.observed" :key="name">
+                                {{
+                                    t("system.browser.stats.observedRow", {
+                                        name,
+                                        total: statTotals[`ind:${name}`] ?? 0,
+                                        solo: statTotals[`solo:${name}`] ?? 0,
+                                    })
+                                }}
+                            </div>
+                            <div v-if="!browserStats.data.value.observed.length">–</div>
+                            <div class="q-mt-sm">
+                                {{ t("system.browser.stats.tiers") }}:
+                                {{
+                                    statsUnder(statTotals, "tier:")
+                                        .map(([name, count]) => `${name} ${count}`)
+                                        .join(" · ") || "–"
+                                }}
+                            </div>
+                            <div>
+                                {{ t("system.browser.stats.refused") }}:
+                                {{
+                                    statsUnder(statTotals, "refused:")
+                                        .map(([name, count]) => `${name} ${count}`)
+                                        .join(" · ") || "–"
+                                }}
+                            </div>
+                            <div>
+                                {{ t("system.browser.stats.pow") }}:
+                                {{
+                                    statsUnder(statTotals, "pow:")
+                                        .map(([bits, count]) => `${bits}: ${count}`)
+                                        .join(" · ") || "–"
+                                }}
+                            </div>
+                            <div>
+                                {{ t("system.browser.stats.paths") }}:
+                                {{
+                                    statsUnder(statTotals, "path:")
+                                        .map(([name, count]) => `${name} ${count}`)
+                                        .join(" · ") || "–"
+                                }}
+                            </div>
+                            <div v-for="transport in ['tcp', 'quic']" :key="transport">
+                                {{ t("system.browser.stats.excess", { transport }) }}:
+                                {{
+                                    statsUnder(statTotals, `excess:${transport}:`)
+                                        .map(([bucket, count]) => `${bucket}: ${count}`)
+                                        .join(" · ") || "–"
+                                }}
+                            </div>
+                            <div v-if="statTotals.ip_class_e" class="text-negative">
+                                {{ t("system.browser.stats.classE", { n: statTotals.ip_class_e }) }}
+                            </div>
                         </div>
                     </q-expansion-item>
                 </aside>
@@ -707,6 +985,14 @@ onBeforeUnmount(() => {
     height: 3px;
     margin-right: 5px;
     vertical-align: middle;
+}
+.legend-box {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 5px;
+    vertical-align: middle;
+    opacity: 0.6;
 }
 .legend-dot {
     display: inline-block;

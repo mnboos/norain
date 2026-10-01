@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import type { WindDistribution } from "@norain/api/models";
 import { windDistributionParts } from "@/utils/wind";
 
-const props = defineProps<{ distribution: WindDistribution }>();
+const props = defineProps<{ distribution: WindDistribution; profile?: string | null }>();
 const { t } = useI18n();
 // Reads the locale through t(), so the labels follow a switch.
 const parts = computed(() => windDistributionParts(props.distribution));
@@ -22,7 +23,7 @@ const colors = ["negative", "primary", "secondary", "blue-grey-3", "grey-7"];
                 <span v-if="distribution.feltCoveredM < total - 0.01">
                     · {{ t("windBar.coveredOn", { km: (distribution.feltCoveredM / 1000).toFixed(1) }) }}
                 </span>
-                <span v-if="distribution.timingSource === 'sample-interpolation'">· {{ t("windBar.approxPace") }}</span>
+                <span v-if="distribution.timingSource === 'sample-interpolation'">· {{ tp(profile, "windBar.approxPace") }}</span>
             </span>
             <span v-else-if="total > 0" class="text-muted">{{ t("windBar.feltUnavailable") }}</span>
         </div>

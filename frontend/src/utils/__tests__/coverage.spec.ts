@@ -38,6 +38,11 @@ describe("rankedWishes", () => {
         ];
         expect(rankedWishes(areas, "de").map(a => a.code)).toEqual(["FR", "DE", "AT"]);
     });
+
+    it("keeps the viewer's own vote before the daily count includes it", () => {
+        const areas = [area("AT", { votes: 2 }), area("ES", { votes: 0, voted: true }), area("PT", { votes: 0 })];
+        expect(rankedWishes(areas, "de").map(a => a.code)).toEqual(["AT", "ES"]);
+    });
 });
 
 describe("voteOptions", () => {

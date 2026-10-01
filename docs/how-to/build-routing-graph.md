@@ -429,7 +429,25 @@ GraphHopper stores decoded tiles in `cache/` and `cache-fallback/`. Imports keep
 most 512 decoded tiles memory-mapped at once, so continent-sized builds do not exhaust
 native mappings or file descriptors. An empty, interrupted, or legacy-format cache
 file is deleted and regenerated from the retained PMTiles archive when it is read;
-valid cached tiles remain reusable.
+valid cached tiles remain reusable. Elevation prefetch reports node progress at least
+once per minute while moving between tiles; decoding uncached terrain is much slower
+than reading an already populated cache.
+
+Preparation also writes `cell_coverage.json`: for each road cell, how many of its 256 zoom-15
+tiles the archive holds (read from the PMTiles directories, no tile is decoded), and, when the
+tiles were decoded, how many have nodata. It is not part of the terrain key. The system
+dashboard colours the cells from it: zoom 15 complete, partial, or zoom 12 only. For terrain
+prepared before the file existed, run `just elevation-coverage-backfill`. It writes the file
+into the terrain of the active graph, which need not be `elevation/current`, using the graph's
+road cells (so run `graph-cells-backfill` first), else the terrain's, else every cell in the
+bounding box of terrain prepared before cells existed. Ship the file with the terrain.
+
+Each graph release also keeps the road cells of the OSM file it was built from (`cells.json`,
+written by the check before the import) and the file's name, size and date in `artifact.json`.
+GraphHopper serves both, with the terrain's files, at `GET /coverage`, for the system dashboard.
+A release built before that shows the terrain's cells instead, which may cover more; run
+`just graph-cells-backfill FILE` with the file it was built from to add them. Without that file,
+terrain prepared for a bounding box shows the whole box.
 
 The manifest records the coverage-cell hash, source catalog version, source metadata,
 zooms and archive checksums. Mapterhorn attribution is retained as `attribution.json`;

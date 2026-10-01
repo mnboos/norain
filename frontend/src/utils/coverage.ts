@@ -43,7 +43,8 @@ export function areaNote(area: CoverageAreaOut, locale: AppLocale = currentLocal
 export function rankedWishes(areas: CoverageAreaOut[], locale: AppLocale = currentLocale()): CoverageAreaOut[] {
     const collator = new Intl.Collator(intlLocale(locale));
     return areas
-        .filter(area => area.status !== Status.Covered && (area.votes ?? 0) > 0)
+        // The viewer's own vote shows before the daily settlement counts it (core/coverage.py).
+        .filter(area => area.status !== Status.Covered && ((area.votes ?? 0) > 0 || area.voted === true))
         .sort(
             (a, b) =>
                 (b.votes ?? 0) - (a.votes ?? 0) ||

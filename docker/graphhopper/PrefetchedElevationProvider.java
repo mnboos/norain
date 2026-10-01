@@ -113,6 +113,7 @@ public class PrefetchedElevationProvider implements ElevationProvider {
             // Index into order[] of the first node of the next tile not yet handed to read-ahead.
             int ahead = 0, tilesAhead = 0;
             long lastTile = -1;
+            long lastProgress = System.nanoTime();
             for (int i = 0; i < count; i++) {
                 long tile = order[i] >>> 33;
                 if (readAhead != null && tile != lastTile) {
@@ -126,12 +127,14 @@ public class PrefetchedElevationProvider implements ElevationProvider {
                         while (ahead < count && order[ahead] >>> 33 == next)
                             ahead++;
                     }
+                    if (seconds(lastProgress) >= 60) {
+                        logger.info("Elevation prefetch: {} of {} nodes, {}s", i + 1, count, seconds(start));
+                        lastProgress = System.nanoTime();
+                    }
                 }
                 long c = coords.get((int) (order[i] & ORDINAL_MASK));
                 if (!heights.containsKey(c))
                     heights.put(c, delegate.getEle(lat(c), lon(c)));
-                if ((i + 1) % 10_000_000 == 0)
-                    logger.info("Elevation prefetch: {} of {} nodes, {}s", i + 1, count, seconds(start));
             }
         } finally {
             if (readAhead != null)

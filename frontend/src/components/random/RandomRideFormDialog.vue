@@ -2,6 +2,7 @@
 import { computed, ref, watch, type Ref } from "vue";
 import { QSelect } from "quasar";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import {
     JourneyInKindEnum,
     RoadPrefsInClimbingEnum as Climbing,
@@ -82,6 +83,7 @@ const considerWeather = ref(false);
 // Off until the rider chooses it; see WeatherRoutingChoice.
 const avoidRain = ref(false);
 const avoidHeadwind = ref(false);
+const avoidShade = ref(false);
 
 function load(ride: JourneyOut | undefined) {
     if (!ride) {
@@ -109,6 +111,7 @@ function load(ride: JourneyOut | undefined) {
     ferries.value = ride.roadPrefs.ferries ?? Ferries.Neutral;
     avoidRain.value = ride.weatherPrefs.avoidRain ?? false;
     avoidHeadwind.value = ride.weatherPrefs.avoidHeadwind ?? false;
+    avoidShade.value = ride.weatherPrefs.avoidShade ?? false;
 }
 watch(
     () => [props.modelValue, props.ride] as const,
@@ -169,7 +172,7 @@ const terrainOptions = computed(() => [
 const trafficOptions = computed(() => [
     { label: t("roadPrefs.any"), value: Traffic.Neutral },
     { label: t("roadPrefs.traffic.avoidMain"), value: Traffic.AvoidMain },
-    { label: t("roadPrefs.traffic.preferNetwork"), value: Traffic.AvoidOffNetwork },
+    { label: tp(profile.value, "roadPrefs.traffic.preferNetwork"), value: Traffic.AvoidOffNetwork },
 ]);
 const townOptions = computed(() => [
     { label: t("roadPrefs.any"), value: Towns.Neutral },
@@ -244,6 +247,7 @@ function onSave() {
         weatherPrefs: {
             avoidRain: weatherMode.value && avoidRain.value,
             avoidHeadwind: weatherMode.value && avoidHeadwind.value && hasWindEffort(profile.value),
+            avoidShade: weatherMode.value && avoidShade.value,
         },
     };
     emit("save", data);
@@ -260,7 +264,7 @@ function onClose() {
         <q-card style="min-width: min(640px, 96vw)">
             <q-card-section>
                 <q-item-label overline>{{ ride ? t("randomForm.editTitle") : t("randomForm.newTitle") }}</q-item-label>
-                <div class="text-caption text-muted">{{ t("randomForm.intro") }}</div>
+                <div class="text-caption text-muted">{{ tp(profile, "randomForm.intro") }}</div>
             </q-card-section>
 
             <q-card-section class="q-gutter-md">
@@ -379,7 +383,7 @@ function onClose() {
                             :step="0.25"
                             label
                             :label-value="`${hours} h`"
-                            :aria-label="t('randomForm.length.hoursLabel')"
+                            :aria-label="tp(profile, 'randomForm.length.hoursLabel')"
                         />
                         <q-slider
                             v-else
@@ -415,7 +419,7 @@ function onClose() {
                     <q-input
                         v-model="departure"
                         class="col-6"
-                        :label="t('routeForm.departure')"
+                        :label="tp(profile, 'routeForm.departure')"
                         outlined
                         dense
                         mask="##:##"
@@ -454,7 +458,9 @@ function onClose() {
                         v-if="weatherMode"
                         v-model:avoid-rain="avoidRain"
                         v-model:avoid-headwind="avoidHeadwind"
+                        v-model:avoid-shade="avoidShade"
                         :headwind="hasWindEffort(profile)"
+                        :profile="profile"
                         class="q-mt-sm"
                     />
                 </div>

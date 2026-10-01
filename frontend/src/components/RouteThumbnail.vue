@@ -14,6 +14,7 @@
  */
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 
 import {
     CASING_DARK,
@@ -52,7 +53,7 @@ const label = computed(() => {
     const quality = thumbnail.value
         ? rideLabelText(thumbnail.value.rideLabel, thumbnail.value.rideCause) || t("common.notAvailable")
         : t("thumbnail.noForecast");
-    return t("thumbnail.quality", { quality });
+    return tp(props.route.profile, "thumbnail.quality", { quality });
 });
 
 defineExpose({ label });

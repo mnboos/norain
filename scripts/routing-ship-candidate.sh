@@ -15,7 +15,7 @@ set -euo pipefail
 : "${VPS_HOST:?Set VPS_HOST in .env}"
 : "${ROUTING_OSM_IMPORT_DIR:?Set ROUTING_OSM_IMPORT_DIR in .env}"
 remote="$VPS_USER@$VPS_HOST"
-norain_dir="${VPS_NORAIN_DIR:-/srv/norain}"
+norain_dir="${VPS_NORAIN_DIR:?err}"
 command -v rsync >/dev/null || { echo "rsync is required (on Windows, run this from WSL)." >&2; exit 1; }
 
 # The graph cache mount in docker-compose.base.yml.

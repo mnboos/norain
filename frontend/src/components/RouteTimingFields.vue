@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 
 const { t } = useI18n();
-const props = defineProps<{ modelValue: number; distanceM: number }>();
+const props = defineProps<{ modelValue: number; distanceM: number; profile?: string }>();
 const emit = defineEmits<{ "update:modelValue": [seconds: number] }>();
 const speed = computed(() => props.modelValue > 0 ? Math.round(props.distanceM / props.modelValue * 3.6 * 10) / 10 : 0);
 function setSpeed(value: string | number | null) {
@@ -21,7 +22,7 @@ function setMinutes(value: string | number | null) {
 class="col-6" outlined dense type="number" :label="t('timing.speed')" suffix="km/h"
             :model-value="speed" min="0.1" step="0.1" @update:model-value="setSpeed" />
         <q-input
-class="col-6" outlined dense type="number" :label="t('timing.duration')" suffix="min"
+class="col-6" outlined dense type="number" :label="tp(profile, 'timing.duration')" suffix="min"
             :model-value="Math.round(modelValue / 60 * 10) / 10" min="0.1" step="1" @update:model-value="setMinutes" />
     </div>
 </template>

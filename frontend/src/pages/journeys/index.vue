@@ -6,6 +6,7 @@
 </route>
 
 <script setup lang="ts">
+import { useEntitlements } from "@/composables/useEntitlements";
 import { ref } from "vue";
 import { useQuasar } from "quasar";
 import { useI18n } from "vue-i18n";
@@ -23,6 +24,7 @@ const router = useRouter();
 const showForm = ref(false);
 
 const { data: journeys, isLoading } = useJourneys(JourneyKind.Tour);
+const { entitlements } = useEntitlements();
 const createMutation = useCreateJourney();
 const deleteMutation = useDeleteJourney();
 
@@ -33,7 +35,13 @@ function onSave(data: JourneyIn) {
             if (isQuotaExceeded(err)) {
                 $q.dialog({
                     title: t("quota.title"),
-                    message: t("quota.journeys"),
+                    message: entitlements.value?.offer
+                        ? t(
+                              "quota.journeys",
+                              { n: entitlements.value.offer.freeJourneys, plus: entitlements.value.offer.plusJourneys },
+                              entitlements.value.offer.freeJourneys,
+                          )
+                        : undefined,
                     cancel: { label: t("quota.later"), flat: true },
                     ok: { label: t("quota.upgrade"), color: "primary", unelevated: true },
                 }).onOk(() => void router.push("/account"));

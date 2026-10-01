@@ -5,7 +5,6 @@ Open to anyone (``optional_session_auth``, which still checks CSRF). The rules a
 """
 
 from collections import Counter
-from contextlib import suppress
 from datetime import date
 from typing import Literal
 
@@ -14,8 +13,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError
-from django.db.models import Count
 from django.http import HttpRequest, HttpResponse
+from django.utils import timezone
 from django.utils.translation import get_language, gettext
 from ninja import Router
 from ninja.errors import HttpError
@@ -130,23 +129,25 @@ def _area_out(area: CoverageArea | None, code: str, votes: int, voted: bool) -> 
 async def get_coverage(request: HttpRequest):
     """Covered and planned areas, every area with votes, and the countries one may vote for."""
     areas = {a.code: a async for a in CoverageArea.objects.all()}
-    counts = Counter({row["area_code"]: row["n"] async for row in _vote_counts()})
+    counts = Counter(await sync_to_async(coverage.published_tallies)())
     voter = _voter(request)
+    # The voter's own votes, counted or not: a refused one looks like any other (the blind ledger).
     mine = (
-        {c async for c in CoverageVote.objects.filter(voter=voter).values_list("area_code", flat=True)}
+        {
+            c
+            async for c in CoverageVote.objects.filter(voter=voter, withdrawn_at__isnull=True).values_list(
+                "area_code", flat=True
+            )
+        }
         if voter
         else set()
     )
-    codes = set(areas) | {c for c in counts if c in COUNTRY_NAMES}
+    codes = set(areas) | {c for c in counts.keys() | mine if c in COUNTRY_NAMES}
     covered = {c for c, a in areas.items() if a.status == CoverageArea.Status.COVERED}
     return CoverageOut(
         areas=[_area_out(areas.get(c), c, counts[c], c in mine) for c in sorted(codes)],
         countries=sorted(c for c in COUNTRY_NAMES if c not in covered),
     )
-
-
-def _vote_counts():
-    return CoverageVote.objects.values("area_code").annotate(n=Count("id")).values("area_code", "n")
 
 
 def _set_voter_cookie(response: HttpResponse, token: str) -> None:
@@ -161,12 +162,28 @@ def _set_voter_cookie(response: HttpResponse, token: str) -> None:
 
 
 async def _vote_out(code: str, voted: bool) -> VoteOut:
-    return VoteOut(code=code, votes=await CoverageVote.objects.filter(area_code=code).acount(), voted=voted)
+    tallies = await sync_to_async(coverage.published_tallies)()
+    return VoteOut(code=code, votes=tallies.get(code, 0), voted=voted)
+
+
+def _refusal(reason: str) -> str:
+    """Why a vote was refused, for the ledger switched off; with it, nobody is told."""
+    if reason == "device":
+        return gettext("Mit diesem Browser wurde schon für dieses Gebiet gestimmt. Melde dich an, um mitzustimmen.")
+    if reason == "limit":
+        return gettext("Von hier aus wurden heute schon viele Stimmen abgegeben. Melde dich an, um mitzustimmen.")
+    return gettext("Von hier aus wurde heute schon für dieses Gebiet gestimmt. Melde dich an, um mitzustimmen.")
 
 
 @router.put("/coverage/{code}/vote", response=VoteOut)
 async def vote(request: HttpRequest, response: HttpResponse, code: str):
-    """Vote for an area Meteolane does not cover yet; voting twice changes nothing."""
+    """Vote for an area Meteolane does not cover yet; voting twice changes nothing.
+
+    With the blind ledger, a vote the limits refuse is stored as not accepted and answered
+    like any other; it simply never counts (``core.coverage``). Casting it again does not try
+    the limits again: a retry that could flip it would say, by its timing or its tally, that it
+    had been refused. Signing in is the way to a vote that surely counts.
+    """
     code = _normalize(code)
     await _votable_area(code)
     user = _viewer(request)
@@ -175,33 +192,24 @@ async def vote(request: HttpRequest, response: HttpResponse, code: str):
         token = coverage.new_voter_token()
         _set_voter_cookie(response, token)
     voter = coverage.voter_key(user, token)
-    if await CoverageVote.objects.filter(area_code=code, voter=voter).aexists():
+    # Cast again before the settlement took the withdrawal: the vote stands as it was.
+    if await CoverageVote.objects.filter(area_code=code, voter=voter).aupdate(withdrawn_at=None):
         return await _vote_out(code, voted=True)
     ip = client_ip(request)
     if not coverage.within_hourly_limit("vote", ip, coverage.VOTES_PER_IP_PER_HOUR):
         raise HttpError(429, gettext("Zu viele Stimmen. Bitte versuche es später noch einmal."))
+    refused = None
     if user is None:
-        # The browser's claim first: a refused one leaves nothing behind, and a refused IP
-        # claim below releases it again.
-        refused = coverage.claim_device_vote(voter, fingerprinting.get_browser_assessment(request), ip, code)
-        if refused == "device":
-            raise HttpError(
-                429,
-                gettext("Mit diesem Browser wurde schon für dieses Gebiet gestimmt. Melde dich an, um mitzustimmen."),
-            )
-        if refused == "limit":
-            raise HttpError(
-                429,
-                gettext("Von hier aus wurden heute schon viele Stimmen abgegeben. Melde dich an, um mitzustimmen."),
-            )
-        if not coverage.claim_anonymous_vote(ip, code):
-            coverage.release_device_vote(voter, code)
-            raise HttpError(
-                429,
-                gettext("Von hier aus wurde heute schon für dieses Gebiet gestimmt. Melde dich an, um mitzustimmen."),
-            )
-    with suppress(IntegrityError):  # a parallel request cast the same vote
-        await CoverageVote.objects.acreate(area_code=code, voter=voter)
+        refused = coverage.claim_vote(voter, fingerprinting.get_browser_assessment(request), ip, code)
+        if refused is not None and not settings.COVERAGE_BLIND_LEDGER:
+            raise HttpError(429, _refusal(refused))
+    try:
+        await CoverageVote.objects.acreate(area_code=code, voter=voter, accepted=refused is None)
+    except IntegrityError:
+        # A parallel request (a double click) cast the same vote first. If that one was refused
+        # only because this one held the claims, this one's claims make it count.
+        if refused is None:
+            await CoverageVote.objects.filter(area_code=code, voter=voter).aupdate(accepted=True)
     return await _vote_out(code, voted=True)
 
 
@@ -209,11 +217,18 @@ async def vote(request: HttpRequest, response: HttpResponse, code: str):
 async def withdraw_vote(request: HttpRequest, code: str):
     code = _normalize(code)
     voter = _voter(request)
-    if voter is not None:
-        deleted, _ = await CoverageVote.objects.filter(area_code=code, voter=voter).adelete()
-        if deleted and _viewer(request) is None:
-            coverage.release_anonymous_vote(client_ip(request), code)
-            coverage.release_device_vote(voter, code)
+    if voter is None:
+        return await _vote_out(code, voted=False)
+    if settings.COVERAGE_BLIND_LEDGER:
+        # The settlement deletes it and releases its claims, so withdrawing tells nothing either.
+        await CoverageVote.objects.filter(area_code=code, voter=voter, withdrawn_at__isnull=True).aupdate(
+            withdrawn_at=timezone.now()
+        )
+        return await _vote_out(code, voted=False)
+    deleted, _ = await CoverageVote.objects.filter(area_code=code, voter=voter).adelete()
+    if deleted and _viewer(request) is None:
+        coverage.release_anonymous_vote(client_ip(request), code)
+        coverage.release_device_vote(voter, code)
     return await _vote_out(code, voted=False)
 
 

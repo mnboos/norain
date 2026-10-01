@@ -2,7 +2,8 @@
 
 GraphHopper is patched (``docker/graphhopper/weather``) with a time-dependent A*: a request
 that carries a ``weather`` hint costs every road its weight times the weather there *at the
-moment the rider would be on it*, rain by the cell and headwind along the road's own bearing.
+moment the rider would be on it*, rain by the cell, headwind along the road's own bearing, and
+shade where the rider asked to stay in the sun.
 Via legs start where the previous one ended, in time as well as space. GraphHopper never
 fetches weather: this module builds the field from the cache and sends it with the request.
 
@@ -15,6 +16,11 @@ missing cell is a null in the field, which GraphHopper treats as no weather.
 What the weather costs is the app's judgement, ``ride_quality.ROUTING_*``, turned into
 multipliers here. GraphHopper only interpolates, so the judgement stays in one place. Every
 multiplier is at least 1: weather only makes a road more expensive, which LM needs.
+
+Shade is half ours and half GraphHopper's. The field carries the forecast's sunshine (how
+much of each hour the clouds let the sun through) and what full shade costs. GraphHopper works
+out where the sun stands, and whether the terrain or the trees hide it from each road
+(``Shade.java``), because only it holds the elevation and canopy archives.
 """
 
 import math
@@ -23,7 +29,7 @@ from datetime import datetime, timedelta
 from itertools import pairwise
 
 from .grid import extract_sample, get_cached_forecast_cell
-from .ride_quality import ROUTING_RAIN_ZONES, ROUTING_WIND_ZONES, rain_impact
+from .ride_quality import ROUTING_RAIN_ZONES, ROUTING_SHADE_PRIORITY, ROUTING_WIND_ZONES, rain_impact
 
 LATTICE_STEP = 0.05  # degrees, ~5 km: a shower is bigger than this
 CORRIDOR = 0.1  # degrees either side of the route
@@ -84,6 +90,17 @@ def rain_multiplier(sample: dict) -> float | None:
     return None if impact is None else round(_piecewise(impact, rain_curve()), 3)
 
 
+def shade_multiplier() -> float:
+    """The weight multiplier for a road in full shade while the sun is up."""
+    return round(1 / ROUTING_SHADE_PRIORITY, 4)
+
+
+def sunshine(sample: dict) -> float | None:
+    """The share of the hour the sky lets the sun through, 0..1."""
+    value = sample.get("sunshine")
+    return None if value is None else round(min(1.0, max(0.0, float(value))), 3)
+
+
 def wind_vector(sample: dict) -> tuple[float, float] | None:
     """The wind as (east, north) in km/h, pointing where it blows *to*; ``wind_dir`` is where it
     comes from."""
@@ -114,13 +131,14 @@ async def weather_field(
     *,
     avoid_rain: bool,
     avoid_headwind: bool,
+    avoid_shade: bool = False,
 ) -> dict | None:
     """The ``weather`` hint for a GraphHopper request (see ``WeatherField.java`` for the layout).
 
     None when nothing is to be avoided or no cell is warm: the request then routes plainly.
     """
     keys = list(cells)
-    if not keys or not (avoid_rain or avoid_headwind):
+    if not keys or not (avoid_rain or avoid_headwind or avoid_shade):
         return None
     t0, hours = field_hours(departure, ride_seconds)
     lat0, lon0 = min(k[0] for k in keys), min(k[1] for k in keys)
@@ -130,6 +148,7 @@ async def weather_field(
     rain: list[float | None] = [None] * size
     wind_u: list[float | None] = [None] * size
     wind_v: list[float | None] = [None] * size
+    sun: list[float | None] = [None] * size
     warm = 0
     for key in keys:
         cell = await get_cached_forecast_cell(key[0], key[1], day_key, forecast_days)
@@ -146,6 +165,8 @@ async def weather_field(
                 rain[at] = rain_multiplier(sample)
             if avoid_headwind and (vector := wind_vector(sample)) is not None:
                 wind_u[at], wind_v[at] = vector
+            if avoid_shade:
+                sun[at] = sunshine(sample)
     if not warm:
         return None
     field = {
@@ -163,4 +184,6 @@ async def weather_field(
         field["rain"] = rain
     if avoid_headwind:
         field |= {"wind_u": wind_u, "wind_v": wind_v, "headwind": headwind_table()}
+    if avoid_shade:
+        field |= {"sun": sun, "shade": shade_multiplier()}
     return field

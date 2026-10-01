@@ -2,6 +2,7 @@
 import { GeometrySource } from "@norain/api/models";
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import type { GpxPathOut, RoutePlanIn, RoutePlanOut } from "@norain/api/models";
 import { gpxApi, gpxError, routingProfile, type RouteDraft } from "@/services/gpx";
 import GpxPreviewMap from "./GpxPreviewMap.vue";
@@ -95,10 +96,10 @@ v-if="paths.length > 1" v-model="selected" outlined :label="t('gpx.track')"
                     <q-option-group
 v-model="mode" :options="[
                         { label: t('gpx.keepOriginal'), value: 'imported' },
-                        { label: t('gpx.recalculate'), value: 'graphhopper' },
+                        { label: tp(profile, 'gpx.recalculate'), value: 'graphhopper' },
                     ]" />
-                    <RouteTimingFields v-if="mode === 'imported'" v-model="duration" :distance-m="path.distanceM" />
-                    <div v-if="mode === 'imported'" class="text-caption">{{ t("gpx.importedHint") }}</div>
+                    <RouteTimingFields v-if="mode === 'imported'" v-model="duration" :profile="profile" :distance-m="path.distanceM" />
+                    <div v-if="mode === 'imported'" class="text-caption">{{ tp(profile, "gpx.importedHint") }}</div>
                     <div v-else class="text-caption">{{ t("gpx.recalculatedHint") }}</div>
                     <GpxPreviewMap :original="path.coordinates" :calculated="mode === 'graphhopper' ? preview?.coordinates : undefined" />
                     <div>{{ ((preview?.distanceM ?? path.distanceM) / 1000).toFixed(1) }} km

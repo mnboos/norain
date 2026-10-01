@@ -359,6 +359,8 @@ onMounted(async () => {
                 <h2 id="coverage-ranking" class="text-subtitle1 text-weight-bold q-my-sm">
                     {{ t("coverage.ranking") }}
                 </h2>
+                <!-- The same line for every voter: the counts never say whose vote counted. -->
+                <p class="text-caption text-muted q-mb-sm">{{ t("coverage.countedDaily") }}</p>
                 <div v-if="!wishes.length" class="text-body2 text-muted">{{ t("coverage.noVotes") }}</div>
                 <q-list v-else bordered separator class="rounded-borders">
                     <q-item v-for="(area, index) in wishes" :key="area.code">

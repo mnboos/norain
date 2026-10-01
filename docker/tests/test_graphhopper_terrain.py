@@ -123,6 +123,55 @@ class TerrainTests(unittest.TestCase):
             )
             self.assertIn("15/102/100", result["examples"])
 
+    def test_cell_coverage_counts_present_and_void_tiles_per_cell(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "terrain.pmtiles"
+            # Cell (6, 6): three tiles, one with nodata. Cell (7, 6): every tile.
+            # Cell (6, 7): none, so it reads the fallback only.
+            tiles = [
+                (100, 100, (132, 0, 0)),
+                (101, 100, (100, 0, 0)),
+                (102, 100, (130, 0, 0)),
+            ] + [(x, y, (132, 0, 0)) for x in range(112, 128) for y in range(96, 112)]
+            archive(path, tiles)
+            cells = {(6, 6), (7, 6), (6, 7)}
+            void_tiles = set()
+            terrain.verify_coverage(path, cells, void_out=void_tiles)
+            self.assertEqual(void_tiles, {(102, 100)})
+            result = terrain.cell_coverage(path, cells, void_tiles=void_tiles)
+            self.assertEqual(result["per_cell"], 256)
+            self.assertEqual(
+                result["cells"], [[6, 6, 3, 1], [6, 7, 0, 0], [7, 6, 256, 0]]
+            )
+            # Without decoding, the counts come from the directories alone.
+            self.assertEqual(
+                [row[3] for row in terrain.cell_coverage(path, cells)["cells"]],
+                [None, None, None],
+            )
+
+    def test_write_cell_coverage_reads_the_prepared_cells(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive(root / "terrain.pmtiles", [(100, 100, (132, 0, 0))])
+            (root / "cells.json").write_text(terrain.cells_json({(6, 6)}))
+            terrain.write_cell_coverage(root)
+            stored = json.loads((root / "cell_coverage.json").read_text())
+            self.assertEqual(stored["cells"], [[6, 6, 1, None]])
+            self.assertEqual(list(root.glob(".cell_coverage-*")), [])
+
+    def test_bounding_box_terrain_uses_every_cell_in_its_bounds(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive(root / "terrain.pmtiles", [(100, 100, (132, 0, 0))])
+            west, north = terrain.tile_lonlat(6, 6, terrain.MASK_ZOOM)
+            east, south = terrain.tile_lonlat(8, 7, terrain.MASK_ZOOM)
+            # Slightly inside: cells (6, 6) and (7, 6), one row.
+            bounds = [west + 0.01, south + 0.01, east - 0.01, north - 0.01]
+            (root / "manifest.json").write_text(json.dumps({"bounds": bounds}))
+            self.assertEqual(terrain.bounds_cells(bounds), {(6, 6), (7, 6)})
+            data = terrain.write_cell_coverage(root)
+            self.assertEqual(data["cells"], [[6, 6, 1, None], [7, 6, 0, None]])
+
     def test_fallback_is_checked_at_its_own_zoom(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "fallback.pmtiles"
@@ -558,6 +607,7 @@ class DownloadPieceTests(unittest.TestCase):
                 patch.object(terrain, "node_cells", return_value={(1078, 719)}),
                 patch.object(terrain, "run"),
                 patch.object(terrain, "verify_coverage", return_value={}),
+                patch.object(terrain, "write_cell_coverage"),
                 patch.object(
                     terrain, "download_pieces", side_effect=download
                 ) as downloads,
@@ -633,6 +683,7 @@ class DownloadPieceTests(unittest.TestCase):
             patch.object(terrain, "node_cells", return_value={(1078, 719)}),
             patch.object(terrain, "run"),
             patch.object(terrain, "verify_coverage", return_value={}),
+            patch.object(terrain, "write_cell_coverage"),
             patch.object(terrain, "download_json", side_effect=lambda url: catalog),
             patch.object(terrain, "extract_whole", side_effect=whole) as extract,
             patch.object(terrain, "download_pieces", side_effect=pieces) as download,

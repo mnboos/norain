@@ -39,10 +39,15 @@ just routing-terrain-estimate bike-europe-cycling.osm.pbf
 just download-elevation-for bike-europe-cycling.osm.pbf
 just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
 just poi-import-into-db
+just canopy-from-unfiltered-osm-pbf data/downloads/osm/*.osm.pbf
 ```
 
 The commands filter and merge the OSM files, prepare matching terrain, import a candidate
-graph and load POIs. Validate and activate the candidate using the routing-graph guide
+graph and load POIs. The last one rasterises the woods of the raw files into
+`canopy.pmtiles` beside the terrain: the tree heights "avoid shade" looks over towards the
+sun. GraphHopper reads it while serving (not at import), so it needs no rebuild, only a
+restart, and `just routing-ship-candidate` ships it with the terrain. Run it again after new
+terrain was prepared. Without it trees cast no shadow; the terrain and the clouds still do. Validate and activate the candidate using the routing-graph guide
 before serving it.
 
 ## 3. Build the search index
@@ -79,6 +84,21 @@ Steps 2 and 3 don't depend on each other. Run them in either order.
   caches the graph file.
 
 Then do [after every build](build-routing-graph.md#5-validate-activate-and-check).
+
+The system page (`/system`, "Kartendaten") shows what the running graph, its terrain and the
+Photon index cover. A Photon import from dumps counts the places per country on the way and
+writes `meteolane-coverage.json` beside the index. A prebuilt `.tar.bz2` index only records
+its file name. For an index imported before this existed, count the same dumps again without
+importing them:
+
+```bash
+just photon-coverage-backfill data/downloads/photon/*.jsonl.zst
+just graph-cells-backfill bike-europe-cycling.osm.pbf
+just elevation-coverage-backfill
+```
+
+Count the dumps the index was actually built from: newer downloads give different numbers.
+Run `graph-cells-backfill` before `elevation-coverage-backfill`, which uses the graph's cells.
 
 ## Update the data later
 

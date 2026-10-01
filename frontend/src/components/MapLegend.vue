@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { QIcon, QTooltip } from "quasar";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import { symSharpInfo } from "@quasar/extras/material-symbols-sharp";
 
 import { NO_DATA_COLOR, YLORRD_8 } from "@/utils/rideQuality";
@@ -9,6 +10,8 @@ import { NO_DATA_COLOR, YLORRD_8 } from "@/utils/rideQuality";
 defineProps<{
     /** Show the grey swatch - only when some stretch really has no usable data. */
     showNoData?: boolean;
+    /** The forecast's routing profile: a hike is scored as a hike. */
+    profile?: string | null;
 }>();
 
 const { t } = useI18n();
@@ -18,10 +21,10 @@ const barGradient = computed(() => `linear-gradient(to right, ${YLORRD_8.join(",
 <template>
     <div class="wx-legend bg-tint-neutral">
         <div class="wx-legend__head">
-            <span class="wx-legend__caption">{{ t("legend.rideQuality") }}</span>
+            <span class="wx-legend__caption">{{ tp(profile, "legend.rideQuality") }}</span>
             <QIcon :name="symSharpInfo" size="14px" class="wx-legend__info" />
             <QTooltip anchor="top middle" self="bottom middle" max-width="240px">
-                {{ t("legend.explanation") }}
+                {{ tp(profile, "legend.explanation") }}
             </QTooltip>
         </div>
         <div class="wx-legend__bar" :style="{ background: barGradient }"></div>

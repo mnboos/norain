@@ -37,8 +37,16 @@ from stripe.params.checkout import (
     SessionCreateParamsSubscriptionData,
 )
 
-from .. import telemetry
-from ..entitlements import allowed_route_ids, entitlements_for_sync, subscription_for_sync
+from .. import briefings, telemetry
+from ..entitlements import (
+    FREE,
+    PLUS_PRICES,
+    PRO,
+    TRIAL_DAYS,
+    allowed_route_ids,
+    entitlements_for_sync,
+    subscription_for_sync,
+)
 from ..models import Plan, ProcessedStripeEvent, RecurringRoute, Subscription, User
 
 # Events that can change what an account is entitled to. Anything else is acknowledged
@@ -69,6 +77,23 @@ def _not_configured() -> JsonResponse:
     return JsonResponse({"detail": gettext("Die Abrechnung ist auf diesem Server nicht eingerichtet.")}, status=503)
 
 
+def _offer() -> dict[str, Any]:
+    """What Free and Plus include, for the texts that quote it: the same for every account."""
+    return {
+        "freeRoutes": FREE.max_routes,
+        "plusRoutes": PRO.max_routes,
+        "plusBriefingRoutes": PRO.max_briefing_routes,
+        "freeJourneys": FREE.max_journeys,
+        "plusJourneys": PRO.max_journeys,
+        "plusAlternatives": PRO.max_journey_alternatives,
+        "freeRandomRides": FREE.max_random_rides,
+        "plusRandomRides": PRO.max_random_rides,
+        "trialDays": TRIAL_DAYS,
+        "briefingLeadMinutes": int(briefings.LEAD.total_seconds() // 60),
+        "briefingsPerDay": briefings.MAX_PER_DAY,
+    }
+
+
 def _entitlements_payload(user: AbstractBaseUser | AnonymousUser) -> dict[str, Any]:
     limits = entitlements_for_sync(user)
     subscription = Subscription.objects.filter(user=user).first() if user.is_authenticated else None
@@ -89,7 +114,8 @@ def _entitlements_payload(user: AbstractBaseUser | AnonymousUser) -> dict[str, A
         "paidSubscription": bool(
             subscription and subscription.stripe_subscription_id and subscription.status in Subscription.ACTIVE_STATUSES
         ),
-        "prices": {"annual": 29, "monthly": 3.9, "currency": "EUR"},
+        "prices": PLUS_PRICES,
+        "offer": _offer(),
         "routeCount": RecurringRoute.objects.filter(owner=user, active=True, return_of__isnull=True).count()
         if user.is_authenticated
         else 0,
@@ -418,7 +444,7 @@ def trial_view(request):
         if subscription.trial_started_at or entitlements_for_sync(user).is_pro:
             return JsonResponse({"detail": gettext("Die Testphase gibt es einmal pro Konto.")}, status=409)
         subscription.trial_started_at = datetime.now(tz=UTC)
-        subscription.trial_ends_at = subscription.trial_started_at + timedelta(days=14)
+        subscription.trial_ends_at = subscription.trial_started_at + timedelta(days=TRIAL_DAYS)
         subscription.save(update_fields=["trial_started_at", "trial_ends_at", "updated_at"])
     telemetry.event("billing.action", action="trial_started", outcome="success", **telemetry.user_context(user))
     return JsonResponse(_entitlements_payload(user))

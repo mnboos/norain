@@ -90,6 +90,7 @@ export enum SystemMapFilterKindEnum {
 export enum SystemMapFilterSourceEnum {
     All = 'all',
     OpenMeteo = 'open-meteo',
+    MetNorway = 'met-norway',
     Openweathermap = 'openweathermap'
 }
 /**

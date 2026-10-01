@@ -478,6 +478,9 @@ async def update_route(request: HttpRequest, route_id: UUID, data: RecurringRout
             "return_schedule_description",
         }
     )
+    # The stops were routed into the old line; on another one they are no longer passed.
+    if route.geometry_source != data.geometry_source or route.imported_coordinates != data.imported_coordinates:
+        route.stops = []
     for field, value in values.items():
         setattr(route, field, value)
     if route.return_of_id:
@@ -668,7 +671,8 @@ def _save_return(route, cron, description):
     description = _return_description(cron, route, description or (returning.schedule_description if returning else ""))
     values = {
         "owner": route.owner,
-        "name": gettext("%(name)s – Rückfahrt") % {"name": route.name[:188]},
+        "name": (gettext("%(name)s – Rückweg") if route.profile == "hike" else gettext("%(name)s – Rückfahrt"))
+        % {"name": route.name[:188]},
         "description": route.description,
         "start_point": route.destination_point,
         "start_name": route.dest_name,
@@ -677,6 +681,7 @@ def _save_return(route, cron, description):
         "via_points": list(reversed(route.via_points or [])),
         "geometry_source": route.geometry_source,
         "imported_coordinates": list(reversed(route.imported_coordinates or [])),
+        "stops": list(route.stops or []),
         "duration_seconds": route.duration_seconds,
         "profile": route.profile,
         "schedule_cron": cron,

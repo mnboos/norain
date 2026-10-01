@@ -19,6 +19,16 @@ import {
     ChallengeToJSON,
 } from '../models/Challenge';
 import {
+    type EchoIn,
+    EchoInFromJSON,
+    EchoInToJSON,
+} from '../models/EchoIn';
+import {
+    type EchoOut,
+    EchoOutFromJSON,
+    EchoOutToJSON,
+} from '../models/EchoOut';
+import {
     type Receipt,
     ReceiptFromJSON,
     ReceiptToJSON,
@@ -28,6 +38,13 @@ import {
     SubmissionFromJSON,
     SubmissionToJSON,
 } from '../models/Submission';
+
+export interface FingerprintApiCoreApiFingerprintEchoRequest {
+    /**
+     * 
+     */
+    echoIn: EchoIn;
+}
 
 export interface FingerprintApiCoreApiFingerprintVerifyRequest {
     /**
@@ -75,6 +92,55 @@ export class FingerprintApi extends runtime.BaseAPI {
      */
     async coreApiFingerprintChallenge(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Challenge> {
         const response = await this.coreApiFingerprintChallengeRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
+     * Creates request options for coreApiFingerprintEcho without sending the request
+     */
+    async coreApiFingerprintEchoRequestOpts(requestParameters: FingerprintApiCoreApiFingerprintEchoRequest): Promise<runtime.RequestOpts> {
+        if (requestParameters['echoIn'] == null) {
+            throw new runtime.RequiredError(
+                'echoIn',
+                'Required parameter "echoIn" was null or undefined when calling coreApiFingerprintEcho().'
+            );
+        }
+
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+        headerParameters['Content-Type'] = 'application/json';
+
+
+        let urlPath = `/api/fingerprint/echo`;
+
+        return {
+            path: urlPath,
+            method: 'POST',
+            headers: headerParameters,
+            query: queryParameters,
+            body: EchoInToJSON(requestParameters['echoIn']),
+        };
+    }
+
+    /**
+     * One round trip of the relay meter; the server times it, the reply says nothing about it.
+     * Echo
+     */
+    async coreApiFingerprintEchoRaw(requestParameters: FingerprintApiCoreApiFingerprintEchoRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<EchoOut>> {
+        const requestOptions = await this.coreApiFingerprintEchoRequestOpts(requestParameters);
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => EchoOutFromJSON(jsonValue));
+    }
+
+    /**
+     * One round trip of the relay meter; the server times it, the reply says nothing about it.
+     * Echo
+     */
+    async coreApiFingerprintEcho(requestParameters: FingerprintApiCoreApiFingerprintEchoRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<EchoOut> {
+        const response = await this.coreApiFingerprintEchoRaw(requestParameters, initOverrides);
         return await response.value();
     }
 

@@ -32,6 +32,10 @@ export interface Challenge {
      * 
      */
     difficulty: number;
+    /**
+     * 
+     */
+    echo?: boolean;
 }
 
 /**
@@ -57,6 +61,7 @@ export function ChallengeFromJSONTyped(json: any, ignoreDiscriminator: boolean):
         'challenge': json['challenge'],
         'expiresIn': json['expiresIn'],
         'difficulty': json['difficulty'],
+        'echo': json['echo'] == null ? undefined : json['echo'],
     };
 }
 
@@ -74,6 +79,7 @@ export function ChallengeToJSONTyped(value?: Challenge | null, ignoreDiscriminat
         'challenge': value['challenge'],
         'expiresIn': value['expiresIn'],
         'difficulty': value['difficulty'],
+        'echo': value['echo'],
     };
 }
 

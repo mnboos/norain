@@ -135,6 +135,9 @@ FROST_CODES = {
 # custom model goes to GraphHopper, not to the browser. Checked worst first.
 ROUTING_RAIN_ZONES = ((0.5, 0.25), (0.2, 0.6))  # (rain_impact at least, multiplier)
 ROUTING_WIND_ZONES = ((30.0, 0.6), (18.0, 0.85))  # (wind km/h at least, multiplier on headwind roads)
+# "Avoid shade": a road in full shade while the sun is up, behind cloud, terrain or trees. Sunny
+# roads keep 1; at night none is preferred.
+ROUTING_SHADE_PRIORITY = 0.7
 
 BAND_LABELS: tuple[RideBand, ...] = ("very_good", "good", "fair", "poor", "very_poor")
 

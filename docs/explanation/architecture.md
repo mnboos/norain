@@ -22,7 +22,8 @@ flowchart TD
     WF --> Plot[Weather sections]
     Grid --> DB
     Grid --> OM[Open-Meteo: deterministic and ensemble]
-    Grid --> OWM[OpenWeatherMap: deterministic fallback]
+    Grid --> MET[MET Norway: free deterministic fallback]
+    Grid --> OWM[OpenWeatherMap: paid deterministic fallback]
     WC --> WU[Weather Underground: station readings near now]
     WC --> Redis
     WF --> Redis
@@ -63,10 +64,10 @@ A database cell is reusable when it is at most two hours old and its stored
 fetches and updates the row. Expiration rejects data on lookup; it does not delete
 old rows, and no periodic pruning command is provided.
 
-Deterministic lookup checks fresh Open-Meteo and then fresh OWM cache entries
-before fetching. With neither available, it fetches Open-Meteo and falls back to
-OWM on a handled fetch failure. Without an OWM key, that fallback cannot supply
-data. Ensemble failures leave probability optional; deterministic weather can
+Deterministic lookup checks fresh Open-Meteo, then MET Norway, then OWM cache entries
+before fetching. With none available, it fetches Open-Meteo and on a handled fetch
+failure falls back to MET Norway (free, no key), then to OWM. Without an OWM key, that
+last fallback cannot supply data. Ensemble failures leave probability optional; deterministic weather can
 still be used.
 
 Routing and geocoding have bounded process-local LRU caches (`core/weather.py` and
