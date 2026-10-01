@@ -87,6 +87,23 @@ class AdaptiveTests(SimpleTestCase):
             )
         self.assertEqual(wait, 3000)
 
+    def test_a_reason_naming_the_minute_waits_for_the_next_minute_not_longer(self):
+        reason = {"error": True, "reason": "Minutely API request limit exceeded. Please try again in one minute."}
+        waits = []
+        for i in range(3):
+            with patch("core.ratelimit._now", return_value=T0 + i * 100 + 15):
+                waits.append(record_throttle(_limit(), _response(body=reason)))
+            cache.delete("rl:test:cooldown")
+        self.assertEqual(waits, [45, 5, 25], "no doubling: the provider resets its minute regardless")
+
+    def test_too_many_concurrent_requests_pauses_briefly_and_adapts_nothing(self):
+        with patch("core.ratelimit._now", return_value=T0):
+            wait = record_throttle(_limit(), _response(body={"error": True, "reason": "Too many concurrent requests"}))
+            self.assertEqual(wait, 1)
+            self.assertEqual(cooldown_left(_limit()), 1)
+        self.assertIsNone(cache.get("rl:test:factor"))
+        self.assertIsNone(cache.get("rl:test:strikes"))
+
     def test_consecutive_429s_back_off_exponentially(self):
         waits = []
         for i in range(3):
@@ -152,6 +169,7 @@ class GridGateTests(TestCase):
         with (
             patch.dict(os.environ, {"OPENWEATHERMAP_API_KEY": "k"}),
             patch.object(grid, "_fetch_open_meteo", AsyncMock(side_effect=_status_error(503))),
+            patch.object(grid, "_fetch_met", AsyncMock(side_effect=_status_error(503))),
             patch.object(grid, "_fetch_owm", owm),
         ):
             cell = self._get(allow_fallback=False)
@@ -161,6 +179,7 @@ class GridGateTests(TestCase):
         with (
             patch.dict(os.environ, {"OPENWEATHERMAP_API_KEY": "k", "OPENWEATHERMAP_DAILY_CAP": "0"}),
             patch.object(grid, "_fetch_open_meteo", AsyncMock(side_effect=_status_error())),
+            patch.object(grid, "_fetch_met", AsyncMock(side_effect=_status_error(503))),
             patch.object(grid, "_fetch_owm", AsyncMock(side_effect=AssertionError("over budget"))),
         ):
             self.assertIsNone(self._get(allow_fallback=True))
@@ -168,8 +187,22 @@ class GridGateTests(TestCase):
     def test_requests_are_weighted_as_open_meteo_counts_them(self):
         self.assertEqual(grid.open_meteo_weight(20, 7), 2.0)
         self.assertAlmostEqual(grid.open_meteo_weight(20, 16), 2 * 16 / 14)
-        self.assertEqual(grid.open_meteo_weight(5, 2, models=3), 1.5)
+        self.assertEqual(grid.open_meteo_weight(5, 2, members=3), 1.5)
         self.assertEqual(grid.open_meteo_weight(3, 1), 1.0)
+
+    def test_an_ensemble_request_counts_every_member(self):
+        # Open-Meteo's calculateQueryWeight: variables x members of every model, over 10.
+        self.assertEqual(grid.ENSEMBLE_MEMBER_COUNT, 72)
+        self.assertEqual(set(grid.ENSEMBLE_MODELS.split(",")), set(grid.ENSEMBLE_MEMBERS))
+        self.assertEqual(grid.open_meteo_weight(len(grid.ENSEMBLE_VARIABLES), 7, grid.ENSEMBLE_MEMBER_COUNT), 36.0)
+
+    def test_the_ensemble_request_is_spent_at_its_member_weight(self):
+        with (
+            patch.object(grid, "acquire", Mock(return_value=0.0)) as spend,
+            patch.object(grid, "_fetch_ensemble", AsyncMock(return_value={"hourly": {"time": []}})),
+        ):
+            async_to_sync(grid.get_or_fetch_ensemble_cell)(47.0, 9.0, DAY, 2)
+        self.assertEqual(spend.call_args.args[1], 36.0)
 
     def test_the_budget_follows_the_env(self):
         with patch.dict(os.environ, {"OPEN_METEO_LIMIT_MINUTE": "10"}):

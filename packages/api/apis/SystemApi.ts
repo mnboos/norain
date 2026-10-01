@@ -581,6 +581,7 @@ export enum CoreApiSystemMapFeaturesKindEnum {
 export enum CoreApiSystemMapFeaturesSourceEnum {
     All = 'all',
     OpenMeteo = 'open-meteo',
+    MetNorway = 'met-norway',
     Openweathermap = 'openweathermap',
 }
 /**

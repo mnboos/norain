@@ -8,7 +8,8 @@ to wait.
 The adaptive part: a 429 means the provider counts differently from what we assumed (a
 weight too low, another client on the same IP, a limit changed without notice). So a 429
 starts a cooldown that every worker honours (``Retry-After``, else the window the reply
-names, else doubling per consecutive 429) and halves a *factor* on the shortest window.
+names, else doubling per consecutive 429; a 429 for too many requests in flight only pauses
+briefly) and halves a *factor* on the shortest window.
 Only there: halving the hour or the day would lock a half-spent window for the rest of it,
 and every cell would go to the fallback over a minute-level 429.
 The factor climbs back a step per quiet minute. A burst of 429s from several workers counts
@@ -39,6 +40,9 @@ FACTOR_TTL = 7 * 86400  # a lost factor resets to 1.0, which is only the configu
 RECOVERY_EVERY = 60
 RECOVERY_QUIET = 300  # no step back up until this long after the last cooldown ended
 MAX_COOLDOWN = 3600
+# Open-Meteo's free API answers 429 "Too many concurrent requests" past a few requests in
+# flight from one IP. That says nothing about the call budget: pause briefly, adapt nothing.
+CONCURRENCY_COOLDOWN = 1  # within tasks.SHORT_WAIT: waited out in the worker, not deferred
 
 CACHE_ERRORS = (RedisError, OSError, ValueError)  # ValueError: incr on a key that just expired
 
@@ -151,13 +155,15 @@ def _reason(response) -> str:
 
 
 def _until_window_end(reason: str, now: float) -> float | None:
-    """Seconds to the end of the window a 429 reason names, if it names hour or day.
+    """Seconds to the end of the window a 429 reason names, if it names the minute, hour or day.
 
-    A guess at the wording (Open-Meteo says e.g. "Hourly API request limit exceeded"); the
-    reason is logged with every 429, so check it there before relying on more of it.
+    Open-Meteo's wording ("Minutely API request limit exceeded. Please try again in one
+    minute.", "Hourly …", "Daily …"; ``RateLimitError`` in its source). A minute is waited
+    out to its end, not doubled per 429: a doubling cooldown turned a few 429s in a row into
+    minutes of idle workers while the provider had long reset its counter.
     """
     text = reason.lower()
-    for word, seconds in (("daily", 86400), ("day", 86400), ("hour", 3600)):
+    for word, seconds in (("daily", 86400), ("day", 86400), ("hour", 3600), ("minute", 60)):
         if word in text:
             return seconds - now % seconds
     return None
@@ -167,6 +173,13 @@ def record_throttle(limit: Limit, response) -> float:
     """Adapt to a 429: start a shared cooldown and halve the factor. Returns the cooldown."""
     now = _now()
     reason = _reason(response)
+    if "concurrent" in reason.lower():
+        try:
+            cache.add(_key(limit, "cooldown"), now + CONCURRENCY_COOLDOWN, CONCURRENCY_COOLDOWN)
+        except CACHE_ERRORS as exc:
+            logger.warning(f"Could not record the {limit.provider} 429: {exc}")
+        logger.info(f"{limit.provider} answered 429 ({reason}); pausing {CONCURRENCY_COOLDOWN} s")
+        return float(CONCURRENCY_COOLDOWN)
     try:
         strikes = cache.get(_key(limit, "strikes"), 0)
         cooldown = (

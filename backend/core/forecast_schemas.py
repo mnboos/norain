@@ -142,7 +142,10 @@ class RouteWeatherSummary(CamelSchema):
     # naming - a ride with no samples at all says so through `samples` being empty.
     max_frost_level: ImpactLevel | None = None
     wind_distribution: WindDistribution | None = None
-    source: str  # "open-meteo" or "openweathermap"
+    source: str  # the last sample's forecast source; `sources` has all of them
+    # Every provider the forecast drew on ("open-meteo", "met-norway", "openweathermap",
+    # "open-meteo-ensemble"), for the attribution. Empty on results stored before it existed.
+    sources: list[str] = Field(default_factory=list)
     station_corrected: bool = False  # some samples were corrected with station readings
 
 

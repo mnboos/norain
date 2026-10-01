@@ -7,6 +7,7 @@ from django.utils.translation import gettext
 
 from . import ride_quality
 from .forecast_schemas import DepartureExplanation
+from .grid import met_covers
 from .schedule import LOCAL_TZ
 
 STEP_MINUTES = 15
@@ -92,6 +93,8 @@ def fetch_windows(params: dict, sample_points: list[dict], today) -> list[tuple[
 def cell_covers(data: dict, eta: datetime, source: str) -> bool:
     """Comparison must not rank clamped or fabricated weather as a complete sample."""
     eta = instant(eta)
+    if source == "met-norway":
+        return met_covers(data, eta)
     if source == "openweathermap":
         hourly = data.get("hourly")
         if not isinstance(hourly, list) or not hourly:

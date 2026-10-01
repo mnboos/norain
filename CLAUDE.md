@@ -1,7 +1,7 @@
 # MeteoLane — Bike-route weather forecaster
 
-Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo (primary, free) with OpenWeatherMap One
-Call 3.0 as fallback. Multi-user with
+Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo (primary, free) with MET Norway
+(yr.no, free) and then OpenWeatherMap One Call 3.0 as fallbacks. Multi-user with
 email/username sign-in, and a free/Pro subscription tier backed by Stripe.
 
 ## Project layout
@@ -261,8 +261,8 @@ exceptions: `POST /api/routes/preview` (see "Route editing") and the admin-only
 ```
 POST-ish GET  ->  ForecastJob (202)
                      plan_forecast_job     queue: forecasts   geometry + fan-out
-                       refresh_forecast_cell  \ queue: cells   one task per ~1 km² cell
-                       refresh_ensemble_cell  /
+                       refresh_forecast_cells  \ queue: cells   one task (one Open-Meteo
+                       refresh_ensemble_cells  /               request) per batch of cells
                          assemble_forecast_job  queue: forecasts  cache_only + sections
                            -> job.result, pushed over ws/forecast/<job_id>/
 ```
@@ -301,8 +301,16 @@ Four rules hold this together:
   would sit in front of the user as though it were the weather, for the full `MAX_CELL_AGE`.
 
 Queue split, because `db_worker` has no concurrency flag (one process, one task at a time —
-parallelism is replicas): `cells` for the provider fan-out, `forecasts` for planning and
-assembly (someone is waiting), `default` for geometry, thumbnails, scans and maintenance.
+parallelism is replicas): `cells` for the provider fan-out, `forecasts` for planning, assembly and a route's geometry
+(someone is waiting), `default` for thumbnails, scans, journey planning and maintenance (a bulk
+geometry backfill passes `.using(queue_name="default")`).
+
+**A route forecast waits for its geometry in `pending`, and storing the geometry plans it.**
+`_refresh_route_geometry_async` enqueues `plan_forecast_job` for every pending `ROUTE` job of the
+route; the delayed retry (`PLAN_RETRY_DELAY`, `MAX_PLAN_ATTEMPTS`) is only the fallback for a
+geometry task that never stores. Because both can arrive, planning starts with one guarded UPDATE
+from `pending` to `planning`, and only its winner plans; never start planning without it, or a job
+is counted and fanned out twice.
 Queue position no longer implies completion order, so anything that used to rely on FIFO —
 the thumbnail rebuild — now uses `.using(run_after=…)`.
 
@@ -320,7 +328,7 @@ lease held waits for it, then only reads what the holder stored. If the holder s
 nothing, the waiter returns `None` and does not fetch. It fetches only when the stored cell
 covers fewer `forecast_days` than it needs. Never make a waiter wait on the enqueue claim
 instead: a task still in the queue holds that, possibly behind the waiter itself.
-`LEASE_TTL` must stay above the Open-Meteo + OWM timeouts combined.
+`LEASE_TTL` must stay above the Open-Meteo + MET Norway + OWM timeouts combined.
 
 **Imports go at module scope — keep the layering that allows it.** The forecast payload
 schemas live in `core/forecast_schemas.py`, outside the `core.api` package, because the
@@ -479,21 +487,24 @@ In tests, patch `core.stations._fetch_nearby` / `_fetch_observation`, and set
 
 `core/ratelimit.py` budgets every external weather call in shared cache counters (the four
 `cells` replicas fetch side by side, so a per-process limit would mean nothing). A `Limit` is a
-set of fixed windows in the provider's own *weighted* calls. Open-Meteo counts a request with
-more than 10 variables or 14 days as several (`grid.open_meteo_weight`), so one forecast cell
-costs ~2.3. `acquire` spends against every window or refuses and returns the wait.
+set of fixed windows in the provider's own *weighted* calls. Open-Meteo counts a request as
+variables × members of every model / 10, times days / 14, at least 1 (`grid.open_meteo_weight`,
+its own `calculateQueryWeight`): one forecast cell costs ~2.3, one **ensemble cell 36**
+(5 variables × 72 members, `ENSEMBLE_MEMBERS`; keep the counts in step with `ENSEMBLE_MODELS`).
+`acquire` spends against every window or refuses and returns the wait.
 Rules that hold this together:
 
-- **The gate sits in `grid._fetch_and_store_*`, inside the fetch lease and outside `@provider`.**
+- **The gate sits in `grid._fetch_and_store_*` and `grid._fetch_cell_batch`, inside the fetch lease and outside `@provider`.**
   That covers every caller, and a skipped call is `provider.throttled`, never a
   `provider.request`.
 - **Adaptive.** A 429 goes through `record_throttle`. That starts one cooldown shared by every
-  worker: `Retry-After`, else the hour/day the reply's `reason` names, else doubling from 60 s.
+  worker: `Retry-After`, else the end of the minute/hour/day the reply's `reason` names, else
+  doubling from 60 s. "Too many concurrent requests" (the free API's per-IP limit on requests in
+  flight) only pauses `CONCURRENCY_COOLDOWN` and adapts nothing: it says nothing about the budget.
   It also halves a factor on the *shortest* window, which climbs back 0.1 a quiet minute (halving
   the hour would lock a half-spent hour and send every cell to OWM over a minute-level 429). The first 429
-  of a burst adapts, the rest don't. This is what corrects a weight we guessed too low (the ensemble's weighting is
-  undocumented).
-- **Fail open for Open-Meteo, closed for OWM and Weather Underground**, for the same reasons as
+  of a burst adapts, the rest don't. This is what corrects a weight we guessed too low.
+- **Fail open for Open-Meteo and MET Norway, closed for OWM and Weather Underground**, for the same reasons as
   `claims.py` and `_spend_call` (which is now a thin wrapper over `ratelimit`). Open-Meteo's
   forecast and ensemble APIs share one budget.
 - **`ProviderThrottled` must not subclass `httpx.HTTPError`/`ValueError`/`KeyError`**, or the
@@ -523,15 +534,67 @@ stored `forecast_days` is less than what the caller needs.
 - `get_or_fetch_forecast_cell()` — returns fresh cell (DB cache or live fetch)
 - `extract_sample(cell_data, eta, source)` — source-aware dispatcher: "open-meteo" or "openweathermap"
 - `get_or_fetch_ensemble_cell()` — same pattern for ensemble POP data
+- `fetch_forecast_cells()` / `fetch_ensemble_cells()` — the same for many cells, with one
+  Open-Meteo request for the missing ones (`latitude=a,b,…`; it answers a list, or a bare
+  object for one location)
+
+**Planning and the scan fetch cells in batches** (`tasks.CELL_BATCH`: 25 forecast, 8 ensemble
+cells per `refresh_*_cells` task). The free API serves one request per IP at a time, so one
+request per cell kept the `cells` workers waiting on each other. A batch only shares the round
+trip: each cell is still claimed, counted in `cells_total`, settled (`_settle_cell(…, settled=n)`)
+and fetched under its own lease (`cell_lease.try_lease`, never waiting — a cell someone else holds
+goes through the single-cell path, which waits for the holder). The budget is spent cell by cell,
+so a batch shrinks to what the window allows and the rest is deferred (`CellBatch.throttled`) under
+the single-cell deferral rules. A failed batch request falls back cell by cell. A reply with a
+different number of results than locations is a failure, never matched up by position. The single
+`refresh_*_cell` tasks stay for journey corridors and random-ride areas. In tests, patch
+`core.grid._fetch_open_meteo_batch` / `_fetch_ensemble_batch` for this path, and patch
+`core.tasks.refresh_*_cells` (count cells with `core.tests.enqueued_cells`) where planning is tested.
+
+**Ensemble cells sit on a 0.05° lattice** (`grid.ensemble_cell`, `ENSEMBLE_CELL_DEG`), not the
+forecast cells' 0.01°: at 36 weighted calls each, one per forecast cell spent the hourly budget on
+a few routes. The ensemble accessors take a forecast cell's coordinates and snap them themselves;
+`get_cached_cell_keys` / `get_cached_cells` key their ensemble result by the forecast cells asked
+for, so readers look up both kinds by the sample's `lat_r`/`lon_r`. Only planning and the scan
+work in ensemble cells (`tasks._cell_kinds`): one task and one `cells_total` unit per ensemble
+cell, however many forecast cells it covers. Anything else that reads `EnsembleCell` rows directly
+(the system dashboard) must snap too.
 
 ### Data format difference (critical)
 
 **Open-Meteo**: `hourly` = `{"time": [...], "temperature_2m": [...], ...}` — dict of parallel arrays **OpenWeatherMap**:
-`hourly` = `[{"dt": 123, "temp": 15, ...}, ...]` — list of objects
+`hourly` = `[{"dt": 123, "temp": 15, ...}, ...]` — list of objects. **MET Norway**: `properties.timeseries` =
+`[{"time": "…Z", "data": {"instant": {...}, "next_1_hours": {...}}}, ...]` — no `hourly` at all
 
-`_from_open_meteo()` expects dict blocks; `_from_owm()` expects a list. Both have
-`isinstance` guards rejecting the wrong format. `extract_sample()` routes directly based
-on `cell.source` to avoid confusing the two.
+`_from_open_meteo()` expects dict blocks; `_from_owm()` expects a list; `_from_met()` expects
+`properties.timeseries`. All have `isinstance` guards rejecting the wrong format. `extract_sample()`
+routes directly based on `cell.source` to avoid confusing them, and `departures.cell_covers` has
+one branch per source.
+
+### MET Norway fallback
+
+`grid._met_fallback`, tried after Open-Meteo fails and before the paid OWM (`FORECAST_SOURCES`
+is the order, for fetching and for a cache read that finds several sources). Free, commercial use
+allowed, CC BY 4.0. Rules that hold this together:
+
+- **MET's terms.** Every request sends `MET_USER_AGENT` (app and contact; without one MET
+  answers 403). A place's last response is reused for the conditional request: its
+  `_met_last_modified` goes out as `If-Modified-Since`, and a 304 (`MET_NOT_MODIFIED`) stores that
+  response again under the new day. MET answers the same for any day, so any earlier row of the
+  place will do. Budget `met_limit()`: far below the 20 requests a second MET asks to be told about.
+- **Coarser than Open-Meteo.** Outside the Nordics it is a global model; steps are hourly for
+  about 2.5 days, then six-hourly. `_from_met` gives a six-hourly step its own
+  `precipitation_interval_s` (21600), so the rain rate stays right. Don't make it primary.
+- **Symbol codes become WMO codes** (`MET_SYMBOLS`, `met_weather_code`), so the frost floor and
+  the SPA's weather words work. WMO has no sleet: it counts as snow; snow with thunder stays snow.
+- **A throttled Open-Meteo still defers first.** MET is only asked when the fallback is allowed
+  (a failure, a long wait, the last attempt), like OWM before it.
+- **Credit it.** `summary.sources` lists every provider a forecast used, and
+  `ForecastSummaryCard` names and links them (`utils/weatherProviders.ts`). Open-Meteo's and
+  MET's licences both ask for that.
+
+In tests, patch `core.grid._fetch_met` on every path where Open-Meteo fails, or the test calls
+api.met.no.
 
 ### `_from_open_meteo` clamping
 

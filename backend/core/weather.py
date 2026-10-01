@@ -721,6 +721,14 @@ async def compute_route_weather(
         )
 
     summary = _summarize(samples, forecast_source)
+    # Every provider whose data is on screen, for the attribution the SPA shows.
+    summary.sources = list(
+        dict.fromkeys(
+            [f["source"] for f in forecasts if f is not None]
+            + [s.probability_source for s in samples if s.probability_source]
+            + (["open-meteo-ensemble"] if any(s.uncertainty for s in samples) else [])
+        )
+    )
     summary.station_corrected = any(s.station_count for s in samples)
     if wind.distribution is not None:
         summary.wind_distribution = WindDistribution(**wind.distribution)

@@ -35,6 +35,7 @@ from core.grid import (
     _get_ensemble_cell_sync,
     _get_forecast_cell_sync,
     _nearest_index,
+    ensemble_cell,
     extract_sample,
 )
 from core.jobs import (
@@ -887,9 +888,10 @@ class RouteThumbnailTests(TestCase):
         times = [f"{self.departure.date().isoformat()}T{h:02d}:00" for h in range(24)]
         for sp in self.sample_points:
             self._warm_cell(sp)
+            lat_e, lon_e = ensemble_cell(sp["lat_r"], sp["lon_r"])
             EnsembleCell.objects.update_or_create(
-                lat_r=sp["lat_r"],
-                lon_r=sp["lon_r"],
+                lat_r=lat_e,
+                lon_r=lon_e,
                 day_key=self.departure.date(),
                 defaults={
                     "forecast_days": 16,
@@ -1539,6 +1541,11 @@ LOCMEM_CACHE = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMem
 INMEM_CHANNELS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 
+def enqueued_cells(enqueue) -> list[tuple]:
+    """Every cell a mocked batch task was enqueued with, as ``(lat, lon)``, across all its batches."""
+    return [tuple(cell) for call in enqueue.await_args_list for cell in call.args[0]]
+
+
 @override_settings(CACHES=LOCMEM_CACHE, CHANNEL_LAYERS=INMEM_CHANNELS)
 class ForecastJobTests(TestCase):
     """The forecast endpoints must enqueue work, never do it."""
@@ -1701,10 +1708,12 @@ class ForecastJobTests(TestCase):
         with patch("core.management.commands.backfill_route_vertex_times.refresh_route_geometry") as refresh:
             out = StringIO()
             call_command("backfill_route_vertex_times", route_id=self.route.id, stdout=out)
-            refresh.enqueue.assert_not_called()
+            refresh.using.return_value.enqueue.assert_not_called()
             self.assertIn("Matched: 1", out.getvalue())
             call_command("backfill_route_vertex_times", route_id=self.route.id, enqueue=True, stdout=StringIO())
-            refresh.enqueue.assert_called_once_with(str(self.route.id), backfill_only=True)
+            # On `default`: a bulk backfill must not stand in front of routes someone waits for.
+            refresh.using.assert_called_with(queue_name="default")
+            refresh.using.return_value.enqueue.assert_called_once_with(str(self.route.id), backfill_only=True)
             self.route.vertex_times = [0, 300, 600]
             self.route.save(update_fields=["vertex_times"])
             out = StringIO()
@@ -1794,17 +1803,20 @@ class ForecastJobTests(TestCase):
         job = self._make_job()
         forecast_enqueue, ensemble_enqueue = AsyncMock(), AsyncMock()
         with (
-            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)),
-            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble_enqueue)),
+            patch("core.tasks.refresh_forecast_cells", SimpleNamespace(aenqueue=forecast_enqueue)),
+            patch("core.tasks.refresh_ensemble_cells", SimpleNamespace(aenqueue=ensemble_enqueue)),
             patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())),
         ):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
 
-        # Three sample points, two distinct cells, one deterministic + one ensemble each.
-        self.assertEqual(forecast_enqueue.await_count, 2)
-        self.assertEqual(ensemble_enqueue.await_count, 2)
+        # Three sample points, two distinct cells, one deterministic each; both lie in one
+        # ensemble cell (grid.ensemble_cell), fetched once.
+        self.assertEqual(len(enqueued_cells(forecast_enqueue)), 2)
+        self.assertEqual(len(enqueued_cells(ensemble_enqueue)), 1)
+        # One batch per kind: one Open-Meteo request each, not one per cell.
+        self.assertEqual((forecast_enqueue.await_count, ensemble_enqueue.await_count), (1, 1))
         job.refresh_from_db()
-        self.assertEqual(job.cells_total, 4)
+        self.assertEqual(job.cells_total, 3)
         self.assertEqual(job.status, ForecastJob.Status.FETCHING)
 
     def test_scan_skips_cells_another_pass_already_claimed(self):
@@ -1820,8 +1832,8 @@ class ForecastJobTests(TestCase):
 
         forecast_enqueue, ensemble_enqueue = AsyncMock(), AsyncMock()
         with (
-            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)),
-            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble_enqueue)),
+            patch("core.tasks.refresh_forecast_cells", SimpleNamespace(aenqueue=forecast_enqueue)),
+            patch("core.tasks.refresh_ensemble_cells", SimpleNamespace(aenqueue=ensemble_enqueue)),
             patch(
                 "core.tasks.refresh_route_thumbnail",
                 SimpleNamespace(using=lambda **kw: SimpleNamespace(aenqueue=AsyncMock())),
@@ -1851,13 +1863,13 @@ class ForecastJobTests(TestCase):
 
         forecast_enqueue = AsyncMock()
         with (
-            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast_enqueue)),
-            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=AsyncMock())),
+            patch("core.tasks.refresh_forecast_cells", SimpleNamespace(aenqueue=forecast_enqueue)),
+            patch("core.tasks.refresh_ensemble_cells", SimpleNamespace(aenqueue=AsyncMock())),
             patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())),
         ):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
 
-        self.assertEqual(forecast_enqueue.await_count, 2)
+        self.assertEqual(len(enqueued_cells(forecast_enqueue)), 2)
 
     def test_missing_geometry_gives_up_eventually(self):
         """A route whose geometry never arrives must fail, not re-defer forever."""
@@ -1875,6 +1887,51 @@ class ForecastJobTests(TestCase):
         job.refresh_from_db()
         self.assertEqual(job.status, ForecastJob.Status.FAILED)
         self.assertTrue(job.error)
+
+    def test_a_forecast_waiting_for_geometry_is_planned_when_it_lands(self):
+        """No 20 s retry in between: storing the line plans the waiting job at once."""
+        geometry = {
+            "polyline": self.route.polyline_coordinates,
+            "sample_points": self.sample_points,
+            "vertex_times": [0.0, 300.0, 600.0],
+            "total_seconds": 600,
+            "total_distance_m": 1500,
+        }
+        self.route.sample_points = None
+        self.route.save(update_fields=["sample_points"])
+        job = self._make_job()
+        geometry_task, retry = AsyncMock(), AsyncMock()
+        with (
+            patch("core.tasks.refresh_route_geometry", SimpleNamespace(aenqueue=geometry_task)),
+            patch("core.tasks.plan_forecast_job", SimpleNamespace(using=lambda **kw: SimpleNamespace(aenqueue=retry))),
+        ):
+            async_to_sync(_plan_forecast_job_async)(str(job.id))
+        job.refresh_from_db()
+        self.assertEqual((job.status, job.attempts), (ForecastJob.Status.PENDING, 1))
+        geometry_task.assert_not_awaited()  # creating the route enqueued it already
+        retry.assert_awaited_once()  # only the fallback, for a geometry task that never stores
+
+        kick = AsyncMock()
+        with (
+            patch("core.tasks.build_geometry", AsyncMock(return_value=geometry)),
+            patch("core.tasks.refresh_route_thumbnail", SimpleNamespace(aenqueue=AsyncMock())),
+            patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=kick)),
+        ):
+            async_to_sync(_refresh_route_geometry_async)(str(self.route.id))
+        kick.assert_awaited_once_with(str(job.id))
+
+    def test_only_one_planner_runs_per_job(self):
+        """The kick and the delayed retry can both arrive; the second must not fan out again."""
+        job = self._make_job(status=ForecastJob.Status.PLANNING)
+        forecast_enqueue = AsyncMock()
+        with (
+            patch("core.tasks.refresh_forecast_cells", SimpleNamespace(aenqueue=forecast_enqueue)),
+            patch("core.tasks.refresh_ensemble_cells", SimpleNamespace(aenqueue=AsyncMock())),
+        ):
+            async_to_sync(_plan_forecast_job_async)(str(job.id))
+        forecast_enqueue.assert_not_awaited()
+        job.refresh_from_db()
+        self.assertEqual((job.status, job.cells_total), (ForecastJob.Status.PLANNING, 0))
 
     # -- the handoff to assembly --------------------------------------------------
 

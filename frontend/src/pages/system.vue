@@ -156,8 +156,9 @@ const profileOptions = computed(() => [
     ...Object.values(Profile).map(value => ({ label: value, value })),
 ]);
 const sourceOptions = computed(() => [
-    { label: t("system.filter.bothProviders"), value: Source.All },
+    { label: t("system.filter.allProviders"), value: Source.All },
     { label: "Open-Meteo", value: Source.OpenMeteo },
+    { label: "MET Norway", value: Source.MetNorway },
     { label: "OpenWeatherMap", value: Source.Openweathermap },
 ]);
 const activeOptions = computed(() => [

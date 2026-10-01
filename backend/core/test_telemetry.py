@@ -124,6 +124,7 @@ class TelemetryDatabaseTests(TestCase):
         with (
             patch.object(grid, "get_cached_forecast_cell", new=AsyncMock(return_value=None)),
             patch.object(grid, "_fetch_open_meteo", new=AsyncMock(side_effect=httpx.ReadTimeout("timeout"))),
+            patch.object(grid, "_fetch_met", new=AsyncMock(side_effect=httpx.ReadTimeout("timeout"))),
             patch.object(grid, "_fetch_owm", new=AsyncMock(return_value={"hourly": []})),
             patch.object(grid, "_store_forecast_cell_sync", return_value="stored"),
             patch.object(telemetry.metrics, "count") as count,

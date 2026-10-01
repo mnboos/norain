@@ -65,12 +65,17 @@ class CellFetchLeaseTests(TransactionTestCase):
     async def test_callers_waiting_on_a_failed_fetch_do_not_fetch_again(self):
         """A provider that just refused must not be asked again by every waiter."""
         fetch = AsyncMock(side_effect=_slow(ValueError("429")))
+        met = AsyncMock(side_effect=ValueError("down"))
         owm = AsyncMock(return_value=None)
-        with patch.object(grid, "_fetch_open_meteo", fetch), patch.object(grid, "_fetch_owm", owm):
+        with (
+            patch.object(grid, "_fetch_open_meteo", fetch),
+            patch.object(grid, "_fetch_met", met),
+            patch.object(grid, "_fetch_owm", owm),
+        ):
             cells = await asyncio.gather(*(grid.get_or_fetch_forecast_cell(47.0, 9.0, DAY, 2) for _ in range(3)))
 
         self.assertEqual(cells, [None, None, None])
-        self.assertEqual((fetch.await_count, owm.await_count), (1, 1))
+        self.assertEqual((fetch.await_count, met.await_count, owm.await_count), (1, 1, 1))
         self.assertFalse(await CellFetchLease.objects.aexists())
 
     async def test_waiter_reads_what_the_holder_stored(self):

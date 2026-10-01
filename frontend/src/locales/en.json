@@ -446,6 +446,7 @@
         "title": "Forecast",
         "explain": "Figures explained",
         "noData": "There is no weather data for this ride yet.",
+        "dataFrom": "Weather data:",
         "noDataHike": "There is no weather data for this hike yet.",
         "riskUnavailable": "The rain risk is not available right now.",
         "peakRisk": "Highest rain risk along the route: {percent} %",
@@ -800,7 +801,7 @@
         },
         "filter": {
             "allProfiles": "All profiles",
-            "bothProviders": "Both providers",
+            "allProviders": "All providers",
             "allRoutes": "All routes",
             "activeRoutes": "Active routes",
             "inactiveRoutes": "Inactive routes",
