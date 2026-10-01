@@ -267,7 +267,9 @@ just routing-ship-candidate
 
 The dry run compares the files to transfer with free space on the VPS. Shipping
 copies the candidate, its matching terrain from `artifact.json`, and the matching
-POI file if present. It sets the VPS's candidate and terrain links, but does not
+POI file if present. Of the terrain it copies only `terrain.pmtiles`,
+`fallback.pmtiles` and the metadata, not the decoded caches, the download pieces or
+the per-source `part-*.pmtiles` (for Europe that is ~76 GiB instead of ~290 GiB). It sets the VPS's candidate and terrain links, but does not
 validate or activate the graph. Existing matching files are skipped by rsync.
 If the POI file is absent, shipping keeps the VPS's existing POIs and prints a notice.
 
@@ -281,7 +283,8 @@ Prefer the shipping command above. For a manual transfer, read the local candida
 link (`data/graphhopper/cache/candidate`) to get `releases/<id>`. Read the `terrain`
 field from that release's `artifact.json` to get `/osm_data/elevation/<hash>`.
 Do not use `elevation/current`: it may have changed since the candidate was built.
-Copy the release, that terrain directory (excluding `cache/` and `cache-fallback/`),
+Copy the release, that terrain directory (without `cache/`, `cache-fallback/`,
+`pieces/` and `part-*.pmtiles`),
 and the matching POI file to the corresponding production paths. Create destination
 directories first. On the VPS, set:
 
@@ -300,6 +303,7 @@ Then validate and activate as in step 5.
 | Graph release, including `artifact.json`, configuration and models | Serving and validation |
 | Matching terrain directory, including both PMTiles archives and metadata | Coordinate elevation lookups and future builds |
 | Decoded `cache/` and `cache-fallback/` directories | Builds only; no need to ship them |
+| Download leftovers `pieces/` and `part-*.pmtiles` | Nothing once the terrain is published; not shipped. A copy shipped by an older script is removed with `docker compose run --rm --no-deps graphhopper terrain-cleanup` |
 | Filtered `.osm.pbf` | Rebuilding on that machine; no need to ship it for serving |
 
 Keep the terrain referenced by every active, candidate or retained rollback graph,
