@@ -245,8 +245,10 @@
         "title": "Ride around bad weather",
         "avoidRain": "Avoid rain",
         "avoidHeadwind": "Avoid strong headwind",
+        "avoidShade": "Avoid shade",
+        "shadeExplanation": "While the sun is up, MeteoLane picks roads it reaches: not under cloud and not in the shadow of hills or woods.",
         "explanation": "For rides in the next three days, MeteoLane routes you where it is dry and the wind blows less, at the time you are there. Off: the route follows only your road preferences.",
-        "plusOnly": "With Plus, MeteoLane can route you around rain and headwind.",
+        "plusOnly": "With Plus, MeteoLane can route you around rain, headwind and shade.",
         "seePlus": "See Plus"
     },
     "windBar": {

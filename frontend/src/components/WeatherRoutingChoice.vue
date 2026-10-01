@@ -10,6 +10,8 @@ import { useEntitlements } from "@/composables/useEntitlements";
  */
 const avoidRain = defineModel<boolean>("avoidRain", { required: true });
 const avoidHeadwind = defineModel<boolean>("avoidHeadwind", { required: true });
+/** Stay in the sun: the server weighs clouds, and GraphHopper the terrain and trees towards the sun. */
+const avoidShade = defineModel<boolean>("avoidShade", { required: true });
 /** Off for hiking: a headwind barely slows a walker, so the server never routes around one. */
 const { headwind } = defineProps<{ headwind: boolean }>();
 
@@ -36,6 +38,15 @@ const { weatherRouting } = useEntitlements();
             :label="t('weatherRouting.avoidHeadwind')"
             @update:model-value="avoidHeadwind = $event"
         />
+        <q-toggle
+            :model-value="weatherRouting && avoidShade"
+            :disable="!weatherRouting"
+            :label="t('weatherRouting.avoidShade')"
+            @update:model-value="avoidShade = $event"
+        />
+        <div v-if="weatherRouting && avoidShade" class="text-caption text-muted q-mb-xs">
+            {{ t("weatherRouting.shadeExplanation") }}
+        </div>
         <div v-if="weatherRouting" class="text-caption text-muted">
             {{ t("weatherRouting.explanation") }}
         </div>

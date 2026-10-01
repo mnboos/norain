@@ -82,6 +82,7 @@ const ferries = ref(Ferries.Neutral);
 // Off until the rider chooses it; see WeatherRoutingChoice.
 const avoidRain = ref(false);
 const avoidHeadwind = ref(false);
+const avoidShade = ref(false);
 const departureWindow = ref(60);
 
 function load(journey: JourneyOut | undefined) {
@@ -108,6 +109,7 @@ function load(journey: JourneyOut | undefined) {
     ferries.value = journey.roadPrefs.ferries ?? Ferries.Neutral;
     avoidRain.value = journey.weatherPrefs.avoidRain ?? false;
     avoidHeadwind.value = journey.weatherPrefs.avoidHeadwind ?? false;
+    avoidShade.value = journey.weatherPrefs.avoidShade ?? false;
     departureWindow.value = journey.weatherPrefs.departureWindowMinutes ?? 60;
 }
 watch(
@@ -229,6 +231,7 @@ function onSave() {
         weatherPrefs: {
             avoidRain: weatherRouting.value && avoidRain.value,
             avoidHeadwind: weatherRouting.value && avoidHeadwind.value && hasWindEffort(profile.value),
+            avoidShade: weatherRouting.value && avoidShade.value,
             departureWindowMinutes: departureWindow.value,
         },
     };
@@ -495,6 +498,7 @@ function onClose() {
                         <WeatherRoutingChoice
                             v-model:avoid-rain="avoidRain"
                             v-model:avoid-headwind="avoidHeadwind"
+                            v-model:avoid-shade="avoidShade"
                             :headwind="hasWindEffort(profile)"
                         />
                         <div v-if="!isPro" class="text-caption text-muted q-mt-sm">

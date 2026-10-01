@@ -67,6 +67,26 @@ terrain_cleanup() {
     python /graphhopper/terrain.py cleanup
 }
 
+# Tree heights for "avoid shade" (canopy.py), beside the current terrain, which ships them with
+# it (just routing-ship-candidate). Read while serving, never at import: no graph rebuild.
+canopy() {
+    [ $# -gt 0 ] || { echo "Usage: entrypoint.sh canopy RAW.osm.pbf [RAW.osm.pbf ...]" >&2; exit 2; }
+    if [ ! -d /osm_data/elevation/current ]; then
+        echo "Prepare the terrain first (just download-elevation-for FILE): the canopy goes beside it." >&2
+        exit 1
+    fi
+    python /graphhopper/canopy.py "$(readlink -f /osm_data/elevation/current)/canopy.pmtiles" "$@"
+}
+
+# The canopy archive, when the terrain has one. Without it trees cast no shadow, and the
+# terrain and the clouds still do.
+canopy_args() {
+    canopy_opts=()
+    if [ -f "$1/canopy.pmtiles" ]; then
+        canopy_opts=(-Ddw.graphhopper.graph.canopy.pmtiles.location="$1/canopy.pmtiles")
+    fi
+}
+
 build() {
     python /graphhopper/memory.py "$GRAPHHOPPER_BUILD_HEAP"
     if ! [[ "$GRAPHHOPPER_BUILD_THREADS" =~ ^[1-9][0-9]*$ ]]; then
@@ -125,11 +145,13 @@ serve() {
     artifact=$(python /graphhopper/artifact.py check "${1:-current}")
     terrain_dir=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["terrain"])' "$artifact/artifact.json")
     fallback_args "$terrain_dir"
+    canopy_args "$terrain_dir"
     exec java -Xmx"${GRAPHHOPPER_HEAP}" \
         -Ddw.graphhopper.graph.location="$artifact/graph" \
         -Ddw.graphhopper.custom_models.directory="$artifact/models" \
         -Ddw.graphhopper.graph.elevation.pmtiles.location="$terrain_dir/terrain.pmtiles" \
         "${fallback_opts[@]}" \
+        "${canopy_opts[@]}" \
         -Ddw.graphhopper.graph.dataaccess.default_type="${GRAPHHOPPER_DATAACCESS}" \
         -jar graphhopper.jar server "$artifact/config.yaml"
 }
@@ -137,9 +159,10 @@ serve() {
 case "${1:-serve}" in
     terrain) shift; terrain "$@" ;;
     terrain-cleanup) terrain_cleanup ;;
+    canopy) shift; canopy "$@" ;;
     build) build ;;
     serve) serve "${2:-current}" ;;
     activate) python /graphhopper/artifact.py activate "${2:-candidate}" ;;
     rollback) python /graphhopper/artifact.py rollback previous ;;
-    *) echo "Unknown command: $1 (expected terrain, terrain-cleanup, build, serve, activate or rollback)" >&2; exit 2 ;;
+    *) echo "Unknown command: $1 (expected terrain, terrain-cleanup, canopy, build, serve, activate or rollback)" >&2; exit 2 ;;
 esac

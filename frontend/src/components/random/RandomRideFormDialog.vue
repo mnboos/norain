@@ -82,6 +82,7 @@ const considerWeather = ref(false);
 // Off until the rider chooses it; see WeatherRoutingChoice.
 const avoidRain = ref(false);
 const avoidHeadwind = ref(false);
+const avoidShade = ref(false);
 
 function load(ride: JourneyOut | undefined) {
     if (!ride) {
@@ -109,6 +110,7 @@ function load(ride: JourneyOut | undefined) {
     ferries.value = ride.roadPrefs.ferries ?? Ferries.Neutral;
     avoidRain.value = ride.weatherPrefs.avoidRain ?? false;
     avoidHeadwind.value = ride.weatherPrefs.avoidHeadwind ?? false;
+    avoidShade.value = ride.weatherPrefs.avoidShade ?? false;
 }
 watch(
     () => [props.modelValue, props.ride] as const,
@@ -244,6 +246,7 @@ function onSave() {
         weatherPrefs: {
             avoidRain: weatherMode.value && avoidRain.value,
             avoidHeadwind: weatherMode.value && avoidHeadwind.value && hasWindEffort(profile.value),
+            avoidShade: weatherMode.value && avoidShade.value,
         },
     };
     emit("save", data);
@@ -454,6 +457,7 @@ function onClose() {
                         v-if="weatherMode"
                         v-model:avoid-rain="avoidRain"
                         v-model:avoid-headwind="avoidHeadwind"
+                        v-model:avoid-shade="avoidShade"
                         :headwind="hasWindEffort(profile)"
                         class="q-mt-sm"
                     />

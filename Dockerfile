@@ -91,12 +91,18 @@ RUN sed -i 's/ElevationProvider elevationProvider = createElevationProvider(ghCo
 # Route around the weather a request carries (core/weather_routing.py): a time-dependent A*
 # behind a Router subclass. The grep fails the build if the line moved and the sed matched nothing.
 COPY docker/graphhopper/weather/WeatherField.java docker/graphhopper/weather/WeatherAStar.java docker/graphhopper/weather/WeatherRouter.java \
+    docker/graphhopper/weather/SunPosition.java docker/graphhopper/weather/Shade.java \
     /source/core/src/main/java/com/graphhopper/routing/weather/
-COPY docker/graphhopper/weather/WeatherAStarTest.java /source/core/src/test/java/com/graphhopper/routing/weather/
+COPY docker/graphhopper/weather/WeatherAStarTest.java docker/graphhopper/weather/ShadeTest.java /source/core/src/test/java/com/graphhopper/routing/weather/
 RUN sed -i 's/return new Router(baseGraph, encodingManager, locationIndex, profilesByName, pathBuilderFactory,/return new com.graphhopper.routing.weather.WeatherRouter(baseGraph, encodingManager, locationIndex, profilesByName, pathBuilderFactory,/' \
     core/src/main/java/com/graphhopper/GraphHopper.java \
     && grep -q 'new com.graphhopper.routing.weather.WeatherRouter(' core/src/main/java/com/graphhopper/GraphHopper.java
-RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -pl core -am install -Dtest=WeatherAStarTest,PrefetchedElevationProviderTest -Dsurefire.failIfNoSpecifiedTests=false
+# "Avoid shade" looks at the terrain and the canopy archive while serving (routing/weather/Shade):
+# GraphHopper.init hands it the config that names them.
+RUN sed -i '/PrefetchedElevationProvider.forImport(com.graphhopper.reader.dem.FallbackElevationProvider.withFallback/a\        com.graphhopper.routing.weather.Shade.configure(ghConfig);' \
+    core/src/main/java/com/graphhopper/GraphHopper.java \
+    && grep -q 'com.graphhopper.routing.weather.Shade.configure(ghConfig);' core/src/main/java/com/graphhopper/GraphHopper.java
+RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -pl core -am install -Dtest=WeatherAStarTest,ShadeTest,PrefetchedElevationProviderTest -Dsurefire.failIfNoSpecifiedTests=false
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -pl web -am package -DskipTests
 
 FROM docker.io/library/eclipse-temurin:25-jre AS graphhopper
@@ -125,6 +131,7 @@ ENV PATH="/opt/terrain/bin:$PATH"
 COPY docker/graphhopper-entrypoint.sh entrypoint.sh
 COPY docker/graphhopper-memory.py memory.py
 COPY docker/graphhopper-terrain.py terrain.py
+COPY docker/graphhopper-canopy.py canopy.py
 COPY docker/graphhopper-artifact.py artifact.py
 COPY docker/graphhopper-smoke.py smoke.py
 COPY docker/graphhopper-filter-osm.sh filter-osm.sh

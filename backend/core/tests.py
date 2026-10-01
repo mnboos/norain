@@ -265,6 +265,22 @@ class ForecastMatchTests(SimpleTestCase):
         # nearest entry is 10:00 (1.5h away — clamped)
         self.assertAlmostEqual(out["temp"], 20.0)
         self.assertAlmostEqual(out["rain_mm"], 1.0)
+        self.assertIsNone(out["sunshine"], "a cell stored before sunshine was fetched")
+
+    def test_from_open_meteo_reads_sunshine_from_the_hourly_block(self):
+        """Sunshine is fetched hourly only, so a near eta reads it beside the 15-minute block."""
+        data = {
+            "minutely_15": {"time": ["2026-06-03T08:00", "2026-06-03T08:15"], "temperature_2m": [12.0, 13.0]},
+            "hourly": {
+                "time": ["2026-06-03T08:00", "2026-06-03T09:00"],
+                "temperature_2m": [10.0, 11.0],
+                "sunshine_duration": [1800.0, 3600.0],
+            },
+        }
+        out = _from_open_meteo(data, datetime.fromisoformat("2026-06-03T08:14"))
+        self.assertAlmostEqual(out["temp"], 13.0, msg="still the 15-minute block")
+        self.assertEqual(out["sunshine"], 0.5)
+        self.assertEqual(_from_open_meteo(data, datetime.fromisoformat("2026-06-03T09:10"))["sunshine"], 1.0)
 
 
 class EnsembleAtTests(SimpleTestCase):
@@ -423,6 +439,8 @@ class OwmExtractTests(SimpleTestCase):
         self.assertAlmostEqual(out["wind_gust"], 6.0 * 3.6)
         self.assertAlmostEqual(out["wind_dir"], 180.0)
         self.assertAlmostEqual(out["pop"], 0.5)
+        self.assertIsNone(out["sunshine"], "no cloud cover in the reply")
+        self.assertEqual(_from_owm(self._owm_data([{"dt": int(eta.timestamp()), "clouds": 75}]), eta)["sunshine"], 0.25)
         self.assertAlmostEqual(out["rain_mm"], 0.0)
 
     def test_rain_as_float_owm3(self):

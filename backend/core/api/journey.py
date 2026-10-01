@@ -70,6 +70,8 @@ class WeatherPrefsIn(CamelSchema):
 
     avoid_rain: bool = False
     avoid_headwind: bool = False
+    # Stay in the sun: shade from clouds, terrain and trees costs more while the sun is up.
+    avoid_shade: bool = False
     # How far after the earliest start the departure may move, for the comparison (Plus).
     departure_window_minutes: int = Field(default=60, ge=0, le=120, multiple_of=15)
 
@@ -317,7 +319,7 @@ def _values(data: JourneyIn, limits) -> dict:
     if not limits.weather_routing:
         # Stored off, not just ignored: after an upgrade nothing routes around weather that the
         # rider did not switch on with Plus.
-        values["weather_prefs"] |= {"avoid_rain": False, "avoid_headwind": False}
+        values["weather_prefs"] |= {"avoid_rain": False, "avoid_headwind": False, "avoid_shade": False}
     return values
 
 

@@ -245,8 +245,10 @@
         "title": "Um schlechtes Wetter herum fahren",
         "avoidRain": "Regen ausweichen",
         "avoidHeadwind": "Starken Gegenwind meiden",
+        "avoidShade": "Schatten meiden",
+        "shadeExplanation": "Solange die Sonne scheint, wählt MeteoLane Strassen, die sie erreicht: nicht unter Wolken und nicht im Schatten von Bergen oder Wald.",
         "explanation": "Für Fahrten in den nächsten drei Tagen legt MeteoLane die Strecke dorthin, wo es trocken ist und der Wind weniger bläst, zur Zeit, zu der du dort bist. Aus: die Strecke folgt nur deinen Wünschen an die Strasse.",
-        "plusOnly": "Mit Plus kann MeteoLane die Strecke um Regen und Gegenwind herum legen.",
+        "plusOnly": "Mit Plus kann MeteoLane die Strecke um Regen, Gegenwind und Schatten herum legen.",
         "seePlus": "Plus ansehen"
     },
     "windBar": {

@@ -376,6 +376,25 @@ class WeatherFieldTests(SimpleTestCase):
         self.assertIsNone(self._field([(47.0, 8.0)], {(47.0, 8.0): calm}, avoid_rain=False, avoid_headwind=False))
         self.assertIsNone(self._field([(47.0, 8.0)], {}), "no warm cell, no field")
 
+    def test_shade_carries_the_sunshine_and_what_full_shade_costs(self):
+        from .weather_routing import shade_multiplier
+
+        def cloudy_later(at):
+            return {"rain_mm": 0.0, "precipitation_interval_s": 900, "sunshine": 0.0 if at.hour >= 9 else 1.0}
+
+        field = self._field(
+            [(47.0, 8.0)], {(47.0, 8.0): cloudy_later}, avoid_rain=False, avoid_headwind=False, avoid_shade=True
+        )
+        self.assertNotIn("rain", field)
+        self.assertEqual(field["sun"], [1.0, 0.0, 0.0, 0.0], "one cell, by the hour")
+        self.assertEqual(field["shade"], shade_multiplier())
+        self.assertGreater(field["shade"], 1, "shade only ever costs more, which LM needs")
+        old_cell = lambda at: {"rain_mm": 0.0, "precipitation_interval_s": 900}  # noqa: E731
+        field = self._field([(47.0, 8.0)], {(47.0, 8.0): old_cell}, avoid_shade=True)
+        self.assertEqual(field["sun"], [None] * 4, "a cell stored before sunshine was fetched counts as no weather")
+        rain_only = self._field([(47.0, 8.0)], {(47.0, 8.0): cloudy_later}, avoid_headwind=False)
+        self.assertNotIn("sun", rain_only)
+
     def test_route_body_carries_the_field_and_skips_the_cache(self):
         from .weather import _route
 

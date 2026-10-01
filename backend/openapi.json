@@ -6061,6 +6061,11 @@
                         "title": "Avoid Headwind",
                         "type": "boolean"
                     },
+                    "avoid_shade": {
+                        "default": false,
+                        "title": "Avoid Shade",
+                        "type": "boolean"
+                    },
                     "departure_window_minutes": {
                         "default": 60,
                         "maximum": 120,

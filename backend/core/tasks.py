@@ -1162,7 +1162,8 @@ def _weather_prefs(journey: Journey) -> dict:
 
 def _wants_weather_routing(journey: Journey, limits, day: date) -> bool:
     prefs = _weather_prefs(journey)
-    if not limits.weather_routing or not (prefs.get("avoid_rain", False) or prefs.get("avoid_headwind", False)):
+    wanted = ("avoid_rain", "avoid_headwind", "avoid_shade")
+    if not limits.weather_routing or not any(prefs.get(name, False) for name in wanted):
         return False
     return 0 <= (day - local_today()).days < WEATHER_ROUTING_DAYS
 
@@ -1447,6 +1448,7 @@ async def _weather_field(journey: Journey, day: dict, road_model: dict | None) -
         forecast_days,
         avoid_rain=prefs.get("avoid_rain", False),
         avoid_headwind=prefs.get("avoid_headwind", False),
+        avoid_shade=prefs.get("avoid_shade", False),
     )
 
 
@@ -1578,6 +1580,7 @@ async def _random_ride_weather(journey: Journey) -> tuple[dict | None, bool]:
         days,
         avoid_rain=prefs.get("avoid_rain", False),
         avoid_headwind=prefs.get("avoid_headwind", False),
+        avoid_shade=prefs.get("avoid_shade", False),
     )
     return field, False
 
