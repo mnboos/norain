@@ -450,7 +450,7 @@
         "riskUnavailable": "Das Regenrisiko ist derzeit nicht verfügbar.",
         "peakRisk": "Höchstes Regenrisiko entlang der Strecke: {percent} %",
         "note": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Fahrt. Regen und Gegenwind zeigen die höchsten erwarteten Werte. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Der Windaufwand zeigt als Stufe (niedrig bis sehr hoch), wie viel zusätzliche Kraft du für dein Tempo brauchst. Er ist geschätzt. Frost zeigt als Stufe (leicht bis stark), wie glatt die Strasse an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen.",
-        "noteHike": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Wanderung. Regen zeigt den höchsten erwarteten Wert. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Frost zeigt als Stufe (leicht bis stark), wie glatt der Weg an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen."
+        "noteHike": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Wanderung. Regen und Gegenwind zeigen die höchsten erwarteten Werte. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Frost zeigt als Stufe (leicht bis stark), wie glatt der Weg an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen."
     },
     "legend": {
         "rideQuality": "Fahrqualität",
@@ -773,7 +773,7 @@
         "duration": "Dauer",
         "riskPartial": "Für Teile der Strecke fehlt das Regenrisiko.",
         "note": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Fahrt. Regen und Gegenwind zeigen die höchsten erwarteten Werte. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Der Windaufwand zeigt als Stufe (niedrig bis sehr hoch), wie viel zusätzliche Kraft du für dein Tempo brauchst. Er ist geschätzt. Gefühlt ist die Temperatur, die du im Fahrtwind spürst (Windchill bei deinem Tempo), gemittelt über die Fahrzeit. Frost zeigt als Stufe (leicht bis stark), wie glatt die Strasse an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen.",
-        "noteHike": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Wanderung. Regen und Böen zeigen die höchsten erwarteten Werte. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Gefühlt ist die Temperatur, die du im Wind spürst (Windchill), gemittelt über die Gehzeit. Frost zeigt als Stufe (leicht bis stark), wie glatt der Weg an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen."
+        "noteHike": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Wanderung. Regen, Böen und Gegenwind zeigen die höchsten erwarteten Werte. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Gefühlt ist die Temperatur, die du im Wind spürst (Windchill), gemittelt über die Gehzeit. Frost zeigt als Stufe (leicht bis stark), wie glatt der Weg an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen."
     },
     "sections": {
         "dry": "Trocken",

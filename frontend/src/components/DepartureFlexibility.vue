@@ -3,7 +3,7 @@ import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { tp } from "@/i18n";
 import { useEntitlements } from "@/composables/useEntitlements";
-const { profile } = defineProps<{ profile?: string }>();
+const { profile = "bike" } = defineProps<{ profile?: string }>();
 const { t } = useI18n();
 const { isPro, entitlements } = useEntitlements();
 const before = defineModel<number>("before", { default: 0 });

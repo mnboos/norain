@@ -499,8 +499,8 @@ function onClose() {
                             :headwind="hasWindEffort(profile)"
                             :profile="profile"
                         />
-                        <div v-if="!isPro" class="text-caption text-muted q-mt-sm">
-                            {{ t("journeyForm.plusPitch", { n: entitlements?.offer?.plusAlternatives ?? 3 }) }}
+                        <div v-if="!isPro && entitlements?.offer" class="text-caption text-muted q-mt-sm">
+                            {{ t("journeyForm.plusPitch", { n: entitlements.offer.plusAlternatives }) }}
                         </div>
                         <q-select
                             v-else

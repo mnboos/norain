@@ -5,52 +5,52 @@ msgid ""
 msgstr ""
 "Project-Id-Version: meteolane\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-01 11:35+0200\n"
+"POT-Creation-Date: 2026-10-01 12:11+0200\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: core/api/billing.py:69
+#: core/api/billing.py:77
 msgid "Die Abrechnung ist auf diesem Server nicht eingerichtet."
 msgstr "Billing is not configured on this server."
 
-#: core/api/billing.py:120 core/api/billing.py:199 core/api/billing.py:414
-#: core/api/billing.py:432 core/api/briefings.py:64 core/api/briefings.py:141
+#: core/api/billing.py:146 core/api/billing.py:225 core/api/billing.py:440
+#: core/api/billing.py:458 core/api/briefings.py:64 core/api/briefings.py:141
 #: core/api/briefings.py:190 core/api/recurring_route.py:195
 msgid "Anmeldung erforderlich."
 msgstr "Authentication required."
 
-#: core/api/billing.py:127
+#: core/api/billing.py:153
 msgid "Bitte jährliche oder monatliche Zahlung wählen."
 msgstr "Choose annual or monthly billing."
 
-#: core/api/billing.py:144
+#: core/api/billing.py:170
 msgid "Verwalte dein bestehendes Abo im Kundenportal."
 msgstr "Manage your existing subscription in the billing portal."
 
-#: core/api/billing.py:151
+#: core/api/billing.py:177
 msgid "Die Zahlung wird verarbeitet. Bitte lade dein Konto gleich neu."
 msgstr "Payment is being processed. Please refresh your account shortly."
 
-#: core/api/billing.py:188
+#: core/api/billing.py:214
 msgid "Stripe hat keine Bezahlseite geliefert."
 msgstr "Stripe did not return a checkout URL."
 
-#: core/api/billing.py:206
+#: core/api/billing.py:232
 msgid "Noch kein Kundenkonto für die Abrechnung."
 msgstr "No billing account yet."
 
-#: core/api/billing.py:274
+#: core/api/billing.py:300
 msgid "bald"
 msgstr "soon"
 
-#: core/api/billing.py:279
+#: core/api/billing.py:305
 msgid "Dein MeteoLane Plus-Testzeitraum endet bald"
 msgstr "Your MeteoLane Plus trial ends soon"
 
-#: core/api/billing.py:281
+#: core/api/billing.py:307
 #, python-format
 msgid ""
 "Hallo %(name)s,\n"
@@ -67,15 +67,15 @@ msgstr ""
 "\n"
 "%(url)s\n"
 
-#: core/api/billing.py:419
+#: core/api/billing.py:445
 msgid "Die Testphase gibt es einmal pro Konto."
 msgstr "The trial is available once per account."
 
-#: core/api/billing.py:447
+#: core/api/billing.py:473
 msgid "Wähle bis zu zwei deiner aktiven Routen."
 msgstr "Choose up to two of your active routes."
 
-#: core/api/billing.py:452 core/api/briefings.py:79 core/api/community.py:182
+#: core/api/billing.py:478 core/api/briefings.py:79 core/api/community.py:182
 #: core/api/community.py:192 core/api/community.py:501
 #: core/api/community.py:521 core/api/community.py:657 core/api/elevation.py:36
 #: core/api/elevation.py:39 core/api/recurring_route.py:205
@@ -443,19 +443,20 @@ msgstr "%(name)s – return"
 msgid "Unbekanntes Profil %(profile)r; erwartet: %(choices)s"
 msgstr "Unknown profile %(profile)r; expected one of %(choices)s"
 
-#: core/api/route_weather.py:81
-msgid "Der Abfahrtsvergleich braucht Plus. Teste Plus 14 Tage kostenlos."
-msgstr "Departure comparison requires Plus. Try Plus free for 14 days."
+#: core/api/route_weather.py:83
+#, python-format
+msgid "Der Abfahrtsvergleich braucht Plus. Teste Plus %(days)d Tage kostenlos."
+msgstr "Departure comparison requires Plus. Try Plus free for %(days)d days."
 
-#: core/api/route_weather.py:129
+#: core/api/route_weather.py:132
 msgid "Messpunkt nicht gefunden."
 msgstr "Sample not found."
 
-#: core/api/route_weather.py:149 core/api/route_weather.py:156
+#: core/api/route_weather.py:152 core/api/route_weather.py:159
 msgid "Vorhersage-Auftrag nicht gefunden."
 msgstr "Forecast job not found."
 
-#: core/api/route_weather.py:159
+#: core/api/route_weather.py:162
 msgid "Der Vorhersage-Auftrag ist noch nicht fertig."
 msgstr "Forecast job is not finished."
 
@@ -576,7 +577,7 @@ msgstr "More pleasant temperatures during your ride."
 msgid "Geringeres Frostrisiko während deiner Fahrt."
 msgstr "Lower risk of frost during your ride."
 
-#: core/briefings.py:46
+#: core/briefings.py:48
 #, python-format
 msgid ""
 "%(route)s: Wetterdaten sind derzeit nicht verfügbar. Bitte prüfe die "
@@ -585,7 +586,7 @@ msgstr ""
 "%(route)s: weather data is not available right now. Please check the "
 "forecast before you set off."
 
-#: core/briefings.py:52
+#: core/briefings.py:54
 #, python-format
 msgid ""
 "%(route)s: Die Wetterdaten sind unvollständig. Bitte prüfe die Vorhersage "
@@ -594,22 +595,22 @@ msgstr ""
 "%(route)s: the weather data is incomplete. Please check the forecast before "
 "you set off."
 
-#: core/briefings.py:55
+#: core/briefings.py:57
 #, python-format
 msgid "Deine Fahrt: %(route)s"
 msgstr "Your ride: %(route)s"
 
-#: core/briefings.py:64
+#: core/briefings.py:66
 #, python-format
 msgid "Empfohlene Abfahrt: %(time)s. %(explanation)s"
 msgstr "Recommended departure: %(time)s. %(explanation)s"
 
-#: core/briefings.py:70
+#: core/briefings.py:72
 #, python-format
 msgid "Höchstes Regenrisiko an einem Punkt: %(percent)s %%."
 msgstr "Highest rain risk at one point: %(percent)s %%."
 
-#: core/briefings.py:75
+#: core/briefings.py:77
 #, python-format
 msgid ""
 "Prognostizierte maximale Regenintensität: %(rate).1f mm/h. Regenrisiko nicht "
@@ -618,29 +619,29 @@ msgstr ""
 "Forecast maximum rain intensity: %(rate).1f mm/h. Rain risk not fully "
 "available."
 
-#: core/briefings.py:80
+#: core/briefings.py:82
 msgid "Regenrisiko nicht vollständig verfügbar."
 msgstr "Rain risk not fully available."
 
-#: core/briefings.py:84
+#: core/briefings.py:86
 #, python-format
 msgid "Temperatur entlang der Route: %(low).0f–%(high).0f °C."
 msgstr "Temperature along the route: %(low).0f–%(high).0f °C."
 
-#: core/briefings.py:88
+#: core/briefings.py:90
 #, python-format
 msgid "Gefühlt im Schnitt: %(felt).0f °C."
 msgstr "Feels like on average: %(felt).0f °C."
 
-#: core/briefings.py:89
+#: core/briefings.py:91
 msgid "Die Vorhersage kann sich ändern; dies ist keine laufende Wetterwarnung."
 msgstr "The forecast can change; this is not a running weather warning."
 
-#: core/briefings.py:95 core/briefings.py:151
+#: core/briefings.py:97 core/briefings.py:153
 msgid "MeteoLane – Deine Fahrt"
 msgstr "MeteoLane – Your ride"
 
-#: core/briefings.py:146
+#: core/briefings.py:148
 #, python-format
 msgid "Briefings verwalten: %(url)s"
 msgstr "Manage briefings: %(url)s"
