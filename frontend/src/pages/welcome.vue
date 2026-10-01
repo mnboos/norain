@@ -92,7 +92,7 @@ const copy = {
             },
             {
                 q: "Woher kommen die Wetterdaten?",
-                a: "Aus Open-Meteo, mit OpenWeatherMap als Rückfallebene. Fehlende oder unvollständige Daten werden immer als solche gekennzeichnet.",
+                a: "Aus Open-Meteo, mit MET Norway (yr.no) und OpenWeatherMap als Rückfallebenen. Fehlende oder unvollständige Daten werden immer als solche gekennzeichnet.",
             },
         ],
         footer: "Wetter für unterwegs",
@@ -171,7 +171,7 @@ const copy = {
             },
             {
                 q: "Where does the weather data come from?",
-                a: "From Open-Meteo, with OpenWeatherMap as a fallback. Missing or incomplete data is always labelled as such.",
+                a: "From Open-Meteo, with MET Norway (yr.no) and OpenWeatherMap as fallbacks. Missing or incomplete data is always labelled as such.",
             },
         ],
         footer: "Weather for the way ahead",

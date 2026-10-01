@@ -24,7 +24,14 @@ from ..auth.lockout import client_ip
 from ..data_coverage import data_coverage as read_data_coverage
 from ..departures import cell_covers, instant
 from ..geo import simplify_line
-from ..grid import ENSEMBLE_MODELS, ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE
+from ..grid import (
+    ENSEMBLE_CELL_DEG,
+    ENSEMBLE_MODELS,
+    ENSEMBLE_REQUEST_VERSION,
+    FORECAST_SOURCES,
+    MAX_CELL_AGE,
+    ensemble_cell,
+)
 from ..jobs import JOB_STALL_TIMEOUT
 from ..models import EnsembleCell, ForecastCell, ForecastJob, Journey, JourneyStage, RecurringRoute
 from ..schedule import LOCAL_TZ, next_departure
@@ -97,7 +104,7 @@ class SystemMapFilter(CamelSchema):
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=500, ge=1, le=1000)
     kind: Literal["forecast", "ensemble"] = "forecast"
-    source: Literal["all", "open-meteo", "openweathermap"] = "all"
+    source: Literal["all", "open-meteo", "met-norway", "openweathermap"] = "all"
     day: date | None = None
     active: bool | None = None
     profile: Literal["bike", "ebike", "fast_ebike", "hike"] | None = None
@@ -118,9 +125,9 @@ def viewport_boxes(value):
     return [(west, south, east, north)] if west <= east else [(west, south, 180, north), (-180, south, east, north)]
 
 
-def cell_ring(lat, lon):
-    west, east = max(-180, lon - 0.005), min(180, lon + 0.005)
-    south, north = max(-90, lat - 0.005), min(90, lat + 0.005)
+def cell_ring(lat, lon, half=0.005):
+    west, east = max(-180, lon - half), min(180, lon + half)
+    south, north = max(-90, lat - half), min(90, lat + half)
     return [[west, south], [east, south], [east, north], [west, north], [west, south]]
 
 
@@ -128,7 +135,7 @@ def cell_feature(row, kind):
     return {
         "id": f"{kind}:{row['id']}",
         "kind": kind,
-        "coordinates": cell_ring(row["lat_r"], row["lon_r"]),
+        "coordinates": cell_ring(row["lat_r"], row["lon_r"], ENSEMBLE_CELL_DEG / 2 if kind == "ensemble" else 0.005),
         "lat": row["lat_r"],
         "lon": row["lon_r"],
         "source": row.get("source", "open-meteo-ensemble"),
@@ -451,8 +458,9 @@ def cell_history(request, lat: float, lon: float, offset: int = 0, limit: int = 
         .annotate(kind=Value("forecast", output_field=CharField()))
         .values(*fields)
     )
+    ensemble_lat, ensemble_lon = ensemble_cell(lat, lon)  # the ensemble cell covering this one
     ensembles = (
-        EnsembleCell.objects.filter(lat_r=lat, lon_r=lon)
+        EnsembleCell.objects.filter(lat_r=ensemble_lat, lon_r=ensemble_lon)
         .annotate(
             source=Value("open-meteo-ensemble", output_field=CharField()),
             kind=Value("ensemble", output_field=CharField()),
@@ -493,8 +501,8 @@ class SystemCoverage(CamelSchema):
 def coverage_state(rows, required_days, etas, now, *, ensemble=False):
     if not ensemble:
         rows = sorted(
-            (row for row in rows if row.source in ("open-meteo", "openweathermap")),
-            key=lambda row: row.source != "open-meteo",
+            (row for row in rows if row.source in FORECAST_SOURCES),
+            key=lambda row: FORECAST_SOURCES.index(row.source),
         )
     if not rows:
         return "missing"
@@ -521,8 +529,8 @@ def coverage_state(rows, required_days, etas, now, *, ensemble=False):
                     return "usable"
             except ValueError, TypeError, KeyError, IndexError, OverflowError:
                 return "insufficient"
-            # The cache reader prefers eligible Open-Meteo records even when their
-            # payload is incomplete; do not suggest OWM will be chosen in that case.
+            # The cache reader prefers the best eligible source even when its payload is
+            # incomplete; do not suggest a fallback will be chosen in that case.
             return "insufficient"
     return "insufficient"
 
@@ -563,9 +571,11 @@ def coverage(request, kind: Literal["route", "stage"], item_id: UUID):
         from itertools import batched
 
         for batch in batched(list(etas), 500, strict=False):
-            locations = Q(*(Q(lat_r=lat, lon_r=lon) for lat, lon in batch), _connector=Q.OR)
             grouped = []
-            for model in (ForecastCell, EnsembleCell):
+            # Ensemble cells sit on their own coarser lattice (grid.ensemble_cell).
+            for model, locate in ((ForecastCell, lambda lat, lon: (lat, lon)), (EnsembleCell, ensemble_cell)):
+                keys = {locate(lat, lon) for lat, lon in batch}
+                locations = Q(*(Q(lat_r=lat, lon_r=lon) for lat, lon in keys), _connector=Q.OR)
                 cells = {}
                 for cell in model.objects.filter(locations, day_key=day):
                     cells.setdefault((cell.lat_r, cell.lon_r), []).append(cell)
@@ -577,7 +587,9 @@ def coverage(request, kind: Literal["route", "stage"], item_id: UUID):
                         "lat": lat,
                         "lon": lon,
                         "forecast": coverage_state(grouped[0].get(key, []), days, etas[key], now),
-                        "ensemble": coverage_state(grouped[1].get(key, []), days, etas[key], now, ensemble=True),
+                        "ensemble": coverage_state(
+                            grouped[1].get(ensemble_cell(lat, lon), []), days, etas[key], now, ensemble=True
+                        ),
                     }
                 )
     return {

@@ -30,7 +30,7 @@ class Command(BaseCommand):
                 continue
             matched += 1
             if options["enqueue"]:
-                refresh_route_geometry.enqueue(str(route.id), backfill_only=True)
+                refresh_route_geometry.using(queue_name="default").enqueue(str(route.id), backfill_only=True)
                 enqueued += 1
             if limit is not None and matched >= limit:
                 break

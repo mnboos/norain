@@ -446,6 +446,7 @@
         "title": "Prognose",
         "explain": "Kennzahlen erklärt",
         "noData": "Für diese Fahrt liegen noch keine Wetterdaten vor.",
+        "dataFrom": "Wetterdaten:",
         "noDataHike": "Für diese Wanderung liegen noch keine Wetterdaten vor.",
         "riskUnavailable": "Das Regenrisiko ist derzeit nicht verfügbar.",
         "peakRisk": "Höchstes Regenrisiko entlang der Strecke: {percent} %",
@@ -800,7 +801,7 @@
         },
         "filter": {
             "allProfiles": "Alle Profile",
-            "bothProviders": "Beide Anbieter",
+            "allProviders": "Alle Anbieter",
             "allRoutes": "Alle Routen",
             "activeRoutes": "Aktive Routen",
             "inactiveRoutes": "Inaktive Routen",
