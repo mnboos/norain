@@ -1293,6 +1293,43 @@
                 }
             }
         },
+        "/api/journeys/{journey_id}/stages/{stage_id}/gpx": {
+            "get": {
+                "operationId": "core_api_journey_journey_stage_gpx",
+                "summary": "Journey Stage Gpx",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "journey_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Journey Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "stage_id",
+                        "schema": {
+                            "format": "uuid",
+                            "title": "Stage Id",
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                },
+                "description": "One stage as GPX: the line, and the stops it was routed through (breaks, gap-fill detours\nand the night's lodging) as waypoints.",
+                "tags": [
+                    "Journeys"
+                ]
+            }
+        },
         "/api/journeys/{journey_id}/stages/{stage_id}/pois": {
             "get": {
                 "operationId": "core_api_journey_journey_stage_pois",
@@ -2365,6 +2402,28 @@
                 ]
             }
         },
+        "/api/system/data-coverage": {
+            "get": {
+                "operationId": "core_api_system_data_coverage",
+                "summary": "Data Coverage",
+                "parameters": [],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SystemDataCoverage"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "system"
+                ]
+            }
+        },
         "/api/system/summary": {
             "get": {
                 "operationId": "core_api_system_summary",
@@ -2479,6 +2538,7 @@
                             "enum": [
                                 "all",
                                 "open-meteo",
+                                "met-norway",
                                 "openweathermap"
                             ],
                             "title": "Source",
@@ -3829,6 +3889,13 @@
                     "source": {
                         "title": "Source",
                         "type": "string"
+                    },
+                    "sources": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "title": "Sources",
+                        "type": "array"
                     },
                     "station_corrected": {
                         "default": false,
@@ -7259,6 +7326,483 @@
                 "title": "SystemBrowserStatsDay",
                 "type": "object"
             },
+            "SystemDataCoverage": {
+                "description": "None for a part that could not be read; the others still answer.",
+                "properties": {
+                    "graph": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/SystemGraphCoverage"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "terrain": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/SystemTerrainCoverage"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "photon": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/SystemPhotonCoverage"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    },
+                    "road_boxes": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Road Boxes",
+                        "type": "array"
+                    },
+                    "elevation_boxes": {
+                        "$ref": "#/components/schemas/SystemElevationBoxes"
+                    },
+                    "bounds": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "type": "number"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Bounds"
+                    }
+                },
+                "required": [
+                    "graph",
+                    "terrain",
+                    "photon",
+                    "road_boxes",
+                    "elevation_boxes",
+                    "bounds"
+                ],
+                "title": "SystemDataCoverage",
+                "type": "object"
+            },
+            "SystemElevationBoxes": {
+                "properties": {
+                    "full": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Full",
+                        "type": "array"
+                    },
+                    "partial": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Partial",
+                        "type": "array"
+                    },
+                    "fallback": {
+                        "items": {
+                            "items": {
+                                "type": "number"
+                            },
+                            "type": "array"
+                        },
+                        "title": "Fallback",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "full",
+                    "partial",
+                    "fallback"
+                ],
+                "title": "SystemElevationBoxes",
+                "type": "object"
+            },
+            "SystemElevationCounts": {
+                "properties": {
+                    "full": {
+                        "title": "Full",
+                        "type": "integer"
+                    },
+                    "partial": {
+                        "title": "Partial",
+                        "type": "integer"
+                    },
+                    "fallback": {
+                        "title": "Fallback",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "full",
+                    "partial",
+                    "fallback"
+                ],
+                "title": "SystemElevationCounts",
+                "type": "object"
+            },
+            "SystemGraphCoverage": {
+                "properties": {
+                    "release": {
+                        "title": "Release",
+                        "type": "string"
+                    },
+                    "revision": {
+                        "title": "Revision",
+                        "type": "string"
+                    },
+                    "status": {
+                        "title": "Status",
+                        "type": "string"
+                    },
+                    "built_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Built At"
+                    },
+                    "osm_file": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Osm File"
+                    },
+                    "osm_file_modified": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Osm File Modified"
+                    },
+                    "cells_source": {
+                        "enum": [
+                            "graph",
+                            "terrain",
+                            "bounds"
+                        ],
+                        "title": "Cells Source",
+                        "type": "string"
+                    },
+                    "cells": {
+                        "title": "Cells",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "release",
+                    "revision",
+                    "status",
+                    "built_at",
+                    "osm_file",
+                    "osm_file_modified",
+                    "cells_source",
+                    "cells"
+                ],
+                "title": "SystemGraphCoverage",
+                "type": "object"
+            },
+            "SystemPhotonCountry": {
+                "properties": {
+                    "code": {
+                        "title": "Code",
+                        "type": "string"
+                    },
+                    "places": {
+                        "title": "Places",
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "code",
+                    "places"
+                ],
+                "title": "SystemPhotonCountry",
+                "type": "object"
+            },
+            "SystemPhotonCoverage": {
+                "properties": {
+                    "reachable": {
+                        "title": "Reachable",
+                        "type": "boolean"
+                    },
+                    "import_date": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Import Date"
+                    },
+                    "version": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Version"
+                    },
+                    "manifest": {
+                        "title": "Manifest",
+                        "type": "boolean"
+                    },
+                    "imported_at": {
+                        "anyOf": [
+                            {
+                                "format": "date-time",
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Imported At"
+                    },
+                    "sources": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "type": "string"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Sources"
+                    },
+                    "countries": {
+                        "anyOf": [
+                            {
+                                "items": {
+                                    "$ref": "#/components/schemas/SystemPhotonCountry"
+                                },
+                                "type": "array"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Countries"
+                    }
+                },
+                "required": [
+                    "reachable",
+                    "import_date",
+                    "version",
+                    "manifest",
+                    "imported_at",
+                    "sources",
+                    "countries"
+                ],
+                "title": "SystemPhotonCoverage",
+                "type": "object"
+            },
+            "SystemTerrainCheck": {
+                "properties": {
+                    "zoom": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Zoom"
+                    },
+                    "positions": {
+                        "title": "Positions",
+                        "type": "integer"
+                    },
+                    "decoded": {
+                        "title": "Decoded",
+                        "type": "boolean"
+                    },
+                    "missing": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Missing"
+                    },
+                    "nodata": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Nodata"
+                    }
+                },
+                "required": [
+                    "zoom",
+                    "positions",
+                    "decoded"
+                ],
+                "title": "SystemTerrainCheck",
+                "type": "object"
+            },
+            "SystemTerrainCoverage": {
+                "properties": {
+                    "key": {
+                        "title": "Key",
+                        "type": "string"
+                    },
+                    "catalog_version": {
+                        "title": "Catalog Version",
+                        "type": "string"
+                    },
+                    "zoom": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Zoom"
+                    },
+                    "fallback_zoom": {
+                        "anyOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Fallback Zoom"
+                    },
+                    "sources": {
+                        "items": {
+                            "$ref": "#/components/schemas/SystemTerrainSource"
+                        },
+                        "title": "Sources",
+                        "type": "array"
+                    },
+                    "fallback_source": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "Fallback Source"
+                    },
+                    "checks": {
+                        "items": {
+                            "$ref": "#/components/schemas/SystemTerrainCheck"
+                        },
+                        "title": "Checks",
+                        "type": "array"
+                    },
+                    "cell_counts": {
+                        "anyOf": [
+                            {
+                                "$ref": "#/components/schemas/SystemElevationCounts"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ]
+                    }
+                },
+                "required": [
+                    "key",
+                    "catalog_version",
+                    "zoom",
+                    "fallback_zoom",
+                    "sources",
+                    "fallback_source",
+                    "checks",
+                    "cell_counts"
+                ],
+                "title": "SystemTerrainCoverage",
+                "type": "object"
+            },
+            "SystemTerrainSource": {
+                "properties": {
+                    "name": {
+                        "title": "Name",
+                        "type": "string"
+                    },
+                    "bbox": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "title": "Bbox",
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "name",
+                    "bbox"
+                ],
+                "title": "SystemTerrainSource",
+                "type": "object"
+            },
             "SystemCacheCount": {
                 "properties": {
                     "kind": {
@@ -7420,6 +7964,7 @@
                         "enum": [
                             "all",
                             "open-meteo",
+                            "met-norway",
                             "openweathermap"
                         ],
                         "title": "Source",

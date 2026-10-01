@@ -1,7 +1,7 @@
 # MeteoLane — Bike-route weather forecaster
 
-Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo (primary, free) with OpenWeatherMap One
-Call 3.0 as fallback.
+Self-hosted routing (GraphHopper) + geocoding (Photon), weather from Open-Meteo (primary, free) with MET Norway
+(yr.no, free) and then OpenWeatherMap One Call 3.0 as fallbacks.
 
 ## Project layout
 

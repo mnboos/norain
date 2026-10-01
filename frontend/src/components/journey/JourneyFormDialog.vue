@@ -2,6 +2,7 @@
 import { computed, ref, watch, type Ref } from "vue";
 import { QSelect } from "quasar";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import {
     RoadPrefsInClimbingEnum as Climbing,
     RoadPrefsInFerriesEnum as Ferries,
@@ -36,7 +37,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const { isPro, weatherRouting } = useEntitlements();
+const { isPro, weatherRouting, entitlements } = useEntitlements();
 
 type Limit = "distance" | "time";
 
@@ -172,7 +173,7 @@ const climbingOptions = computed(() => [
 const trafficOptions = computed(() => [
     { label: t("roadPrefs.any"), value: Traffic.Neutral },
     { label: t("roadPrefs.traffic.avoidMain"), value: Traffic.AvoidMain },
-    { label: t("roadPrefs.traffic.preferNetwork"), value: Traffic.AvoidOffNetwork },
+    { label: tp(profile.value, "roadPrefs.traffic.preferNetwork"), value: Traffic.AvoidOffNetwork },
 ]);
 const townOptions = computed(() => [
     { label: t("roadPrefs.any"), value: Towns.Neutral },
@@ -249,7 +250,7 @@ function onClose() {
         <q-card style="min-width: min(720px, 96vw)">
             <q-card-section>
                 <q-item-label overline>{{ journey ? t("journeyForm.editTitle") : t("journeys.new") }}</q-item-label>
-                <div class="text-caption text-muted">{{ t("journeyForm.intro") }}</div>
+                <div class="text-caption text-muted">{{ tp(profile, "journeyForm.intro") }}</div>
             </q-card-section>
 
             <q-card-section class="q-gutter-md">
@@ -500,9 +501,10 @@ function onClose() {
                             v-model:avoid-headwind="avoidHeadwind"
                             v-model:avoid-shade="avoidShade"
                             :headwind="hasWindEffort(profile)"
+                            :profile="profile"
                         />
-                        <div v-if="!isPro" class="text-caption text-muted q-mt-sm">
-                            {{ t("journeyForm.plusPitch") }}
+                        <div v-if="!isPro && entitlements?.offer" class="text-caption text-muted q-mt-sm">
+                            {{ t("journeyForm.plusPitch", { n: entitlements.offer.plusAlternatives }) }}
                         </div>
                         <q-select
                             v-else

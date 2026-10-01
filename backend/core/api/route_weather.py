@@ -8,7 +8,7 @@ from ninja.errors import HttpError
 
 from ..auth.backend import optional_session_auth, session_auth
 from ..departures import candidate_times, check_flexibility
-from ..entitlements import entitlements_for
+from ..entitlements import TRIAL_DAYS, entitlements_for
 from ..forecast_schemas import ForecastJobOut, ForecastMapDetailOut, ForecastUncertainty
 from ..jobs import job_snapshot, line_at_detail, wind_arrows_at_detail
 from ..models import ForecastJob
@@ -78,7 +78,10 @@ async def route_weather(
     if (departure_flex_before_minutes or departure_flex_after_minutes) and not (
         await entitlements_for(getattr(request, "auth", None))
     ).departure_comparison:
-        raise HttpError(402, gettext("Der Abfahrtsvergleich braucht Plus. Teste Plus 14 Tage kostenlos."))
+        raise HttpError(
+            402,
+            gettext("Der Abfahrtsvergleich braucht Plus. Teste Plus %(days)d Tage kostenlos.") % {"days": TRIAL_DAYS},
+        )
     job = await start_forecast_job(
         ForecastJob.Kind.ADHOC,
         request.auth,

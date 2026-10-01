@@ -3,6 +3,7 @@ import { GeometrySource } from "@norain/api/models";
 import { computed, ref, watch, type Ref } from "vue";
 import { QSelect } from "quasar";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import { symSharpSchedule, symSharpSyncAlt, symSharpArrowForward } from "@quasar/extras/material-symbols-sharp";
 import RouteLocationPicker from "@/components/RouteLocationPicker.vue";
 import RouteEditorDialog from "@/components/RouteEditorDialog.vue";
@@ -189,7 +190,7 @@ function onClose() {
                 <GpxImportDialog v-model="importing" :profile="profile" @apply="applyImport" />
                 <template v-if="exact && imported">
                     <div class="text-caption">{{ t("routeForm.originalFromGpx") }}</div>
-                    <RouteTimingFields v-model="importedDuration" :distance-m="imported.preview.distanceM" />
+                    <RouteTimingFields v-model="importedDuration" :profile="profile" :distance-m="imported.preview.distanceM" />
                 </template>
                 <q-input
                     v-model="name"
@@ -293,7 +294,7 @@ function onClose() {
 
                 <q-input
                     v-model="time"
-                    :label="t('routeForm.departureTime')"
+                    :label="tp(profile, 'routeForm.departureTime')"
                     outlined
                     dense
                     mask="##:##"
@@ -317,19 +318,19 @@ function onClose() {
                     unelevated
                     no-caps
                     toggle-color="primary"
-                    :aria-label="t('routeForm.direction')"
+                    :aria-label="tp(profile, 'routeForm.direction')"
                     :options="[
                         {
                             value: true,
-                            label: $q.screen.xs ? undefined : t('routeForm.twoWay'),
+                            label: $q.screen.xs ? undefined : tp(profile, 'routeForm.twoWay'),
                             icon: $q.screen.xs ? symSharpSyncAlt : undefined,
-                            attrs: { 'aria-label': t('routeForm.twoWay'), title: t('routeForm.twoWay') },
+                            attrs: { 'aria-label': tp(profile, 'routeForm.twoWay'), title: tp(profile, 'routeForm.twoWay') },
                         },
                         {
                             value: false,
-                            label: $q.screen.xs ? undefined : t('routeForm.oneWay'),
+                            label: $q.screen.xs ? undefined : tp(profile, 'routeForm.oneWay'),
                             icon: $q.screen.xs ? symSharpArrowForward : undefined,
-                            attrs: { 'aria-label': t('routeForm.oneWay'), title: t('routeForm.oneWay') },
+                            attrs: { 'aria-label': tp(profile, 'routeForm.oneWay'), title: tp(profile, 'routeForm.oneWay') },
                         },
                     ]"
                 />
@@ -337,7 +338,7 @@ function onClose() {
                     <q-input
                         v-model="returnTime"
                         :disable="!twoWay"
-                        :label="t('routeForm.returnTime')"
+                        :label="tp(profile, 'routeForm.returnTime')"
                         outlined
                         dense
                         mask="##:##"
@@ -347,7 +348,7 @@ function onClose() {
                     <!--                    <q-item-label caption>{{ t("routeForm.returnHint") }}</q-item-label>-->
                 </div>
 
-                <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" />
+                <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" :profile="profile" />
 
                 <!--                <div v-if="scheduleDescription" class="text-body2 text-muted">-->
                 <!--                    {{ scheduleDescription }}-->

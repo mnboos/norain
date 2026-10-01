@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -97,3 +98,26 @@ class ArtifactTests(unittest.TestCase):
     def test_external_artifact_rejected(self):
         with self.assertRaises(ValueError):
             artifact.selected(str(self.root.parent))
+
+    def test_begin_keeps_the_road_cells_and_names_the_osm_file(self):
+        (self.root / "config.yaml").write_text("graphhopper: {}")
+        (self.root / "models").mkdir()
+        (self.root / "models" / "bike.json").write_text("{}")
+        terrain = self.root / "terrain"
+        terrain.mkdir()
+        (terrain / "manifest.json").write_text('{"zoom": 15}')
+        cells = self.root / "cells.tmp"
+        cells.write_text("[[6,6]]")
+        osm = self.root / "bike-test.osm.pbf"
+        osm.write_bytes(b"pbf")
+        with (
+            patch.object(artifact, "CONFIG", self.root / "config.yaml"),
+            patch.object(artifact, "MODELS", self.root / "models"),
+            patch.object(artifact, "jar_digest", return_value="jar"),
+        ):
+            self.invoke("begin", "--terrain", str(terrain), "--cells", str(cells), "--osm", str(osm))
+        (release,) = (self.root / "releases").iterdir()
+        self.assertEqual((release / "cells.json").read_text(), "[[6,6]]")
+        data = json.loads((release / "artifact.json").read_text())
+        self.assertEqual((data["osm_file"]["name"], data["osm_file"]["size"]), ("bike-test.osm.pbf", 3))
+        self.assertEqual(data["status"], "building")

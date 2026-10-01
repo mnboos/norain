@@ -11,6 +11,7 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 
 from . import tests as fixtures
 from .geo import haversine_m
+from .gpx import parse_gpx
 from .journey_geometry import Limits, measured_geometry
 from .models import Journey, JourneyDay, JourneyStage, Plan, RecurringRoute, Subscription, User, route_line, route_point
 from .random_rides import (
@@ -556,6 +557,52 @@ class PickVariantsApiTests(TestCase):
         self.assertEqual(route.duration_seconds, self.stages[1].total_seconds)
         self.assertEqual((route.start_name, route.schedule_cron), ("Zuhause", "0 9 * * 6"))
         geometry.assert_awaited_once_with(str(route.id))
+
+    def _with_stops(self, stage):
+        water = {"osm_ref": "n1", "category": "drinking_water", "name": "Brunnen", "lon": 8.01, "lat": 47.0}
+        food = {"osm_ref": "n2", "category": "food", "name": "", "lon": 8.02, "lat": 47.0}
+        breaks = [{"along_m": 9000, "elapsed_s": 1800, "lon": 8.02, "lat": 47.0, "pois": [{**food, "along_m": 9000}]}]
+        detours = [{**water, "along_m": 4000}, {**food, "along_m": 9000}]
+        JourneyStage.objects.filter(id=stage.id).update(breaks=breaks, detours=detours)
+
+    def test_a_saved_variant_keeps_its_stops_for_the_gpx(self):
+        self._with_stops(self.stages[0])
+        response, _ = self._save(self.stages[0])
+        self.assertEqual(response.status_code, 200, response.content)
+        route = RecurringRoute.objects.get()
+        self.assertEqual(
+            [(s["osm_ref"], s["category"]) for s in route.stops], [("n1", "drinking_water"), ("n2", "food")]
+        )
+        content = self.client.get(f"/api/routes/{route.id}/gpx").content
+        self.assertEqual(content.count(b"<wpt"), 2)
+        self.assertIn(b"<name>Brunnen</name>", content)
+        self.assertIn(b"<name>Essen</name>", content)
+
+    def test_a_stage_downloads_as_gpx_with_its_stops_and_lodging(self):
+        self._with_stops(self.stages[0])
+        hotel = {
+            "osm_ref": "n9",
+            "category": "lodging",
+            "name": "Hotel Post",
+            "lon": 8.0,
+            "lat": 47.001,
+            "along_m": 20000,
+        }
+        JourneyDay.objects.filter(journey=self.ride).update(lodging=hotel)
+        url = f"/api/journeys/{self.ride.id}/stages/{self.stages[0].id}/gpx"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response["Content-Type"], "application/gpx+xml")
+        content = response.content
+        self.assertEqual(content.count(b"<wpt"), 3)
+        self.assertLess(content.index(b"Brunnen"), content.index(b"Hotel Post"), "in riding order")
+        self.assertIn("Runde – Variante 1".encode(), content)
+        self.assertEqual(parse_gpx(content)[0]["coordinates"][0][2], 400.0, "heights come along")
+        other = User.objects.create_user(username="other", email="o@example.com", password="pw")
+        self.client.force_login(other)
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.client.logout()
+        self.assertEqual(self.client.get(url).status_code, 401)
 
     def test_picking_several_counts_against_the_route_quota(self):
         names = []

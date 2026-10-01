@@ -71,10 +71,16 @@ RUN git init && git remote add origin https://github.com/graphhopper/graphhopper
     && git fetch --depth 1 origin "$GRAPHHOPPER_COMMIT" && git checkout --detach FETCH_HEAD \
     && test "$(git rev-parse HEAD)" = "$GRAPHHOPPER_COMMIT" \
     && printf '%s\n' "$GRAPHHOPPER_COMMIT" > /graphhopper-revision
-# Expose coordinate heights for saved paths using GraphHopper's native provider.
-COPY docker/graphhopper/ElevationResource.java /source/web/src/main/java/com/graphhopper/application/resources/ElevationResource.java
-RUN sed -i '/environment.jersey().register(new RootResource());/a\        environment.jersey().register(com.graphhopper.application.resources.ElevationResource.class);' \
-    web/src/main/java/com/graphhopper/application/GraphHopperApplication.java
+# Expose coordinate heights for saved paths using GraphHopper's native provider, and the area
+# the graph and its terrain cover (the system dashboard). The grep fails the build if the line
+# moved and the sed matched nothing.
+COPY docker/graphhopper/ElevationResource.java docker/graphhopper/CoverageResource.java \
+    /source/web/src/main/java/com/graphhopper/application/resources/
+RUN sed -i \
+    -e '/environment.jersey().register(new RootResource());/a\        environment.jersey().register(com.graphhopper.application.resources.ElevationResource.class);' \
+    -e '/environment.jersey().register(new RootResource());/a\        environment.jersey().register(com.graphhopper.application.resources.CoverageResource.class);' \
+    web/src/main/java/com/graphhopper/application/GraphHopperApplication.java \
+    && grep -q 'register(com.graphhopper.application.resources.CoverageResource.class)' web/src/main/java/com/graphhopper/application/GraphHopperApplication.java
 # Where the zoom-15 terrain has no value, read the zoom-12 archive instead of storing 0 m.
 # The grep fails the build if the line moved and the sed matched nothing.
 # An import also looks up every node's height once, in tile order, before reading the ways: in

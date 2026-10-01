@@ -540,6 +540,44 @@ class HardeningTests(SimpleTestCase):
     def assess(self, signals=None, headers=None, browser="browser"):
         return fp.assess(browser, evidence(signals or honest_signals()), headers or CHROME_HEADERS)
 
+    def test_semantic_diagnostics_never_change_identity_or_tier(self):
+        baseline = self.assess()
+        for value, indicator in (
+            (dict.fromkeys(fp.SEMANTIC_CASES, "pass"), None),
+            (dict.fromkeys(fp.SEMANTIC_CASES, "mismatch"), "semantic_alteration"),
+            (dict.fromkeys(fp.SEMANTIC_CASES, "unavailable"), None),
+            ({"font": ["pass"]}, "invalid_semantics"),
+        ):
+            with self.subTest(value=value):
+                signals = honest_signals()
+                signals["semantics"] = {"status": "ok", "value": json.dumps(value)}
+                result = self.assess(signals)
+                self.assertEqual(result["tier"], baseline["tier"])
+                self.assertEqual(result["fingerprintId"], baseline["fingerprintId"])
+                self.assertEqual(result["components"], baseline["components"])
+                if indicator:
+                    self.assertIn(indicator, result["indicators"])
+                    fp.record_stats(result)
+
+    def test_optional_semantic_status_and_unknown_signal_validation(self):
+        signals = honest_signals()
+        signals["semantics"] = {"status": "unavailable"}
+        result = self.assess(signals)
+        self.assertEqual(result["tier"], "high")
+        self.assertNotIn("checks_unavailable", result["indicators"])
+        signals["unknown"] = {"status": "unavailable"}
+        with self.assertRaises(ValueError):
+            evidence(signals)
+
+    def test_common_assessment_keeps_candidate_only_for_debits(self):
+        high = self.assess()
+        with patch.object(fp, "fingerprint_is_common", return_value=True):
+            low = self.assess()
+        self.assertEqual(low["tier"], "low")
+        self.assertIsNone(low["fingerprintId"])
+        self.assertEqual(low["debitFingerprint"], high["fingerprintId"])
+        self.assertFalse(any(key.startswith("f:") for key in fp.device_keys(low, "203.0.113.1")))
+
     def test_ipv6_floors_count_a_56_and_leave_ipv4_alone(self):
         self.assertEqual(fp.ip_floor("203.0.113.7"), "203.0.113.7")
         self.assertEqual(fp.ip_floor("::ffff:203.0.113.7"), "203.0.113.7")
@@ -1070,6 +1108,69 @@ class DeviceThrottleTests(TestCase):
             down.get.side_effect = RedisError("down")
             down.add.side_effect = RedisError("down")
             self.assertEqual(middleware(request).status_code, 401)
+
+
+@override_settings(CACHES=LOCMEM, BROWSER_FINGERPRINT_ENABLED=True, BROWSER_KEY_AGE_SIGNUPS=False)
+class DebitLeaseTests(SimpleTestCase):
+    def setUp(self):
+        cache.clear()
+        self.factory = RequestFactory()
+
+    def held(self, assessment, ip="203.0.113.1", path="signup", now=100000):
+        request = self.factory.post(f"/api/allauth/browser/v1/auth/{path}", REMOTE_ADDR=ip)
+        with (
+            patch.object(fp, "get_browser_assessment", return_value=assessment),
+            patch("core.auth.device_throttle.time.time", return_value=now),
+        ):
+            return device_throttle.counters(request)
+
+    def assessment(self, browser, common=False):
+        return {
+            "browserId": browser,
+            "persistent": True,
+            "established": True,
+            "tier": "low" if common else "high",
+            "fingerprintId": None if common else "device",
+            "debitFingerprint": "device" if common else None,
+            "coarsePrint": "coarse" if common else None,
+            "indicators": ["fingerprint_common"] if common else [],
+        }
+
+    def test_already_spent_debit_survives_new_keys_and_networks(self):
+        high = self.held(self.assessment("old"))
+        device_throttle.count(high)
+        device_throttle.count(high)
+        low = self.assessment("new", common=True)
+        held = self.held(low, "198.51.100.1")
+        self.assertEqual(len(held), 3)
+        self.assertFalse(device_throttle.refused(held))
+        device_throttle.count(held)
+        fresh = self.held(self.assessment("fresh", common=True), "192.0.2.1")
+        self.assertTrue(device_throttle.refused(fresh))
+        self.assertEqual(len(self.held(low, now=200000)), 2)
+        self.assertFalse(device_throttle.refused(self.held(low, now=200000)))
+        self.assertEqual(len(self.held(low, path="code/request")), 2)
+
+    def test_initially_common_print_cannot_create_a_lease(self):
+        low = self.assessment("low", common=True)
+        for n in range(4):
+            held = self.held({**low, "browserId": f"low-{n}"}, f"192.0.2.{n}")
+            self.assertEqual(len(held), 2)
+            device_throttle.count(held)
+        self.assertEqual(len(self.held(low)), 2)
+
+    def test_code_lease_is_rule_and_slot_scoped(self):
+        high = self.held(self.assessment("old"), path="code/request")
+        for _ in range(10):
+            device_throttle.count(high)
+        low = self.assessment("low", common=True)
+        self.assertTrue(device_throttle.refused(self.held(low, path="code/request")))
+        self.assertEqual(len(self.held(low)), 2)
+        self.assertEqual(len(self.held(low, path="code/request", now=104000)), 2)
+
+    def test_failed_cache_lookup_does_not_hold_mail(self):
+        with patch("core.auth.device_throttle.cache.get", side_effect=RedisError("down")):
+            self.assertEqual(len(self.held(self.assessment("low", common=True))), 2)
 
 
 @skipUnless(os.environ.get("BROWSER_FINGERPRINT_REDIS_TEST_URL"), "Opt-in shared Redis integration test")

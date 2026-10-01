@@ -46,6 +46,8 @@ public final class Shade {
     static final double UNDER_CANOPY_M = 3;
     static final double FIRST_M = 10, GROWTH = 1.25;
     static final double CANOPY_M = 300, NEAR_M = 1_000, MAX_M = 10_000;
+    /** The zoom graphhopper-canopy.py writes. */
+    static final int CANOPY_ZOOM = 13;
     private static final double EARTH_RADIUS_M = 6_371_000;
     private static final double ANGLE_SCALE = 300;
     private static final int CACHE_BITS = 22;
@@ -159,10 +161,12 @@ public final class Shade {
             far = fallback.isEmpty() ? near : new PMTilesElevationProvider(fallback,
                     PMTilesElevationProvider.TerrainEncoding.TERRARIUM, true,
                     config.getInt("graph.elevation.pmtiles.fallback.zoom", 12), "").init();
-            String trees = config.getString("graph.canopy.pmtiles.location", "");
-            canopy = trees.isEmpty() || !new java.io.File(trees).isFile() ? null : new PMTilesElevationProvider(trees,
-                    PMTilesElevationProvider.TerrainEncoding.TERRARIUM, false,
-                    config.getInt("graph.canopy.pmtiles.zoom", 13), "").init();
+            // Beside the terrain (the entrypoint's `canopy` command puts it there), not a config
+            // key: a served graph keeps the config it was built with, and Dropwizard's -Ddw.
+            // nests a key that config does not declare, where GraphHopper never reads it.
+            java.io.File trees = new java.io.File(location).toPath().resolveSibling("canopy.pmtiles").toFile();
+            canopy = !trees.isFile() ? null : new PMTilesElevationProvider(trees.getPath(),
+                    PMTilesElevationProvider.TerrainEncoding.TERRARIUM, false, CANOPY_ZOOM, "").init();
         }
 
         @Override

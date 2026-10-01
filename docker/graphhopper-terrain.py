@@ -29,6 +29,8 @@ import subprocess
 import tempfile
 import time
 import urllib.request
+from bisect import bisect_right
+from collections import Counter
 from contextlib import contextmanager
 from decimal import Decimal
 from functools import lru_cache
@@ -562,11 +564,12 @@ def has_void(rgb):
     return ImageChops.lighter(red, green).getextrema()[0] == 0
 
 
-def verify_coverage(path, cells, zoom=ZOOM):
+def verify_coverage(path, cells, zoom=ZOOM, void_out=None):
     """Counts missing tiles and tiles with nodata inside the mask cells, at zoom.
 
     Neither is an error. GraphHopper reads the fallback archive where zoom 15 has no value;
     where the fallback has none either, it stores 0 m, so those are the counts to watch.
+    void_out: a set that receives every nodata tile as (x, y), for cell_coverage.
     """
     from PIL import Image
     from pmtiles.tile import Compression, TileType
@@ -600,6 +603,8 @@ def verify_coverage(path, cells, zoom=ZOOM):
                     )
                 if has_void(image.convert("RGB")):
                     void.append(f"{zoom}/{x}/{y}")
+                    if void_out is not None:
+                        void_out.add((x, y))
     print(f"Verified {positions} zoom-{zoom} tile positions.", flush=True)
     for kind, tiles in (("are missing", missing), ("have nodata", void)):
         if tiles:
@@ -617,6 +622,89 @@ def verify_coverage(path, cells, zoom=ZOOM):
         "void": len(void),
         "examples": missing[:10] + void[:10],
     }
+
+
+def tile_ranges(path):
+    """The archive's tile entries as sorted (first tile id, run length): directories only,
+    never a tile payload, so it is cheap even for a continent."""
+    from pmtiles.tile import deserialize_directory, deserialize_header
+
+    with Path(path).open("rb") as stream, mmap.mmap(
+        stream.fileno(), 0, access=mmap.ACCESS_READ
+    ) as mapping:
+        header = deserialize_header(mapping[0:127])
+        ranges = []
+        pending = [(header["root_offset"], header["root_length"])]
+        while pending:
+            offset, length = pending.pop()
+            for entry in deserialize_directory(mapping[offset : offset + length]):
+                if entry.run_length:
+                    ranges.append((entry.tile_id, entry.run_length))
+                else:
+                    pending.append(
+                        (header["leaf_directory_offset"] + entry.offset, entry.length)
+                    )
+    return sorted(ranges)
+
+
+def _present(ranges, starts, first, count):
+    """How many tile ids in [first, first + count) the sorted ranges hold."""
+    end = first + count
+    i = max(0, bisect_right(starts, first) - 1)
+    present = 0
+    while i < len(ranges) and ranges[i][0] < end:
+        start, length = ranges[i]
+        present += max(0, min(end, start + length) - max(first, start))
+        i += 1
+    return present
+
+
+def cell_coverage(path, cells, zoom=ZOOM, void_tiles=None):
+    """Per mask cell: how many of its zoom tiles the archive holds, and how many of those
+    have nodata (None when the tiles were not decoded). For the system dashboard's map.
+
+    A mask cell's zoom tiles are one subtree of the Hilbert curve, so their tile ids are one
+    contiguous run: counting needs the directories only."""
+    from pmtiles.tile import zxy_to_tileid
+
+    ranges = tile_ranges(path)
+    starts = [start for start, _ in ranges]
+    shift = zoom - MASK_ZOOM
+    per_cell = 4**shift
+    base = zxy_to_tileid(zoom, 0, 0)
+    mask_base = zxy_to_tileid(MASK_ZOOM, 0, 0)
+    voids = None
+    if void_tiles is not None:
+        voids = Counter((vx >> shift, vy >> shift) for vx, vy in void_tiles)
+    rows = []
+    for x, y in sorted(cells):
+        first = base + (zxy_to_tileid(MASK_ZOOM, x, y) - mask_base) * per_cell
+        void = None if voids is None else voids[(x, y)]
+        rows.append([x, y, _present(ranges, starts, first, per_cell), void])
+    return {"zoom": zoom, "mask_zoom": MASK_ZOOM, "per_cell": per_cell, "cells": rows}
+
+
+def bounds_cells(bounds, zoom=MASK_ZOOM):
+    """Every mask cell in [west, south, east, north]: for terrain prepared for a bounding box,
+    before cells.json existed."""
+    west, south, east, north = bounds
+    x0, y0 = (int(v) for v in tile_xy(west, north, zoom))
+    x1, y1 = (int(v) for v in tile_xy(east, south, zoom))
+    return {(x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)}
+
+
+def write_cell_coverage(directory, cells=None, void_tiles=None):
+    """cell_coverage.json beside the archives. Not part of the terrain key."""
+    directory = Path(directory)
+    if cells is None and (directory / "cells.json").is_file():
+        cells = {tuple(cell) for cell in json.loads((directory / "cells.json").read_text())}
+    elif cells is None:
+        cells = bounds_cells(json.loads((directory / "manifest.json").read_text())["bounds"])
+    data = cell_coverage(directory / "terrain.pmtiles", cells, void_tiles=void_tiles)
+    temporary = directory / f".cell_coverage-{os.getpid()}.json"
+    temporary.write_text(json.dumps(data, separators=(",", ":")))
+    temporary.replace(directory / "cell_coverage.json")
+    return data
 
 
 def check(directory, pbf=None, cells=None):
@@ -767,10 +855,15 @@ def prepare(pbf, root, dry_run=False, whole=False):
         terrain = stage / "terrain.pmtiles"
         merge_pieces(parts, terrain)
         print("Terrain preparation: checking coverage and checksums...", flush=True)
+        void_tiles = set()
         coverage = [
-            verify_coverage(terrain, cells),
+            verify_coverage(terrain, cells, void_out=void_tiles),
             verify_coverage(fallback_path, cells, FALLBACK_ZOOM),
         ]
+        # Per cell, for the system dashboard's elevation layer.
+        write_cell_coverage(
+            stage, cells, void_tiles if coverage[0].get("decoded") else None
+        )
         spec["sha256"] = digest(terrain)
         spec["fallback_sha256"] = digest(fallback_path)
         spec["coverage"] = coverage
@@ -794,10 +887,23 @@ def prepare(pbf, root, dry_run=False, whole=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("prepare", "check", "cleanup"))
+    parser.add_argument(
+        "command", choices=("prepare", "check", "cleanup", "coverage", "cells")
+    )
     parser.add_argument("pbf", type=Path, nargs="?")
     parser.add_argument("--root", type=Path, default=Path("/osm_data/elevation"))
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--terrain", type=Path, help="coverage: the terrain directory (default: current)"
+    )
+    parser.add_argument(
+        "--cells", type=Path, help="coverage: the road cells (default: the terrain's)"
+    )
+    parser.add_argument(
+        "--cells-out",
+        type=Path,
+        help="check: also write the file's road cells there (the graph release keeps them)",
+    )
     parser.add_argument(
         "--whole",
         action="store_true",
@@ -806,8 +912,28 @@ def main():
     args = parser.parse_args()
     if args.command == "cleanup":
         cleanup_downloads(args.root)
+    elif args.command == "coverage":
+        # Backfill for terrain prepared before cell_coverage.json existed. Terrain from before
+        # the cell mask has no cells.json: pass the graph release's (--cells).
+        directory = (args.terrain or args.root / "current").resolve(strict=True)
+        cells = None
+        if args.cells:
+            cells = {tuple(cell) for cell in json.loads(args.cells.read_text())}
+        data = write_cell_coverage(directory, cells)
+        full = sum(1 for row in data["cells"] if row[2] == data["per_cell"])
+        none = sum(1 for row in data["cells"] if row[2] == 0)
+        print(
+            f"Cell coverage written: {len(data['cells'])} cells, {full} complete at zoom "
+            f"{ZOOM}, {none} fallback only: {directory / 'cell_coverage.json'}"
+        )
     elif args.pbf is None:
         parser.error(f"the {args.command} command requires pbf")
+    elif args.command == "cells":
+        # Backfill for a graph release built before it kept its road cells.
+        if not args.cells_out:
+            parser.error("the cells command requires --cells-out")
+        args.cells_out.write_text(cells_json(node_cells(args.pbf)))
+        print(f"Road cells written: {args.cells_out}")
     elif args.command == "prepare":
         # Serialize preparation, including current-symlink changes, across containers.
         if args.dry_run:
@@ -820,7 +946,10 @@ def main():
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 prepare(args.pbf, args.root, whole=args.whole)
     else:
-        check(args.root / "current", args.pbf)
+        cells = node_cells(args.pbf) if args.cells_out else None
+        check(args.root / "current", args.pbf, cells)
+        if args.cells_out:
+            args.cells_out.write_text(cells_json(cells))
         print("Terrain checksum and OSM extent match.")
 
 

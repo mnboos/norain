@@ -63,9 +63,9 @@ class GpxExportIn(CamelSchema):
     coordinates: list[list[float]] = Field(min_length=2, max_length=100000)
 
 
-def gpx_response(name, points):
+def gpx_response(name, points, waypoints=()):
     try:
-        content = serialize_gpx(name, points)
+        content = serialize_gpx(name, points, waypoints)
     except ValueError as exc:
         raise HttpError(422, str(exc)) from None
     response = HttpResponse(content, content_type="application/gpx+xml")
@@ -86,7 +86,7 @@ async def export_saved_gpx(request, route_id: UUID):
     points = route.imported_coordinates if route.geometry_source == "imported" else route.polyline_coordinates
     if not points:
         raise HttpError(409, gettext("Die Strecke wird noch berechnet."))
-    return gpx_response(route.name, points)
+    return gpx_response(route.name, points, route.stops or ())
 
 
 @router.get("/forecast_jobs/{job_id}/gpx")

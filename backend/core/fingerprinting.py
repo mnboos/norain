@@ -71,6 +71,15 @@ STABLE = ("canvas", "audio", "graphics", "fonts", "hardware", "math", "media")
 DISTINCTIVE = ("canvas", "audio", "graphics")
 CHECKS = ("navigator", "worker", "iframe", "integrity", "canvasIntegrity", "engine", "automation")
 SIGNALS = {*WEIGHTS, *CHECKS}
+OPTIONAL_SIGNALS = {"semantics"}
+SEMANTIC_CASES = {"font", "viewport", "exception", "serialization"}
+# Always diagnostic, even when BROWSER_OBSERVE_ONLY is empty: privacy extensions can
+# legitimately break these relations. They never contribute identity entropy or tier.
+SEMANTIC_INDICATORS = {
+    "semantic_alteration",
+    "invalid_semantics",
+    *(f"semantic_{case}_{outcome}" for case in SEMANTIC_CASES for outcome in ("mismatch", "unavailable")),
+}
 
 # The proof-of-work: leading zero bits of SHA-256(seed ":" n). Measured with the JS solver at
 # ~1.25 M hashes/s on a laptop, a phone ~5x slower: 16 bits ~0.05 s / ~0.3 s, 20 bits ~0.8 s /
@@ -254,7 +263,7 @@ def parse_evidence(payload):
         evidence = Evidence.model_validate_json(payload)
     except ValidationError as error:
         raise ValueError("Invalid browser evidence") from error
-    if set(evidence.signals) != SIGNALS or any(
+    if not SIGNALS <= set(evidence.signals) <= SIGNALS | OPTIONAL_SIGNALS or any(
         (probe.status == "ok") != (probe.value is not None) for probe in evidence.signals.values()
     ):
         raise ValueError("Invalid browser probes")
@@ -543,6 +552,21 @@ def consistency_flags(signals, headers, profile):
     # A check that did not run cannot catch a lie, so skipping one must cost the browser something.
     if any(signals[name].status != "ok" for name in CHECKS):
         flags.append("checks_unavailable")
+    semantic = signals.get("semantics")
+    if semantic is not None and semantic.status == "ok":
+        result = _parsed(semantic)
+        if not (
+            isinstance(result, dict)
+            and set(result) == SEMANTIC_CASES
+            and all(
+                isinstance(value, str) and value in {"pass", "mismatch", "unavailable"} for value in result.values()
+            )
+        ):
+            flags.append("invalid_semantics")
+        else:
+            flags += [f"semantic_{case}_{outcome}" for case, outcome in result.items() if outcome != "pass"]
+            if "mismatch" in result.values():
+                flags.append("semantic_alteration")
     return flags
 
 
@@ -637,6 +661,9 @@ def assess(browser_id, evidence, headers, previous_browser_id=None, first_seen=N
         "persistent": evidence.persistent,
         "established": first_seen is None or _now() - first_seen >= settings.BROWSER_KEY_AGE,
         "fingerprintId": fingerprint if tier == "high" else None,
+        # Server-internal candidate, only for retaining already-spent quota debits.
+        # Never consumed by device_keys, coverage votes, or returned in the public receipt.
+        "debitFingerprint": fingerprint if tier == "low" and "fingerprint_common" in indicators else None,
         # Every low browser, whatever made it low: losing the fingerprint must never free it.
         "coarsePrint": _coarse_print(components, headers) if tier == "low" else None,
         "tier": tier,
@@ -857,9 +884,14 @@ INDICATORS = frozenset(
     {
         *SUSPICIOUS,
         *LOW,
+        *SEMANTIC_INDICATORS,
         "fingerprint_changed",
         "browser_key_changed",
-        *(f"{name}_{status}" for name in SIGNALS for status in ("unavailable", "timeout", "unstable")),
+        *(
+            f"{name}_{status}"
+            for name in SIGNALS | OPTIONAL_SIGNALS
+            for status in ("unavailable", "timeout", "unstable")
+        ),
     }
 )
 

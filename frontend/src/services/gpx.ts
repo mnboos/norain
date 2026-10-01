@@ -1,5 +1,5 @@
 import { GeometrySource, RoutingProfile } from "@norain/api/models";
-import { GPXApi } from "@norain/api/apis";
+import { GPXApi, JourneysApi } from "@norain/api/apis";
 import type { PlacesSearchResult, RecurringRouteOut, RoutePlanIn, RoutePlanOut } from "@norain/api/models";
 import { ResponseError } from "@norain/api/runtime";
 import { Notify } from "quasar";
@@ -102,4 +102,10 @@ export async function exportDraft(draft: RouteDraft): Promise<void> {
         name: draft.plan.name, coordinates: draft.preview.coordinates,
     } });
     await shareGpx(response.raw, draft.plan.name);
+}
+
+/** One journey stage or random-ride variant as GPX: its line, its stops and the night's lodging. */
+export async function exportJourneyStage(journeyId: string, stageId: string, name: string): Promise<void> {
+    const response = await new JourneysApi().coreApiJourneyJourneyStageGpxRaw({ journeyId, stageId });
+    await shareGpx(response.raw, name);
 }

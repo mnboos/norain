@@ -8,7 +8,10 @@ those differences helps explain apparently conflicting results.
 
 Open-Meteo responses contain dictionary blocks of parallel arrays, such as
 `hourly.time` and `hourly.temperature_2m`. OWM responses contain an `hourly` list of
-objects. The grid layer dispatches extraction using the stored cell's source and
+objects. MET Norway responses contain `properties.timeseries`, a list of steps that
+are hourly for about two and a half days and six-hourly after; a six-hourly step keeps
+its six-hour precipitation interval, and its symbol code is mapped to a WMO weather code.
+The grid layer dispatches extraction using the stored cell's source and
 rejects mismatched block formats. Its OWM parser accepts both numeric rain and a
 legacy `{"1h": value}` object.
 
@@ -31,7 +34,7 @@ value, with control members counted once. A member is wet at 0.1 mm or more
 in the preceding forecast hour. At least two valid members are required for an
 ensemble probability. `pop` is the fraction of wet members;
 `rain_if_wet` is their mean precipitation, or zero when none are wet. Ensemble
-probability is preferred; OWM probability is a fallback when available. The current
+probability is preferred; MET Norway or OWM probability is a fallback when available. The current
 Open-Meteo deterministic parser does not expose its precipitation-probability field.
 
 If any sample has a probability, the route's rain verdict uses a 25% threshold at

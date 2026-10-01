@@ -4,7 +4,14 @@ import ElevationChart from "@/components/ElevationChart.vue";
 import { computed, ref, toRefs, watch } from "vue";
 import { useQuasar } from "quasar";
 import { useI18n } from "vue-i18n";
-import { symSharpBed, symSharpCloudOff, symSharpStar, symSharpWarning } from "@quasar/extras/material-symbols-sharp";
+import {
+    symSharpBed,
+    symSharpCloudOff,
+    symSharpDownload,
+    symSharpShare,
+    symSharpStar,
+    symSharpWarning,
+} from "@quasar/extras/material-symbols-sharp";
 import {
     JourneyReasonOutKindEnum,
     type JourneyDayOut,
@@ -18,10 +25,11 @@ import NiceMap from "@/components/NiceMap.vue";
 import WeatherChart from "@/components/WeatherChart.vue";
 import { useJourneyStageForecast, useJourneyStageForecasts, useJourneyStagesPois } from "@/queries/journeys";
 import { clock, dayLabel, duration, gapExcessLabel, isPlanningWarning, km, reasonText } from "@/utils/journeys";
-import { intlLocale } from "@/i18n";
+import { intlLocale, tp } from "@/i18n";
 import { rideLabelText } from "@/utils/levels";
 import { CANDIDATE_COLOR, poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
 import { alternativeColor } from "@/utils/rideQuality";
+import { canShareFiles, exportJourneyStage, gpxError } from "@/services/gpx";
 
 const $q = useQuasar();
 const { t } = useI18n();
@@ -56,6 +64,20 @@ function pick(id: string) {
     userPicked.value = true;
 }
 const stage = computed(() => stages.value.find(s => s.id === selectedId.value));
+// The picked variant as GPX, with its stops and the night's lodging.
+const exporting = ref(false);
+const sharing = canShareFiles();
+async function exportStage() {
+    if (!stage.value) return;
+    exporting.value = true;
+    try {
+        await exportJourneyStage(journey.value.id, stage.value.id, `${journey.value.name} – ${dayLabel(day.value.date)}`);
+    } catch (e) {
+        $q.notify({ type: "negative", message: await gpxError(e) });
+    } finally {
+        exporting.value = false;
+    }
+}
 // The variants not picked, each in its own colour on the map (by its place in the list, so a
 // variant keeps its colour whichever one is picked); a click on one picks it. Each brings its
 // own forecast's wind for the animation, once that forecast is done: waiting on the rest would
@@ -191,7 +213,7 @@ function breakEta(elapsedS: number): string {
                             dayLabel(day.date)
                         }}
                     </span>
-                    <span v-if="day.weatherRouted" class="text-caption text-muted">{{ t("journeyDay.weatherRouted") }}</span>
+                    <span v-if="day.weatherRouted" class="text-caption text-muted">{{ tp(journey.profile, "journeyDay.weatherRouted") }}</span>
                 </div>
                 <div v-if="stages.length > 1" class="variant-grid" role="group" :aria-label="t('journeyDay.pickRoute')">
                     <button
@@ -239,10 +261,10 @@ function breakEta(elapsedS: number): string {
                     <template v-if="stage.recommendedDeparture || stage.departureTime">
                         {{
                             stage.recommendedDeparture
-                                ? t("journeyDay.recommendedDeparture", {
+                                ? tp(journey.profile, "journeyDay.recommendedDeparture", {
                                       time: clock(stage.recommendedDeparture),
                                   })
-                                : t("journeyDay.departure", { time: clock(stage.departureTime!) })
+                                : tp(journey.profile, "journeyDay.departure", { time: clock(stage.departureTime!) })
                         }}
                         ·
                     </template>
@@ -255,6 +277,18 @@ function breakEta(elapsedS: number): string {
                 <q-banner v-else-if="day.lodgingMissing" dense rounded class="bg-tint-warn q-mt-sm">
                     {{ t("journeyDay.noLodging") }}
                 </q-banner>
+                <q-btn
+                    v-if="stage"
+                    flat
+                    dense
+                    no-caps
+                    class="q-mt-xs"
+                    :icon="sharing ? symSharpShare : symSharpDownload"
+                    :label="sharing ? t('routeDetail.shareGpx') : t('routeDetail.downloadGpx')"
+                    :loading="exporting"
+                    data-testid="journey-stage-gpx"
+                    @click="exportStage"
+                />
                 <q-banner
                     v-if="planningWarnings.length || missingGaps.length"
                     dense
@@ -318,7 +352,7 @@ function breakEta(elapsedS: number): string {
             <q-banner v-else-if="!day.forecastAvailable" rounded class="bg-tint-neutral">
                 <template #avatar><q-icon :name="symSharpCloudOff" class="text-muted" /></template>
                 <template v-if="journey.kind === 'random'">{{ t("journeyDay.noForecastRandom") }}</template>
-                <template v-else>{{ t("journeyDay.noForecastJourney") }}</template>
+                <template v-else>{{ tp(journey.profile, "journeyDay.noForecastJourney") }}</template>
             </q-banner>
             <q-banner v-else-if="forecastQuery.error.value" rounded class="bg-tint-error">
                 {{ t("journeyDay.weatherLoadFailed") }}
@@ -327,6 +361,7 @@ function breakEta(elapsedS: number): string {
         <div v-if="stage || forecast" class="journey-charts" data-testid="journey-charts">
             <ElevationChart
                 v-if="stage"
+                :profile="journey.profile"
                 :stage-id="stage.id"
                 :color="selectedProfileColor"
                 :label="selectedLabel"
@@ -356,6 +391,7 @@ function breakEta(elapsedS: number): string {
                 <q-card v-for="kind in ['headwind', 'temperature'] as const" :key="kind" class="weather-chart-card">
                     <WeatherChart
                         :kind="kind"
+                        :profile="forecast.profile"
                         :version="forecast.version"
                         :cursor-minutes="positionMinutes"
                         :samples="forecast.samples"

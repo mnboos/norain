@@ -83,6 +83,11 @@ PRO = Entitlements(
 )
 
 BY_PLAN = {Plan.FREE: FREE, Plan.PRO: PRO}
+
+# What Plus costs (Stripe bills the real price; this is what the UI quotes) and how long the
+# trial lasts. The SPA's texts take these as parameters, so they live here only.
+PLUS_PRICES = {"annual": 29, "monthly": 3.9, "currency": "EUR"}
+TRIAL_DAYS = 14
 ELIGIBILITY_BATCH_SIZE = 500
 
 

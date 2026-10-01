@@ -29,6 +29,11 @@ import {
     SystemCoverageToJSON,
 } from '../models/SystemCoverage';
 import {
+    type SystemDataCoverage,
+    SystemDataCoverageFromJSON,
+    SystemDataCoverageToJSON,
+} from '../models/SystemDataCoverage';
+import {
     type SystemJobsPage,
     SystemJobsPageFromJSON,
     SystemJobsPageToJSON,
@@ -336,6 +341,43 @@ export class SystemApi extends runtime.BaseAPI {
     }
 
     /**
+     * Creates request options for coreApiSystemDataCoverage without sending the request
+     */
+    async coreApiSystemDataCoverageRequestOpts(): Promise<runtime.RequestOpts> {
+        const queryParameters: any = {};
+
+        const headerParameters: runtime.HTTPHeaders = {};
+
+
+        let urlPath = `/api/system/data-coverage`;
+
+        return {
+            path: urlPath,
+            method: 'GET',
+            headers: headerParameters,
+            query: queryParameters,
+        };
+    }
+
+    /**
+     * Data Coverage
+     */
+    async coreApiSystemDataCoverageRaw(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<SystemDataCoverage>> {
+        const requestOptions = await this.coreApiSystemDataCoverageRequestOpts();
+        const response = await this.request(requestOptions, initOverrides);
+
+        return new runtime.JSONApiResponse(response, (jsonValue) => SystemDataCoverageFromJSON(jsonValue));
+    }
+
+    /**
+     * Data Coverage
+     */
+    async coreApiSystemDataCoverage(initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<SystemDataCoverage> {
+        const response = await this.coreApiSystemDataCoverageRaw(initOverrides);
+        return await response.value();
+    }
+
+    /**
      * Creates request options for coreApiSystemJobs without sending the request
      */
     async coreApiSystemJobsRequestOpts(requestParameters: SystemApiCoreApiSystemJobsRequest): Promise<runtime.RequestOpts> {
@@ -539,6 +581,7 @@ export enum CoreApiSystemMapFeaturesKindEnum {
 export enum CoreApiSystemMapFeaturesSourceEnum {
     All = 'all',
     OpenMeteo = 'open-meteo',
+    MetNorway = 'met-norway',
     Openweathermap = 'openweathermap',
 }
 /**

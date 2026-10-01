@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 from asgiref.sync import async_to_sync
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, SimpleTestCase, TestCase, override_settings
+from django.utils import translation
 
 from . import tests as fixtures
 from .gpx import MAX_GPX_BYTES, distances, exact_geometry, guided_points, parse_gpx, serialize_gpx, validate_track
@@ -23,6 +24,21 @@ class GpxTests(SimpleTestCase):
         self.assertEqual(result[0]["coordinates"], POINTS)
         self.assertEqual(result[0]["name"], 'Ride <&> "Zürich"')
         self.assertNotIn(b"<time>", serialize_gpx("ride", POINTS))
+
+    def test_stops_are_waypoints_before_the_track(self):
+        stops = [
+            {"osm_ref": "n1", "category": "drinking_water", "name": "Brunnen\x01", "lon": 9.01, "lat": 47.004},
+            {"osm_ref": "n2", "category": "toilets", "name": "", "lon": 9.012, "lat": 47.006},
+            {"osm_ref": "n3", "category": "food", "lon": 999, "lat": 47.0},
+        ]
+        with translation.override("de"):
+            content = serialize_gpx("ride", POINTS, stops)
+        self.assertLess(content.index(b"<wpt"), content.index(b"<trk>"), "GPX 1.1 orders wpt before trk")
+        self.assertEqual(content.count(b"<wpt"), 2, "an invalid position is left out")
+        self.assertIn(b"<name>Brunnen</name><type>drinking_water</type>", content)
+        self.assertIn(b"<name>Toilette</name>", content, "no name of its own: the category's")
+        self.assertEqual(parse_gpx(content)[0]["coordinates"], POINTS)
+        self.assertEqual(serialize_gpx("ride", POINTS, ()), serialize_gpx("ride", POINTS))
 
     def test_versions_routes_and_namespaces(self):
         for version in ("1.0", "1.1"):
@@ -266,6 +282,19 @@ class GpxApiTests(TestCase):
         self.assertIsNone(self.client.get("/api/routes").json()[0]["imported_coordinates"])
         self.client.logout()
         self.assertIn(self.client.get(f"/api/routes/{self.route.id}/gpx").status_code, (401, 404))
+
+    def test_saved_stops_are_in_the_export_until_the_line_changes(self):
+        self.import_route()
+        stop = {"osm_ref": "n1", "category": "food", "name": "Beizli", "lon": 9.01, "lat": 47.004, "along_m": 1}
+        RecurringRoute.objects.filter(pk=self.route.pk).update(stops=[stop])
+        self.assertIn(b"<name>Beizli</name>", self.client.get(f"/api/routes/{self.route.id}/gpx").content)
+        self.put(name="Neuer Name")
+        self.route.refresh_from_db()
+        self.assertEqual(self.route.stops, [stop], "a rename keeps the line and its stops")
+        self.put(importedCoordinates=[[9.0, 47.0], [9.02, 47.02]])
+        self.route.refresh_from_db()
+        self.assertEqual(self.route.stops, [])
+        self.assertNotIn(b"<wpt", self.client.get(f"/api/routes/{self.route.id}/gpx").content)
 
     def test_return_import_reverses_points_and_duration(self):
         self.import_route()

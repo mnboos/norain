@@ -23,8 +23,15 @@ from ..departures import local_iso
 from ..entitlements import entitlements_for
 from ..forecast_schemas import ForecastJobOut
 from ..geo import simplify_line, vertex_distances
-from ..journeys import FILL_CORRIDOR_M, LODGING_CORRIDOR_M, LODGING_WINDOW, lodging_candidates, rank_day
-from ..models import ForecastJob, Journey, JourneyDay, JourneyStage, route_point
+from ..journeys import (
+    FILL_CORRIDOR_M,
+    LODGING_CORRIDOR_M,
+    LODGING_WINDOW,
+    lodging_candidates,
+    rank_day,
+    stage_stops,
+)
+from ..models import ForecastJob, Journey, JourneyDay, JourneyStage, RecurringRoute, route_point
 from ..pois import LODGING_KINDS, POI_CATEGORIES, pois_along_sync
 from ..public_routes import ascent_m
 from ..random_rides import RandomPrefs, new_seed
@@ -33,6 +40,7 @@ from ..schedule import LOCAL_TZ, forecast_available_at
 from ..schemas import CamelSchema
 from ..system_events import notify_system
 from ..tasks import plan_journey, start_forecast_job
+from .gpx import gpx_response, limit_request
 from .recurring_route import (
     RecurringRouteIn,
     RecurringRouteOut,
@@ -589,10 +597,7 @@ async def save_variant_as_route(request: HttpRequest, journey_id: UUID, stage_id
     journey, stage = await _owned_stage(request, journey_id, stage_id)
     if journey.kind != Journey.Kind.RANDOM:
         raise HttpError(422, gettext("Nur Varianten einer Zufallsrunde lassen sich als Route speichern."))
-    line = stage.polyline_coordinates
-    heights = stage.vertex_elevations or []
-    if len(heights) == len(line):
-        line = [[lon, lat, h] if h is not None else [lon, lat] for (lon, lat), h in zip(line, heights, strict=True)]
+    line = _stage_line(stage)
     route_in = RecurringRouteIn(
         # The owner's own text from here on, so it is worded in the language they saved it in.
         name=data.name.strip() or gettext("%(name)s – Variante %(n)s") % {"name": journey.name, "n": stage.rank + 1},
@@ -610,7 +615,34 @@ async def save_variant_as_route(request: HttpRequest, journey_id: UUID, stage_id
         schedule_cron=data.schedule_cron,
         schedule_description=data.schedule_description,
     )
-    return await create_route(request, route_in)
+    route = await create_route(request, route_in)
+    # Kept on the row, never taken from the client: the variant's stops for the GPX download.
+    stops = stage_stops(stage)
+    if stops:
+        await RecurringRoute.objects.filter(pk=route.id).aupdate(stops=stops)
+    return route
+
+
+def _stage_line(stage: JourneyStage) -> list[list[float]]:
+    """The stage's line, with its stored heights where there is one per vertex."""
+    line = stage.polyline_coordinates
+    heights = stage.vertex_elevations or []
+    if len(heights) == len(line):
+        line = [[lon, lat, h] if h is not None else [lon, lat] for (lon, lat), h in zip(line, heights, strict=True)]
+    return line
+
+
+@router.get("/journeys/{journey_id}/stages/{stage_id}/gpx")
+async def journey_stage_gpx(request: HttpRequest, journey_id: UUID, stage_id: UUID):
+    """One stage as GPX: the line, and the stops it was routed through (breaks, gap-fill detours
+    and the night's lodging) as waypoints."""
+    limit_request(request, "export")
+    journey, stage = await _owned_stage(request, journey_id, stage_id)
+    if journey.kind == Journey.Kind.RANDOM:
+        name = gettext("%(name)s – Variante %(n)s") % {"name": journey.name, "n": stage.rank + 1}
+    else:
+        name = gettext("%(name)s – Tag %(n)s") % {"name": journey.name, "n": stage.day.index + 1}
+    return gpx_response(name, _stage_line(stage), stage_stops(stage, stage.day.lodging))
 
 
 @router.get("/journeys/{journey_id}/stages/{stage_id}/pois", response=list[PoiOut])

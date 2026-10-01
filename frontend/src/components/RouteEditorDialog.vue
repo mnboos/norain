@@ -333,7 +333,7 @@ function apply() {
             </q-card-section>
             <div ref="map" class="col" :style="{ minHeight: $q.screen.xs ? '0' : 'min(60dvh, 560px)' }" />
             <q-expansion-item v-if="previewSeconds && !loading" :label="t('elevation.title')">
-                <ElevationChart :coordinates="line" :total-seconds="previewSeconds" :vertex-times="previewTimes" />
+                <ElevationChart :profile="profile" :coordinates="line" :total-seconds="previewSeconds" :vertex-times="previewTimes" />
             </q-expansion-item>
             <q-card-actions>
                 <div class="text-caption q-ml-sm" aria-live="polite">

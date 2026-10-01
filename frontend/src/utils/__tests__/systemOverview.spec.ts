@@ -4,6 +4,8 @@ import {
     cacheFreshness,
     systemGeoJson,
     coverageGeoJson,
+    dataCoverageGeoJson,
+    ELEVATION_COLORS,
     statsUnder,
     systemQueryAffected,
     SYSTEM_TOPICS,
@@ -69,6 +71,35 @@ describe("system overview", () => {
         ];
         expect(coverageGeoJson(points, "forecast").features[0]?.properties?.status).toBe("usable");
         expect(coverageGeoJson(points, "ensemble").features[0]?.properties?.status).toBe("missing");
+    });
+});
+
+describe("map data coverage", () => {
+    const roads = [[8, 46, 9, 47]];
+    const elevation = { full: [[8, 46, 8.5, 47]], partial: [], fallback: [[8.5, 46, 9, 47]] };
+
+    it("draws only the layers switched on, as closed boxes", () => {
+        expect(dataCoverageGeoJson(roads, elevation, { roads: false, elevation: false }).features).toEqual([]);
+        const both = dataCoverageGeoJson(roads, elevation, { roads: true, elevation: true }).features;
+        expect(both.map(feature => String(feature.properties?.layer))).toEqual(["elevation", "elevation", "roads"]);
+        expect(both[1]?.properties?.color).toBe(ELEVATION_COLORS.fallback);
+        const geometry = both[2]?.geometry;
+        expect(geometry?.type === "Polygon" && geometry.coordinates[0]).toEqual([
+            [8, 46],
+            [9, 46],
+            [9, 47],
+            [8, 47],
+            [8, 46],
+        ]);
+    });
+
+    it("draws the roads before the elevation report has loaded", () => {
+        const features = dataCoverageGeoJson(roads, undefined, { roads: true, elevation: true }).features;
+        expect(features).toHaveLength(1);
+    });
+
+    it("is never refetched by a change notice", () => {
+        expect(systemQueryAffected(SYSTEM_TOPICS, ["system", "dataCoverage"])).toBe(false);
     });
 });
 

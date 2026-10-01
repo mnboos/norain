@@ -5,53 +5,52 @@ msgid ""
 msgstr ""
 "Project-Id-Version: meteolane\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-29 06:09+0100\n"
+"POT-Creation-Date: 2026-10-01 12:11+0200\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: .\core\api\billing.py:69
+#: core/api/billing.py:77
 msgid "Die Abrechnung ist auf diesem Server nicht eingerichtet."
 msgstr "Billing is not configured on this server."
 
-#: .\core\api\billing.py:120 .\core\api\billing.py:199
-#: .\core\api\billing.py:414 .\core\api\billing.py:432
-#: .\core\api\briefings.py:64 .\core\api\briefings.py:141
-#: .\core\api\briefings.py:190 .\core\api\recurring_route.py:195
+#: core/api/billing.py:146 core/api/billing.py:225 core/api/billing.py:440
+#: core/api/billing.py:458 core/api/briefings.py:64 core/api/briefings.py:141
+#: core/api/briefings.py:190 core/api/recurring_route.py:195
 msgid "Anmeldung erforderlich."
 msgstr "Authentication required."
 
-#: .\core\api\billing.py:127
+#: core/api/billing.py:153
 msgid "Bitte jährliche oder monatliche Zahlung wählen."
 msgstr "Choose annual or monthly billing."
 
-#: .\core\api\billing.py:144
+#: core/api/billing.py:170
 msgid "Verwalte dein bestehendes Abo im Kundenportal."
 msgstr "Manage your existing subscription in the billing portal."
 
-#: .\core\api\billing.py:151
+#: core/api/billing.py:177
 msgid "Die Zahlung wird verarbeitet. Bitte lade dein Konto gleich neu."
 msgstr "Payment is being processed. Please refresh your account shortly."
 
-#: .\core\api\billing.py:188
+#: core/api/billing.py:214
 msgid "Stripe hat keine Bezahlseite geliefert."
 msgstr "Stripe did not return a checkout URL."
 
-#: .\core\api\billing.py:206
+#: core/api/billing.py:232
 msgid "Noch kein Kundenkonto für die Abrechnung."
 msgstr "No billing account yet."
 
-#: .\core\api\billing.py:274
+#: core/api/billing.py:300
 msgid "bald"
 msgstr "soon"
 
-#: .\core\api\billing.py:279
+#: core/api/billing.py:305
 msgid "Dein MeteoLane Plus-Testzeitraum endet bald"
 msgstr "Your MeteoLane Plus trial ends soon"
 
-#: .\core\api\billing.py:281
+#: core/api/billing.py:307
 #, python-format
 msgid ""
 "Hallo %(name)s,\n"
@@ -68,55 +67,54 @@ msgstr ""
 "\n"
 "%(url)s\n"
 
-#: .\core\api\billing.py:419
+#: core/api/billing.py:445
 msgid "Die Testphase gibt es einmal pro Konto."
 msgstr "The trial is available once per account."
 
-#: .\core\api\billing.py:447
+#: core/api/billing.py:473
 msgid "Wähle bis zu zwei deiner aktiven Routen."
 msgstr "Choose up to two of your active routes."
 
-#: .\core\api\billing.py:452 .\core\api\briefings.py:79
-#: .\core\api\community.py:182 .\core\api\community.py:192
-#: .\core\api\community.py:501 .\core\api\community.py:521
-#: .\core\api\community.py:657 .\core\api\elevation.py:36
-#: .\core\api\elevation.py:39 .\core\api\recurring_route.py:205
+#: core/api/billing.py:478 core/api/briefings.py:79 core/api/community.py:182
+#: core/api/community.py:192 core/api/community.py:501
+#: core/api/community.py:521 core/api/community.py:657 core/api/elevation.py:36
+#: core/api/elevation.py:39 core/api/recurring_route.py:205
 msgid "Route nicht gefunden."
 msgstr "Route not found."
 
-#: .\core\api\briefings.py:74
+#: core/api/briefings.py:74
 msgid "Wähle E-Mail, Push oder Aus."
 msgstr "Choose email, push or off."
 
-#: .\core\api\briefings.py:83
+#: core/api/briefings.py:83
 msgid "Briefings brauchen eine aktive Plus-Route."
 msgstr "Ride briefings require an active Plus route."
 
-#: .\core\api\briefings.py:91
+#: core/api/briefings.py:91
 msgid "Plus umfasst Briefings für fünf Routen."
 msgstr "Plus includes briefings for five routes."
 
-#: .\core\api\briefings.py:93
+#: core/api/briefings.py:93
 msgid "E-Mail-Briefings sind nicht eingerichtet."
 msgstr "Email briefings are not configured."
 
-#: .\core\api\briefings.py:95
+#: core/api/briefings.py:95
 msgid "Erlaube zuerst Benachrichtigungen im Browser."
 msgstr "Enable browser notifications first."
 
-#: .\core\api\briefings.py:152 .\core\api\briefings.py:196
+#: core/api/briefings.py:152 core/api/briefings.py:196
 msgid "Ungültige Push-Anmeldung des Browsers."
 msgstr "Invalid browser push subscription."
 
-#: .\core\api\briefings.py:154 .\core\api\briefings.py:198
+#: core/api/briefings.py:154 core/api/briefings.py:198
 msgid "Push-Briefings brauchen Plus."
 msgstr "Push briefings require Plus."
 
-#: .\core\api\briefings.py:156 .\core\api\briefings.py:200
+#: core/api/briefings.py:156 core/api/briefings.py:200
 msgid "Push ist nicht eingerichtet."
 msgstr "Push is not configured."
 
-#: .\core\api\briefings.py:164
+#: core/api/briefings.py:164
 msgid ""
 "Dieser Browser ist mit einem anderen Konto verbunden. Schalte die "
 "Benachrichtigungen dort zuerst aus."
@@ -124,48 +122,48 @@ msgstr ""
 "This browser is connected to another account. Disable notifications there "
 "first."
 
-#: .\core\api\briefings.py:171
+#: core/api/briefings.py:171
 msgid "Höchstens fünf Push-Geräte pro Konto."
 msgstr "Maximum five push devices per account."
 
-#: .\core\api\briefings.py:203
+#: core/api/briefings.py:203
 msgid "Push ist auf diesem Gerät nicht aktiviert."
 msgstr "Push is not turned on on this device."
 
-#: .\core\api\briefings.py:205
+#: core/api/briefings.py:205
 msgid "Warte kurz, bevor du erneut testest."
 msgstr "Please wait a moment before testing again."
 
-#: .\core\api\briefings.py:208
+#: core/api/briefings.py:208
 msgid "MeteoLane – Testbenachrichtigung"
 msgstr "MeteoLane – Test notification"
 
-#: .\core\api\briefings.py:209
+#: core/api/briefings.py:209
 msgid "Push-Benachrichtigungen funktionieren auf diesem Gerät."
 msgstr "Push notifications work on this device."
 
-#: .\core\api\briefings.py:215
+#: core/api/briefings.py:215
 msgid "Der Push-Dienst hat die Nachricht abgelehnt."
 msgstr "The push service refused the message."
 
-#: .\core\api\community.py:69
+#: core/api/community.py:69
 #, python-format
 msgid "Eine von %(choices)s."
 msgstr "One of %(choices)s."
 
-#: .\core\api\community.py:134
+#: core/api/community.py:134
 msgid "Der Kommentar ist leer."
 msgstr "The comment is empty."
 
-#: .\core\api\community.py:174
+#: core/api/community.py:174
 msgid "Bitte melde dich an."
 msgstr "Please sign in."
 
-#: .\core\api\community.py:294
+#: core/api/community.py:294
 msgid "Die Strecke wird noch berechnet. Bitte gleich nochmal versuchen."
 msgstr "The route is still being calculated. Please try again in a moment."
 
-#: .\core\api\community.py:297
+#: core/api/community.py:297
 msgid ""
 "Zwischen den Privatsphäre-Zonen bleibt zu wenig Strecke. Wähle eine kleinere "
 "Zone."
@@ -173,401 +171,413 @@ msgstr ""
 "Too little of the route is left between the privacy zones. Choose a smaller "
 "zone."
 
-#: .\core\api\community.py:310
+#: core/api/community.py:310
 msgid "Bitte nochmal versuchen."
 msgstr "Please try again."
 
-#: .\core\api\community.py:340
+#: core/api/community.py:340
 #, python-format
 msgid "Höchstens %(n)s Fotos pro Route."
 msgstr "At most %(n)s photos per route."
 
-#: .\core\api\community.py:360
+#: core/api/community.py:360
 msgid "Das Foto ist grösser als 20 MB."
 msgstr "The photo is larger than 20 MB."
 
-#: .\core\api\community.py:362
+#: core/api/community.py:362
 msgid "Die Bildunterschrift ist zu lang."
 msgstr "The caption is too long."
 
-#: .\core\api\community.py:366
+#: core/api/community.py:366
 msgid "Ungültige Position."
 msgstr "Invalid position."
 
-#: .\core\api\community.py:380 .\core\api\community.py:413
-#: .\core\api\community.py:418
+#: core/api/community.py:380 core/api/community.py:413
+#: core/api/community.py:418
 msgid "Foto nicht gefunden."
 msgstr "Photo not found."
 
-#: .\core\api\community.py:468
+#: core/api/community.py:468
 msgid "bbox ist minLon,minLat,maxLon,maxLat"
 msgstr "bbox is minLon,minLat,maxLon,maxLat"
 
-#: .\core\api\community.py:542
+#: core/api/community.py:542
 msgid "Ungültige Abfahrtszeit."
 msgstr "Invalid departure time."
 
-#: .\core\api\community.py:585
+#: core/api/community.py:585
 msgid "Zu viele Kommentare. Bitte kurz warten."
 msgstr "Too many comments. Please wait a moment."
 
-#: .\core\api\community.py:594 .\core\api\community.py:603
-#: .\core\api\community.py:616
+#: core/api/community.py:594 core/api/community.py:603
+#: core/api/community.py:616
 msgid "Kommentar nicht gefunden."
 msgstr "Comment not found."
 
-#: .\core\api\coverage.py:70
+#: core/api/coverage.py:69
 msgid "Bitte gib eine gültige E-Mail-Adresse ein."
 msgstr "Please enter a valid email address."
 
-#: .\core\api\coverage.py:100 .\core\api\coverage.py:109
+#: core/api/coverage.py:99 core/api/coverage.py:108
 msgid "Unbekanntes Gebiet."
 msgstr "Unknown area."
 
-#: .\core\api\coverage.py:107
+#: core/api/coverage.py:106
 msgid "Dieses Gebiet deckt Meteolane schon ab."
 msgstr "Meteolane already covers this area."
 
-#: .\core\api\coverage.py:182
-msgid "Zu viele Stimmen. Bitte versuche es später noch einmal."
-msgstr "Too many votes. Please try again later."
-
-#: .\core\api\coverage.py:190
+#: core/api/coverage.py:172
 msgid ""
 "Mit diesem Browser wurde schon für dieses Gebiet gestimmt. Melde dich an, um "
 "mitzustimmen."
 msgstr ""
 "This browser has already voted for this area. Sign in to add your vote."
 
-#: .\core\api\coverage.py:195
+#: core/api/coverage.py:174
 msgid ""
 "Von hier aus wurden heute schon viele Stimmen abgegeben. Melde dich an, um "
 "mitzustimmen."
 msgstr ""
 "Many votes have already come from here today. Sign in to add your vote."
 
-#: .\core\api\coverage.py:201
+#: core/api/coverage.py:175
 msgid ""
 "Von hier aus wurde heute schon für dieses Gebiet gestimmt. Melde dich an, um "
 "mitzustimmen."
 msgstr ""
 "Someone here has already voted for this area today. Sign in to add your vote."
 
-#: .\core\api\coverage.py:226 .\core\api\fingerprint.py:31
-#: .\core\api\fingerprint.py:64
+#: core/api/coverage.py:200
+msgid "Zu viele Stimmen. Bitte versuche es später noch einmal."
+msgstr "Too many votes. Please try again later."
+
+#: core/api/coverage.py:241 core/api/fingerprint.py:33
+#: core/api/fingerprint.py:78
 msgid "Zu viele Anfragen. Bitte versuche es später noch einmal."
 msgstr "Too many requests. Please try again later."
 
-#: .\core\api\coverage.py:236
+#: core/api/coverage.py:251
 msgid "Dieser Link ist abgelaufen oder wurde schon abbestellt."
 msgstr "This link has expired or has already been used to unsubscribe."
 
-#: .\core\api\elevation.py:23
+#: core/api/elevation.py:23
 msgid "Höhendaten konnten nicht geladen werden. Bitte erneut versuchen."
 msgstr "The elevation data could not be loaded. Please try again."
 
-#: .\core\api\elevation.py:51 .\core\api\elevation.py:54
-#: .\core\api\journey.py:553
+#: core/api/elevation.py:51 core/api/elevation.py:54 core/api/journey.py:561
 msgid "Etappe nicht gefunden."
 msgstr "Stage not found."
 
-#: .\core\api\fingerprint.py:21
+#: core/api/fingerprint.py:21
 msgid "Die Browser-Erkennung ist ausgeschaltet."
 msgstr "Browser recognition is switched off."
 
-#: .\core\api\fingerprint.py:23 .\core\api\system.py:34
-#: .\core\auth\backend.py:13 .\core\auth\backend.py:21
+#: core/api/fingerprint.py:23 core/api/system.py:38 core/auth/backend.py:13
+#: core/auth/backend.py:21
 msgid "CSRF-Prüfung fehlgeschlagen."
 msgstr "CSRF check failed."
 
-#: .\core\api\fingerprint.py:27
+#: core/api/fingerprint.py:27
 msgid "Die Browser-Daten sind zu gross."
 msgstr "The browser data is too large."
 
-#: .\core\api\fingerprint.py:29 .\core\api\fingerprint.py:74
-#: .\core\api\fingerprint.py:86
+#: core/api/fingerprint.py:29 core/api/fingerprint.py:95
+#: core/api/fingerprint.py:100 core/api/fingerprint.py:110
+#: core/api/fingerprint.py:123
 msgid "Die Browser-Prüfung ist fehlgeschlagen."
 msgstr "The browser check failed."
 
-#: .\core\api\fingerprint.py:90 .\core\api\fingerprint.py:95
+#: core/api/fingerprint.py:102 core/api/fingerprint.py:127
+#: core/api/fingerprint.py:140
 msgid "Die Browser-Prüfung ist gerade nicht verfügbar."
 msgstr "The browser check is unavailable right now."
 
-#: .\core\api\gpx.py:40
+#: core/api/gpx.py:40
 msgid "Zu viele Anfragen. Bitte kurz warten."
 msgstr "Too many requests. Please wait a moment."
 
-#: .\core\api\gpx.py:54 .\core\gpx.py:45
+#: core/api/gpx.py:54 core/gpx.py:46
 msgid "Die GPX-Datei darf höchstens 10 MiB gross sein."
 msgstr "The GPX file may be at most 10 MiB."
 
-#: .\core\api\gpx.py:88 .\core\api\gpx.py:101
+#: core/api/gpx.py:88 core/api/gpx.py:101
 msgid "Die Strecke wird noch berechnet."
 msgstr "The route is still being calculated."
 
-#: .\core\api\gpx.py:122 .\core\api\recurring_route.py:409
+#: core/api/gpx.py:122 core/api/recurring_route.py:416
 msgid "Für diese Punkte wurde keine Route gefunden."
 msgstr "No route was found for these points."
 
-#: .\core\api\gpx.py:149 .\core\api\recurring_route.py:309
-#: .\core\api\recurring_route.py:432 .\core\api\recurring_route.py:572
+#: core/api/gpx.py:149 core/api/recurring_route.py:309
+#: core/api/recurring_route.py:439 core/api/recurring_route.py:582
 msgid "Der Abfahrtsvergleich braucht Plus."
 msgstr "Departure comparison requires Plus."
 
-#: .\core\api\journey.py:56
+#: core/api/journey.py:64
 #, python-format
 msgid "Unbekannte Kategorien: %(names)s"
 msgstr "Unknown categories: %(names)s"
 
-#: .\core\api\journey.py:63
+#: core/api/journey.py:71
 #, python-format
 msgid "Unbekannte Unterkunftsarten: %(names)s"
 msgstr "Unknown lodging kinds: %(names)s"
 
-#: .\core\api\journey.py:127
+#: core/api/journey.py:135
 msgid "Ein Tag braucht ein Zeit- oder Distanzlimit."
 msgstr "A day needs a time or distance limit."
 
-#: .\core\api\journey.py:129
+#: core/api/journey.py:137
 msgid "Die späteste Ankunft muss nach dem frühesten Start liegen."
 msgstr "The latest arrival must be after the earliest start."
 
-#: .\core\api\journey.py:329
+#: core/api/journey.py:337
 msgid "Reise nicht gefunden."
 msgstr "Journey not found."
 
-#: .\core\api\journey.py:382
+#: core/api/journey.py:390
 #, python-format
 msgid ""
 "Der %(plan)s-Tarif erlaubt %(n)s Runden. Lösche eine oder wechsle zu Plus."
 msgstr "The %(plan)s plan allows %(n)s rides. Delete one or switch to Plus."
 
-#: .\core\api\journey.py:388
+#: core/api/journey.py:396
 #, python-format
 msgid ""
 "Der %(plan)s-Tarif erlaubt %(n)s Reisen. Lösche eine oder wechsle zu Plus."
 msgstr "The %(plan)s plan allows %(n)s journeys. Delete one or switch to Plus."
 
-#: .\core\api\journey.py:407
+#: core/api/journey.py:415
 msgid "Eine Reise kann ihre Art nicht ändern."
 msgstr "A journey cannot change its kind."
 
-#: .\core\api\journey.py:562
+#: core/api/journey.py:570
 msgid "Diese Etappe liegt ausserhalb des Vorhersagezeitraums."
 msgstr "This stage is outside the forecast period."
 
-#: .\core\api\journey.py:566
+#: core/api/journey.py:574
 msgid "Speichere die Variante als Route, dann gibt es ihre Vorhersage."
 msgstr "Save the variant as a route to get its forecast."
 
-#: .\core\api\journey.py:589
+#: core/api/journey.py:597
 msgid "Nur Varianten einer Zufallsrunde lassen sich als Route speichern."
 msgstr "Only variants of a random ride can be saved as a route."
 
-#: .\core\api\journey.py:596
+#: core/api/journey.py:601 core/api/journey.py:640
 #, python-format
 msgid "%(name)s – Variante %(n)s"
 msgstr "%(name)s – variant %(n)s"
 
-#: .\core\api\journey.py:597
+#: core/api/journey.py:602
 msgid "Aus einer Zufallsrunde"
 msgstr "From a random ride"
 
-#: .\core\api\places.py:94 .\core\api\places.py:99
+#: core/api/journey.py:642
+#, python-format
+msgid "%(name)s – Tag %(n)s"
+msgstr "%(name)s – day %(n)s"
+
+#: core/api/places.py:94 core/api/places.py:99
 msgid "Kein Ort an dieser Stelle."
 msgstr "No place at this spot."
 
-#: .\core\api\recurring_route.py:54
+#: core/api/recurring_route.py:54
 msgid "Jeder Punkt ist [lon, lat]."
 msgstr "Each point is [lon, lat]."
 
-#: .\core\api\recurring_route.py:60
+#: core/api/recurring_route.py:60
 #, python-format
 msgid "Höchstens %(n)s Zwischenpunkte."
 msgstr "At most %(n)s via points."
 
-#: .\core\api\recurring_route.py:297
+#: core/api/recurring_route.py:297
 #, python-format
 msgid "Der %(plan)s-Tarif erlaubt %(n)s aktive Routen. Mit Plus hast du mehr."
 msgstr "The %(plan)s plan allows %(n)s active routes. Plus gives you more."
 
-#: .\core\api\recurring_route.py:311 .\core\api\recurring_route.py:444
+#: core/api/recurring_route.py:311 core/api/recurring_route.py:451
 msgid "Bitte Strecke und Fahrzeit angeben."
 msgstr "Please give a route and a riding time."
 
-#: .\core\api\recurring_route.py:403
+#: core/api/recurring_route.py:410
 msgid "Zu viele Routenberechnungen. Bitte kurz warten."
 msgstr "Too many route calculations. Please wait a moment."
 
-#: .\core\api\recurring_route.py:569
+#: core/api/recurring_route.py:579
 msgid ""
 "Diese Route ist pausiert. Wähle deine aktiven Routen im Konto oder teste "
 "Plus."
 msgstr ""
 "This route is paused. Choose your active routes in your account or try Plus."
 
-#: .\core\api\recurring_route.py:574
+#: core/api/recurring_route.py:584
 msgid ""
 "Die Strecke wird noch berechnet. Bitte in ein paar Sekunden erneut versuchen."
 msgstr "Route geometry not yet computed. Try again in a few seconds."
 
-#: .\core\api\recurring_route.py:606
+#: core/api/recurring_route.py:616
 msgid ""
 "Du hast die Grenze deiner aktiven Routen erreicht. Plus umfasst 20 Routen."
 msgstr "Your active route limit is reached. Plus includes 20 routes."
 
-#: .\core\api\recurring_route.py:622
+#: core/api/recurring_route.py:632
 msgid "Du hast die Grenze deiner aktiven Routen erreicht."
 msgstr "Your active route limit is reached."
 
-#: .\core\api\recurring_route.py:650
+#: core/api/recurring_route.py:660
 msgid "Eine Rückfahrt kann keine eigene Rückfahrt haben."
 msgstr "A return journey cannot have another return journey."
 
-#: .\core\api\recurring_route.py:664
+#: core/api/recurring_route.py:674
+#, python-format
+msgid "%(name)s – Rückweg"
+msgstr "%(name)s – return"
+
+#: core/api/recurring_route.py:674
 #, python-format
 msgid "%(name)s – Rückfahrt"
 msgstr "%(name)s – return"
 
-#: .\core\api\route_weather.py:27
+#: core/api/route_weather.py:27
 #, python-format
 msgid "Unbekanntes Profil %(profile)r; erwartet: %(choices)s"
 msgstr "Unknown profile %(profile)r; expected one of %(choices)s"
 
-#: .\core\api\route_weather.py:81
-msgid "Der Abfahrtsvergleich braucht Plus. Teste Plus 14 Tage kostenlos."
-msgstr "Departure comparison requires Plus. Try Plus free for 14 days."
+#: core/api/route_weather.py:83
+#, python-format
+msgid "Der Abfahrtsvergleich braucht Plus. Teste Plus %(days)d Tage kostenlos."
+msgstr "Departure comparison requires Plus. Try Plus free for %(days)d days."
 
-#: .\core\api\route_weather.py:129
+#: core/api/route_weather.py:132
 msgid "Messpunkt nicht gefunden."
 msgstr "Sample not found."
 
-#: .\core\api\route_weather.py:149 .\core\api\route_weather.py:156
+#: core/api/route_weather.py:152 core/api/route_weather.py:159
 msgid "Vorhersage-Auftrag nicht gefunden."
 msgstr "Forecast job not found."
 
-#: .\core\api\route_weather.py:159
+#: core/api/route_weather.py:162
 msgid "Der Vorhersage-Auftrag ist noch nicht fertig."
 msgstr "Forecast job is not finished."
 
-#: .\core\api\system.py:36 .\core\auth\views.py:128 .\core\auth\views.py:170
-#: .\core\auth\views.py:189
+#: core/api/system.py:40 core/auth/views.py:128 core/auth/views.py:170
+#: core/auth/views.py:189
 msgid "Bitte zuerst anmelden."
 msgstr "Sign in first."
 
-#: .\core\api\system.py:38
+#: core/api/system.py:42
 msgid "Administrator-Zugang und Admin-Bestätigung sind erforderlich."
 msgstr "Administrator access and admin verification are required."
 
-#: .\core\api\system.py:109
+#: core/api/system.py:113
 msgid "bbox muss west,süd,ost,nord sein."
 msgstr "bbox must be west,south,east,north."
 
-#: .\core\api\system.py:113
+#: core/api/system.py:117
 msgid "Ungültiger Kartenausschnitt."
 msgstr "Invalid map bounds."
 
-#: .\core\api\system.py:275
+#: core/api/system.py:444
 msgid "Ungültige Zelle oder Seite."
 msgstr "Invalid cell or page."
 
-#: .\core\api\system.py:376
+#: core/api/system.py:545
 msgid "Keine gespeicherte Routengeometrie oder Messpunkte."
 msgstr "No stored route geometry or sample points."
 
-#: .\core\api\system.py:378
+#: core/api/system.py:547
 msgid "Kein gültiger Abfahrtstermin."
 msgstr "No valid departure."
 
-#: .\core\api\system.py:384
+#: core/api/system.py:553
 msgid "Diese Abfahrt liegt in der Vergangenheit."
 msgstr "This departure is in the past."
 
-#: .\core\api\system.py:386
+#: core/api/system.py:555
 msgid "Diese Fahrt liegt ausserhalb des Vorhersagezeitraums."
 msgstr "This ride is outside the forecast period."
 
-#: .\core\api\system.py:453
+#: core/api/system.py:622
 msgid "Ungültige Seite."
 msgstr "Invalid page."
 
-#: .\core\auth\adapter.py:77 .\core\auth\views.py:154
+#: core/auth/adapter.py:77 core/auth/views.py:154
 msgid "Dieser Benutzername ist schon vergeben."
 msgstr "This username is already taken."
 
-#: .\core\auth\adapter.py:84
+#: core/auth/adapter.py:84
 msgid "Diese E-Mail-Adresse kann nicht verwendet werden."
 msgstr "This email address cannot be used."
 
-#: .\core\auth\device_throttle.py:86
+#: core/auth/device_throttle.py:116
 msgid ""
 "Zu viele Versuche von diesem Browser. Bitte versuche es später noch einmal."
 msgstr "Too many attempts from this browser. Please try again later."
 
-#: .\core\auth\lockout.py:38
+#: core/auth/lockout.py:38
 msgid ""
 "Zu viele fehlgeschlagene Anmeldeversuche. Bitte in 30 Minuten erneut "
 "versuchen."
 msgstr "Too many failed sign-in attempts. Please try again in 30 minutes."
 
-#: .\core\auth\views.py:84
+#: core/auth/views.py:84
 msgid "Ein Benutzername ist erforderlich."
 msgstr "A username is required."
 
-#: .\core\auth\views.py:95
+#: core/auth/views.py:95
 msgid "Unbekannter Velotyp."
 msgstr "Unknown bike profile."
 
-#: .\core\auth\views.py:100
+#: core/auth/views.py:100
 msgid "Unbekannte Sprache."
 msgstr "Unknown language."
 
-#: .\core\auth\views.py:130
+#: core/auth/views.py:130
 msgid "Dieses Konto ist schon eingerichtet."
 msgstr "This account is already set up."
 
-#: .\core\auth\views.py:172
+#: core/auth/views.py:172
 msgid "Zu viele Prüfungen. Bitte einen Moment warten."
 msgstr "Too many checks. Please wait a moment."
 
-#: .\core\auth\views.py:202
+#: core/auth/views.py:202
 msgid "Nichts zu ändern."
 msgstr "Nothing to change."
 
-#: .\core\briefings.py:24
+#: core/briefings.py:24
 msgid "Nicht genügend Wetterdaten zum Vergleichen der Abfahrtszeiten."
 msgstr "Not enough weather data to compare departure times."
 
-#: .\core\briefings.py:25
+#: core/briefings.py:25
 msgid "Voraussichtlich die günstigsten Bedingungen im gewählten Zeitfenster."
 msgstr "Probably the best conditions in the chosen time window."
 
-#: .\core\briefings.py:26
+#: core/briefings.py:26
 msgid "Ähnliche Bedingungen – deine gewünschte Abfahrtszeit passt bereits."
 msgstr "Similar conditions – your requested departure already works."
 
-#: .\core\briefings.py:27
+#: core/briefings.py:27
 msgid ""
 "Deine gewünschte Abfahrtszeit bietet bereits die günstigsten Bedingungen."
 msgstr "Your requested departure already has the best conditions."
 
-#: .\core\briefings.py:28
+#: core/briefings.py:28
 msgid "Weniger Regen während deiner Fahrt."
 msgstr "Less rain during your ride."
 
-#: .\core\briefings.py:29
+#: core/briefings.py:29
 msgid "Weniger Gegenwind während deiner Fahrt."
 msgstr "Less headwind during your ride."
 
-#: .\core\briefings.py:30
+#: core/briefings.py:30
 msgid "Angenehmere Temperaturen während deiner Fahrt."
 msgstr "More pleasant temperatures during your ride."
 
-#: .\core\briefings.py:31
+#: core/briefings.py:31
 msgid "Geringeres Frostrisiko während deiner Fahrt."
 msgstr "Lower risk of frost during your ride."
 
-#: .\core\briefings.py:46
+#: core/briefings.py:48
 #, python-format
 msgid ""
 "%(route)s: Wetterdaten sind derzeit nicht verfügbar. Bitte prüfe die "
@@ -576,7 +586,7 @@ msgstr ""
 "%(route)s: weather data is not available right now. Please check the "
 "forecast before you set off."
 
-#: .\core\briefings.py:52
+#: core/briefings.py:54
 #, python-format
 msgid ""
 "%(route)s: Die Wetterdaten sind unvollständig. Bitte prüfe die Vorhersage "
@@ -585,22 +595,22 @@ msgstr ""
 "%(route)s: the weather data is incomplete. Please check the forecast before "
 "you set off."
 
-#: .\core\briefings.py:55
+#: core/briefings.py:57
 #, python-format
 msgid "Deine Fahrt: %(route)s"
 msgstr "Your ride: %(route)s"
 
-#: .\core\briefings.py:64
+#: core/briefings.py:66
 #, python-format
 msgid "Empfohlene Abfahrt: %(time)s. %(explanation)s"
 msgstr "Recommended departure: %(time)s. %(explanation)s"
 
-#: .\core\briefings.py:70
+#: core/briefings.py:72
 #, python-format
 msgid "Höchstes Regenrisiko an einem Punkt: %(percent)s %%."
 msgstr "Highest rain risk at one point: %(percent)s %%."
 
-#: .\core\briefings.py:75
+#: core/briefings.py:77
 #, python-format
 msgid ""
 "Prognostizierte maximale Regenintensität: %(rate).1f mm/h. Regenrisiko nicht "
@@ -609,39 +619,39 @@ msgstr ""
 "Forecast maximum rain intensity: %(rate).1f mm/h. Rain risk not fully "
 "available."
 
-#: .\core\briefings.py:80
+#: core/briefings.py:82
 msgid "Regenrisiko nicht vollständig verfügbar."
 msgstr "Rain risk not fully available."
 
-#: .\core\briefings.py:84
+#: core/briefings.py:86
 #, python-format
 msgid "Temperatur entlang der Route: %(low).0f–%(high).0f °C."
 msgstr "Temperature along the route: %(low).0f–%(high).0f °C."
 
-#: .\core\briefings.py:88
+#: core/briefings.py:90
 #, python-format
 msgid "Gefühlt im Schnitt: %(felt).0f °C."
 msgstr "Feels like on average: %(felt).0f °C."
 
-#: .\core\briefings.py:89
+#: core/briefings.py:91
 msgid "Die Vorhersage kann sich ändern; dies ist keine laufende Wetterwarnung."
 msgstr "The forecast can change; this is not a running weather warning."
 
-#: .\core\briefings.py:95 .\core\briefings.py:151
+#: core/briefings.py:97 core/briefings.py:153
 msgid "MeteoLane – Deine Fahrt"
 msgstr "MeteoLane – Your ride"
 
-#: .\core\briefings.py:146
+#: core/briefings.py:148
 #, python-format
 msgid "Briefings verwalten: %(url)s"
 msgstr "Manage briefings: %(url)s"
 
-#: .\core\coverage.py:236
+#: core/coverage.py:360
 #, python-format
 msgid "Bitte bestätige: Nachricht, sobald Meteolane %(area)s abdeckt"
 msgstr "Please confirm: a message once Meteolane covers %(area)s"
 
-#: .\core\coverage.py:238
+#: core/coverage.py:362
 #, python-format
 msgid ""
 "Hallo,\n"
@@ -670,12 +680,12 @@ msgstr ""
 "You can unsubscribe at any time here:\n"
 "%(unsubscribe)s\n"
 
-#: .\core\coverage.py:286
+#: core/coverage.py:410
 #, python-format
 msgid "Meteolane deckt jetzt %(area)s ab"
 msgstr "Meteolane now covers %(area)s"
 
-#: .\core\coverage.py:288
+#: core/coverage.py:412
 #, python-format
 msgid ""
 "Hallo,\n"
@@ -696,79 +706,135 @@ msgstr ""
 "\n"
 "This was the only message about it. We have now deleted your address.\n"
 
-#: .\core\departures.py:42
+#: core/departures.py:42
 msgid "Die Flexibilität muss 0–120 Minuten in 15-Minuten-Schritten sein."
 msgstr "Flexibility must be 0–120 minutes in 15-minute steps."
 
-#: .\core\departures.py:52
+#: core/departures.py:52
 msgid "Die Abfahrt fällt in die Zeitumstellung."
 msgstr "The departure falls in a daylight-saving clock gap."
 
-#: .\core\gpx.py:22
+#: core/gpx.py:23
 msgid "Eine Strecke braucht 2 bis 100000 Punkte."
 msgstr "A route needs 2 to 100000 points."
 
-#: .\core\gpx.py:26
+#: core/gpx.py:27
 msgid "Ein Punkt muss Längengrad, Breitengrad und optional Höhe enthalten."
 msgstr "A point must hold longitude, latitude and optionally elevation."
 
-#: .\core\gpx.py:29
+#: core/gpx.py:30
 msgid "Die Datei enthält ungültige Koordinaten."
 msgstr "The file contains invalid coordinates."
 
-#: .\core\gpx.py:32
+#: core/gpx.py:33
 msgid "Die Strecke braucht mindestens zwei unterschiedliche Positionen."
 msgstr "The route needs at least two different positions."
 
-#: .\core\gpx.py:49
+#: core/gpx.py:50
 msgid "Die Datei ist kein gültiges GPX-XML."
 msgstr "The file is not valid GPX XML."
 
-#: .\core\gpx.py:52
+#: core/gpx.py:53
 msgid "Unbekanntes GPX-Format."
 msgstr "Unknown GPX format."
 
-#: .\core\gpx.py:55
+#: core/gpx.py:56
 msgid "Bitte eine GPX-Datei der Version 1.0 oder 1.1 wählen."
 msgstr "Please choose a GPX file of version 1.0 or 1.1."
 
-#: .\core\gpx.py:58
+#: core/gpx.py:59
 msgid "Die GPX-Datei darf höchstens 100000 Punkte enthalten."
 msgstr "The GPX file may contain at most 100000 points."
 
-#: .\core\gpx.py:76
+#: core/gpx.py:77
 msgid "Die Datei enthält ungültige Koordinaten oder Höhen."
 msgstr "The file contains invalid coordinates or elevations."
 
-#: .\core\gpx.py:91
+#: core/gpx.py:92
 msgid "Keine Strecke gefunden. Einzelne Wegpunkte reichen nicht aus."
 msgstr "No track found. Single waypoints are not enough."
 
-#: .\core\gpx.py:121
+#: core/gpx.py:122
 msgid "Die Fahrzeit muss zwischen einer Sekunde und 16 Tagen liegen."
 msgstr "The riding time must be between one second and 16 days."
 
-#: .\core\photos.py:48
+#: core/photos.py:48
 msgid "Nur JPEG-, PNG- oder WebP-Fotos."
 msgstr "Only JPEG, PNG or WebP photos."
 
-#: .\core\photos.py:50
+#: core/photos.py:50
 msgid "Das Foto ist zu gross."
 msgstr "The photo is too large."
 
-#: .\core\photos.py:54
+#: core/photos.py:54
 msgid "Die Datei ist kein lesbares Foto."
 msgstr "The file is not a readable photo."
 
-#: .\core\route_input.py:36
+#: core/pois.py:66
+msgid "Toilette"
+msgstr "Toilet"
+
+#: core/pois.py:67
+msgid "Grillstelle"
+msgstr "Barbecue spot"
+
+#: core/pois.py:68
+msgid "Trinkwasser"
+msgstr "Drinking water"
+
+#: core/pois.py:69
+msgid "Automat: Essen"
+msgstr "Vending: food"
+
+#: core/pois.py:70
+msgid "Automat: Getränke"
+msgstr "Vending: drinks"
+
+#: core/pois.py:71
+msgid "Automat: Süsses"
+msgstr "Vending: sweets"
+
+#: core/pois.py:72
+msgid "Automat: Kaffee"
+msgstr "Vending: coffee"
+
+#: core/pois.py:73
+msgid "Unterstand"
+msgstr "Shelter"
+
+#: core/pois.py:74
+msgid "Veloreparatur"
+msgstr "Bike repair"
+
+#: core/pois.py:75
+msgid "Essen"
+msgstr "Food"
+
+#: core/pois.py:76
+msgid "Einkauf"
+msgstr "Groceries"
+
+#: core/pois.py:77
+msgid "E-Bike-Laden"
+msgstr "E-bike charging"
+
+#: core/pois.py:78
+msgid "Bahnhof"
+msgstr "Train station"
+
+#: core/pois.py:79
+msgid "Unterkunft"
+msgstr "Lodging"
+
+#: core/route_input.py:36
 msgid "Bitte eine Fahrzeit angeben."
 msgstr "Please give a riding time."
 
-#: .\core\route_input.py:39
+#: core/route_input.py:39
 msgid "Höchstens 15 Zwischenpunkte sind erlaubt."
 msgstr "At most 15 via points are allowed."
 
-#: .\core\templates\account\email\account_already_exists_message.txt:1
+#: core/templates/account/email/account_already_exists_message.txt:1
 #, python-format
 msgid ""
 "Hallo\n"
@@ -785,16 +851,16 @@ msgstr ""
 "\n"
 "Sign in with a code we send you by email:"
 
-#: .\core\templates\account\email\account_already_exists_message.txt:9
-#: .\core\templates\account\email\login_code_message.txt:9
+#: core/templates/account/email/account_already_exists_message.txt:9
+#: core/templates/account/email/login_code_message.txt:9
 msgid "Warst du das nicht? Dann kannst du diese E-Mail ignorieren."
 msgstr "Wasn't you? Then you can ignore this email."
 
-#: .\core\templates\account\email\account_already_exists_subject.txt:1
+#: core/templates/account/email/account_already_exists_subject.txt:1
 msgid "Du hast bereits ein Konto"
 msgstr "You already have an account"
 
-#: .\core\templates\account\email\email_confirmation_signup_message.txt:1
+#: core/templates/account/email/email_confirmation_signup_message.txt:1
 #, python-format
 msgid ""
 "Hallo\n"
@@ -811,14 +877,14 @@ msgstr ""
 "\n"
 "Your confirmation code:"
 
-#: .\core\templates\account\email\email_confirmation_signup_message.txt:9
+#: core/templates/account/email/email_confirmation_signup_message.txt:9
 msgid ""
 "Gib ihn im Fenster ein, in dem du dich registriert hast. Er ist 15 Minuten "
 "gültig."
 msgstr ""
 "Enter it in the window where you signed up. It is valid for 15 minutes."
 
-#: .\core\templates\account\email\email_confirmation_signup_message.txt:11
+#: core/templates/account/email/email_confirmation_signup_message.txt:11
 msgid ""
 "Warst du das nicht? Dann kannst du diese E-Mail ignorieren; das Konto wird "
 "nach einer Woche gelöscht."
@@ -826,11 +892,11 @@ msgstr ""
 "Wasn't you? Then you can ignore this email; the account is deleted after a "
 "week."
 
-#: .\core\templates\account\email\email_confirmation_signup_subject.txt:1
+#: core/templates/account/email/email_confirmation_signup_subject.txt:1
 msgid "Dein Bestätigungscode"
 msgstr "Your confirmation code"
 
-#: .\core\templates\account\email\login_code_message.txt:1
+#: core/templates/account/email/login_code_message.txt:1
 #, python-format
 msgid ""
 "Hallo\n"
@@ -841,10 +907,10 @@ msgstr ""
 "\n"
 "Your sign-in code for %(site_name)s:"
 
-#: .\core\templates\account\email\login_code_message.txt:7
+#: core/templates/account/email/login_code_message.txt:7
 msgid "Gib ihn im Fenster ein, in dem du ihn angefordert hast."
 msgstr "Enter it in the window where you requested it."
 
-#: .\core\templates\account\email\login_code_subject.txt:1
+#: core/templates/account/email/login_code_subject.txt:1
 msgid "Dein Anmeldecode"
 msgstr "Your sign-in code"

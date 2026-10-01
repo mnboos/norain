@@ -85,6 +85,21 @@ Steps 2 and 3 don't depend on each other. Run them in either order.
 
 Then do [after every build](build-routing-graph.md#5-validate-activate-and-check).
 
+The system page (`/system`, "Kartendaten") shows what the running graph, its terrain and the
+Photon index cover. A Photon import from dumps counts the places per country on the way and
+writes `meteolane-coverage.json` beside the index. A prebuilt `.tar.bz2` index only records
+its file name. For an index imported before this existed, count the same dumps again without
+importing them:
+
+```bash
+just photon-coverage-backfill data/downloads/photon/*.jsonl.zst
+just graph-cells-backfill bike-europe-cycling.osm.pbf
+just elevation-coverage-backfill
+```
+
+Count the dumps the index was actually built from: newer downloads give different numbers.
+Run `graph-cells-backfill` before `elevation-coverage-backfill`, which uses the graph's cells.
+
 ## Update the data later
 
 ```bash

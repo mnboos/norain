@@ -177,6 +177,9 @@ class RecurringRoute(models.Model):
         max_length=20, default="graphhopper", choices=[("graphhopper", "GraphHopper"), ("imported", "Imported path")]
     )
     imported_coordinates = models.JSONField(default=list, blank=True)
+    # Denormalised POIs (core.pois.PoiHit.as_json) the line was routed through, no FK: a saved
+    # random-ride variant keeps its stops for the GPX download. Cleared when the line changes.
+    stops = models.JSONField(default=list, blank=True)
     duration_seconds = models.PositiveIntegerField(null=True, blank=True)
 
     # Pre-computed route geometry (populated by background task on create/update)
@@ -302,7 +305,7 @@ class ForecastCell(models.Model):
 
 
 class EnsembleCell(models.Model):
-    """Cached ensemble precipitation probability for a ~1 km² grid cell.
+    """Cached ensemble data for a ~5 km grid cell (``grid.ENSEMBLE_CELL_DEG``).
 
     Stores the full ensemble API response (hourly, multi-model) so POP
     can be computed for any ETA within the forecast window.

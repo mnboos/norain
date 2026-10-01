@@ -7,8 +7,8 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import "maplibre-gl/dist/maplibre-gl.css";
 import lightStyle from "@/assets/map-styles/positron.json?url";
 import darkStyle from "@/assets/map-styles/dark-matter.json?url";
-import type { SystemFeature, SystemCoveragePoint } from "@norain/api/models";
-import { systemGeoJson, coverageGeoJson, featureKey } from "@/utils/systemOverview";
+import type { SystemFeature, SystemCoveragePoint, SystemElevationBoxes } from "@norain/api/models";
+import { systemGeoJson, coverageGeoJson, dataCoverageGeoJson, featureKey } from "@/utils/systemOverview";
 
 const { t } = useI18n();
 
@@ -20,6 +20,10 @@ const props = defineProps<{
     coverageKind: "forecast" | "ensemble";
     now: number;
     maxAgeSeconds: number;
+    roadBoxes: number[][];
+    elevationBoxes?: SystemElevationBoxes;
+    showRoads: boolean;
+    showElevation: boolean;
 }>();
 const emit = defineEmits<{
     viewport: [value: { bbox: string; zoom: number }];
@@ -45,20 +49,57 @@ function reportViewport() {
         zoom: map.getZoom(),
     });
 }
+function dataCoverage() {
+    return dataCoverageGeoJson(props.roadBoxes, props.elevationBoxes, {
+        roads: props.showRoads,
+        elevation: props.showElevation,
+    });
+}
 function update() {
     if (!map) return;
     const features = map.getSource("system"),
-        coverage = map.getSource("coverage");
-    if (!(features instanceof GeoJSONSource) || !(coverage instanceof GeoJSONSource)) return;
+        coverage = map.getSource("coverage"),
+        area = map.getSource("data-coverage");
+    if (
+        !(features instanceof GeoJSONSource) ||
+        !(coverage instanceof GeoJSONSource) ||
+        !(area instanceof GeoJSONSource)
+    )
+        return;
     void features.setData(systemGeoJson(props.items, props.now, props.maxAgeSeconds));
     void coverage.setData(coverageGeoJson(props.points, props.coverageKind));
+    void area.setData(dataCoverage());
     map.setFilter("selected-route", ["==", ["get", "key"], props.selected ? featureKey(props.selected) : ""]);
 }
 function installLayers() {
     if (!map || map.getSource("system")) return;
     map.addSource("system", { type: "geojson", data: systemGeoJson(props.items, props.now, props.maxAgeSeconds) });
     map.addSource("coverage", { type: "geojson", data: coverageGeoJson(props.points, props.coverageKind) });
+    map.addSource("data-coverage", { type: "geojson", data: dataCoverage() });
     const before = map.getStyle().layers.find(layer => layer.type === "symbol")?.id;
+    // Map data coverage lies under everything else: it is the background the rest is read against.
+    map.addLayer(
+        {
+            id: "elevation-coverage",
+            type: "fill",
+            source: "data-coverage",
+            filter: ["==", ["get", "layer"], "elevation"],
+            paint: { "fill-color": ["get", "color"], "fill-opacity": 0.3, "fill-antialias": false },
+        },
+        before,
+    );
+    map.addLayer(
+        {
+            id: "road-coverage",
+            type: "fill",
+            source: "data-coverage",
+            filter: ["==", ["get", "layer"], "roads"],
+            // A fill, not outlines: every run of cells is its own box, and their shared edges
+            // would draw a grid.
+            paint: { "fill-color": ["get", "color"], "fill-opacity": 0.2, "fill-antialias": false },
+        },
+        before,
+    );
     map.addLayer(
         {
             id: "cell-hit",
@@ -164,7 +205,21 @@ onMounted(() => {
         emit("error", t("system.mapPartial"));
     });
 });
-watch(() => [props.items, props.selected, props.points, props.coverageKind, props.now, props.maxAgeSeconds], update);
+watch(
+    () => [
+        props.items,
+        props.selected,
+        props.points,
+        props.coverageKind,
+        props.now,
+        props.maxAgeSeconds,
+        props.roadBoxes,
+        props.elevationBoxes,
+        props.showRoads,
+        props.showElevation,
+    ],
+    update,
+);
 watch(
     () => $q.dark.isActive,
     dark => map?.setStyle(dark ? darkStyle : lightStyle),

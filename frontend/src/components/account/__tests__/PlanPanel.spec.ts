@@ -1,3 +1,4 @@
+import type { PlanOffer } from "@/services/billing";
 import { flushPromises, mount } from "@vue/test-utils";
 import { Quasar } from "quasar";
 import { VueQueryPlugin, QueryClient } from "@tanstack/vue-query";
@@ -19,7 +20,23 @@ interface TestEntitlement {
     complimentaryUntil: string | null;
     trialEndsAt: string | null;
     paidSubscription: boolean;
+    offer: PlanOffer;
 }
+// The figures the texts quote come from the server; these are made up on purpose.
+const OFFER: PlanOffer = {
+    freeRoutes: 2,
+    plusRoutes: 20,
+    plusBriefingRoutes: 5,
+    freeJourneys: 1,
+    plusJourneys: 10,
+    plusAlternatives: 3,
+    freeRandomRides: 3,
+    plusRandomRides: 20,
+    trialDays: 21,
+    briefingLeadMinutes: 60,
+    briefingsPerDay: 10,
+    prices: { annual: 31, monthly: 4.5, currency: "EUR" },
+};
 const entitlement = ref<TestEntitlement>({
     plan: "free",
     trialEligible: true,
@@ -29,6 +46,7 @@ const entitlement = ref<TestEntitlement>({
     complimentaryUntil: null,
     trialEndsAt: null,
     paidSubscription: false,
+    offer: OFFER,
 });
 vi.mock("@/composables/useEntitlements", () => ({
     useEntitlements: () => ({ entitlements: entitlement, isPro: computed(() => entitlement.value.plan === "pro") }),
@@ -55,6 +73,7 @@ beforeEach(() => {
         complimentaryUntil: null,
         trialEndsAt: null,
         paidSubscription: false,
+        offer: OFFER,
     };
     state.trial.mockReset();
     state.preferences.mockResolvedValue({
@@ -75,11 +94,13 @@ describe("Plus account", () => {
         const wrapper = render();
         await flushPromises();
         expect(state.trial).not.toHaveBeenCalled();
-        expect(wrapper.text()).toContain("29 € pro Jahr");
+        // Intl puts a no-break space between the currency and the amount.
+        expect(wrapper.text()).toMatch(/EUR\s31 pro Jahr/);
+        expect(wrapper.text()).toMatch(/EUR\s4\.50 pro Monat/);
         expect(wrapper.text()).toContain("Ohne Kreditkarte");
         expect(wrapper.text()).toContain("noch nicht freigeschaltet");
         state.trial.mockResolvedValue({});
-        const button = wrapper.findAll("button").find(b => b.text().includes("14 Tage kostenlos testen"));
+        const button = wrapper.findAll("button").find(b => b.text().includes("21 Tage kostenlos testen"));
         expect(button).toBeDefined();
         if (!button) throw new Error("Trial button missing");
         await button.trigger("click");
@@ -99,7 +120,7 @@ describe("Plus account", () => {
         await flushPromises();
         expect(wrapper.text()).toContain("Plus geschenkt bis");
         expect(wrapper.text()).toContain("Keine automatische Zahlung");
-        expect(wrapper.findAll("button").some(b => b.text().includes("14 Tage kostenlos testen"))).toBe(false);
+        expect(wrapper.findAll("button").some(b => b.text().includes("21 Tage kostenlos testen"))).toBe(false);
         wrapper.unmount();
     });
     it("fails closed on paid capabilities from an older server", () => {

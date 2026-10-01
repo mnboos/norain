@@ -98,6 +98,19 @@ places you missed.
 **Exception:** the landing page `src/pages/welcome.vue` has its texts in the file itself, in a
 German part and an English part. Change both parts.
 
+**Hiking.** A text that says "Fahrt", "Abfahrt", "Fahrzeit" or "Velo" is wrong for a hike. Where
+the text belongs to one route, journey or forecast, add a sibling key ending in `Hike` to both
+files (`"departureTime"` → `"departureTimeHike": "Startzeit"`) and translate with
+`tp(profile, "routeForm.departureTime")` from `@/i18n` instead of `t(...)`. `tp` reads the `Hike`
+key for the `hike` profile and the plain key otherwise, so cyclists keep their wording. Where
+no single profile is in reach (a list page, the account), word the text so it fits both.
+
+**Prices and limits.** Never write a price, a route count or the trial length into a text. Use
+a placeholder (`"{price} pro Jahr"`, `"Plus umfasst {plus} Routen."`) and pass the figure from
+`entitlements.offer` (the server's `offer`, from `core/entitlements.py`); format money with
+`formatPrice` from `@/composables/usePlanOffer`. The landing page fills its `{name}`
+placeholders the same way.
+
 ## Backend: add or change a text
 
 ### One-time setup: install GNU gettext
@@ -279,6 +292,7 @@ running program locks some files, so the update stops half-way). Fix:
 ## Checklist before you commit
 
 - [ ] Every new frontend key is in `de.json` **and** `en.json`.
+- [ ] No price, limit or trial length is written into a text, and texts about one ride have a `Hike` variant where they say "Fahrt".
 - [ ] `npm run test:unit` and `npm run build-only` pass.
 - [ ] New backend texts are German, in `gettext(...)`, with `%(name)s` for values.
 - [ ] `just messages` ran, `django.po` has no empty `msgstr ""` and no `#, fuzzy`.
