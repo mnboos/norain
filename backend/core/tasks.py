@@ -8,6 +8,7 @@ import random
 from contextlib import suppress
 from datetime import UTC, date, datetime, timedelta
 from functools import partial
+from itertools import batched
 from time import monotonic
 
 from asgiref.sync import async_to_sync, sync_to_async
@@ -29,7 +30,10 @@ from core.entitlements import (
 from core.forecast_schemas import RouteWeatherOut
 from core.gpx import exact_geometry
 from core.grid import (
+    CellBatch,
     ensemble_cell,
+    fetch_ensemble_cells,
+    fetch_forecast_cells,
     get_cached_cell_keys,
     get_or_fetch_ensemble_cell,
     get_or_fetch_forecast_cell,
@@ -296,6 +300,82 @@ async def _refresh_ensemble_cell_async(
             await _settle_cell(job_id, failed=not stored)
 
 
+# --------------------------------------------------------------------------- cell batches
+# Planning and the pre-warm scan enqueue cells in batches: one task, one Open-Meteo request
+# for every cell in it (grid.fetch_*_cells). The free API serves one request per IP at a time,
+# so one request per cell kept the `cells` workers waiting on each other. Each cell still
+# counts, settles, claims and leases on its own; a batch only shares the round trip. An
+# ensemble cell weighs 36 calls, so its batches are smaller, and a batch the budget cannot
+# hold shrinks to what fits and defers the rest.
+CELL_BATCH = {"forecast": 25, "ensemble": 8}
+
+
+@task(queue_name="cells")
+def refresh_forecast_cells(
+    cells: list[list[float]], day_key: str, forecast_days: int, job_id: str | None = None, attempt: int = 0
+) -> None:
+    """Fetch and store several grid cells' deterministic weather in one request."""
+    async_to_sync(_refresh_cells_async)("forecast", cells, day_key, forecast_days, job_id, attempt)
+
+
+@task(queue_name="cells")
+def refresh_ensemble_cells(
+    cells: list[list[float]], day_key: str, forecast_days: int, job_id: str | None = None, attempt: int = 0
+) -> None:
+    """Fetch and store several ensemble cells in one request."""
+    async_to_sync(_refresh_cells_async)("ensemble", cells, day_key, forecast_days, job_id, attempt)
+
+
+async def _refresh_cells_async(
+    kind: str, cells: list, day_key: str, forecast_days: int, job_id: str | None = None, attempt: int = 0
+) -> None:
+    """The batch twin of ``_refresh_*_cell_async``: same deferral rules, settled per cell."""
+    cells = [ensemble_cell(*cell) if kind == "ensemble" else tuple(cell) for cell in cells]
+
+    async def fetch(todo, last: bool) -> CellBatch:
+        if kind == "forecast":
+            return await fetch_forecast_cells(todo, day_key, forecast_days, allow_fallback=last)
+        return await fetch_ensemble_cells(todo, day_key, forecast_days, raise_throttled=not last)
+
+    batch = CellBatch()
+    try:
+        batch = await fetch(cells, attempt >= MAX_CELL_DEFERS)
+        # As _cell_fetch: a wait of a second is slept here, the hour or the day is not waited for.
+        if batch.throttled and (batch.wait <= SHORT_WAIT or batch.wait > MAX_DEFER_WAIT):
+            if batch.wait <= SHORT_WAIT:
+                await asyncio.sleep(batch.wait)
+            again = await fetch(batch.throttled, batch.wait > MAX_DEFER_WAIT or attempt >= MAX_CELL_DEFERS)
+            batch = CellBatch({**batch.cells, **again.cells}, again.throttled, again.wait)
+        if batch.throttled:
+            await _defer_cells(kind, batch.throttled, day_key, forecast_days, job_id, attempt, batch.wait)
+    finally:
+        # Released and settled on failure too, like the single-cell tasks; a deferred cell
+        # settles when its retry does.
+        finished = [cell for cell in cells if cell not in batch.throttled]
+        for cell in cells:
+            release_cell(kind, *cell, day_key, forecast_days)
+        missing = sum(1 for cell in finished if not batch.cells.get(cell))
+        if missing:
+            logger.warning(
+                f"{kind} batch: {missing} of {len(cells)} cells NOT stored ({day_key}, days={forecast_days})"
+            )
+        if finished:
+            await _settle_cell(job_id, failed=missing, settled=len(finished))
+
+
+async def _defer_cells(kind, cells, day_key, forecast_days, job_id, attempt, wait) -> None:
+    task = refresh_forecast_cells if kind == "forecast" else refresh_ensemble_cells
+    delay = timedelta(seconds=wait + random.uniform(1, 10))  # noqa: S311 -- jitter, not a secret
+    logger.info(f"{kind} batch of {len(cells)} cells: provider throttled, retrying in {delay.total_seconds():.0f} s")
+    await task.using(run_after=datetime.now(tz=UTC) + delay).aenqueue(
+        [list(cell) for cell in cells], day_key, forecast_days, job_id, attempt=attempt + 1
+    )
+    if job_id:
+        await ForecastJob.objects.filter(id=job_id, status=ForecastJob.Status.FETCHING).aupdate(
+            updated_at=datetime.now(tz=UTC)
+        )
+
+
 @task(queue_name="cells")
 def refresh_station_observations(job_id: str) -> None:
     """Fetch recent weather-station readings near the part of a job's ride that is close to now."""
@@ -329,10 +409,11 @@ async def _refresh_station_observations_async(job_id: str) -> None:
         await _settle_cell(job_id)
 
 
-def _settle_cell_sync(job_id: str, failed: bool = False) -> tuple[ForecastJob | None, bool]:
-    """Count one finished cell and, if it was the last, hand the job to computation.
+def _settle_cell_sync(job_id: str, failed: int = 0, settled: int = 1) -> tuple[ForecastJob | None, bool]:
+    """Count finished cells (one, or a batch's ``settled``) and, if they were the last, hand the job on.
 
-    ``failed`` also counts the cell in ``cells_failed``: it settled, but stored nothing.
+    ``failed`` (a bool for one cell, a count for a batch) also counts them in ``cells_failed``:
+    they settled, but stored nothing.
 
     Returns ``(job, won_computation)``. The increment is atomic but the read that follows is
     not, so several `cells` workers finishing at once could each see a complete job and
@@ -343,9 +424,9 @@ def _settle_cell_sync(job_id: str, failed: bool = False) -> tuple[ForecastJob | 
     cannot push the counter past `cells_total` and show the browser "3/2".
     """
     jobs = ForecastJob.objects.filter(id=job_id)
-    increments = {"cells_settled": F("cells_settled") + 1}
+    increments = {"cells_settled": F("cells_settled") + settled}
     if failed:
-        increments["cells_failed"] = F("cells_failed") + 1
+        increments["cells_failed"] = F("cells_failed") + int(failed)
     if not jobs.filter(status=ForecastJob.Status.FETCHING).update(**increments):
         return None, False
 
@@ -358,10 +439,10 @@ def _settle_cell_sync(job_id: str, failed: bool = False) -> tuple[ForecastJob | 
     return jobs.first(), won
 
 
-async def _settle_cell(job_id: str | None, failed: bool = False) -> None:
+async def _settle_cell(job_id: str | None, failed: int = 0, settled: int = 1) -> None:
     if not job_id:
         return
-    job, won = await sync_to_async(_settle_cell_sync)(job_id, failed)
+    job, won = await sync_to_async(_settle_cell_sync)(job_id, failed, settled)
     if job is None:
         return
     await publish(job)
@@ -388,7 +469,7 @@ def _cell_set(sample_points: list[dict]) -> list[tuple[float, float]]:
 
 
 def _cell_kinds(cells: list[tuple[float, float]], warm_forecasts: set, warm_ensembles: set) -> tuple:
-    """``(kind, cells, warm keys, task)`` per cell kind, the ensemble on its own coarser lattice.
+    """``(kind, cells, warm keys, batch task)`` per cell kind, the ensemble on its own coarser lattice.
 
     ``get_cached_cell_keys`` keys both warm sets by forecast cell; here each ensemble cell is
     one unit however many forecast cells it covers, so it is enqueued and counted once.
@@ -396,8 +477,8 @@ def _cell_kinds(cells: list[tuple[float, float]], warm_forecasts: set, warm_ense
     ensemble_cells = list(dict.fromkeys(ensemble_cell(lat, lon) for lat, lon in cells))
     warm_ensemble_cells = {(*ensemble_cell(lat, lon), day) for lat, lon, day in warm_ensembles}
     return (
-        ("forecast", cells, warm_forecasts, refresh_forecast_cell),
-        ("ensemble", ensemble_cells, warm_ensemble_cells, refresh_ensemble_cell),
+        ("forecast", cells, warm_forecasts, refresh_forecast_cells),
+        ("ensemble", ensemble_cells, warm_ensemble_cells, refresh_ensemble_cells),
     )
 
 
@@ -586,17 +667,17 @@ async def _plan_forecast_job_async(job_id: str) -> None:
         # Ensemble cells are fetched for every tier: `pop` and `rain_if_wet` are not gated,
         # only the spread is, and the cells are shared between accounts anyway.
         for kind, kind_cells, warm_keys, cell_task in kinds:
-            for lat_r, lon_r in kind_cells:
-                if (lat_r, lon_r, day) in warm_keys:
-                    continue
-                # Enqueued even when the claim is held elsewhere. The holder is usually the
-                # pre-warm scan, whose task carries no job_id and so would never report back --
-                # counting the cell settled here would let assembly run before the data landed
-                # and store an empty forecast as a finished one. A duplicate task never fetches
-                # twice: get_or_fetch_* takes the cell's fetch lease (core.cell_lease), so it
-                # either reads the warm cell or waits for the holder and reads what it stored.
+            cold = [cell for cell in kind_cells if (*cell, day) not in warm_keys]
+            # Enqueued even when the claim is held elsewhere. The holder is usually the
+            # pre-warm scan, whose task carries no job_id and so would never report back --
+            # counting the cell settled here would let assembly run before the data landed
+            # and store an empty forecast as a finished one. A duplicate task never fetches
+            # twice: each cell is fetched under its fetch lease (core.cell_lease), so the task
+            # either reads the warm cell or waits for the holder and reads what it stored.
+            for lat_r, lon_r in cold:
                 claim_cell(kind, lat_r, lon_r, day_key, days)
-                await cell_task.aenqueue(lat_r, lon_r, day_key, days, str(job.id))
+            for chunk in batched(cold, CELL_BATCH[kind], strict=False):
+                await cell_task.aenqueue([list(cell) for cell in chunk], day_key, days, str(job.id))
 
     if with_stations:
         # Counted in cells_total above, so assembly waits for the readings to land.
@@ -1125,18 +1206,19 @@ async def _scan_route_forecasts_async(route_id: str) -> dict:
             # No station readings here: they are only good for minutes and this scan runs
             # hourly, so it would spend the Weather Underground budget on data nobody reads.
             for kind, kind_cells, warm_keys, cell_task in _cell_kinds(cells, warm_forecasts, warm_ensembles):
-                for lat_r, lon_r in kind_cells:
-                    if (lat_r, lon_r, day) in warm_keys:
-                        continue
-                    # The claim is what stops the same cell being enqueued once per sample
-                    # point, once per route sharing it, and again by a live request.
-                    if not claim_cell(kind, lat_r, lon_r, day_key, days):
-                        continue
-                    await cell_task.aenqueue(lat_r, lon_r, day_key, days)
-                    if kind == "forecast":
-                        cell_count += 1
-                    else:
-                        ensemble_count += 1
+                # The claim is what stops the same cell being enqueued once per sample
+                # point, once per route sharing it, and again by a live request.
+                claimed = [
+                    cell
+                    for cell in kind_cells
+                    if (*cell, day) not in warm_keys and claim_cell(kind, *cell, day_key, days)
+                ]
+                for chunk in batched(claimed, CELL_BATCH[kind], strict=False):
+                    await cell_task.aenqueue([list(cell) for cell in chunk], day_key, days)
+                if kind == "forecast":
+                    cell_count += len(claimed)
+                else:
+                    ensemble_count += len(claimed)
 
     # Deferred rather than simply enqueued last: several `cells` workers run in parallel, so
     # queue position no longer implies completion order. The "don't regress a good glyph to

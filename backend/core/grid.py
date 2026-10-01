@@ -9,6 +9,7 @@ to avoid circular imports between weather.py <-> grid.py).
 
 import os
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from itertools import batched
 from typing import Any
@@ -19,7 +20,7 @@ from asgiref.sync import sync_to_async
 from django.db.models import Q
 from loguru import logger
 
-from .cell_lease import fetch_lease
+from .cell_lease import fetch_lease, release_lease, try_lease
 from .models import EnsembleCell, ForecastCell
 from .ratelimit import Limit, ProviderThrottled, acquire, cooldown_left, record_throttle
 from .ratelimit import describe_failure as _failure
@@ -195,6 +196,55 @@ async def _fetch_open_meteo(lat_r: float, lon_r: float, forecast_days: int, day_
         resp = await client.get(url, params=params, timeout=30)
         resp.raise_for_status()
         return resp.json()
+
+
+def _many(data) -> list:
+    """Open-Meteo answers a list for several locations and a bare object for one."""
+    return data if isinstance(data, list) else [data]
+
+
+def _coordinates(cells: list[tuple[float, float]]) -> dict:
+    return {"latitude": ",".join(str(lat) for lat, _ in cells), "longitude": ",".join(str(lon) for _, lon in cells)}
+
+
+@provider("open-meteo")
+async def _fetch_open_meteo_batch(cells: list[tuple[float, float]], forecast_days: int, day_key: str) -> list[dict]:
+    """``_fetch_open_meteo`` for several cells in one request, one response per cell in order."""
+    features = ",".join(_OM_VARS)
+    params = {
+        **_coordinates(cells),
+        "minutely_15": features,
+        "hourly": features,
+        "wind_speed_unit": "kmh",
+        "timezone": "Europe/Zurich",
+        "forecast_days": forecast_days,
+    }
+    url, params = _open_meteo_request(OPEN_METEO_URL, params)
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, params=params, timeout=30)
+        resp.raise_for_status()
+        return _many(resp.json())
+
+
+@provider("open-meteo-ensemble")
+async def _fetch_ensemble_batch(cells: list[tuple[float, float]], forecast_days: int, day_key: str) -> list[dict]:
+    """``_fetch_ensemble`` for several cells in one request, one response per cell in order."""
+    params = {
+        **_coordinates(cells),
+        "hourly": ",".join(ENSEMBLE_VARIABLES),
+        "wind_speed_unit": "kmh",
+        "models": ENSEMBLE_MODELS,
+        "timezone": "Europe/Zurich",
+        "forecast_days": forecast_days,
+    }
+    url, params = _open_meteo_request(ENSEMBLE_URL, params)
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, params=params, timeout=30)
+        resp.raise_for_status()
+        results = _many(resp.json())
+    for data in results:
+        data["_norain_request_version"] = ENSEMBLE_REQUEST_VERSION
+    return results
 
 
 @provider("openweathermap", optional_key="OPENWEATHERMAP_API_KEY")
@@ -815,10 +865,27 @@ async def _fetch_and_store_forecast(
         raise ProviderThrottled(limit.provider, wait)
 
     if data is None:
-        emit("count", "weather.fallback", outcome="needed")
-        source = "met-norway"
-        data = await _met_fallback(lat_r, lon_r)
+        data, source = await _fallback_forecast(lat_r, lon_r)
+        if data is None:
+            logger.warning(
+                "get_or_fetch_forecast_cell: Open-Meteo, MET Norway and OWM failed for ({}, {}), day_key={}, "
+                "forecast_days={}",
+                lat_r,
+                lon_r,
+                day_key,
+                forecast_days,
+            )
+            return None
 
+    cell = await sync_to_async(_store_forecast_cell_sync)(lat_r, lon_r, day_key, forecast_days, data, source)
+    await notify_system("cells")
+    return cell
+
+
+async def _fallback_forecast(lat_r: float, lon_r: float) -> tuple[dict | None, str]:
+    """``(data, source)`` from MET Norway, else OWM, for a cell Open-Meteo could not supply."""
+    emit("count", "weather.fallback", outcome="needed")
+    source, data = "met-norway", await _met_fallback(lat_r, lon_r)
     if data is None:
         source = "openweathermap"
         # Without a key _fetch_owm makes no call, so it spends no budget either.
@@ -832,23 +899,9 @@ async def _fetch_and_store_forecast(
                 )
         else:
             logger.warning("get_or_fetch_forecast_cell: OpenWeatherMap budget reached, no fallback call")
-
-    if data is None:
-        logger.warning(
-            "get_or_fetch_forecast_cell: Open-Meteo, MET Norway and OWM failed for ({}, {}), day_key={}, "
-            "forecast_days={}",
-            lat_r,
-            lon_r,
-            day_key,
-            forecast_days,
-        )
-        return None
-
-    if source != "open-meteo":
+    if data is not None:
         emit("count", "weather.fallback", outcome="recovered", source=source)
-    cell = await sync_to_async(_store_forecast_cell_sync)(lat_r, lon_r, day_key, forecast_days, data, source)
-    await notify_system("cells")
-    return cell
+    return data, source
 
 
 def _latest_met_data_sync(lat_r: float, lon_r: float) -> dict | None:
@@ -954,6 +1007,170 @@ async def _fetch_and_store_ensemble(
     cell = await sync_to_async(_store_ensemble_cell_sync)(lat_r, lon_r, day_key, forecast_days, data)
     await notify_system("cells")
     return cell
+
+
+# =============================================================================
+# Several cells per request
+# =============================================================================
+
+
+@dataclass
+class CellBatch:
+    """What one batch fetch did for each cell it was given.
+
+    ``cells`` maps every cell that is finished to its stored row, or None when no source could
+    supply it. ``throttled`` lists the cells left untouched because Open-Meteo is rate-limited;
+    the caller retries them after ``wait`` seconds.
+    """
+
+    cells: dict[tuple[float, float], Any] = field(default_factory=dict)
+    throttled: list[tuple[float, float]] = field(default_factory=list)
+    wait: float = 0.0
+
+
+async def _fetch_cell_batch(
+    kind: str,
+    cells: list[tuple[float, float]],
+    day_key: date,
+    forecast_days: int,
+    *,
+    find_sync: Callable[[float, float, date, int | None], Any],
+    fetch_batch: Callable[[list[tuple[float, float]], int, str], Awaitable[list[dict]]],
+    weight: float,
+    store: Callable[[tuple[float, float], dict], Awaitable[Any]],
+    fallback: Callable[[tuple[float, float]], Awaitable[Any]],
+    single: Callable[[tuple[float, float]], Awaitable[Any]],
+    defer_throttled: bool,
+) -> CellBatch:
+    """Fetch the cells nobody has yet in one Open-Meteo request; the rest as before.
+
+    The guarantees of the single-cell path hold per cell. Each cell is fetched only under its
+    own fetch lease, so a cell another caller is fetching is left to it: ``single`` waits for
+    that holder and reads what it stored. The budget is spent cell by cell, so a batch larger
+    than what the current window allows shrinks to what fits, and the rest is ``throttled``
+    (or, without ``defer_throttled``, handed to ``fallback`` like a failed request).
+    """
+    batch = CellBatch()
+    held: dict[tuple[float, float], Any] = {}
+    elsewhere: list[tuple[float, float]] = []
+    for cell in dict.fromkeys(cells):
+        if (found := await sync_to_async(find_sync)(*cell, day_key, forecast_days)) is not None:
+            batch.cells[cell] = found
+        elif (token := await sync_to_async(try_lease)(kind, *cell, day_key)) is None:
+            elsewhere.append(cell)
+        elif (found := await sync_to_async(find_sync)(*cell, day_key, forecast_days)) is not None:
+            # Stored between the first look and taking the lease.
+            await sync_to_async(release_lease)(kind, *cell, day_key, token)
+            batch.cells[cell] = found
+        else:
+            held[cell] = token
+
+    try:
+        limit, todo, wait = open_meteo_limit(), list(held), 0.0
+        granted: list[tuple[float, float]] = []
+        for cell in todo:
+            if wait := acquire(limit, weight):
+                break
+            granted.append(cell)
+        results = None
+        if granted:
+            try:
+                results = await fetch_batch(granted, forecast_days, day_key.isoformat())
+                if len(results) != len(granted):
+                    raise ValueError(f"{len(results)} results for {len(granted)} locations")
+            except (httpx.HTTPError, KeyError, ValueError) as exc:
+                results, wait = None, _throttle_wait(limit, exc) or wait
+                logger.warning(f"{kind} batch of {len(granted)} cells failed: {_failure(exc)}")
+        stored = list(zip(granted, results, strict=True)) if results is not None else []
+        for cell, data in stored:
+            batch.cells[cell] = await store(cell, data)
+        left = [cell for cell in todo if cell not in batch.cells]
+        if left and wait and defer_throttled:
+            batch.throttled, batch.wait = left, wait
+        else:
+            for cell in left:
+                batch.cells[cell] = await fallback(cell)
+        if stored or any(batch.cells.get(cell) for cell in left):
+            await notify_system("cells")
+    finally:
+        for cell, token in held.items():
+            await sync_to_async(release_lease)(kind, *cell, day_key, token)
+
+    for cell in elsewhere:
+        try:
+            batch.cells[cell] = await single(cell)
+        except ProviderThrottled as throttled:
+            batch.throttled.append(cell)
+            batch.wait = max(batch.wait, throttled.retry_after)
+    return batch
+
+
+async def fetch_forecast_cells(
+    cells: list[tuple[float, float]], day_key: str | date, forecast_days: int, *, allow_fallback: bool = True
+) -> CellBatch:
+    """``get_or_fetch_forecast_cell`` for many cells, with one Open-Meteo request for the missing ones.
+
+    Without ``allow_fallback``, cells Open-Meteo is too rate-limited for come back ``throttled``
+    instead of going to MET Norway or OWM, like ``ProviderThrottled`` on the single path.
+    """
+    if isinstance(day_key, str):
+        day_key = date.fromisoformat(day_key)
+
+    async def store(cell, data):
+        return await sync_to_async(_store_forecast_cell_sync)(*cell, day_key, forecast_days, data, "open-meteo")
+
+    async def fallback(cell):
+        data, source = await _fallback_forecast(*cell)
+        if data is None:
+            logger.warning(f"get_or_fetch_forecast_cell: no source could supply {cell}, day_key={day_key}")
+            return None
+        return await sync_to_async(_store_forecast_cell_sync)(*cell, day_key, forecast_days, data, source)
+
+    return await _fetch_cell_batch(
+        "forecast",
+        cells,
+        day_key,
+        forecast_days,
+        find_sync=_find_forecast_cell_sync,
+        fetch_batch=_fetch_open_meteo_batch,
+        weight=open_meteo_weight(FORECAST_VARIABLES, forecast_days),
+        store=store,
+        fallback=fallback,
+        single=lambda cell: get_or_fetch_forecast_cell(*cell, day_key, forecast_days, allow_fallback=allow_fallback),
+        defer_throttled=not allow_fallback,
+    )
+
+
+async def fetch_ensemble_cells(
+    cells: list[tuple[float, float]], day_key: str | date, forecast_days: int, *, raise_throttled: bool = False
+) -> CellBatch:
+    """``get_or_fetch_ensemble_cell`` for many ensemble cells, in one request for the missing ones.
+
+    Takes forecast or ensemble cells' coordinates and keys the result by ensemble cell. With
+    ``raise_throttled``, rate-limited cells come back ``throttled`` rather than as None.
+    """
+    if isinstance(day_key, str):
+        day_key = date.fromisoformat(day_key)
+
+    async def store(cell, data):
+        return await sync_to_async(_store_ensemble_cell_sync)(*cell, day_key, forecast_days, data)
+
+    async def no_fallback(cell):
+        return None
+
+    return await _fetch_cell_batch(
+        "ensemble",
+        [ensemble_cell(*cell) for cell in cells],
+        day_key,
+        forecast_days,
+        find_sync=_get_ensemble_cell_sync,
+        fetch_batch=_fetch_ensemble_batch,
+        weight=open_meteo_weight(len(ENSEMBLE_VARIABLES), forecast_days, ENSEMBLE_MEMBER_COUNT),
+        store=store,
+        fallback=no_fallback,
+        single=lambda cell: get_or_fetch_ensemble_cell(*cell, day_key, forecast_days, raise_throttled=raise_throttled),
+        defer_throttled=raise_throttled,
+    )
 
 
 def extract_sample(cell_data: dict, eta: datetime, source: str | None = None) -> dict | None:

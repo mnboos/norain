@@ -64,6 +64,19 @@ def _held_sync(kind: str, lat_r: float, lon_r: float, day_key: date) -> bool:
     ).exists()
 
 
+def try_lease(kind: str, lat_r: float, lon_r: float, day_key: date) -> uuid.UUID | None:
+    """Take the lease without waiting: the token, or None while someone else holds it.
+
+    For a batch fetch (``grid.fetch_forecast_cells``), which fetches only the cells it holds and
+    leaves the rest to their holders. Pass the token to ``release_lease`` when done.
+    """
+    return _acquire_sync(kind, lat_r, lon_r, day_key)
+
+
+def release_lease(kind: str, lat_r: float, lon_r: float, day_key: date, token: uuid.UUID) -> None:
+    _release_sync(kind, lat_r, lon_r, day_key, token)
+
+
 @asynccontextmanager
 async def fetch_lease(kind: str, lat_r: float, lon_r: float, day_key: date) -> AsyncIterator[bool]:
     """Yield True to the one caller that may fetch this cell, False to everyone else.

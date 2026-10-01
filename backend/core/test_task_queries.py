@@ -18,6 +18,7 @@ from core.grid import ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE, ensemble_cell, get
 from core.models import EnsembleCell, ForecastCell, ForecastJob, Plan, RecurringRoute, Subscription, User, route_point
 from core.schedule import LOCAL_TZ, local_today
 from core.tasks import _plan_forecast_job_async, _prewarm_routes, _scan_route_forecasts_async, _settle_cell
+from core.tests import enqueued_cells
 
 
 class BulkCellAvailabilityTests(TestCase):
@@ -387,8 +388,8 @@ class TaskQueryTests(TestCase):
     def queues(self, *, stations=False):
         forecast, ensemble, station, compute = AsyncMock(), AsyncMock(), AsyncMock(), AsyncMock()
         with (
-            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast)),
-            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble)),
+            patch("core.tasks.refresh_forecast_cells", SimpleNamespace(aenqueue=forecast)),
+            patch("core.tasks.refresh_ensemble_cells", SimpleNamespace(aenqueue=ensemble)),
             patch("core.tasks.refresh_station_observations", SimpleNamespace(aenqueue=station)),
             patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=compute)),
             patch("core.tasks._wants_stations", AsyncMock(return_value=stations)),
@@ -463,8 +464,8 @@ class TaskQueryTests(TestCase):
             compute.assert_not_awaited()
         tomorrow = (self.departure + timedelta(days=1)).date().isoformat()
         for enqueue in (forecast, ensemble):
-            self.assertEqual(enqueue.await_count, 2)
-            self.assertEqual({call.args[2] for call in enqueue.await_args_list}, {tomorrow})
+            self.assertEqual(len(enqueued_cells(enqueue)), 2)
+            self.assertEqual({call.args[1] for call in enqueue.await_args_list}, {tomorrow})
         job.refresh_from_db()
         self.assertEqual((job.cells_settled, job.cells_total), (4, 8))
 
@@ -514,12 +515,12 @@ class TaskQueryTests(TestCase):
         with self.scan_queues() as (forecast, ensemble, _, _):
             result = async_to_sync(_scan_route_forecasts_async)(str(route.pk))
             forecast.assert_not_awaited()
-            ensemble.assert_awaited_once_with(47, 9.05, day, days)
+            ensemble.assert_awaited_once_with([[47, 9.05]], day, days)
         self.assertEqual(result, {"cells_enqueued": 0, "ensembles_enqueued": 1})
         with self.queues() as (forecast, ensemble, _, compute):
             async_to_sync(_plan_forecast_job_async)(str(job.pk))
             forecast.assert_not_awaited()
-            self.assertEqual(ensemble.await_count, 2)
+            self.assertEqual(len(enqueued_cells(ensemble)), 2)
             self.assertEqual({call.args[-1] for call in ensemble.await_args_list}, {str(job.pk)})
             compute.assert_not_awaited()
 
@@ -547,8 +548,8 @@ class TaskQueryTests(TestCase):
         job = self.fine_job([9.0, 9.01, 9.02, 9.03, 9.04])  # ensemble cells 9.0 and 9.05
         with self.queues() as (forecast, ensemble, _, _):
             async_to_sync(_plan_forecast_job_async)(str(job.pk))
-        self.assertEqual(forecast.await_count, 5)
-        self.assertEqual(sorted(call.args[:2] for call in ensemble.await_args_list), [(47.0, 9.0), (47.0, 9.05)])
+        self.assertEqual(len(enqueued_cells(forecast)), 5)
+        self.assertEqual(sorted(enqueued_cells(ensemble)), [(47.0, 9.0), (47.0, 9.05)])
         job.refresh_from_db()
         self.assertEqual((job.cells_settled, job.cells_total), (0, 7))
 
@@ -558,6 +559,6 @@ class TaskQueryTests(TestCase):
         with self.queues() as (forecast, ensemble, _, _):
             async_to_sync(_plan_forecast_job_async)(str(job.pk))
         ensemble.assert_not_awaited()
-        self.assertEqual(forecast.await_count, 2)
+        self.assertEqual(len(enqueued_cells(forecast)), 2)
         job.refresh_from_db()
         self.assertEqual((job.cells_settled, job.cells_total), (2, 4))

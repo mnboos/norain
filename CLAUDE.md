@@ -260,8 +260,8 @@ exception, `POST /api/routes/preview` (see "Route editing"). The forecast endpoi
 ```
 POST-ish GET  ->  ForecastJob (202)
                      plan_forecast_job     queue: forecasts   geometry + fan-out
-                       refresh_forecast_cell  \ queue: cells   one task per ~1 km² cell
-                       refresh_ensemble_cell  /
+                       refresh_forecast_cells  \ queue: cells   one task (one Open-Meteo
+                       refresh_ensemble_cells  /               request) per batch of cells
                          assemble_forecast_job  queue: forecasts  cache_only + sections
                            -> job.result, pushed over ws/forecast/<job_id>/
 ```
@@ -493,7 +493,7 @@ its own `calculateQueryWeight`): one forecast cell costs ~2.3, one **ensemble ce
 `acquire` spends against every window or refuses and returns the wait.
 Rules that hold this together:
 
-- **The gate sits in `grid._fetch_and_store_*`, inside the fetch lease and outside `@provider`.**
+- **The gate sits in `grid._fetch_and_store_*` and `grid._fetch_cell_batch`, inside the fetch lease and outside `@provider`.**
   That covers every caller, and a skipped call is `provider.throttled`, never a
   `provider.request`.
 - **Adaptive.** A 429 goes through `record_throttle`. That starts one cooldown shared by every
@@ -533,6 +533,22 @@ stored `forecast_days` is less than what the caller needs.
 - `get_or_fetch_forecast_cell()` — returns fresh cell (DB cache or live fetch)
 - `extract_sample(cell_data, eta, source)` — source-aware dispatcher: "open-meteo" or "openweathermap"
 - `get_or_fetch_ensemble_cell()` — same pattern for ensemble POP data
+- `fetch_forecast_cells()` / `fetch_ensemble_cells()` — the same for many cells, with one
+  Open-Meteo request for the missing ones (`latitude=a,b,…`; it answers a list, or a bare
+  object for one location)
+
+**Planning and the scan fetch cells in batches** (`tasks.CELL_BATCH`: 25 forecast, 8 ensemble
+cells per `refresh_*_cells` task). The free API serves one request per IP at a time, so one
+request per cell kept the `cells` workers waiting on each other. A batch only shares the round
+trip: each cell is still claimed, counted in `cells_total`, settled (`_settle_cell(…, settled=n)`)
+and fetched under its own lease (`cell_lease.try_lease`, never waiting — a cell someone else holds
+goes through the single-cell path, which waits for the holder). The budget is spent cell by cell,
+so a batch shrinks to what the window allows and the rest is deferred (`CellBatch.throttled`) under
+the single-cell deferral rules. A failed batch request falls back cell by cell. A reply with a
+different number of results than locations is a failure, never matched up by position. The single
+`refresh_*_cell` tasks stay for journey corridors and random-ride areas. In tests, patch
+`core.grid._fetch_open_meteo_batch` / `_fetch_ensemble_batch` for this path, and patch
+`core.tasks.refresh_*_cells` (count cells with `core.tests.enqueued_cells`) where planning is tested.
 
 **Ensemble cells sit on a 0.05° lattice** (`grid.ensemble_cell`, `ENSEMBLE_CELL_DEG`), not the
 forecast cells' 0.01°: at 36 weighted calls each, one per forecast cell spent the hourly budget on

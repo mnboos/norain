@@ -428,8 +428,8 @@ class StationJobTests(_NearNowRoute, TestCase):
     def plan(self, job):
         station_enqueue = AsyncMock()
         with (
-            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=AsyncMock())),
-            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=AsyncMock())),
+            patch("core.tasks.refresh_forecast_cells", SimpleNamespace(aenqueue=AsyncMock())),
+            patch("core.tasks.refresh_ensemble_cells", SimpleNamespace(aenqueue=AsyncMock())),
             patch("core.tasks.refresh_station_observations", SimpleNamespace(aenqueue=station_enqueue)),
             patch("core.tasks.compute_route_weather_job", SimpleNamespace(aenqueue=AsyncMock())),
         ):
