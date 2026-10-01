@@ -254,6 +254,22 @@ poi-extract-from-unfiltered-osm-pbf +files:
 poi-extract-from-unfiltered-osm-pbf +files:
     CONTAINER={{ quote(container) }} POIS_FILE={{ quote(pois_file) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/poi-extract-from-unfiltered-osm-pbf.sh "$@"
 
+[doc("Rasterise the woods of raw .osm.pbf files, anywhere (several are merged), into the tree heights \"avoid shade\" reads beside the current terrain in ROUTING_OSM_IMPORT_DIR, e.g. just canopy-from-unfiltered-osm-pbf data/downloads/osm/*.osm.pbf. Use the raw files the graph was filtered from, never a bike-*.osm.pbf: the bike filter dropped every wood. GraphHopper reads it on its next start; no graph rebuild.")]
+[group('geodata')]
+[positional-arguments]
+[unix]
+canopy-from-unfiltered-osm-pbf +files:
+    CONTAINER={{ quote(container) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} bash scripts/canopy-from-unfiltered-osm-pbf.sh "$@"
+
+# Git Bash: see osm-filter-many-raw-pbf-into-one.
+[doc("Rasterise the woods of raw .osm.pbf files, anywhere (several are merged), into the tree heights \"avoid shade\" reads beside the current terrain in ROUTING_OSM_IMPORT_DIR, e.g. just canopy-from-unfiltered-osm-pbf data/downloads/osm/*.osm.pbf. Use the raw files the graph was filtered from, never a bike-*.osm.pbf: the bike filter dropped every wood. GraphHopper reads it on its next start; no graph rebuild.")]
+[group('geodata')]
+[positional-arguments]
+[windows]
+[script("C:/Program Files/Git/bin/bash.exe", "-eu")]
+canopy-from-unfiltered-osm-pbf +files:
+    CONTAINER={{ quote(container) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/canopy-from-unfiltered-osm-pbf.sh "$@"
+
 [doc("Replace the POI table with a POI file in ROUTING_OSM_IMPORT_DIR, by default the one just poi-extract-from-unfiltered-osm-pbf writes (named after ROUTING_OSM_FILE_FILTERED). Readers keep the old POIs until the new set is in. With a prod COMPOSE_FILE it runs in worker-default (the backend image has GDAL, the VPS host none), else in the host's virtualenv.")]
 [group('geodata')]
 poi-import-into-db file=pois_file:

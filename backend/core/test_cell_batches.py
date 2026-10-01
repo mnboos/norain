@@ -161,6 +161,9 @@ class BatchRequestTests(SimpleTestCase):
             results = async_to_sync(grid._fetch_open_meteo_batch)(CELLS[:2], 2, DAY.isoformat())
         self.assertEqual((seen["params"]["latitude"], seen["params"]["longitude"]), ("47.0,47.01", "9.0,9.0"))
         self.assertEqual(len(results), 2)
+        # "Avoid shade" reads the sunshine by the hour; the 15-minute block would cost twice.
+        self.assertIn("sunshine_duration", seen["params"]["hourly"].split(","))
+        self.assertNotIn("sunshine_duration", seen["params"]["minutely_15"].split(","))
 
     def test_one_location_answers_a_bare_object(self):
         client, _ = self._transport({"hourly": {"time": []}})

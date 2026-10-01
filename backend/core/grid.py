@@ -49,6 +49,9 @@ _OM_VARS = {
     "apparent_temperature",
     "precipitation_probability",
 }
+# Hourly only: "avoid shade" routes by the hour (core/weather_routing.py), and every variable in
+# both blocks costs Open-Meteo weight twice.
+_OM_HOURLY_ONLY = ("sunshine_duration",)
 
 # Cells older than this are considered stale and should be refreshed.
 MAX_CELL_AGE = timedelta(hours=2)
@@ -127,7 +130,7 @@ def open_meteo_weight(variables: int, forecast_days: int, members: int = 1) -> f
     return max(1.0, variables * members / 10) * max(1.0, forecast_days / 14)
 
 
-FORECAST_VARIABLES = len(_OM_VARS) * 2  # minutely_15 and hourly both count
+FORECAST_VARIABLES = len(_OM_VARS) * 2 + len(_OM_HOURLY_ONLY)  # minutely_15 and hourly both count
 ENSEMBLE_MEMBER_COUNT = sum(ENSEMBLE_MEMBERS.values())
 
 
@@ -186,7 +189,7 @@ async def _fetch_open_meteo(lat_r: float, lon_r: float, forecast_days: int, day_
         "latitude": lat_r,
         "longitude": lon_r,
         "minutely_15": features,
-        "hourly": features,
+        "hourly": ",".join((*_OM_VARS, *_OM_HOURLY_ONLY)),
         "wind_speed_unit": "kmh",
         "timezone": "Europe/Zurich",
         "forecast_days": forecast_days,
@@ -214,7 +217,7 @@ async def _fetch_open_meteo_batch(cells: list[tuple[float, float]], forecast_day
     params = {
         **_coordinates(cells),
         "minutely_15": features,
-        "hourly": features,
+        "hourly": ",".join((*_OM_VARS, *_OM_HOURLY_ONLY)),
         "wind_speed_unit": "kmh",
         "timezone": "Europe/Zurich",
         "forecast_days": forecast_days,
@@ -329,6 +332,23 @@ def _wind_at(block: dict, var: str, i: int, *, direction=False) -> float | None:
     return _wind_value(value, direction=direction)
 
 
+def _sunshine(seconds, interval_s: float = 3600) -> float | None:
+    """The share of the interval the sun shone (0..1), None when the cell has no such value."""
+    value = finite_number(seconds, nonnegative=True)
+    return None if value is None else round(min(1.0, value / interval_s), 3)
+
+
+def _open_meteo_sunshine(data: dict, eta: datetime) -> float | None:
+    """``sunshine_duration`` of eta's hour. Only the hourly block has it, and cells stored
+    before it was requested have none."""
+    hourly = data.get("hourly")
+    if not isinstance(hourly, dict) or not hourly.get("time") or not hourly.get("sunshine_duration"):
+        return None
+    values = hourly["sunshine_duration"]
+    i = _nearest_index(hourly["time"], eta)
+    return _sunshine(values[i]) if i < len(values) else None
+
+
 def _from_open_meteo(data: dict, eta: datetime) -> dict | None:
     """Pull the forecast nearest eta, preferring 15-min data, falling back to hourly.
 
@@ -373,6 +393,7 @@ def _from_open_meteo(data: dict, eta: datetime) -> dict | None:
             "wind_dir": _wind_at(b, "wind_direction_10m", i, direction=True),
             "weather_code": int(code) if code is not None else None,
             "pop": None,
+            "sunshine": _open_meteo_sunshine(data, eta),
             "source": "open-meteo",
         }
     return None
@@ -405,6 +426,7 @@ def _from_owm(data: dict, eta: datetime) -> dict | None:
         rain = float(raw_rain)
     else:
         rain = 0.0
+    clouds = finite_number(entry.get("clouds"))
     return {
         "rain_mm": rain,
         "precipitation_interval_s": 3600,
@@ -414,6 +436,8 @@ def _from_owm(data: dict, eta: datetime) -> dict | None:
         "wind_dir": _wind_value(entry.get("wind_deg"), direction=True),
         "weather_code": None,
         "pop": float(entry.get("pop")) if entry.get("pop") is not None else None,
+        # OWM has no sunshine duration: the clear share of the sky stands in for it.
+        "sunshine": None if clouds is None else _sunshine(100 - clouds, 100),
         "source": "openweathermap",
     }
 
@@ -506,6 +530,7 @@ def _from_met(data: dict, eta: datetime) -> dict | None:
     temp = finite_number(instant.get("air_temperature"))
     if temp is None:
         return None
+    clouds = finite_number(instant.get("cloud_area_fraction"), nonnegative=True)
     rain, interval, symbol, pop = 0.0, 3600, None, None
     if found := _met_period(step_data):
         period, interval = found
@@ -523,6 +548,8 @@ def _from_met(data: dict, eta: datetime) -> dict | None:
         "wind_dir": _wind_value(instant.get("wind_from_direction"), direction=True),
         "weather_code": met_weather_code(symbol),
         "pop": pop,
+        # Like OWM: the clear share of the sky stands in for the sunshine duration.
+        "sunshine": None if clouds is None else _sunshine(100 - clouds, 100),
         "source": "met-norway",
     }
 

@@ -39,10 +39,15 @@ just routing-terrain-estimate bike-europe-cycling.osm.pbf
 just download-elevation-for bike-europe-cycling.osm.pbf
 just build-graphhopper-graph-from bike-europe-cycling.osm.pbf
 just poi-import-into-db
+just canopy-from-unfiltered-osm-pbf data/downloads/osm/*.osm.pbf
 ```
 
 The commands filter and merge the OSM files, prepare matching terrain, import a candidate
-graph and load POIs. Validate and activate the candidate using the routing-graph guide
+graph and load POIs. The last one rasterises the woods of the raw files into
+`canopy.pmtiles` beside the terrain: the tree heights "avoid shade" looks over towards the
+sun. GraphHopper reads it while serving (not at import), so it needs no rebuild, only a
+restart, and `just routing-ship-candidate` ships it with the terrain. Run it again after new
+terrain was prepared. Without it trees cast no shadow; the terrain and the clouds still do. Validate and activate the candidate using the routing-graph guide
 before serving it.
 
 ## 3. Build the search index

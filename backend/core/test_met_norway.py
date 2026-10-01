@@ -82,6 +82,12 @@ class ParserTests(SimpleTestCase):
         self.assertEqual(sample["wind_dir"], 10.0)
         self.assertEqual(sample["pop"], 0.35)
         self.assertEqual(sample["weather_code"], 61)
+        self.assertIsNone(sample["sunshine"], "no cloud cover in the step")
+
+    def test_cloud_cover_stands_in_for_sunshine(self):
+        data = met_data()
+        data["properties"]["timeseries"][0]["data"]["instant"]["details"]["cloud_area_fraction"] = 80.0
+        self.assertEqual(grid._from_met(data, T0)["sunshine"], 0.2)
 
     def test_a_six_hourly_step_carries_its_interval(self):
         sample = grid._from_met(met_data(), T0 + timedelta(hours=6))

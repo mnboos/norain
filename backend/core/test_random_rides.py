@@ -371,10 +371,14 @@ class WeatherChoiceTests(TestCase):
         chosen = self._post({**self.BODY, "weatherPrefs": {"avoidRain": True, "avoidHeadwind": False}})
         self.assertTrue(chosen.weather_prefs["avoid_rain"])
         self.assertFalse(chosen.weather_prefs["avoid_headwind"])
+        self.assertFalse(chosen.weather_prefs["avoid_shade"])
+        sunny = self._post({**self.BODY, "weatherPrefs": {"avoidShade": True}})
+        self.assertTrue(sunny.weather_prefs["avoid_shade"])
 
     def test_a_free_account_cannot_store_it_on(self):
-        ride = self._post({**self.BODY, "weatherPrefs": {"avoidRain": True, "avoidHeadwind": True}})
+        ride = self._post({**self.BODY, "weatherPrefs": {"avoidRain": True, "avoidHeadwind": True, "avoidShade": True}})
         self.assertEqual((ride.weather_prefs["avoid_rain"], ride.weather_prefs["avoid_headwind"]), (False, False))
+        self.assertFalse(ride.weather_prefs["avoid_shade"])
         with patch("core.api.journey.plan_journey", SimpleNamespace(aenqueue=AsyncMock())):
             self.client.put(
                 f"/api/journeys/{ride.id}",

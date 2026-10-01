@@ -67,6 +67,18 @@ terrain_cleanup() {
     python /graphhopper/terrain.py cleanup
 }
 
+# Tree heights for "avoid shade" (canopy.py), beside the current terrain, which ships them with
+# it (just routing-ship-candidate). GraphHopper finds it beside terrain.pmtiles while serving,
+# never at import: no graph rebuild. Without it trees cast no shadow; terrain and clouds still do.
+canopy() {
+    [ $# -gt 0 ] || { echo "Usage: entrypoint.sh canopy RAW.osm.pbf [RAW.osm.pbf ...]" >&2; exit 2; }
+    if [ ! -d /osm_data/elevation/current ]; then
+        echo "Prepare the terrain first (just download-elevation-for FILE): the canopy goes beside it." >&2
+        exit 1
+    fi
+    python /graphhopper/canopy.py "$(readlink -f /osm_data/elevation/current)/canopy.pmtiles" "$@"
+}
+
 # Backfills for the system dashboard's coverage map (GET /coverage), for terrain and graphs
 # made before the build wrote these files. Neither changes the graph or the terrain key.
 # The served graph's terrain, which need not be elevation/current. The release's own road cells
@@ -161,11 +173,12 @@ serve() {
 case "${1:-serve}" in
     terrain) shift; terrain "$@" ;;
     terrain-cleanup) terrain_cleanup ;;
+    canopy) shift; canopy "$@" ;;
     terrain-coverage) terrain_coverage "${2:-current}" ;;
     graph-cells) graph_cells "${2:-current}" ;;
     build) build ;;
     serve) serve "${2:-current}" ;;
     activate) python /graphhopper/artifact.py activate "${2:-candidate}" ;;
     rollback) python /graphhopper/artifact.py rollback previous ;;
-    *) echo "Unknown command: $1 (expected terrain, terrain-cleanup, terrain-coverage, graph-cells, build, serve, activate or rollback)" >&2; exit 2 ;;
+    *) echo "Unknown command: $1 (expected terrain, terrain-cleanup, canopy, terrain-coverage, graph-cells, build, serve, activate or rollback)" >&2; exit 2 ;;
 esac

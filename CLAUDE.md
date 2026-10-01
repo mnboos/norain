@@ -190,7 +190,7 @@ spread and no station correction; journeys: free = 1 journey, 1 alternative per 
 weather-aware routing (enforced in `create_journey` and `plan_journey`).
 
 **Riding around bad weather is the rider's choice and a Plus feature** (`weather_routing`), for
-journeys and random rides alike. `weather_prefs.avoid_rain` / `avoid_headwind` are off unless
+journeys and random rides alike. `weather_prefs.avoid_rain` / `avoid_headwind` / `avoid_shade` are off unless
 the rider switches them on (`WeatherPrefsIn` defaults, and `prefs.get(..., False)` for rows
 without them). `_values` in `api/journey.py` stores them off for an account without Plus, so an
 upgrade never starts routing around weather nobody chose. `_wants_weather_routing` checks the
@@ -852,7 +852,8 @@ The Dockerfile patches GraphHopper (`docker/graphhopper/weather/`, installed by 
 that carries a `weather` hint with `WeatherAStar`, a time-dependent forward A*, and every other
 request exactly as before. An edge costs its weight times the weather where the rider is halfway
 along it, *when* they are there: rain by the cell and headwind along the edge's own bearing,
-interpolated in space and time. Rules that hold this together:
+interpolated in space and time, and, when the rider asked for sun, the shade there. Rules that
+hold this together:
 
 - **GraphHopper never fetches weather.** The backend builds the field from the cache (`weather_routing.weather_field`)
   and sends it with each request, so the provider budget and
@@ -868,8 +869,24 @@ interpolated in space and time. Rules that hold this together:
 - **Weather requests are uncached** (`weather._route`): the field is large and asked for once.
   `JourneyPlanner.route` sends it only for a whole-day request; local POI insertions and the
   separate-leg fallback route without it, because the field's clock starts at the departure.
-- `WeatherAStarTest` runs in the Docker build before packaging, and the smoke test checks that
-  a dry field changes nothing and that `alternative_route` is refused.
+- **Shade is split: clouds are ours, the line of sight is GraphHopper's** ("avoid shade",
+  `avoid_shade`). The field carries `sun` (Open-Meteo's hourly `sunshine_duration` as a share of
+  the hour, OWM's clear sky) and `shade` (`ride_quality.ROUTING_SHADE_PRIORITY` as a multiplier).
+  `Shade.java` works out the sun's position (`SunPosition`) at the edge's midpoint and time, and
+  marches towards it over the terrain archive the graph was built with, plus, within 300 m, the
+  tree heights of `canopy.pmtiles` beside it (`docker/graphhopper-canopy.py`, from OSM woods,
+  `just canopy-from-unfiltered-osm-pbf`). `Shade` finds that file next to `terrain.pmtiles`,
+  never through a config key: a served graph keeps its build's config, and `-Ddw.` nests an
+  undeclared key where GraphHopper never reads it. An edge costs `1 + (shade − 1) × (1 − lit)`, lit being
+  the sunshine where the line of sight is clear and 0 where it is blocked. After sunset every
+  edge is 1: nothing to choose. Horizons are kept across requests in a fixed table (terrain does
+  not change); the archives are opened once and shared under a lock. `sunshine_duration` is
+  fetched **hourly only**: one more variable in both blocks would cost Open-Meteo weight twice.
+  Cells stored before it carry no sunshine, which counts as no weather. Without a canopy
+  archive, trees cast no shadow; without terrain (`graph.elevation.provider` not pmtiles), only
+  the clouds count.
+- `WeatherAStarTest` and `ShadeTest` run in the Docker build before packaging, and the smoke
+  test checks that a dry field changes nothing and that `alternative_route` is refused.
 
 ### Random rides
 
