@@ -78,12 +78,10 @@ jobs:
           fi
       - run: uv run --no-project --with pmtiles==3.8.1 --with pillow==12.3.0 python -m unittest discover -s docker/tests -v
       - run: cd frontend && npm ci && npm run build
-      - name: Browser recognition tests
-        run: |
-          cd frontend
-          npx vitest run src/lib/browser-fingerprint/__tests__
-          npx playwright install --with-deps chromium firefox webkit
-          npx playwright test --config playwright.fingerprint.config.ts
+      # The full browser matrix stays local: installing three engines and their OS
+      # dependencies is too expensive for every PR/release. Keep the fast unit coverage.
+      - name: Browser recognition unit tests
+        run: cd frontend && npx vitest run src/lib/browser-fingerprint/__tests__
 
   publish:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'

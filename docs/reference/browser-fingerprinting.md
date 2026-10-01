@@ -236,6 +236,11 @@ transactional security boundary. Coverage vote deduplication/release is unchange
 
 ### Local regression tests
 
+CI runs the fast browser-recognition unit tests and the backend core suite, but skips the
+Playwright browser matrix and its browser/system-dependency installation. Run the full
+matrix locally after changing probes or recognition behavior; install its engines first
+if needed with `cd frontend && npx playwright install --with-deps chromium firefox webkit`.
+
 Run `cd frontend && npx playwright test --config playwright.fingerprint.config.ts`.
 The shared `e2e/causal-harness.ts` runs 32 native trials and transparent/faulty wrapper
 controls. For installed Safari, start the isolated fixtures in two terminals:
