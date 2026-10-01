@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { useNow } from "@vueuse/core";
 import { useI18n } from "vue-i18n";
 import type { DepartureCandidate, DepartureComparison } from "@norain/api/models";
-import { intlLocale, te } from "@/i18n";
+import { intlLocale, te, tp } from "@/i18n";
 import { rideLabelText } from "@/utils/levels";
 import { scoreColor } from "@/utils/rideQuality";
 
@@ -11,6 +11,8 @@ const props = defineProps<{
     comparison: DepartureComparison;
     selectedTime?: string | null;
     betterOnly?: boolean;
+    /** The routing profile: a hike starts, it does not depart. */
+    profile?: string | null;
 }>();
 const emit = defineEmits<{ select: [time: string]; reset: [] }>();
 const { t } = useI18n();
@@ -52,7 +54,7 @@ const format = (time: string) => formatter.value.format(new Date(time));
 /** The server's reason for the recommendation is a code; a newer one we don't know says nothing. */
 const explanation = computed(() => {
     const key = `departures.explanation.${props.comparison.explanation}`;
-    return te(key) ? t(key) : "";
+    return te(key) ? tp(props.profile, key) : "";
 });
 const sameTime = (a: string, b: string) => Date.parse(a) === Date.parse(b);
 function available(candidate: DepartureCandidate) {
@@ -69,16 +71,16 @@ function select(candidate: DepartureCandidate) {
 <template>
     <section
         v-if="!betterOnly || candidates.length || selectedTime"
-        :aria-label="t('departures.compare')"
+        :aria-label="tp(profile, 'departures.compare')"
         class="q-pa-sm departure-comparison"
     >
-        <div class="text-subtitle2">{{ t("departures.title") }}</div>
+        <div class="text-subtitle2">{{ tp(profile, "departures.title") }}</div>
         <div class="text-caption">
             {{ t("departures.window", { from: format(comparison.windowStart), to: format(comparison.windowEnd) }) }}
         </div>
         <p v-if="recommended" class="q-my-sm">
             {{
-                t("departures.recommended", {
+                tp(profile, "departures.recommended", {
                     departure: format(recommended.departureTime),
                     arrival: format(recommended.arrivalTime),
                 })
@@ -86,8 +88,8 @@ function select(candidate: DepartureCandidate) {
             <br />
             {{ explanation }}
         </p>
-        <p v-else-if="!betterOnly" class="q-my-sm">{{ t("departures.nothing") }}</p>
-        <div class="departure-timeline" :aria-label="t('departures.compared')">
+        <p v-else-if="!betterOnly" class="q-my-sm">{{ tp(profile, "departures.nothing") }}</p>
+        <div class="departure-timeline" :aria-label="tp(profile, 'departures.compared')">
             <button
                 v-for="candidate in candidates"
                 :key="candidate.departureTime"
@@ -116,7 +118,7 @@ function select(candidate: DepartureCandidate) {
             </button>
         </div>
         <button v-if="selectedTime" type="button" class="reset-time q-mt-sm" @click="emit('reset')">
-            {{ t("departures.backToRequested") }}
+            {{ tp(profile, "departures.backToRequested") }}
         </button>
         <div class="text-caption text-muted q-mt-sm">
             {{ t("departures.steps") }}

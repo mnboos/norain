@@ -11,7 +11,7 @@ import { useRoute, useRouter } from "vue-router";
 import { copyToClipboard, useQuasar } from "quasar";
 import { useI18n } from "vue-i18n";
 import { format } from "date-fns";
-import { dateFnsLocale, te } from "@/i18n";
+import { dateFnsLocale, te, tp } from "@/i18n";
 import {
     symSharpArrowBack,
     symSharpBookmarkAdd,
@@ -226,6 +226,7 @@ const duration = (s: number) => {
                 </div>
                 <ElevationChart
                     :public-slug="slug"
+                    :profile="route.profile"
                     :position="position"
                     class="q-mt-md"
                     @select-position="selectPosition"
@@ -235,11 +236,11 @@ const duration = (s: number) => {
             <div class="col-12 col-md-5">
                 <q-card flat bordered>
                     <q-card-section>
-                        <h2 class="text-subtitle1 text-weight-bold q-my-none">{{ t("publicRoute.weatherTitle") }}</h2>
+                        <h2 class="text-subtitle1 text-weight-bold q-my-none">{{ tp(route.profile, "publicRoute.weatherTitle") }}</h2>
                         <p class="text-caption text-muted q-mb-sm">{{ t("publicRoute.weatherIntro") }}</p>
                         <div class="row q-col-gutter-sm items-end">
                             <q-input v-model="date" type="date" dense outlined :label="t('routeForm.date')" class="col-6" />
-                            <q-input v-model="time" type="time" dense outlined :label="t('routeForm.departure')" class="col-4" />
+                            <q-input v-model="time" type="time" dense outlined :label="tp(route.profile, 'routeForm.departure')" class="col-4" />
                             <div class="col-2">
                                 <q-btn
                                     unelevated

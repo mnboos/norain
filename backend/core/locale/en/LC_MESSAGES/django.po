@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: meteolane\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-10-01 11:21+0200\n"
+"POT-Creation-Date: 2026-10-01 11:35+0200\n"
 "Language: en\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -427,6 +427,11 @@ msgstr "Your active route limit is reached."
 #: core/api/recurring_route.py:660
 msgid "Eine Rückfahrt kann keine eigene Rückfahrt haben."
 msgstr "A return journey cannot have another return journey."
+
+#: core/api/recurring_route.py:674
+#, python-format
+msgid "%(name)s – Rückweg"
+msgstr "%(name)s – return"
 
 #: core/api/recurring_route.py:674
 #, python-format

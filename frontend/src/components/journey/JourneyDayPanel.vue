@@ -25,7 +25,7 @@ import NiceMap from "@/components/NiceMap.vue";
 import WeatherChart from "@/components/WeatherChart.vue";
 import { useJourneyStageForecast, useJourneyStageForecasts, useJourneyStagesPois } from "@/queries/journeys";
 import { clock, dayLabel, duration, gapExcessLabel, isPlanningWarning, km, reasonText } from "@/utils/journeys";
-import { intlLocale } from "@/i18n";
+import { intlLocale, tp } from "@/i18n";
 import { rideLabelText } from "@/utils/levels";
 import { CANDIDATE_COLOR, poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
 import { alternativeColor } from "@/utils/rideQuality";
@@ -213,7 +213,7 @@ function breakEta(elapsedS: number): string {
                             dayLabel(day.date)
                         }}
                     </span>
-                    <span v-if="day.weatherRouted" class="text-caption text-muted">{{ t("journeyDay.weatherRouted") }}</span>
+                    <span v-if="day.weatherRouted" class="text-caption text-muted">{{ tp(journey.profile, "journeyDay.weatherRouted") }}</span>
                 </div>
                 <div v-if="stages.length > 1" class="variant-grid" role="group" :aria-label="t('journeyDay.pickRoute')">
                     <button
@@ -261,10 +261,10 @@ function breakEta(elapsedS: number): string {
                     <template v-if="stage.recommendedDeparture || stage.departureTime">
                         {{
                             stage.recommendedDeparture
-                                ? t("journeyDay.recommendedDeparture", {
+                                ? tp(journey.profile, "journeyDay.recommendedDeparture", {
                                       time: clock(stage.recommendedDeparture),
                                   })
-                                : t("journeyDay.departure", { time: clock(stage.departureTime!) })
+                                : tp(journey.profile, "journeyDay.departure", { time: clock(stage.departureTime!) })
                         }}
                         ·
                     </template>
@@ -352,7 +352,7 @@ function breakEta(elapsedS: number): string {
             <q-banner v-else-if="!day.forecastAvailable" rounded class="bg-tint-neutral">
                 <template #avatar><q-icon :name="symSharpCloudOff" class="text-muted" /></template>
                 <template v-if="journey.kind === 'random'">{{ t("journeyDay.noForecastRandom") }}</template>
-                <template v-else>{{ t("journeyDay.noForecastJourney") }}</template>
+                <template v-else>{{ tp(journey.profile, "journeyDay.noForecastJourney") }}</template>
             </q-banner>
             <q-banner v-else-if="forecastQuery.error.value" rounded class="bg-tint-error">
                 {{ t("journeyDay.weatherLoadFailed") }}
@@ -361,6 +361,7 @@ function breakEta(elapsedS: number): string {
         <div v-if="stage || forecast" class="journey-charts" data-testid="journey-charts">
             <ElevationChart
                 v-if="stage"
+                :profile="journey.profile"
                 :stage-id="stage.id"
                 :color="selectedProfileColor"
                 :label="selectedLabel"
@@ -390,6 +391,7 @@ function breakEta(elapsedS: number): string {
                 <q-card v-for="kind in ['headwind', 'temperature'] as const" :key="kind" class="weather-chart-card">
                     <WeatherChart
                         :kind="kind"
+                        :profile="forecast.profile"
                         :version="forecast.version"
                         :cursor-minutes="positionMinutes"
                         :samples="forecast.samples"

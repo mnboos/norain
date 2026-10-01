@@ -30,7 +30,7 @@
             "no_route": "Für diese Reise wurde keine Route gefunden.",
             "planning_failed": "Die Reise konnte nicht geplant werden.",
             "too_many_days": "Zu viele Tage: bitte längere Tagesetappen wählen.",
-            "day_limit_too_short": "Das Tageslimit erlaubt keine Fahrt.",
+            "day_limit_too_short": "Das Tageslimit ist zu kurz für eine Etappe.",
             "day_failed": "Eine Tagesetappe konnte nicht berechnet werden.",
             "ride_failed": "Die Runde konnte nicht geplant werden.",
             "no_round_found": "Von diesem Start aus wurde keine passende Runde gefunden."
@@ -201,7 +201,7 @@
         "signOut": "Abmelden",
         "signedIn": "Angemeldet",
         "codeOnly": "Du meldest dich mit einem Code per E-Mail an. Ein Passwort kannst du über „Passwort vergessen?“ festlegen.",
-        "defaultProfile": "Standard-Velotyp"
+        "defaultProfile": "Standardprofil"
     },
     "routes": {
         "empty": "Wähle eine Route aus oder erstelle eine neue, um die Wettervorhersage zu sehen.",
@@ -212,11 +212,14 @@
         },
         "notFound": "Route nicht gefunden.",
         "outbound": "Hinfahrt",
-        "return": "Rückfahrt"
+        "outboundHike": "Hinweg",
+        "return": "Rückfahrt",
+        "returnHike": "Rückweg"
     },
     "timing": {
         "speed": "Ø Geschwindigkeit",
-        "duration": "Fahrzeit"
+        "duration": "Fahrzeit",
+        "durationHike": "Gehzeit"
     },
     "random": {
         "heading": {
@@ -239,20 +242,24 @@
         "loopFrom": "Rundkurs ab {start} · {length}",
         "new": "Neue Runde",
         "empty": "Noch keine Zufallsrunde.",
-        "emptyHint": "Keine Idee, wohin? Sag, ob du im Kreis oder zu einem Ziel fahren willst und wie lange oder wie weit. MeteoLane würfelt die Strecke und zeigt das Wetter darauf."
+        "emptyHint": "Keine Idee, wohin? Sag, ob du im Kreis oder zu einem Ziel unterwegs sein willst und wie lange oder wie weit. MeteoLane würfelt die Strecke und zeigt das Wetter darauf."
     },
     "weatherRouting": {
         "title": "Um schlechtes Wetter herum fahren",
+        "titleHike": "Um schlechtes Wetter herum wandern",
         "avoidRain": "Regen ausweichen",
         "avoidHeadwind": "Starken Gegenwind meiden",
         "explanation": "Für Fahrten in den nächsten drei Tagen legt MeteoLane die Strecke dorthin, wo es trocken ist und der Wind weniger bläst, zur Zeit, zu der du dort bist. Aus: die Strecke folgt nur deinen Wünschen an die Strasse.",
+        "explanationHike": "Für Wanderungen in den nächsten drei Tagen legt MeteoLane die Strecke dorthin, wo es trocken ist, zur Zeit, zu der du dort bist. Aus: die Strecke folgt nur deinen Wünschen an den Weg.",
         "plusOnly": "Mit Plus kann MeteoLane die Strecke um Regen und Gegenwind herum legen.",
+        "plusOnlyHike": "Mit Plus kann MeteoLane die Strecke um Regen herum legen.",
         "seePlus": "Plus ansehen"
     },
     "windBar": {
         "meanFelt": "Gefühlt im Mittel {speed} km/h (geschätzt)",
         "coveredOn": "verfügbar auf {km} km",
         "approxPace": "Fahrtempo näherungsweise",
+        "approxPaceHike": "Gehtempo näherungsweise",
         "feltUnavailable": "Gefühlter Wind nicht verfügbar.",
         "noRoute": "Keine Strecke"
     },
@@ -272,7 +279,7 @@
         },
         "new": "Neue Reise",
         "empty": "Noch keine Reise.",
-        "emptyHint": "Gib Start, Ziel und wie weit du am Tag fahren willst an. MeteoLane schlägt Etappen, Pausen mit Wasser und Toiletten, Übernachtungen und die beste Abfahrtszeit vor.",
+        "emptyHint": "Gib Start, Ziel und wie weit du am Tag kommen willst an. MeteoLane schlägt Etappen, Pausen mit Wasser und Toiletten, Übernachtungen und die beste Startzeit vor.",
         "days": "{n} Tag | {n} Tage",
         "reason": {
             "tooLong": "~{minutes} min zu lang",
@@ -303,13 +310,15 @@
         "advanced": "Erweitert",
         "caption": "Flexibel: {before} min früher · {after} min später",
         "plusPitch": "Finde mit Plus eine bessere Abfahrtszeit. Deine normale Vorhersage bleibt kostenlos.",
+        "plusPitchHike": "Finde mit Plus eine bessere Startzeit. Deine normale Vorhersage bleibt kostenlos.",
         "title": "Flexible Abfahrtszeit",
+        "titleHike": "Flexible Startzeit",
         "intro": "Vergleiche das Wetter für frühere oder spätere Abfahrten.",
         "earlier": "Früher um bis zu",
         "later": "Später um bis zu"
     },
     "plan": {
-        "tryPlus": "Plus 14 Tage kostenlos testen",
+        "tryPlus": "Plus {days} Tage kostenlos testen",
         "tryAgain": "Bitte versuche es erneut.",
         "email": "E-Mail",
         "label": "MeteoLane Tarife",
@@ -320,29 +329,29 @@
         "endsOn": "Dein Abo endet am {date}.",
         "feature": {
             "twoWay": "Hin & Zurück",
-        "oneWay": "Einweg",
-        "direction": "Fahrtrichtung",
-            "free": "Free: 2 Routen, Wetterkarten, Regenrisiko, Temperatur und Wind.",
-            "plus": "Plus: 20 Routen, automatischer Abfahrtsvergleich und Wetterdetails.",
-            "briefings": "Plus: Briefings für bis zu 5 Routen, per E-Mail oder Push."
+            "oneWay": "Einweg",
+            "direction": "Fahrtrichtung",
+            "free": "Free: {routes} Routen, Wetterkarten, Regenrisiko, Temperatur und Wind.",
+            "plus": "Plus: {routes} Routen, automatischer Abfahrtsvergleich und Wetterdetails.",
+            "briefings": "Plus: Briefings für bis zu {routes} Routen, per E-Mail oder Push."
         },
-        "perYear": "29 € pro Jahr",
+        "perYear": "{price} pro Jahr",
         "or": "oder",
-        "perMonth": "3,90 € pro Monat",
-        "startTrial": "14 Tage kostenlos testen",
+        "perMonth": "{price} pro Monat",
+        "startTrial": "{days} Tage kostenlos testen",
         "trialStarted": "Plus ist jetzt aktiv. Viel Freude bei deinen Fahrten!",
-        "yearly": "29 € / Jahr",
-        "monthly": "3,90 € / Monat",
+        "yearly": "{price} / Jahr",
+        "monthly": "{price} / Monat",
         "manage": "Abo verwalten",
         "noCard": "Ohne Kreditkarte. Keine automatische Verlängerung der Testphase.",
         "beta": "Beta: Der Kauf von Plus ist noch nicht freigeschaltet.",
-        "freeRoutes": "Deine zwei Free-Routen",
+        "freeRoutes": "Deine Free-Routen",
         "freeRoutesHint": "Diese Routen bleiben nach Plus aktiv. Weitere Routen bleiben gespeichert und pausieren.",
-        "pickFreeRoutes": "Bis zu zwei Routen auswählen",
+        "pickFreeRoutes": "Bis zu {n} Routen auswählen",
         "saveSelection": "Auswahl speichern",
         "selectionSaved": "Auswahl gespeichert.",
         "briefingsTitle": "Vor der Fahrt informiert",
-        "briefingsHint": "Ein Briefing je Hinfahrt und Rückfahrt etwa 60 Minuten vor der frühesten Abfahrt in deinem Zeitfenster. Bis zu 10 Briefings pro Tag. Keine laufenden Wetterwarnungen.",
+        "briefingsHint": "Ein Briefing je Hinfahrt und Rückfahrt etwa {minutes} Minuten vor der frühesten Abfahrt in deinem Zeitfenster. Bis zu {count} Briefings pro Tag. Keine laufenden Wetterwarnungen.",
         "briefingsNeedPlus": "Aktiviere Plus, um Briefings einzurichten.",
         "noPush": "Dieser Browser unterstützt Push hier nicht. Nutze E-Mail. Auf dem iPhone installierst du MeteoLane zuerst über „Zum Home-Bildschirm“.",
         "pushOn": "Push auf diesem Gerät aktivieren",
@@ -364,6 +373,7 @@
         "axis": {
             "distanceKm": "Strecke (km)",
             "rideMinutes": "Fahrzeit (min)",
+            "rideMinutesHike": "Gehzeit (min)",
             "elevation": "Höhe (m ü. M.)"
         },
         "weather": "Wetter",
@@ -371,6 +381,7 @@
         "temperature": "Temperatur",
         "felt": "Gefühlt",
         "feltLong": "Gefühlt (Fahrtwind)",
+        "feltLongHike": "Gefühlt (Windchill)",
         "precipitation": "Niederschlag",
         "headwindTailwind": "Gegenwind (+) / Rückenwind (−)",
         "headwindTailwindShort": "Gegen-(+)/Rückenwind(−)",
@@ -425,23 +436,27 @@
     },
     "quota": {
         "title": "Tarifgrenze erreicht",
-        "routes": "Dein Tarif erlaubt eine aktive Route. Plus umfasst 20 Routen. | Dein Tarif erlaubt {n} aktive Routen. Plus umfasst 20 Routen.",
+        "routes": "Dein Tarif erlaubt eine aktive Route. Plus umfasst {plus} Routen. | Dein Tarif erlaubt {n} aktive Routen. Plus umfasst {plus} Routen.",
         "later": "Später",
         "upgrade": "Upgrade",
-        "journeys": "Dein Tarif erlaubt eine Reise. Lösche eine alte oder wechsle zu Plus für bis zu 10 Reisen.",
-        "randomRides": "Dein Tarif erlaubt drei Zufallsrunden. Lösche eine alte oder wechsle zu Plus für bis zu 20."
+        "journeys": "Dein Tarif erlaubt eine Reise. Lösche eine alte oder wechsle zu Plus für bis zu {plus} Reisen. | Dein Tarif erlaubt {n} Reisen. Lösche eine alte oder wechsle zu Plus für bis zu {plus} Reisen.",
+        "randomRides": "Dein Tarif erlaubt eine Zufallsrunde. Lösche eine alte oder wechsle zu Plus für bis zu {plus}. | Dein Tarif erlaubt {n} Zufallsrunden. Lösche eine alte oder wechsle zu Plus für bis zu {plus}."
     },
     "summaryCard": {
         "title": "Prognose",
         "explain": "Kennzahlen erklärt",
         "noData": "Für diese Fahrt liegen noch keine Wetterdaten vor.",
+        "noDataHike": "Für diese Wanderung liegen noch keine Wetterdaten vor.",
         "riskUnavailable": "Das Regenrisiko ist derzeit nicht verfügbar.",
         "peakRisk": "Höchstes Regenrisiko entlang der Strecke: {percent} %",
-        "note": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Fahrt. Regen und Gegenwind zeigen die höchsten erwarteten Werte. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Der Windaufwand zeigt als Stufe (niedrig bis sehr hoch), wie viel zusätzliche Kraft du für dein Tempo brauchst. Er ist geschätzt. Frost zeigt als Stufe (leicht bis stark), wie glatt die Strasse an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen."
+        "note": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Fahrt. Regen und Gegenwind zeigen die höchsten erwarteten Werte. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Der Windaufwand zeigt als Stufe (niedrig bis sehr hoch), wie viel zusätzliche Kraft du für dein Tempo brauchst. Er ist geschätzt. Frost zeigt als Stufe (leicht bis stark), wie glatt die Strasse an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen.",
+        "noteHike": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Wanderung. Regen zeigt den höchsten erwarteten Wert. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Frost zeigt als Stufe (leicht bis stark), wie glatt der Weg an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen."
     },
     "legend": {
         "rideQuality": "Fahrqualität",
+        "rideQualityHike": "Wanderqualität",
         "explanation": "Aus Regen (55 %), Gegenwind (25 %) und Temperatur (20 %) berechnet. Ein Richtwert ohne Einheit - die genauen Werte stehen in den Wetterpunkten auf der Karte.",
+        "explanationHike": "Aus Regen, Wind, Temperatur und Frost berechnet. Ein Richtwert ohne Einheit - die genauen Werte stehen in den Wetterpunkten auf der Karte.",
         "good": "gut",
         "poor": "schlecht",
         "noData": "Keine Daten"
@@ -449,7 +464,8 @@
     "thumbnail": {
         "computing": "Route wird noch berechnet",
         "noForecast": "Noch keine Prognose",
-        "quality": "Fahrqualität: {quality}"
+        "quality": "Fahrqualität: {quality}",
+        "qualityHike": "Wanderqualität: {quality}"
     },
     "gpx": {
         "requestFailed": "Die GPX-Anfrage ist fehlgeschlagen.",
@@ -462,7 +478,9 @@
         "track": "Strecke oder Abschnitt",
         "keepOriginal": "Originalstrecke behalten",
         "recalculate": "Fürs Velo neu berechnen",
+        "recalculateHike": "Für die Wanderung neu berechnen",
         "importedHint": "Die Wettervorhersage verwendet deine neue Abfahrtszeit und diese Fahrzeit.",
+        "importedHintHike": "Die Wettervorhersage verwendet deine neue Startzeit und diese Gehzeit.",
         "recalculatedHint": "Orange: Original. Blau: neu berechnete Strecke. Die Strecke kann vom Original abweichen.",
         "adjustVias": "Zwischenpunkte anpassen",
         "previewLabel": "Vorschau der importierten Strecke"
@@ -483,6 +501,7 @@
         "uncertaintyLocked": "Mögliche Wetterschwankungen siehst du mit Plus. Die Wettervorhersage und das Regenrisiko sind kostenlos.",
         "uncertaintyPartial": "Für Teile der Strecke fehlen Angaben zu möglichen Wetterschwankungen.",
         "point": "Streckenpunkt · {time} · {minutes} min Fahrt",
+        "pointHike": "Streckenpunkt · {time} · {minutes} min unterwegs",
         "pointLabel": "Streckenpunkt",
         "pointRisk": "Regenrisiko am Punkt: {risk}",
         "noRange": "Für diesen Punkt ist kein Wetterbereich verfügbar.",
@@ -490,6 +509,7 @@
         "probablyDry": "Voraussichtlich trocken.",
         "ifWet": "Falls es regnet: etwa {rate} mm/h.",
         "headwindSign": "Positiver Gegenwind bremst, negative Werte bedeuten Rückenwind.",
+        "headwindSignHike": "Positive Werte: Wind von vorn, negative: Wind von hinten.",
         "noData": "Keine Wetterdaten für diese Strecke verfügbar."
     },
     "routeForm": {
@@ -498,6 +518,7 @@
         "dest": "Ziel",
         "date": "Datum",
         "departure": "Abfahrt",
+        "departureHike": "Startzeit",
         "timeFormat": "Als HH:MM",
         "nameOptional": "Name (optional)",
         "importedName": "Importierte Strecke",
@@ -506,35 +527,54 @@
         "descriptionOptional": "Beschreibung (optional)",
         "days": "Tage",
         "departureTime": "Abfahrtszeit",
+        "departureTimeHike": "Startzeit",
         "timeAsHhMm": "Uhrzeit als HH:MM",
         "twoWay": "Hin- & Rückfahrt",
+        "twoWayHike": "Hin- & Rückweg",
         "oneWay": "Einfache Fahrt",
+        "oneWayHike": "Einfacher Weg",
         "direction": "Fahrtrichtung",
+        "directionHike": "Richtung",
         "returnTime": "Abfahrtszeit der Rückfahrt",
+        "returnTimeHike": "Startzeit des Rückwegs",
         "validTime": "Gültige Uhrzeit angeben",
-        "returnHint": "Die Rückfahrt fährt an denselben Tagen wie die Hinfahrt und wird vom Ziel zum Start separat berechnet. Beide Fahrten zählen zusammen als eine Route."
+        "returnHint": "Die Rückfahrt fährt an denselben Tagen wie die Hinfahrt und wird vom Ziel zum Start separat berechnet. Beide Fahrten zählen zusammen als eine Route.",
+        "returnHintHike": "Der Rückweg gilt für dieselben Tage wie der Hinweg und wird vom Ziel zum Start separat berechnet. Beide Wege zählen zusammen als eine Route."
     },
     "departures": {
         "compare": "Abfahrtszeiten vergleichen",
+        "compareHike": "Startzeiten vergleichen",
         "title": "Beste Abfahrtszeit",
+        "titleHike": "Beste Startzeit",
         "window": "Zeitfenster: {from} – {to}",
         "recommended": "Abfahrt etwa {departure} · Ankunft {arrival}",
+        "recommendedHike": "Start etwa {departure} · Ankunft {arrival}",
         "nothing": "Nicht genügend Wetterdaten oder keine zukünftige Abfahrt im Zeitfenster.",
+        "nothingHike": "Nicht genügend Wetterdaten oder kein künftiger Start im Zeitfenster.",
         "compared": "Verglichene Abfahrtszeiten",
+        "comparedHike": "Verglichene Startzeiten",
         "requested": "Gewünscht",
         "recommendedBadge": "Empfohlen",
         "shown": "Angezeigt",
         "backToRequested": "Zur gewünschten Abfahrtszeit",
+        "backToRequestedHike": "Zur gewünschten Startzeit",
         "steps": "Vergleich in 15-Minuten-Schritten. Die Wetterprognose kann gröber sein.",
         "explanation": {
             "insufficient_data": "Nicht genügend Wetterdaten zum Vergleichen der Abfahrtszeiten.",
+            "insufficient_dataHike": "Nicht genügend Wetterdaten zum Vergleichen der Startzeiten.",
             "best_in_window": "Voraussichtlich die günstigsten Bedingungen im gewählten Zeitfenster.",
             "requested_equivalent": "Ähnliche Bedingungen – deine gewünschte Abfahrtszeit passt bereits.",
+            "requested_equivalentHike": "Ähnliche Bedingungen – deine gewünschte Startzeit passt bereits.",
             "requested_best": "Deine gewünschte Abfahrtszeit bietet bereits die günstigsten Bedingungen.",
+            "requested_bestHike": "Deine gewünschte Startzeit bietet bereits die günstigsten Bedingungen.",
             "less_rain": "Weniger Regen während deiner Fahrt.",
+            "less_rainHike": "Weniger Regen während deiner Wanderung.",
             "less_wind": "Weniger Gegenwind während deiner Fahrt.",
+            "less_windHike": "Weniger Wind während deiner Wanderung.",
             "milder": "Angenehmere Temperaturen während deiner Fahrt.",
-            "less_frost": "Geringeres Frostrisiko während deiner Fahrt."
+            "milderHike": "Angenehmere Temperaturen während deiner Wanderung.",
+            "less_frost": "Geringeres Frostrisiko während deiner Fahrt.",
+            "less_frostHike": "Geringeres Frostrisiko während deiner Wanderung."
         }
     },
     "signup": {
@@ -562,6 +602,7 @@
             "time": "Zeit",
             "distance": "Distanz",
             "hoursLabel": "Fahrzeit in Stunden",
+            "hoursLabelHike": "Gehzeit in Stunden",
             "kmLabel": "Distanz in Kilometern"
         },
         "shape": {
@@ -574,6 +615,7 @@
         "editTitle": "Runde bearbeiten",
         "newTitle": "Neue Zufallsrunde",
         "intro": "Sag, wie lange oder wie weit du fahren willst. MeteoLane würfelt eine Strecke und prüft das Wetter darauf.",
+        "introHike": "Sag, wie lange oder wie weit du wandern willst. MeteoLane würfelt eine Strecke und prüft das Wetter darauf.",
         "profile": "Profil (bestimmt das Tempo)",
         "headingLoop": "Richtung zuerst",
         "headingDetour": "Umweg auf der Seite",
@@ -608,7 +650,8 @@
         "traffic": {
             "label": "Verkehr",
             "avoidMain": "Hauptstrassen meiden",
-            "preferNetwork": "Velonetz bevorzugen"
+            "preferNetwork": "Velonetz bevorzugen",
+            "preferNetworkHike": "Wanderwegnetz bevorzugen"
         },
         "towns": {
             "label": "Ortschaften",
@@ -625,6 +668,7 @@
         "windowFixed": "Fix",
         "editTitle": "Reise bearbeiten",
         "intro": "MeteoLane schlägt Tagesetappen, Pausen und Abfahrtszeiten vor, nach Wetter und deinen Wünschen.",
+        "introHike": "MeteoLane schlägt Tagesetappen, Pausen und Startzeiten vor, nach Wetter und deinen Wünschen.",
         "profile": "Profil",
         "firstDay": "Erster Tag",
         "earliestStart": "Frühester Start",
@@ -636,7 +680,7 @@
         "poisHint": "Jede Auswahl muss auf jeder Etappe vorkommen",
         "lodging": "Übernachten in",
         "lodgingHint": "Leer: jede Art",
-        "plusPitch": "Mit Plus vergleicht MeteoLane bis zu drei Varianten pro Tag und schlägt die beste Abfahrtszeit vor.",
+        "plusPitch": "Mit Plus vergleicht MeteoLane bis zu {n} Varianten pro Tag und schlägt die beste Abfahrtszeit vor.",
         "shiftDeparture": "Abfahrt verschieben",
         "plan": "Reise planen"
     },
@@ -646,11 +690,14 @@
         "detourIn": "Umweg in Variante {n}",
         "day": "Tag {n}",
         "weatherRouted": "Um Regen und Gegenwind geplant",
+        "weatherRoutedHike": "Um Regen geplant",
         "pickRoute": "Route wählen",
         "weatherFailed": "Wetter fehlgeschlagen",
         "weatherLoading": "Wetter wird geladen",
         "recommendedDeparture": "Empfohlene Abfahrt: {time}",
+        "recommendedDepartureHike": "Empfohlener Start: {time}",
         "departure": "Abfahrt: {time}",
+        "departureHike": "Start: {time}",
         "stops": "{n} Stopps | {n} Stopp | {n} Stopps",
         "lodging": "Übernachtung: {name} · {offset} neben der Strecke",
         "noLodging": "Keine passende Unterkunft nahe der Strecke gefunden. Der Tag endet, wo das Tageslimit erreicht ist.",
@@ -660,6 +707,7 @@
         "detourTo": "Umweg zu {poi}",
         "noForecastRandom": "Für diesen Tag gibt es noch keine Vorhersage. Würfle die Runde näher am Termin neu, dann empfiehlt MeteoLane die Strecke mit dem besten Wetter.",
         "noForecastJourney": "Für diesen Tag gibt es noch keine Vorhersage. Plane die Reise näher am Termin neu, dann richtet MeteoLane Strecke und Abfahrt nach dem Wetter.",
+        "noForecastJourneyHike": "Für diesen Tag gibt es noch keine Vorhersage. Plane die Reise näher am Termin neu, dann richtet MeteoLane Strecke und Startzeit nach dem Wetter.",
         "weatherLoadFailed": "Wetterdaten konnten nicht geladen werden.",
         "chosen": "{label} (gewählt)",
         "otherVariants": "weitere Varianten",
@@ -681,6 +729,7 @@
         "loadFailed": "Karte konnte nicht geladen werden",
         "windMode": "Winddarstellung",
         "particlesHint": "Partikel zeigen Richtung und Stärke des Winds zur Fahrzeit",
+        "particlesHintHike": "Partikel zeigen Richtung und Stärke des Winds zur Gehzeit",
         "arrowsHint": "Pfeile zeigen Richtung und Stärke",
         "popup": {
             "windDirUnavailable": "Windrichtung zur Strecke nicht verfügbar",
@@ -698,6 +747,7 @@
     },
     "routeList": {
         "noDeparture": "Keine Abfahrt",
+        "noDepartureHike": "Kein Start",
         "past": "Vergangen",
         "now": "jetzt",
         "computing": "Route wird berechnet …",
@@ -713,6 +763,7 @@
     },
     "keyData": {
         "label": "Kennzahlen der Fahrt",
+        "labelHike": "Kennzahlen der Wanderung",
         "felt": "Gefühlt Ø",
         "windEffort": "Wind­aufwand max.",
         "maxGust": "Böen max.",
@@ -721,7 +772,8 @@
         "headwindMax": "Gegenwind max.",
         "duration": "Dauer",
         "riskPartial": "Für Teile der Strecke fehlt das Regenrisiko.",
-        "note": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Fahrt. Regen und Gegenwind zeigen die höchsten erwarteten Werte. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Der Windaufwand zeigt als Stufe (niedrig bis sehr hoch), wie viel zusätzliche Kraft du für dein Tempo brauchst. Er ist geschätzt. Gefühlt ist die Temperatur, die du im Fahrtwind spürst (Windchill bei deinem Tempo), gemittelt über die Fahrzeit. Frost zeigt als Stufe (leicht bis stark), wie glatt die Strasse an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen."
+        "note": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Fahrt. Regen und Gegenwind zeigen die höchsten erwarteten Werte. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Der Windaufwand zeigt als Stufe (niedrig bis sehr hoch), wie viel zusätzliche Kraft du für dein Tempo brauchst. Er ist geschätzt. Gefühlt ist die Temperatur, die du im Fahrtwind spürst (Windchill bei deinem Tempo), gemittelt über die Fahrzeit. Frost zeigt als Stufe (leicht bis stark), wie glatt die Strasse an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen.",
+        "noteHike": "Das Regenrisiko zeigt den höchsten Wert an einem Streckenpunkt, nicht für die ganze Wanderung. Regen und Böen zeigen die höchsten erwarteten Werte. Wird Regen erwartet, zeigt Regen die Menge, die es voraussichtlich regnet, falls es regnet. Gefühlt ist die Temperatur, die du im Wind spürst (Windchill), gemittelt über die Gehzeit. Frost zeigt als Stufe (leicht bis stark), wie glatt der Weg an der kältesten Stelle werden dürfte — aus Temperatur, Nässe und Wettercode zusammen."
     },
     "sections": {
         "dry": "Trocken",
@@ -943,6 +995,7 @@
         "selectedLoading": "Höhenprofil für die gewählte Strecke wird geladen…",
         "selectedNoData": "Keine Höhendaten für die gewählte Strecke verfügbar.",
         "approximateTiming": "Fahrzeit nach Streckenlänge geschätzt",
+        "approximateTimingHike": "Gehzeit nach Streckenlänge geschätzt",
         "partial": "Höhendaten teilweise nicht verfügbar"
     },
     "routeDetail": {
@@ -952,16 +1005,18 @@
         "publicPhotos": "Öffentlich · Fotos",
         "sharePhotos": "Teilen & Fotos",
         "saveDuration": "Fahrzeit speichern",
+        "saveDurationHike": "Gehzeit speichern",
         "saveForRoute": "Für diese Route speichern",
         "windowSaveFailed": "Zeitfenster konnte nicht gespeichert werden.",
         "windAlong": "Wind entlang der Strecke",
         "weatherFailedPaused": "Wetterdaten konnten nicht geladen werden. Ist diese Route nach Ablauf von Plus pausiert?",
         "manageRoutes": "Aktive Routen und Tarif verwalten",
-        "tooEarly": "Noch keine Vorhersage möglich. Die Wettervorhersage ist erst näher am Abfahrtstermin verfügbar."
+        "tooEarly": "Noch keine Vorhersage möglich. Die Wettervorhersage ist erst näher am Abfahrtstermin verfügbar.",
+        "tooEarlyHike": "Noch keine Vorhersage möglich. Die Wettervorhersage ist erst näher am Starttermin verfügbar."
     },
     "variants": {
         "saved": "Keine Route gespeichert. | Route gespeichert. | {n} Routen gespeichert.",
-        "quota": "Nicht alle Varianten passen in deinen Tarif. Was Platz hatte, ist gespeichert. Mit Plus hast du bis zu 20 Routen.",
+        "quota": "Nicht alle Varianten passen in deinen Tarif. Was Platz hatte, ist gespeichert. Mit Plus hast du bis zu {plus} Routen.",
         "toMyRoutes": "Zu meinen Routen",
         "saveFailed": "Die Routen konnten nicht gespeichert werden.",
         "title": "Wähle deine Varianten",
@@ -987,6 +1042,7 @@
         "saveRoute": "Route speichern",
         "planNew": "Neue Route planen",
         "from": "Abfahrtsort",
+        "fromHike": "Startort",
         "to": "Zielort",
         "pickDestination": "Ziel wählen für die Wetterprognose entlang der Route.",
         "loadFailed": "Route oder Wetter konnte nicht geladen werden. Liegen Start und Ziel innerhalb der geladenen OSM-Region?"
@@ -1000,6 +1056,7 @@
         "copy": "In meine Routen",
         "photos": "Fotos",
         "weatherTitle": "Wetter für deine Fahrt",
+        "weatherTitleHike": "Wetter für deine Wanderung",
         "weatherIntro": "Wann fährst du los? Das Wetter kommt für jeden Abschnitt zur Zeit, zu der du dort bist, bis 16 Tage im Voraus.",
         "go": "Los"
     },

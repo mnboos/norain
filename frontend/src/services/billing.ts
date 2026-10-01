@@ -16,6 +16,53 @@ export interface Entitlements {
     trialEndsAt: string | null;
     complimentaryUntil: string | null;
     paidSubscription: boolean;
+    /** What Free and Plus include and cost; null from an API older than it. */
+    offer: PlanOffer | null;
+}
+
+/** The figures the plan texts quote. They come from the server (core/entitlements.py) only. */
+export interface PlanOffer {
+    freeRoutes: number;
+    plusRoutes: number;
+    plusBriefingRoutes: number;
+    freeJourneys: number;
+    plusJourneys: number;
+    plusAlternatives: number;
+    freeRandomRides: number;
+    plusRandomRides: number;
+    trialDays: number;
+    briefingLeadMinutes: number;
+    briefingsPerDay: number;
+    prices: { annual: number; monthly: number; currency: string };
+}
+
+const number = (value: unknown) => (typeof value === "number" ? value : null);
+
+function parseOffer(offer: unknown, prices: unknown): PlanOffer | null {
+    if (!isRecord(offer) || !isRecord(prices)) return null;
+    const parsed = {
+        freeRoutes: number(offer.freeRoutes),
+        plusRoutes: number(offer.plusRoutes),
+        plusBriefingRoutes: number(offer.plusBriefingRoutes),
+        freeJourneys: number(offer.freeJourneys),
+        plusJourneys: number(offer.plusJourneys),
+        plusAlternatives: number(offer.plusAlternatives),
+        freeRandomRides: number(offer.freeRandomRides),
+        plusRandomRides: number(offer.plusRandomRides),
+        trialDays: number(offer.trialDays),
+        briefingLeadMinutes: number(offer.briefingLeadMinutes),
+        briefingsPerDay: number(offer.briefingsPerDay),
+    };
+    const { annual, monthly, currency } = prices;
+    if (typeof annual !== "number" || typeof monthly !== "number" || typeof currency !== "string") return null;
+    if (!isComplete(parsed)) return null;
+    return { ...parsed, prices: { annual, monthly, currency } };
+}
+
+function isComplete<T extends Record<string, number | null>>(
+    value: T,
+): value is { [K in keyof T]: NonNullable<T[K]> } {
+    return Object.values(value).every(v => v !== null);
 }
 
 export const parseEntitlements: Parse<Entitlements> = value => {
@@ -48,6 +95,7 @@ export const parseEntitlements: Parse<Entitlements> = value => {
         trialEndsAt: typeof value.trialEndsAt === "string" ? value.trialEndsAt : null,
         complimentaryUntil: typeof value.complimentaryUntil === "string" ? value.complimentaryUntil : null,
         paidSubscription: value.paidSubscription === true,
+        offer: parseOffer(value.offer, value.prices),
     };
 };
 

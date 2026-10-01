@@ -11,7 +11,9 @@ import type { RecurringRouteOut, RouteThumbnail } from "@norain/api/models";
 
 /** Only the fields the list's weather readers need, so callers and tests need not build a
  * whole route. */
-export type ThumbnailRoute = Pick<RecurringRouteOut, "thumbnail" | "nextDeparture" | "hasGeometry">;
+// The profile words the caption (a hike has no "Fahrqualität"); it is optional, a bike without it.
+export type ThumbnailRoute = Pick<RecurringRouteOut, "thumbnail" | "nextDeparture" | "hasGeometry"> &
+    Partial<Pick<RecurringRouteOut, "profile">>;
 
 /**
  * The stored thumbnail when it still describes the ride that is coming, `null` otherwise.

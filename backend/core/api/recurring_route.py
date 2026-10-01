@@ -671,7 +671,8 @@ def _save_return(route, cron, description):
     description = _return_description(cron, route, description or (returning.schedule_description if returning else ""))
     values = {
         "owner": route.owner,
-        "name": gettext("%(name)s – Rückfahrt") % {"name": route.name[:188]},
+        "name": (gettext("%(name)s – Rückweg") if route.profile == "hike" else gettext("%(name)s – Rückfahrt"))
+        % {"name": route.name[:188]},
         "description": route.description,
         "start_point": route.destination_point,
         "start_name": route.dest_name,

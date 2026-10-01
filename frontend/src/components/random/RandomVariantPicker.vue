@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { useEntitlements } from "@/composables/useEntitlements";
 import { computed, ref, watch } from "vue";
 import { useQuasar } from "quasar";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import { useRouter } from "vue-router";
 import { symSharpDownload, symSharpSave, symSharpShare } from "@quasar/extras/material-symbols-sharp";
 import type { JourneyOut, JourneyStageOut } from "@norain/api/models";
@@ -26,6 +28,7 @@ const $q = useQuasar();
 const { t } = useI18n();
 const router = useRouter();
 const save = useSaveVariantsAsRoutes();
+const { entitlements } = useEntitlements();
 
 const stages = computed(() => props.ride.days?.[0]?.stages ?? []);
 const paths = computed(() => stages.value.map(stage => stage.path));
@@ -146,7 +149,9 @@ async function onSave() {
         if (isQuotaExceeded(err)) {
             $q.dialog({
                 title: t("quota.title"),
-                message: t("variants.quota"),
+                message: entitlements.value?.offer
+                    ? t("variants.quota", { plus: entitlements.value.offer.plusRoutes })
+                    : undefined,
                 cancel: { label: t("variants.toMyRoutes"), flat: true },
                 ok: { label: t("quota.upgrade"), color: "primary", unelevated: true },
             })
@@ -165,6 +170,7 @@ async function onSave() {
             <VariantsMap :paths="paths" :picked="picked" :pois="pois" @toggle="toggle" />
             <ElevationChart
                 v-if="mainProfile"
+                :profile="ride.profile"
                 class="q-mt-md"
                 :stage-id="mainProfile.stageId"
                 :color="mainProfile.color"
@@ -245,7 +251,7 @@ async function onSave() {
                 <q-input
                     v-model="time"
                     class="q-mt-sm"
-                    :label="t('routeForm.departure')"
+                    :label="tp(ride.profile, 'routeForm.departure')"
                     outlined
                     dense
                     mask="##:##"

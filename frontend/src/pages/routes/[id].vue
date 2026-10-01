@@ -9,6 +9,7 @@
 import { computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import { symSharpArrowBack } from "@quasar/extras/material-symbols-sharp";
 import RouteDetailPanel from "@/components/RouteDetailPanel.vue";
 import { useSession } from "@/composables/useSession";
@@ -67,10 +68,10 @@ const departureTime = computed(() => departure.value.time);
         <q-tabs v-if="route?.returnRouteId || route?.parentRouteId" dense align="left" class="q-mb-md">
             <q-route-tab
                 :to="{ path: `/routes/${route.parentRouteId ?? route.id}`, query: { direction: 'outbound' } }"
-                :label="t('routes.outbound')"
+                :label="tp(route.profile, 'routes.outbound')"
                 exact
             />
-            <q-route-tab :to="`/routes/${route.returnRouteId ?? route.id}`" :label="t('routes.return')" exact />
+            <q-route-tab :to="`/routes/${route.returnRouteId ?? route.id}`" :label="tp(route.profile, 'routes.return')" exact />
         </q-tabs>
         <RouteDetailPanel
             v-if="route && nextDirectionId === routeId"

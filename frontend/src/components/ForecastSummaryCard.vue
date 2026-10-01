@@ -2,6 +2,7 @@
 import { computed, ref, toRefs } from "vue";
 import { useQuasar } from "quasar";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import type { RouteForecastOut } from "@norain/api/models";
 import { forecastHeadline } from "@/utils/forecastDetails";
 import WeatherGlyph from "@/components/WeatherGlyph.vue";
@@ -17,7 +18,7 @@ const horizontal = computed(() => $q.screen.width >= 1280 || $q.screen.lt.md);
 
 const headline = computed(() => forecastHeadline(forecast.value.summary, forecast.value.samples));
 const explanation = computed(() => {
-    if (!forecast.value.samples.length) return t("summaryCard.noData");
+    if (!forecast.value.samples.length) return tp(forecast.value.profile, "summaryCard.noData");
     const p = forecast.value.summary.rainProbability;
     if (p == null) return t("summaryCard.riskUnavailable");
     if (p < 0.1) return "";
@@ -71,7 +72,7 @@ const showExplanation = ref(false);
         </q-card-section>
         <q-dialog v-model="showExplanation">
             <q-card>
-                <q-card-section class="text-body2">{{ t("summaryCard.note") }}</q-card-section>
+                <q-card-section class="text-body2">{{ tp(forecast.profile, "summaryCard.note") }}</q-card-section>
                 <q-card-actions align="right">
                     <q-btn v-close-popup flat :label="t('common.close')" color="primary" />
                 </q-card-actions>

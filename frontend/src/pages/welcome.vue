@@ -12,6 +12,7 @@ import { computed } from "vue";
 import { symSharpAdd, symSharpRemove } from "@quasar/extras/material-symbols-sharp";
 import { useSession } from "@/composables/useSession";
 import { useLocale } from "@/composables/useLocale";
+import { formatPrice, usePlanOffer } from "@/composables/usePlanOffer";
 import RainRouteSimulation from "@/components/landing/RainRouteSimulation.vue";
 
 type Lang = "de" | "en";
@@ -63,14 +64,14 @@ const copy = {
             "Eine Windangabe für den Ort sagt wenig. MeteoLane rechnet Gegen- und Seitenwind entlang jeder Kurve deiner Route und zeigt den Windaufwand als Stufe – von niedrig bis sehr hoch.",
         pricingTitle: "Preise",
         perYear: "/ Jahr",
-        orMonthly: "oder 3,90 € pro Monat",
-        trial: "14 Tage Plus kostenlos testen",
-        free: ["2 Routen", "Wetterkarten, Regenrisiko, Temperatur und Wind", "Gegen- und Seitenwind"],
+        orMonthly: "oder {monthly} pro Monat",
+        trial: "{days} Tage Plus kostenlos testen",
+        free: ["{freeRoutes} Routen", "Wetterkarten, Regenrisiko, Temperatur und Wind", "Gegen- und Seitenwind"],
         plus: [
-            "20 Routen",
+            "{plusRoutes} Routen",
             "Automatischer Abfahrtsvergleich",
             "Wetterdetails inkl. Unsicherheit",
-            "Briefings für bis zu 5 Routen, per E-Mail oder Push",
+            "Briefings für bis zu {briefingRoutes} Routen, per E-Mail oder Push",
         ],
         faq: [
             {
@@ -79,15 +80,15 @@ const copy = {
             },
             {
                 q: "Was ist ein Briefing?",
-                a: "Eine Nachricht per E-Mail oder Push etwa 60 Minuten vor der frühesten Abfahrt in deinem Zeitfenster – je eine für Hin- und Rückfahrt. Es ist eine geplante Prognose, keine laufende Wetterwarnung.",
+                a: "Eine Nachricht per E-Mail oder Push etwa {lead} Minuten vor der frühesten Abfahrt in deinem Zeitfenster – je eine für Hin- und Rückfahrt. Es ist eine geplante Prognose, keine laufende Wetterwarnung.",
             },
             {
                 q: "Brauche ich für den Test eine Kreditkarte?",
-                a: "Nein. Die Testphase dauert 14 Tage und wechselt danach automatisch zu Free, ohne Zahlung.",
+                a: "Nein. Die Testphase dauert {days} Tage und wechselt danach automatisch zu Free, ohne Zahlung.",
             },
             {
                 q: "Was passiert mit meinen Routen nach der Testphase?",
-                a: "Zwei Routen deiner Wahl bleiben aktiv. Weitere Routen bleiben gespeichert und pausieren, bis du Plus aktivierst.",
+                a: "Bis zu {freeRoutes} Routen deiner Wahl bleiben aktiv. Weitere Routen bleiben gespeichert und pausieren, bis du Plus aktivierst.",
             },
             {
                 q: "Woher kommen die Wetterdaten?",
@@ -142,14 +143,14 @@ const copy = {
             "A wind reading for a town tells you little. MeteoLane works out headwind and crosswind along every bend of your route and shows the wind effort as a level – from low to very high.",
         pricingTitle: "Pricing",
         perYear: "/ year",
-        orMonthly: "or €3.90 per month",
-        trial: "Try Plus free for 14 days",
-        free: ["2 routes", "Weather maps, rain risk, temperature and wind", "Headwind and crosswind"],
+        orMonthly: "or {monthly} per month",
+        trial: "Try Plus free for {days} days",
+        free: ["{freeRoutes} routes", "Weather maps, rain risk, temperature and wind", "Headwind and crosswind"],
         plus: [
-            "20 routes",
+            "{plusRoutes} routes",
             "Automatic departure comparison",
             "Weather details incl. uncertainty",
-            "Briefings for up to 5 routes, by email or push",
+            "Briefings for up to {briefingRoutes} routes, by email or push",
         ],
         faq: [
             {
@@ -158,15 +159,15 @@ const copy = {
             },
             {
                 q: "What is a briefing?",
-                a: "An email or push message about 60 minutes before the earliest departure in your window – one each for outward and return. It’s a scheduled forecast, not continuous weather alerts.",
+                a: "An email or push message about {lead} minutes before the earliest departure in your window – one each for outward and return. It’s a scheduled forecast, not continuous weather alerts.",
             },
             {
                 q: "Do I need a credit card for the trial?",
-                a: "No. The trial lasts 14 days, then switches back to Free automatically, with no payment.",
+                a: "No. The trial lasts {days} days, then switches back to Free automatically, with no payment.",
             },
             {
                 q: "What happens to my routes after the trial?",
-                a: "Two routes of your choice stay active. The rest stay saved and pause until you activate Plus.",
+                a: "Up to {freeRoutes} routes of your choice stay active. The rest stay saved and pause until you activate Plus.",
             },
             {
                 q: "Where does the weather data come from?",
@@ -184,7 +185,30 @@ const lang = computed<Lang>({
     get: () => locale.value,
     set: value => void setLocale(value),
 });
+/**
+ * The plan's figures for the copy's `{name}` placeholders: prices, limits and the trial length
+ * come from the server (`usePlanOffer`), never from this file. Until they are there, the
+ * template leaves out whatever still holds a placeholder. formatPrice reads the app's locale,
+ * so a language switch reformats the prices.
+ */
+const { offer } = usePlanOffer();
+const figures = computed<Record<string, string> | null>(() => {
+    const o = offer.value;
+    if (!o) return null;
+    return {
+        annual: formatPrice(o.prices.annual, o.prices.currency),
+        monthly: formatPrice(o.prices.monthly, o.prices.currency),
+        free: formatPrice(0, o.prices.currency),
+        days: String(o.trialDays),
+        freeRoutes: String(o.freeRoutes),
+        plusRoutes: String(o.plusRoutes),
+        briefingRoutes: String(o.plusBriefingRoutes),
+        lead: String(o.briefingLeadMinutes),
+    };
+});
 const t = computed(() => copy[lang.value]);
+const fill = (text: string) => text.replace(/\{(\w+)\}/g, (all, key: string) => figures.value?.[key] ?? all);
+const filled = (text: string) => !/\{\w+\}/.test(fill(text));
 
 const { isAuthenticated } = useSession();
 
@@ -355,15 +379,15 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
                                         MeteoLane {{ plus ? "Plus" : "Free" }}
                                     </div>
                                     <div class="col-12 col-sm-auto price text-weight-bold">
-                                        {{ plus ? "29 €" : "0 €" }}
-                                        <span v-if="plus" class="text-body2 text-weight-regular text-brand-mist">
+                                        {{ figures ? (plus ? figures.annual : figures.free) : "" }}
+                                        <span v-if="plus && figures" class="text-body2 text-weight-regular text-brand-mist">
                                             {{ t.perYear }}
                                         </span>
                                     </div>
                                 </div>
                                 <q-list tag="ul" :dark="false" class="q-pa-none q-ma-none q-mb-md">
                                     <q-item
-                                        v-for="feature in plus ? t.plus : t.free"
+                                        v-for="feature in (plus ? t.plus : t.free).filter(filled)"
                                         :key="feature"
                                         tag="li"
                                         dense
@@ -371,7 +395,7 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
                                         class="q-pa-none q-mb-xs"
                                     >
                                         <q-item-section>
-                                            <span>· {{ feature }}</span>
+                                            <span>· {{ fill(feature) }}</span>
                                         </q-item-section>
                                     </q-item>
                                 </q-list>
@@ -387,11 +411,11 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
                                         text-color="brand-navy"
                                         size="16px"
                                         padding="12px"
-                                        :label="plus ? t.trial : t.cta"
+                                        :label="plus && filled(t.trial) ? fill(t.trial) : t.cta"
                                     />
                                 </q-card-actions>
                                 <p v-if="plus" class="text-caption text-brand-mist text-center q-mt-md q-mb-none">
-                                    {{ t.orMonthly }} · {{ t.ctaNote }}
+                                    <template v-if="filled(t.orMonthly)">{{ fill(t.orMonthly) }} · </template>{{ t.ctaNote }}
                                 </p>
                             </q-card-section>
                         </q-card>
@@ -403,7 +427,7 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
                 <h2 class="text-heading text-brand-navy q-ma-none q-mb-lg">FAQ</h2>
                 <q-card flat :dark="false" class="brand-surface overflow-hidden">
                     <q-list :dark="false">
-                        <template v-for="(faq, i) in t.faq" :key="i">
+                        <template v-for="(faq, i) in t.faq.filter(item => filled(item.a))" :key="i">
                             <q-separator v-if="i > 0" :dark="false" />
                             <q-expansion-item
                                 class="faq-item"
@@ -421,7 +445,7 @@ const loginLabel = computed(() => (isAuthenticated.value ? t.value.toApp : t.val
                                     <q-item-section class="text-body1 text-weight-medium">{{ faq.q }}</q-item-section>
                                 </template>
                                 <q-card-section class="q-pt-none q-px-lg q-pb-lg text-brand-muted">
-                                    {{ faq.a }}
+                                    {{ fill(faq.a) }}
                                 </q-card-section>
                             </q-expansion-item>
                         </template>

@@ -1120,6 +1120,19 @@ never changes what German users see. Rules that hold this together:
   `{ } @ $ |` as `{'@'}`; plurals are `|`-separated (`t(key, n)`). ESLint's
   `@intlify/vue-i18n/no-missing-keys` is an error, `no-raw-text` a warning. `welcome.vue` keeps
   its own de/en copy object, switched by the app locale.
+- **Hiking wording.** A text about one route, journey or forecast that says "Fahrt" has a
+  `<key>Hike` sibling, and the code calls `tp(profile, key)` (`src/i18n`), which falls back to
+  the plain key for every other profile and for keys without a variant. The profile comes from
+  the row or from `job.result.profile`; the charts take it as an argument. Texts with no single
+  profile in reach (list pages, the account) are worded for both. `keyData.note` and
+  `summaryCard.note` differ in content for a hike (gusts, no wind effort), not only in words.
+  The stored return-route name follows the profile too ("– Rückweg").
+- **No figures in texts.** Prices, tier limits, the trial length and the briefing lead and cap
+  are placeholders. The figures come from the server only: `offer` (and `prices`) in the
+  entitlements payload (`core/api/billing.py` `_offer`, from `entitlements.py` `FREE`/`PRO`,
+  `PLUS_PRICES`, `TRIAL_DAYS` and `briefings.LEAD`/`MAX_PER_DAY`). The endpoint answers anonymous
+  visitors, so `welcome.vue` reads it through `usePlanOffer` and leaves out any line still
+  holding a placeholder. Money goes through `formatPrice` (`Intl`, so de-CH reads "EUR 29").
 - **Backend catalog.** `backend/core/locale/en/LC_MESSAGES/django.po` and the compiled `.mo`
   are both committed, so neither the image nor a Windows dev box needs GNU gettext at runtime.
   After adding or changing a `gettext` string or a `{% translate %}`, run `just messages`

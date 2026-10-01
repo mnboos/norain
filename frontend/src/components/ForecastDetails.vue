@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import type { RouteForecastOut } from "@norain/api/models";
 import { metricLabels, rangeText, swissTime } from "@/utils/forecastDetails";
 import { useEntitlements } from "@/composables/useEntitlements";
@@ -52,7 +53,7 @@ const partial = computed(() => props.forecast.uncertaintyPartial);
             <template v-if="sample">
                 <label class="text-weight-medium">
                     {{
-                        t("details.point", {
+                        tp(forecast.profile, "details.point", {
                             time: t("common.clock", { time: swissTime(sample.eta) }),
                             minutes: Math.round(sample.elapsedS / 60),
                         })
@@ -101,7 +102,7 @@ const partial = computed(() => props.forecast.uncertaintyPartial);
                         </dd>
                     </template>
                 </dl>
-                <p class="text-caption">{{ t("details.headwindSign") }}</p>
+                <p class="text-caption">{{ tp(forecast.profile, "details.headwindSign") }}</p>
             </template>
             <p v-else>{{ t("details.noData") }}</p>
         </div>

@@ -9,7 +9,7 @@ import { liveThumbnail } from "@/utils/routeThumbnail";
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { differenceInHours, differenceInMinutes, formatDistanceToNow, formatRelative, isPast } from "date-fns";
-import { dateFnsLocale } from "@/i18n";
+import { dateFnsLocale, tp } from "@/i18n";
 import { rideLabelText } from "@/utils/levels";
 import { useRecurringRoutes } from "@/queries/recurringRoutes";
 
@@ -29,7 +29,7 @@ const { data: routes } = useRecurringRoutes();
 const route = computed(() => routes.value?.find(r => r.id === props.routeId));
 
 function relativeTime(iso: string | null | undefined): string {
-    if (!iso) return t("routeList.noDeparture");
+    if (!iso) return tp(route.value?.profile, "routeList.noDeparture");
     const dt = new Date(iso);
     const now = new Date();
     if (isPast(dt)) return t("routeList.past");
