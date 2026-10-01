@@ -158,6 +158,16 @@ download-elevation-whole-for filtered_pbf:
 cleanup-elevation-downloads:
     {{ container }} compose run --rm --no-deps graphhopper terrain-cleanup
 
+[doc("Write cell_coverage.json (zoom-15 tiles per road cell) into the terrain of the active graph, for the system dashboard's elevation layer. Terrain prepared since it existed has one already. Uses the graph's road cells (run graph-cells-backfill first for an older graph). Reads the archive's directories only; changes nothing else.")]
+[group('geodata')]
+elevation-coverage-backfill:
+    {{ container }} compose run --rm --no-deps graphhopper terrain-coverage
+
+[doc("Write the road cells of the filtered OSM file the current graph was built from into its release, for the system dashboard's routing layer. Graphs built since then have them already; without them the dashboard shows the terrain's cells, which may cover more.")]
+[group('geodata')]
+graph-cells-backfill filtered_pbf:
+    {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper graph-cells
+
 [doc("Import a candidate graph using prepared Mapterhorn terrain. Does not stop, delete or activate the current graph.")]
 [group('geodata')]
 build-graphhopper-graph-from filtered_pbf:
@@ -267,6 +277,21 @@ photon-import +files:
 [script("C:/Program Files/Git/bin/bash.exe", "-eu")]
 photon-import +files:
     CONTAINER={{ quote(container) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/photon-import.sh "$@"
+
+[doc("Write the system dashboard's Photon coverage (places per country) from the dumps the current index was built from, without importing them, e.g. just photon-coverage-backfill data/downloads/photon/*.jsonl.zst. Imports since then write it themselves.")]
+[group('geodata')]
+[positional-arguments]
+[unix]
+photon-coverage-backfill +files:
+    COVERAGE_ONLY=1 CONTAINER={{ quote(container) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} bash scripts/photon-import.sh "$@"
+
+[doc("Write the system dashboard's Photon coverage (places per country) from the dumps the current index was built from, without importing them, e.g. just photon-coverage-backfill data/downloads/photon/*.jsonl.zst. Imports since then write it themselves.")]
+[group('geodata')]
+[positional-arguments]
+[windows]
+[script("C:/Program Files/Git/bin/bash.exe", "-eu")]
+photon-coverage-backfill +files:
+    COVERAGE_ONLY=1 CONTAINER={{ quote(container) }} INVOCATION_DIR={{ quote(invocation_directory_native()) }} "$BASH" scripts/photon-import.sh "$@"
 
 [group('api')]
 [working-directory("backend")]

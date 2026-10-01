@@ -41,6 +41,37 @@ def validate_path(path):
     return coords
 
 
+def cell_centre(x, y, zoom):
+    n = 2**zoom
+    lon = (x + 0.5) / n * 360 - 180
+    lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (y + 0.5) / n))))
+    return [lon, lat]
+
+
+def check_fallback(url, coverage):
+    """Heights where zoom 15 has no tiles come only from the zoom-12 fallback. GraphHopper drops
+    a -Ddw. override for a key its yaml lacks without a word, and Tuscany read 0 m that way."""
+    manifest = coverage.get("manifest") or {}
+    cell_coverage = coverage.get("cell_coverage") or {}
+    cells = cell_coverage.get("cells") or []
+    if "fallback_sha256" not in manifest:
+        return
+    # [x, y, zoom-15 tiles present, nodata]: cells without any zoom-15 tile.
+    bare = [row for row in cells if row[2] == 0]
+    if not bare:
+        if not cells:
+            print("WARNING: no cell_coverage; the zoom-12 fallback was not checked.")
+        return
+    step = max(1, len(bare) // 20)
+    points = [cell_centre(row[0], row[1], cell_coverage["mask_zoom"]) for row in bare[::step][:20]]
+    heights = request(url + "/elevation", {"points": points}).get("elevation") or []
+    if not any(isinstance(h, (int, float)) and math.isfinite(h) for h in heights):
+        raise ValueError(
+            f"The zoom-12 fallback answers no height in {len(points)} cells without zoom 15 "
+            f"(e.g. {points[0]}); is graph.elevation.pmtiles.fallback.location in the config?"
+        )
+
+
 def weather_field(points, rain, east_wind):
     """A ``weather`` hint (core/weather_routing.py) over the test route: the same rain
     multiplier and wind (km/h, blowing east) everywhere, for four hours from now."""
@@ -103,6 +134,14 @@ def main():
         raise ValueError("Saved-coordinate elevation lookup returned invalid data.")
     if any(value is None for value in heights):
         print("WARNING: coordinate elevation lookup contains a terrain gap.")
+    coverage = request(args.url + "/coverage")
+    if not coverage.get("artifact") or not coverage.get("manifest"):
+        raise ValueError("Coverage report lacks the release or its terrain.")
+    if coverage.get("cells_source") != "graph":
+        print("WARNING: the graph kept no road cells; see graph-cells-backfill.")
+    if coverage.get("cell_coverage") is None:
+        print("WARNING: terrain has no cell_coverage.json; run the terrain coverage backfill.")
+    check_fallback(args.url, coverage)
 
     def prefs(network):
         return {

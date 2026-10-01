@@ -4,7 +4,14 @@ import ElevationChart from "@/components/ElevationChart.vue";
 import { computed, ref, toRefs, watch } from "vue";
 import { useQuasar } from "quasar";
 import { useI18n } from "vue-i18n";
-import { symSharpBed, symSharpCloudOff, symSharpStar, symSharpWarning } from "@quasar/extras/material-symbols-sharp";
+import {
+    symSharpBed,
+    symSharpCloudOff,
+    symSharpDownload,
+    symSharpShare,
+    symSharpStar,
+    symSharpWarning,
+} from "@quasar/extras/material-symbols-sharp";
 import {
     JourneyReasonOutKindEnum,
     type JourneyDayOut,
@@ -22,6 +29,7 @@ import { intlLocale } from "@/i18n";
 import { rideLabelText } from "@/utils/levels";
 import { CANDIDATE_COLOR, poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
 import { alternativeColor } from "@/utils/rideQuality";
+import { canShareFiles, exportJourneyStage, gpxError } from "@/services/gpx";
 
 const $q = useQuasar();
 const { t } = useI18n();
@@ -56,6 +64,20 @@ function pick(id: string) {
     userPicked.value = true;
 }
 const stage = computed(() => stages.value.find(s => s.id === selectedId.value));
+// The picked variant as GPX, with its stops and the night's lodging.
+const exporting = ref(false);
+const sharing = canShareFiles();
+async function exportStage() {
+    if (!stage.value) return;
+    exporting.value = true;
+    try {
+        await exportJourneyStage(journey.value.id, stage.value.id, `${journey.value.name} – ${dayLabel(day.value.date)}`);
+    } catch (e) {
+        $q.notify({ type: "negative", message: await gpxError(e) });
+    } finally {
+        exporting.value = false;
+    }
+}
 // The variants not picked, each in its own colour on the map (by its place in the list, so a
 // variant keeps its colour whichever one is picked); a click on one picks it. Each brings its
 // own forecast's wind for the animation, once that forecast is done: waiting on the rest would
@@ -255,6 +277,18 @@ function breakEta(elapsedS: number): string {
                 <q-banner v-else-if="day.lodgingMissing" dense rounded class="bg-tint-warn q-mt-sm">
                     {{ t("journeyDay.noLodging") }}
                 </q-banner>
+                <q-btn
+                    v-if="stage"
+                    flat
+                    dense
+                    no-caps
+                    class="q-mt-xs"
+                    :icon="sharing ? symSharpShare : symSharpDownload"
+                    :label="sharing ? t('routeDetail.shareGpx') : t('routeDetail.downloadGpx')"
+                    :loading="exporting"
+                    data-testid="journey-stage-gpx"
+                    @click="exportStage"
+                />
                 <q-banner
                     v-if="planningWarnings.length || missingGaps.length"
                     dense

@@ -21,6 +21,7 @@ from pydantic import Field
 from .. import fingerprinting
 from ..auth.admin_access import has_system_access
 from ..auth.lockout import client_ip
+from ..data_coverage import data_coverage as read_data_coverage
 from ..departures import cell_covers, instant
 from ..geo import simplify_line
 from ..grid import ENSEMBLE_MODELS, ENSEMBLE_REQUEST_VERSION, MAX_CELL_AGE
@@ -218,6 +219,91 @@ def browser_stats(request):
             {"day": date.fromisoformat(day), "counts": counts} for day, counts in fingerprinting.read_stats().items()
         ],
     }
+
+
+class SystemGraphCoverage(CamelSchema):
+    release: str
+    revision: str
+    status: str
+    built_at: datetime | None
+    osm_file: str | None
+    osm_file_modified: datetime | None
+    # "graph": the build's own road cells; "terrain": an older release, shown with the terrain's
+    # cells, which may cover more than the graph; "bounds": terrain prepared for a bounding box,
+    # every cell in it.
+    cells_source: Literal["graph", "terrain", "bounds"]
+    cells: int
+
+
+class SystemTerrainSource(CamelSchema):
+    name: str
+    bbox: list[float | None]
+
+
+class SystemTerrainCheck(CamelSchema):
+    zoom: int | None
+    positions: int
+    decoded: bool
+    missing: int | None = None
+    # Tiles with nodata pixels ("void" in the terrain manifest; `void` is a TypeScript keyword).
+    nodata: int | None = None
+
+
+class SystemElevationCounts(CamelSchema):
+    full: int
+    partial: int
+    fallback: int
+
+
+class SystemTerrainCoverage(CamelSchema):
+    key: str
+    catalog_version: str
+    zoom: int | None
+    fallback_zoom: int | None
+    sources: list[SystemTerrainSource]
+    fallback_source: str | None
+    checks: list[SystemTerrainCheck]
+    # None until cell_coverage.json exists (just elevation-coverage-backfill).
+    cell_counts: SystemElevationCounts | None
+
+
+class SystemPhotonCountry(CamelSchema):
+    code: str
+    places: int
+
+
+class SystemPhotonCoverage(CamelSchema):
+    reachable: bool
+    import_date: datetime | None
+    version: str | None
+    # False until the import (or just photon-coverage-backfill) wrote meteolane-coverage.json.
+    manifest: bool
+    imported_at: datetime | None
+    sources: list[str] | None
+    countries: list[SystemPhotonCountry] | None
+
+
+class SystemElevationBoxes(CamelSchema):
+    full: list[list[float]]
+    partial: list[list[float]]
+    fallback: list[list[float]]
+
+
+class SystemDataCoverage(CamelSchema):
+    """None for a part that could not be read; the others still answer."""
+
+    graph: SystemGraphCoverage | None
+    terrain: SystemTerrainCoverage | None
+    photon: SystemPhotonCoverage | None
+    # [west, south, east, north] per run of zoom-11 cells in a row.
+    road_boxes: list[list[float]]
+    elevation_boxes: SystemElevationBoxes
+    bounds: list[float] | None
+
+
+@router.get("/data-coverage", response=SystemDataCoverage)
+def data_coverage(request):
+    return read_data_coverage()
 
 
 @router.get("/summary", response=SystemSummary)

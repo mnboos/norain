@@ -10,6 +10,7 @@ from defusedxml.ElementTree import fromstring
 from django.utils.translation import gettext
 
 from .geo import haversine_m
+from .pois import category_label
 
 MAX_GPX_BYTES = 10 * 1024 * 1024
 MAX_TRACK_POINTS = 100_000
@@ -163,17 +164,38 @@ def exact_geometry(points, duration_seconds, interval_seconds=300):
     }
 
 
-def serialize_gpx(name, points):
-    points = validate_track(points)
-    doc = ET.Element("gpx", {"xmlns": GPX_NS, "version": "1.1", "creator": "MeteoLane"})
-    track = ET.SubElement(doc, "trk")
+def _xml_text(text):
     # XML 1.0 rejects control characters even when text escaping is used.
-    clean_name = "".join(
+    return "".join(
         c
-        for c in name[:200]
+        for c in text
         if c in "\t\n\r" or 32 <= ord(c) <= 0xD7FF or 0xE000 <= ord(c) <= 0xFFFD or 0x10000 <= ord(c) <= 0x10FFFF
     )
-    ET.SubElement(track, "name").text = clean_name or "MeteoLane"
+
+
+def _waypoint(doc, stop):
+    try:
+        lon, lat = float(stop["lon"]), float(stop["lat"])
+    except KeyError, TypeError, ValueError:
+        return
+    if not (math.isfinite(lon) and math.isfinite(lat) and -180 <= lon <= 180 and -90 <= lat <= 90):
+        return
+    category = str(stop.get("category") or "")
+    node = ET.SubElement(doc, "wpt", {"lat": str(lat), "lon": str(lon)})
+    ET.SubElement(node, "name").text = _xml_text(str(stop.get("name") or "")[:200]) or category_label(category)
+    if category:
+        ET.SubElement(node, "type").text = _xml_text(category)
+
+
+def serialize_gpx(name, points, waypoints=()):
+    """A track, and the stops it was routed through as waypoints (``core.pois.PoiHit.as_json``)."""
+    points = validate_track(points)
+    doc = ET.Element("gpx", {"xmlns": GPX_NS, "version": "1.1", "creator": "MeteoLane"})
+    # GPX 1.1 orders wpt before trk.
+    for stop in waypoints:
+        _waypoint(doc, stop)
+    track = ET.SubElement(doc, "trk")
+    ET.SubElement(track, "name").text = _xml_text(name[:200]) or "MeteoLane"
     segment = ET.SubElement(track, "trkseg")
     for point in points:
         node = ET.SubElement(segment, "trkpt", {"lat": str(point[1]), "lon": str(point[0])})

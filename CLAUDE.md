@@ -252,8 +252,9 @@ reading: a public route, its photos and comments, and a forecast job by its ungu
 
 ### Every heavy operation is a task
 
-No HTTP request performs a provider fetch or a GraphHopper call — with one deliberate
-exception, `POST /api/routes/preview` (see "Route editing"). The forecast endpoints create a
+No HTTP request performs a provider fetch or a GraphHopper call — with two deliberate
+exceptions: `POST /api/routes/preview` (see "Route editing") and the admin-only
+`GET /api/system/data-coverage` (see "System dashboard"). The forecast endpoints create a
 `ForecastJob`, enqueue `plan_forecast_job` and return **202** with a job id; a finished job that is still fresh returns
 **200** with its stored payload.
 
@@ -632,7 +633,9 @@ Dockerfile, with a `grep` guard) reads the fallback wherever zoom 15 is NaN. Wit
 GraphHopper stores 0 m there (`OSMReader` default elevation), and the slope next to real
 heights becomes a cliff that `average_slope` punishes. The import and `/elevation` must both
 go through `withFallback`, or saved paths read gaps the graph filled. Gaps are counted in the
-manifest's `coverage`, never an error. Heights are baked in at import, so new terrain means a
+manifest's `coverage`, never an error, and per road cell in `cell_coverage.json` (directory lookups
+only; the system dashboard's elevation layer). A release keeps its OSM file's road cells as
+`cells.json` (terrain may cover more). Heights are baked in at import, so new terrain means a
 new graph. Terrain covers only the zoom-11 cells holding a node of the file (`node_cells` →
 `region.geojson` → `pmtiles extract --region`), never its bounding box. GraphHopper reads just the
 zoom-15 tile under each node (interpolation stays inside the tile, long-edge sampling is off).
@@ -653,6 +656,11 @@ the fragmentation (`docs/how-to/build-routing-graph.md`, "Large areas").
 Numeric GraphHopper settings never go through `-Ddw.`: Dropwizard passes them as strings and
 `PMap.getInt` ignores a string, so the default applies silently (0 urban-density threads fails the
 import after pass 2). The entrypoint writes the build thread counts into a copy of the config instead.
+A string key may go through `-Ddw.` only if `graphhopper-config.yaml` already declares it (empty is
+fine): Dropwizard replaces an existing dotted key and nests any other, which GraphHopper never reads.
+The undeclared `pmtiles.fallback.location` left every zoom-15 gap (all of Tuscany) at 0 m.
+`docker/tests/test_graphhopper_config.py` checks every override; the smoke test probes heights in
+cells without zoom 15.
 
 The whole download-and-import workflow is in `docs/how-to/import-geodata.md`.
 `just photon-import FILE…` imports several Photon dumps into **one** index (one dump per country).
@@ -684,7 +692,7 @@ UI offers no editor on a
 return route.
 
 The editor (`components/RouteEditorDialog.vue`) draws its line from `POST /api/routes/preview`,
-the **only** HTTP request that calls GraphHopper itself. An editor cannot wait on a queue.
+the only user-facing HTTP request that calls GraphHopper itself. An editor cannot wait on a queue.
 It returns the line, distance and time only, with no sampling and no weather. The editor
 calls it once per finished drag (debounced, and a new call cancels the previous one), and the
 server limits it per account (`PREVIEW_LIMIT_PER_MINUTE`, failing open like the claims). A saved
@@ -819,6 +827,11 @@ the journey page. It has two modes:
   stage's riding time as its duration) with a weekly schedule prefilled
   from the ride's day and departure. That goes through `create_route`, so the route quota (402)
   and the geometry task apply, and the forecast is the route's own from then on.
+  The saved route keeps the variant's stops (`journeys.stage_stops`: break POIs and gap-fill
+  detours) in `RecurringRoute.stops`, set by the server, never by the client, and cleared when
+  the line changes. Every GPX export writes stops as `<wpt>` before the `<trk>`: a saved route's
+  `/routes/{id}/gpx`, and `/journeys/{id}/stages/{stage_id}/gpx` (journey day or variant, plus
+  the night's lodging). A public copy never gets them.
 - **Considering the weather (Plus, `weather_routing`).** The tier's alternatives, each forecast (`JOURNEY_STAGE` jobs)
   and ranked on read (`rank_day`), optionally routed around the weather (`weather_prefs`). `_random_prefs` stores
   `consider_weather` off without Plus, and
@@ -1051,6 +1064,17 @@ those topics (`systemQueryAffected` in `utils/systemOverview.ts`). Rules that ho
 - **Values that change only with time get no notice.** A stalled job writes nothing, so the page
   works out "possibly stalled" from `updatedAt` and the jobs page's `stall_timeout_seconds`.
   Cache freshness in the summary and coverage updates on the next notice or on "Aktualisieren".
+- **Map data coverage** ("Kartendaten", the "Routing-Netz" and "Höhendaten" layers) is
+  `GET /api/system/data-coverage` (`core/data_coverage.py`). It reads GraphHopper's
+  `GET /coverage` (`docker/graphhopper/CoverageResource.java`: the running release's
+  `artifact.json` and `cells.json`, plus its terrain's `manifest.json` and `cell_coverage.json`,
+  passed through as they are), Photon's `/status`, and `meteolane-coverage.json` from Photon's
+  data directory (mounted read-only into `backend` in production, `PHOTON_COVERAGE_FILE` to
+  override). It is fetched in the request, cached 5 min, and cached only when every part answered.
+  Each part fails on its own (`None`). It gets no change notice: it changes only when a graph or
+  index is swapped in. The elevation levels are computed in Python from per-cell tile counts.
+  Java only passes the files through. Older releases and terrain lack the files; the
+  `*-backfill` recipes write them.
 
 ## Internationalisation
 

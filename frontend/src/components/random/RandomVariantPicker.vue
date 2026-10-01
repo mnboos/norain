@@ -3,11 +3,12 @@ import { computed, ref, watch } from "vue";
 import { useQuasar } from "quasar";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import { symSharpSave } from "@quasar/extras/material-symbols-sharp";
+import { symSharpDownload, symSharpSave, symSharpShare } from "@quasar/extras/material-symbols-sharp";
 import type { JourneyOut, JourneyStageOut } from "@norain/api/models";
 import ElevationChart from "@/components/ElevationChart.vue";
 import VariantsMap from "@/components/random/VariantsMap.vue";
 import { useSaveVariantsAsRoutes } from "@/queries/journeys";
+import { canShareFiles, exportJourneyStage, gpxError } from "@/services/gpx";
 import { isQuotaExceeded } from "@/services/http";
 import { duration, km } from "@/utils/journeys";
 import { type MapPoi, poiCategory } from "@/utils/poiCategories";
@@ -37,6 +38,21 @@ watch(
     { immediate: true },
 );
 const pickedIds = computed(() => stages.value.filter((_, i) => picked.value[i]).map(stage => stage.id));
+
+// A variant as GPX, with the stops the planner routed it through, without saving it.
+const exporting = ref<string | null>(null);
+const sharing = canShareFiles();
+async function exportVariant(stage: JourneyStageOut, index: number) {
+    exporting.value = stage.id;
+    try {
+        const name = `${props.ride.name} – ${t("journeyDay.variant", { n: index + 1 })}`;
+        await exportJourneyStage(props.ride.id, stage.id, name);
+    } catch (e) {
+        $q.notify({ type: "negative", message: await gpxError(e) });
+    } finally {
+        exporting.value = null;
+    }
+}
 
 // All variants' profiles in one chart, in the map's colours: the first picked one (else the
 // first variant) drawn as the main line, the others beside it.
@@ -203,6 +219,20 @@ async function onSave() {
                                 }}
                             </span>
                         </q-item-label>
+                    </q-item-section>
+                    <q-item-section side>
+                        <q-btn
+                            flat
+                            round
+                            dense
+                            :icon="sharing ? symSharpShare : symSharpDownload"
+                            :aria-label="sharing ? t('routeDetail.shareGpx') : t('routeDetail.downloadGpx')"
+                            :loading="exporting === stage.id"
+                            data-testid="variant-gpx"
+                            @click.stop.prevent="exportVariant(stage, index)"
+                        >
+                            <q-tooltip>{{ sharing ? t("routeDetail.shareGpx") : t("routeDetail.downloadGpx") }}</q-tooltip>
+                        </q-btn>
                     </q-item-section>
                 </q-item>
             </q-list>

@@ -68,6 +68,17 @@ def counters(request: HttpRequest) -> list[tuple[str, int, int]]:
         )
         for key in keys
     ]
+    # Becoming common retires f: as an identity, not an already-spent debit. Retain
+    # only a warm counter in THIS rule's fixed slot. Initially-common prints and the
+    # next slot get no lease; low requests cannot create/renew one in a new slot.
+    candidate = assessment.get("debitFingerprint") if assessment else None
+    if candidate and assessment["tier"] == "low" and "fingerprint_common" in assessment["indicators"]:
+        retired = f"auth:device:{name}:{fp.keyed_id('auth', 'f:' + candidate)}:{slot}"
+        try:
+            if (cache.get(retired) or 0) > 0:
+                held.append((retired, per_key, window))
+        except (RedisError, OSError) as exc:
+            logger.warning(f"Device debit lease unavailable: {exc}")
     young = settings.BROWSER_KEY_AGE_SIGNUPS and not fp.is_established(assessment)
     if not keys or not fp.is_trusted(assessment) or young:
         # Unknown, keyless or suspicious: the IP's shared count (an IPv6 address by its /56),

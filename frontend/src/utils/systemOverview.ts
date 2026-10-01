@@ -1,5 +1,5 @@
 import type { FeatureCollection, Feature } from "geojson";
-import type { SystemFeature, SystemCoveragePoint } from "@norain/api/models";
+import type { SystemFeature, SystemCoveragePoint, SystemElevationBoxes } from "@norain/api/models";
 
 import { t } from "@/i18n";
 
@@ -61,6 +61,57 @@ export function coverageGeoJson(points: SystemCoveragePoint[], kind: "forecast" 
             properties: { color: COVERAGE_COLORS[point[kind]], status: point[kind] },
         })),
     };
+}
+
+/** Zoom-15 terrain per road cell: complete, partly the zoom-12 fallback, or the fallback only. */
+export const ELEVATION_COLORS = { full: "#1b9e9a", partial: "#e0a030", fallback: "#c2452d" };
+const ELEVATION_LEVELS = ["full", "partial", "fallback"] as const;
+export const ROAD_COVERAGE_COLOR = "#6b5fb5";
+export function elevationLabels(): Record<keyof typeof ELEVATION_COLORS, string> {
+    return {
+        full: t("system.dataCoverage.elevation.full"),
+        partial: t("system.dataCoverage.elevation.partial"),
+        fallback: t("system.dataCoverage.elevation.fallback"),
+    };
+}
+
+function boxFeature(box: number[], properties: Record<string, string>): Feature {
+    const [west = 0, south = 0, east = 0, north = 0] = box;
+    return {
+        type: "Feature",
+        geometry: {
+            type: "Polygon",
+            coordinates: [
+                [
+                    [west, south],
+                    [east, south],
+                    [east, north],
+                    [west, north],
+                    [west, south],
+                ],
+            ],
+        },
+        properties,
+    };
+}
+
+/** The graph's road cells and the terrain levels (`/api/system/data-coverage`), as boxes per run of cells. */
+export function dataCoverageGeoJson(
+    roadBoxes: number[][],
+    elevationBoxes: SystemElevationBoxes | undefined,
+    show: { roads: boolean; elevation: boolean },
+): FeatureCollection {
+    const features: Feature[] = [];
+    if (show.elevation && elevationBoxes) {
+        for (const level of ELEVATION_LEVELS) {
+            for (const box of elevationBoxes[level])
+                features.push(boxFeature(box, { layer: "elevation", level, color: ELEVATION_COLORS[level] }));
+        }
+    }
+    if (show.roads) {
+        for (const box of roadBoxes) features.push(boxFeature(box, { layer: "roads", color: ROAD_COVERAGE_COLOR }));
+    }
+    return { type: "FeatureCollection", features };
 }
 
 /** What a change notice from `/ws/system/` names (`core/system_events.py`). */

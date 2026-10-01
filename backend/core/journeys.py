@@ -36,6 +36,23 @@ BREAK_WINDOW = 0.4
 # The last day may run this much over the limit rather than leave a stub day of a few km.
 LAST_DAY_SLACK = 0.1
 
+
+def stage_stops(stage, lodging=None) -> list[dict]:
+    """The POIs a stage's line was routed through: its breaks' POIs, its gap-fill detours and,
+    when given, the night's lodging. Once each, in riding order."""
+    seen, stops = set(), []
+    candidates = [*(p for b in stage.breaks or () for p in b.get("pois") or ()), *(stage.detours or ())]
+    if lodging:
+        candidates.append({**lodging, "category": lodging.get("category") or "lodging"})
+    for poi in candidates:
+        key = (poi.get("osm_ref"), poi.get("category"))
+        if key in seen:
+            continue
+        seen.add(key)
+        stops.append(poi)
+    return sorted(stops, key=lambda p: p.get("along_m") or 0)
+
+
 # The ranking: weather dominates, then missing POIs, then extra time. Server-only, like the
 # ride-quality weights.
 POI_GAP_WEIGHT = 0.3

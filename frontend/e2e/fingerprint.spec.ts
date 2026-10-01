@@ -67,7 +67,10 @@ function forged(headers: Record<string, string>): Record<string, string> {
 
 async function setup(page: Page) {
     await page.route("**/fingerprint-test", route =>
-        route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Fingerprint test</title><body></body>" }),
+        route.fulfill({
+            contentType: "text/html",
+            body: "<!doctype html><title>Fingerprint test</title><body></body>",
+        }),
     );
     await page.goto("/fingerprint-test");
     await page.evaluate(async () => {
@@ -96,14 +99,33 @@ async function identify(page: Page): Promise<Assessment> {
         return reply;
     });
     const assessment = toAssessment(value);
-    test.info().annotations.push({ type: "assessment", description: `${assessment.tier}: ${assessment.indicators.join(", ")}` });
+    test.info().annotations.push({
+        type: "assessment",
+        description: `${assessment.tier}: ${assessment.indicators.join(", ")}`,
+    });
     return assessment;
 }
+
+test("an honest browser preserves causal WebIDL relations and detects faulty controls", async ({ page }) => {
+    await setup(page);
+    const result = await page.evaluate(async () => {
+        const path = "/e2e/causal-harness.ts";
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- Vite loads the shared browser harness.
+        const module = (await import(/* @vite-ignore */ path)) as typeof import("./causal-harness");
+        return module.runCausalHarness();
+    });
+    expect(result.nativeTrials).toBe(32);
+    expect(result.staleFont).toBe("mismatch");
+    expect(result.swallowedException).toBe("mismatch");
+    expect(result.prematureSnapshot).toBe("mismatch");
+});
 
 test("an honest browser shows no lie and every check runs", async ({ page }, testInfo) => {
     await setup(page);
     let result = await identify(page);
     for (const lie of LIES) expect(result.indicators).not.toContain(lie);
+    expect(result.indicators).not.toContain("semantic_alteration");
+    expect(result.indicators).not.toContain("invalid_semantics");
     // A cold browser (first module transforms, first worker) can run into the probe timeouts;
     // that is degradation, not a lie. The warm second run must complete every check.
     if (result.indicators.some(indicator => indicator.endsWith("_timeout"))) {
@@ -241,7 +263,9 @@ test("a client-hints brand from another Chromium version is a lie", async ({ pag
         // Chromium derives the made-up brand from its major; an edited template keeps the old one.
         const major = /"Chromium";v="(\d+)"/.exec(headers["sec-ch-ua"] ?? "")?.[1] ?? "130";
         const stale = Number(major) % 3 === 0 ? '"Not?A_Brand";v="99"' : '"Not_A Brand";v="8"';
-        return route.continue({ headers: { ...headers, ...forged({ "sec-ch-ua": `"Chromium";v="${major}", ${stale}` }) } });
+        return route.continue({
+            headers: { ...headers, ...forged({ "sec-ch-ua": `"Chromium";v="${major}", ${stale}` }) },
+        });
     });
     const result = await identify(page);
     expect(result.indicators).toContain("client_hints_grease_mismatch");

@@ -16,6 +16,7 @@ import re
 from dataclasses import dataclass, field
 
 from django.db import connection
+from django.utils.translation import gettext_lazy
 
 # A rule is (key, values, extra conditions). A rule matches when the key has one of the values
 # and every extra tag has one of its values. An extra tag is read as a list (`vending=drinks;sweets`,
@@ -58,6 +59,30 @@ POI_RULES: dict[str, tuple[Rule, ...]] = {
 }
 
 POI_CATEGORIES: tuple[str, ...] = tuple(POI_RULES)
+
+# Names for a stop without one of its own, in files the rider takes away (GPX). The SPA words
+# categories itself (``poi.category`` in its catalogs); keep the two in step.
+_CATEGORY_LABELS = {
+    "toilets": gettext_lazy("Toilette"),
+    "bbq": gettext_lazy("Grillstelle"),
+    "drinking_water": gettext_lazy("Trinkwasser"),
+    "vending_food": gettext_lazy("Automat: Essen"),
+    "vending_drinks": gettext_lazy("Automat: Getränke"),
+    "vending_sweets": gettext_lazy("Automat: Süsses"),
+    "vending_coffee": gettext_lazy("Automat: Kaffee"),
+    "shelter": gettext_lazy("Unterstand"),
+    "bike_repair": gettext_lazy("Veloreparatur"),
+    "food": gettext_lazy("Essen"),
+    "groceries": gettext_lazy("Einkauf"),
+    "ebike_charging": gettext_lazy("E-Bike-Laden"),
+    "train_station": gettext_lazy("Bahnhof"),
+    "lodging": gettext_lazy("Unterkunft"),
+}
+
+
+def category_label(category: str) -> str:
+    return str(_CATEGORY_LABELS.get(category, category))
+
 
 # Where a day may end. A subset of the lodging tag values, chosen per journey.
 LODGING_KINDS: tuple[str, ...] = POI_RULES["lodging"][0][1]

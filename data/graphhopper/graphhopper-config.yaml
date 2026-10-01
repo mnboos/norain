@@ -177,8 +177,11 @@ graphhopper:
   graph.elevation.interpolate: bilinear
   graph.elevation.clear: false
   # Where zoom 15 has no value, the build and serve read the terrain's zoom-12 fallback.pmtiles
-  # (FallbackElevationProvider, patched into the jar). The entrypoint sets
-  # graph.elevation.pmtiles.fallback.{location,cache_dir} when the terrain has one.
+  # (FallbackElevationProvider, patched into the jar). The entrypoint sets both when the terrain
+  # has one; empty means no fallback. They must be declared here: Dropwizard's -Ddw. override
+  # replaces a dotted key only if the yaml has it, and nests any other, which GraphHopper never reads.
+  graph.elevation.pmtiles.fallback.location: ""
+  graph.elevation.pmtiles.fallback.cache_dir: ""
 
   # Each terrain artifact gets its own decoded cache; never mix dataset revisions.
   # Raw tiles are only read at import (elevation is baked into the graph), so keep them out of

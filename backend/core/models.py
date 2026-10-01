@@ -177,6 +177,9 @@ class RecurringRoute(models.Model):
         max_length=20, default="graphhopper", choices=[("graphhopper", "GraphHopper"), ("imported", "Imported path")]
     )
     imported_coordinates = models.JSONField(default=list, blank=True)
+    # Denormalised POIs (core.pois.PoiHit.as_json) the line was routed through, no FK: a saved
+    # random-ride variant keeps its stops for the GPX download. Cleared when the line changes.
+    stops = models.JSONField(default=list, blank=True)
     duration_seconds = models.PositiveIntegerField(null=True, blank=True)
 
     # Pre-computed route geometry (populated by background task on create/update)

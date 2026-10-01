@@ -32,6 +32,13 @@ cd "$repo"
 
 # COMPOSE_FILE comes from .env through just.
 compose=("$CONTAINER" compose)
+if [ "${COVERAGE_ONLY:-}" = 1 ]; then
+    # Only count the dumps' places per country for the system dashboard; the index stays.
+    "${compose[@]}" build photon
+    "${compose[@]}" run --rm --no-deps "${mounts[@]}" \
+        -e PHOTON_INDEX_FILE="${inputs[*]}" -e PHOTON_COVERAGE_ONLY=true photon
+    exit 0
+fi
 "${compose[@]}" build photon
 "${compose[@]}" stop photon
 "${compose[@]}" run --rm --no-deps "${mounts[@]}" \

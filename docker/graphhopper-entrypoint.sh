@@ -67,6 +67,26 @@ terrain_cleanup() {
     python /graphhopper/terrain.py cleanup
 }
 
+# Backfills for the system dashboard's coverage map (GET /coverage), for terrain and graphs
+# made before the build wrote these files. Neither changes the graph or the terrain key.
+# The served graph's terrain, which need not be elevation/current. The release's own road cells
+# come first; without them the terrain's cells, or for terrain prepared for a bounding box,
+# every cell in it.
+terrain_coverage() {
+    artifact=$(python /graphhopper/artifact.py check "${1:-current}")
+    terrain_dir=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["terrain"])' "$artifact/artifact.json")
+    cells=()
+    [ ! -f "$artifact/cells.json" ] || cells=(--cells "$artifact/cells.json")
+    python /graphhopper/terrain.py coverage --terrain "$terrain_dir" "${cells[@]}"
+}
+
+graph_cells() {
+    : "${ROUTING_OSM_FILE_FILTERED:?Name the bike-filtered file the graph was built from}"
+    artifact=$(python /graphhopper/artifact.py check "${1:-current}")
+    python /graphhopper/terrain.py cells "${OSM_DATA_DIR}/${ROUTING_OSM_FILE_FILTERED}" \
+        --cells-out "$artifact/cells.json"
+}
+
 build() {
     python /graphhopper/memory.py "$GRAPHHOPPER_BUILD_HEAP"
     if ! [[ "$GRAPHHOPPER_BUILD_THREADS" =~ ^[1-9][0-9]*$ ]]; then
@@ -85,14 +105,18 @@ build() {
     # Hold the terrain selection stable until the import has captured its immutable path.
     exec 8>/osm_data/elevation/.prepare.lock
     flock -s 8
-    if ! python /graphhopper/terrain.py check "$BIKE_DATA_FILE"; then
+    # The check counts the file's road cells anyway; the release keeps them for GET /coverage.
+    road_cells=$(mktemp /tmp/graphhopper-cells-XXXXXX.json)
+    if ! python /graphhopper/terrain.py check "$BIKE_DATA_FILE" --cells-out "$road_cells"; then
         echo "The prepared elevation data in ROUTING_OSM_IMPORT_DIR (${ROUTING_OSM_IMPORT_DIR:-unknown}) is for another OSM file." >&2
         echo "Run: just download-elevation-for $ROUTING_OSM_FILE_FILTERED" >&2
         echo "Then retry: just build-graphhopper-graph-from $ROUTING_OSM_FILE_FILTERED" >&2
         exit 1
     fi
     terrain_dir=$(readlink -f /osm_data/elevation/current)
-    artifact=$(python /graphhopper/artifact.py begin --terrain "$terrain_dir")
+    artifact=$(python /graphhopper/artifact.py begin --terrain "$terrain_dir" \
+        --cells "$road_cells" --osm "$BIKE_DATA_FILE")
+    rm -f "$road_cells"
     flock -u 8
     fallback_args "$terrain_dir" cache
     # Thread counts go into a copy of the config, never through -Ddw.: Dropwizard passes those as
@@ -107,7 +131,7 @@ build() {
         exit 1
     fi
     echo "Building candidate $artifact; the active graph remains available."
-    java -Xmx"${GRAPHHOPPER_BUILD_HEAP}" \
+    java --enable-native-access=ALL-UNNAMED -Xmx"${GRAPHHOPPER_BUILD_HEAP}" \
         -Ddw.graphhopper.graph.location="$artifact/graph" \
         -Ddw.graphhopper.custom_models.directory="$artifact/models" \
         -Ddw.graphhopper.graph.elevation.pmtiles.location="$terrain_dir/terrain.pmtiles" \
@@ -125,7 +149,7 @@ serve() {
     artifact=$(python /graphhopper/artifact.py check "${1:-current}")
     terrain_dir=$(python -c 'import json,sys; print(json.load(open(sys.argv[1]))["terrain"])' "$artifact/artifact.json")
     fallback_args "$terrain_dir"
-    exec java -Xmx"${GRAPHHOPPER_HEAP}" \
+    exec java --enable-native-access=ALL-UNNAMED -Xmx"${GRAPHHOPPER_HEAP}" \
         -Ddw.graphhopper.graph.location="$artifact/graph" \
         -Ddw.graphhopper.custom_models.directory="$artifact/models" \
         -Ddw.graphhopper.graph.elevation.pmtiles.location="$terrain_dir/terrain.pmtiles" \
@@ -137,9 +161,11 @@ serve() {
 case "${1:-serve}" in
     terrain) shift; terrain "$@" ;;
     terrain-cleanup) terrain_cleanup ;;
+    terrain-coverage) terrain_coverage "${2:-current}" ;;
+    graph-cells) graph_cells "${2:-current}" ;;
     build) build ;;
     serve) serve "${2:-current}" ;;
     activate) python /graphhopper/artifact.py activate "${2:-candidate}" ;;
     rollback) python /graphhopper/artifact.py rollback previous ;;
-    *) echo "Unknown command: $1 (expected terrain, terrain-cleanup, build, serve, activate or rollback)" >&2; exit 2 ;;
+    *) echo "Unknown command: $1 (expected terrain, terrain-cleanup, terrain-coverage, graph-cells, build, serve, activate or rollback)" >&2; exit 2 ;;
 esac

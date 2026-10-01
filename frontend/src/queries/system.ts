@@ -120,6 +120,19 @@ export function useSystemBrowser(enabled: MaybeRefOrGetter<boolean>) {
     });
 }
 
+/**
+ * The area our own map data covers: the running graph's road cells, their terrain and the Photon
+ * index's countries. No change notice touches it: it changes only when a graph or index is swapped in.
+ */
+export function useSystemDataCoverage(enabled: MaybeRefOrGetter<boolean>) {
+    return useQuery({
+        queryKey: [...systemKey, "dataCoverage"],
+        enabled,
+        retry: false,
+        queryFn: ({ signal }) => api.coreApiSystemDataCoverage({ signal }),
+    });
+}
+
 /** Recognition counts per UTC day (tiers, indicators, solo lies, refusals); counts only, never a browser. */
 export function useSystemBrowserStats(enabled: MaybeRefOrGetter<boolean>) {
     return useQuery({

@@ -22,8 +22,12 @@ import {
     browserStatTotals,
     cacheFreshness,
     coverageLabels,
+    ELEVATION_COLORS,
+    ROAD_COVERAGE_COLOR,
+    elevationLabels,
     statsUnder,
 } from "@/utils/systemOverview";
+import { areaName } from "@/utils/coverage";
 import {
     systemKey,
     useSystemSummary,
@@ -34,6 +38,7 @@ import {
     useSystemEvents,
     useSystemBrowser,
     useSystemBrowserStats,
+    useSystemDataCoverage,
 } from "@/queries/system";
 import { recheckRecognition } from "@/services/browserRecognition";
 import { symSharpRefresh } from "@quasar/extras/material-symbols-sharp";
@@ -47,7 +52,9 @@ const viewport = ref<{ bbox: string; zoom: number } | null>(null);
 const showRoutes = ref(true),
     showJourneys = ref(true),
     showCells = ref(true),
-    alternatives = ref(false);
+    alternatives = ref(false),
+    showRoadCoverage = ref(false),
+    showElevation = ref(false);
 const kind = ref(Kind.Forecast),
     source = ref(Source.All),
     profile = ref<Profile | null>(null);
@@ -87,11 +94,31 @@ const history = useSystemCellHistory(selected, historyOffset, allowed);
 const jobs = useSystemJobs(jobsOffset, allowed);
 const browser = useSystemBrowser(allowed);
 const browserStats = useSystemBrowserStats(allowed);
+const dataCoverage = useSystemDataCoverage(allowed);
+const graphCoverage = computed(() => dataCoverage.data.value?.graph ?? null);
+const terrainCoverage = computed(() => dataCoverage.data.value?.terrain ?? null);
+const photonCoverage = computed(() => dataCoverage.data.value?.photon ?? null);
+const photonCountries = computed(() =>
+    (photonCoverage.value?.countries ?? [])
+        .map(country => `${areaName(country.code)} (${number(country.places)})`)
+        .join(" · "),
+);
 const statTotals = computed(() => browserStatTotals(browserStats.data.value?.days ?? []));
 const checkingBrowser = ref(false);
 const { live } = useSystemEvents(allowed);
 const allFeatures = computed(() => [...routes.items.value, ...journeys.items.value, ...cells.items.value]);
-const queries = [summary, routes.query, journeys.query, cells.query, coverage, history, jobs, browser, browserStats];
+const queries = [
+    summary,
+    routes.query,
+    journeys.query,
+    cells.query,
+    coverage,
+    history,
+    jobs,
+    browser,
+    browserStats,
+    dataCoverage,
+];
 const failed = computed(() => queries.some(query => query.isError.value));
 const refreshing = computed(() => queries.some(query => query.isFetching.value));
 const mapLoading = computed(
@@ -147,6 +174,9 @@ function dateTime(value?: Date | null) {
     return value
         ? value.toLocaleString(intlLocale(), { timeZone: "Europe/Zurich", dateStyle: "short", timeStyle: "short" })
         : "–";
+}
+function number(value: number) {
+    return value.toLocaleString(intlLocale());
 }
 function age(value?: Date | null) {
     if (!value) return "–";
@@ -276,6 +306,18 @@ onBeforeUnmount(async () => {
                     dense
                 />
                 <q-checkbox v-model="showCells" :label="t('system.layer.cells')" dense />
+                <q-checkbox
+                    v-model="showRoadCoverage"
+                    :label="t('system.dataCoverage.roadLayer')"
+                    :disable="!dataCoverage.data.value?.roadBoxes.length"
+                    dense
+                />
+                <q-checkbox
+                    v-model="showElevation"
+                    :label="t('system.dataCoverage.elevationLayer')"
+                    :disable="!terrainCoverage?.cellCounts"
+                    dense
+                />
             </div>
             <div class="filters q-mb-sm">
                 <q-select
@@ -350,6 +392,16 @@ onBeforeUnmount(async () => {
                     <i class="legend-line" style="background: #9264cf" />
                     {{ t("pages.journey") }}
                 </span>
+                <span v-if="showRoadCoverage">
+                    <i class="legend-box" :style="{ background: ROAD_COVERAGE_COLOR }" />
+                    {{ t("system.dataCoverage.roadLayer") }}
+                </span>
+                <template v-if="showElevation">
+                    <span v-for="(label, level) in elevationLabels()" :key="level">
+                        <i class="legend-box" :style="{ background: ELEVATION_COLORS[level] }" />
+                        {{ label }}
+                    </span>
+                </template>
             </div>
             <div class="overview-grid">
                 <div class="map-panel">
@@ -372,6 +424,10 @@ onBeforeUnmount(async () => {
                         :coverage-kind="kind"
                         :now="now.getTime()"
                         :max-age-seconds="maxAge"
+                        :road-boxes="dataCoverage.data.value?.roadBoxes ?? []"
+                        :elevation-boxes="dataCoverage.data.value?.elevationBoxes"
+                        :show-roads="showRoadCoverage"
+                        :show-elevation="showElevation"
                         @viewport="viewport = $event"
                         @select="choose"
                         @error="mapError = $event"
@@ -562,6 +618,119 @@ onBeforeUnmount(async () => {
                             </div>
                             <div class="text-caption">
                                 {{ t("system.locationHint") }}
+                            </div>
+                        </div>
+                    </q-expansion-item>
+                    <q-expansion-item :label="t('system.dataCoverage.title')" class="bordered-panel q-mb-sm">
+                        <div class="q-pa-sm text-caption">
+                            <q-linear-progress v-if="dataCoverage.isFetching.value" indeterminate />
+                            <div class="text-weight-medium">{{ t("system.dataCoverage.graph") }}</div>
+                            <template v-if="graphCoverage">
+                                <div>
+                                    {{
+                                        t("system.dataCoverage.release", {
+                                            release: graphCoverage.release,
+                                            status: graphCoverage.status,
+                                        })
+                                    }}
+                                </div>
+                                <div>
+                                    {{ t("system.dataCoverage.built", { time: dateTime(graphCoverage.builtAt) }) }}
+                                </div>
+                                <div>
+                                    {{
+                                        t("system.dataCoverage.osmFile", {
+                                            file: graphCoverage.osmFile ?? "–",
+                                            time: dateTime(graphCoverage.osmFileModified),
+                                        })
+                                    }}
+                                </div>
+                                <div>{{ t("system.dataCoverage.roadCells", { n: number(graphCoverage.cells) }) }}</div>
+                                <div v-if="graphCoverage.cellsSource === 'terrain'" class="text-warning">
+                                    {{ t("system.dataCoverage.cellsFromTerrain") }}
+                                </div>
+                                <div v-else-if="graphCoverage.cellsSource === 'bounds'" class="text-warning">
+                                    {{ t("system.dataCoverage.cellsFromBounds") }}
+                                </div>
+                            </template>
+                            <div v-else-if="dataCoverage.data.value" class="text-negative">
+                                {{ t("system.dataCoverage.graphUnavailable") }}
+                            </div>
+                            <div class="text-weight-medium q-mt-sm">{{ t("system.dataCoverage.terrain") }}</div>
+                            <template v-if="terrainCoverage">
+                                <div>
+                                    {{
+                                        t("system.dataCoverage.terrainKey", {
+                                            key: terrainCoverage.key,
+                                            version: terrainCoverage.catalogVersion,
+                                        })
+                                    }}
+                                </div>
+                                <div>
+                                    {{ t("system.dataCoverage.sources", { zoom: terrainCoverage.zoom ?? "–" }) }}:
+                                    {{ terrainCoverage.sources.map(source => source.name).join(", ") || "–" }}
+                                </div>
+                                <div>
+                                    {{
+                                        t("system.dataCoverage.fallbackSource", {
+                                            zoom: terrainCoverage.fallbackZoom ?? "–",
+                                            name: terrainCoverage.fallbackSource ?? "–",
+                                        })
+                                    }}
+                                </div>
+                                <template v-if="terrainCoverage.cellCounts">
+                                    <div v-for="(label, level) in elevationLabels()" :key="level">
+                                        <i class="legend-box" :style="{ background: ELEVATION_COLORS[level] }" />
+                                        {{ label }}: {{ number(terrainCoverage.cellCounts[level]) }}
+                                    </div>
+                                </template>
+                                <div v-else class="text-warning">{{ t("system.dataCoverage.noCellCoverage") }}</div>
+                                <div v-for="check in terrainCoverage.checks" :key="check.zoom ?? -1">
+                                    {{
+                                        check.decoded
+                                            ? t("system.dataCoverage.checkDecoded", {
+                                                  zoom: check.zoom ?? "–",
+                                                  positions: number(check.positions),
+                                                  missing: number(check.missing ?? 0),
+                                                  nodata: number(check.nodata ?? 0),
+                                              })
+                                            : t("system.dataCoverage.checkStructure", {
+                                                  zoom: check.zoom ?? "–",
+                                                  positions: number(check.positions),
+                                              })
+                                    }}
+                                </div>
+                            </template>
+                            <div v-else-if="dataCoverage.data.value" class="text-negative">
+                                {{ t("system.dataCoverage.terrainUnavailable") }}
+                            </div>
+                            <div class="text-weight-medium q-mt-sm">{{ t("system.dataCoverage.photon") }}</div>
+                            <template v-if="photonCoverage">
+                                <div v-if="!photonCoverage.reachable" class="text-negative">
+                                    {{ t("system.dataCoverage.photonUnreachable") }}
+                                </div>
+                                <div v-else>
+                                    {{
+                                        t("system.dataCoverage.photonIndex", {
+                                            time: dateTime(photonCoverage.importDate),
+                                            version: photonCoverage.version ?? "–",
+                                        })
+                                    }}
+                                </div>
+                                <template v-if="photonCoverage.manifest">
+                                    <div>
+                                        {{ t("system.dataCoverage.photonSources") }}:
+                                        {{ photonCoverage.sources?.join(", ") || "–" }}
+                                    </div>
+                                    <div>
+                                        {{ t("system.dataCoverage.photonCountries") }}:
+                                        {{ photonCountries || t("system.dataCoverage.photonPrebuilt") }}
+                                    </div>
+                                </template>
+                                <div v-else class="text-warning">{{ t("system.dataCoverage.noPhotonFile") }}</div>
+                            </template>
+                            <div v-else-if="dataCoverage.data.value" class="text-negative">
+                                {{ t("system.dataCoverage.photonUnavailable") }}
                             </div>
                         </div>
                     </q-expansion-item>
@@ -815,6 +984,14 @@ onBeforeUnmount(async () => {
     height: 3px;
     margin-right: 5px;
     vertical-align: middle;
+}
+.legend-box {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    margin-right: 5px;
+    vertical-align: middle;
+    opacity: 0.6;
 }
 .legend-dot {
     display: inline-block;

@@ -64,7 +64,10 @@ it is checking.
    - The challenge is signed, single-use and valid for 120 s.
    - It is bound to an HttpOnly browser-context cookie.
    - The difficulty is signed into it.
-2. The client collects its signals and builds `payload = JSON.stringify({version: 2, persistent, signals})`.
+2. The client collects its stable signals, then runs the optional `semantics` diagnostic
+   with parameters derived from the signed challenge. It builds
+   `payload = JSON.stringify({version: 2, persistent, signals})`. A context-race retry runs
+   the diagnostic again against the fresh challenge; stable signals are reused.
 3. The client solves the proof-of-work:
    - `seed = SHA-256(challenge + "\n" + SHA-256(payload))`, as hex;
    - `pow` is the smallest decimal `n` for which `SHA-256(seed + ":" + n)` has `difficulty`
@@ -104,6 +107,18 @@ hashes, and exists only for `high` browsers.
 The checks feed indicators only: `navigator`, `worker`, `iframe`, `integrity`,
 `canvasIntegrity`, `engine` and `automation`. A check that did not run cannot catch a lie, so
 any of them missing is `checks_unavailable`: skipping one costs the browser its `high` tier.
+
+`semantics` is separate and optional (old version-2 clients remain valid). Four disposable
+canvas/context checks intervene during WebIDL argument conversion: a font change before
+`measureText`, a viewport change before `getParameter`, propagation of a unique thrown
+sentinel, and emptying a canvas before `toDataURL` serializes it. Challenge-derived font,
+text and viewport parameters vary the checks. Only the four fixed
+`pass`/`mismatch`/`unavailable` outcomes are submitted, not measurements, pixels or parameters.
+The server records fixed per-case indicators and `semantic_alteration` or `invalid_semantics`.
+These are **always tier-neutral**, including with an empty `BROWSER_OBSERVE_ONLY`: privacy
+extensions may legitimately break these relations. They are excluded from fingerprint
+components, and unavailable diagnostics do not trigger `checks_unavailable`. A client can
+invent the transcript; these checks are not attestation or physical-device uniqueness.
 
 The `integrity` check also calls every watched getter and method on the wrong object, through
 the fresh frame's own `Reflect.apply`, and compares that with the frame's clean copy: a native
@@ -165,7 +180,8 @@ both hold:
 That gate is for lies. The observed `low` indicators (`fetch_metadata_missing`,
 `fingerprint_common`) fire on honest browsers by design, so they are nearly always solo; they
 are enforced from their counts by judgement instead, which is safe because enforcing them only
-trades a browser's `f:` key for a `p:` key.
+trades a browser's `f:` key for a `p:` key. Equal key counts do not imply equal quota
+constraints across networks; already-spent authentication debits are retained as below.
 
 ### Claim keys
 
@@ -204,6 +220,58 @@ an hour (a cloned anti-detect profile), make it `fingerprint_common` for 30 days
 enforced, such a browser is `low`, and its `p:` key takes the fingerprint's place. One device
 moving between networks adds nothing: only a (fingerprint, key) pair seen for the first time
 counts.
+
+**Authentication debit leases.** If a print becomes common and its assessment becomes
+`low`, sign-up/code throttling also checks an already-spent `f:` counter for the same
+candidate print, rule and fixed time slot. Accepted requests debit it alongside current
+`b:`/`p:` counters until that slot ends (sign-ups: 24 h; code requests: 1 h). The internal
+`debitFingerprint` candidate is not a claim key, public receipt field, or coverage identity.
+An initially-common print with no spent counter gets no lease; low requests cannot create
+one in a new slot. This prevents a common-print transition from discarding existing quota
+spend. Legitimate colliding devices can remain jointly constrained for the remainder of
+that slot; that bounded cost is intentional. Cache outages/eviction still fail open, and
+the existing accepted-response counters are not reservations: concurrent in-flight requests
+can overshoot, including around a transition. This is a mail-budget guard, not a strict
+transactional security boundary. Coverage vote deduplication/release is unchanged.
+
+### Local regression tests
+
+Run `cd frontend && npx playwright test --config playwright.fingerprint.config.ts`.
+The shared `e2e/causal-harness.ts` runs 32 native trials and transparent/faulty wrapper
+controls. For installed Safari, start the isolated fixtures in two terminals:
+
+```sh
+cd frontend && npx vite --config vite.fingerprint.config.ts
+```
+
+```sh
+backend/.venv/bin/python scripts/fingerprint-test-server.py
+```
+
+Open `http://127.0.0.1:8128/fingerprint-test.html` in Safari. The page tests the same
+relations, restores every synthetic wrapper, verifies signed receipts against the real
+loopback API, and checks IndexedDB key continuity. It never writes to the application DB
+or calls weather providers. Safari WebDriver/remote automation need not be enabled.
+
+Verified on 2026-10-01 on this Apple-silicon Mac:
+
+- Django core suite: 754 tests, OK (5 opt-in tests skipped); final fingerprint-specific
+  rerun: 72 tests, OK (1 Redis integration test skipped).
+- Browser fixture suite: 37 passed, 4 engine-specific skips, across Chromium, Firefox,
+  Playwright WebKit and Firefox resistFingerprinting.
+- Installed Safari 27.0 (ordinary local tab, not Playwright WebKit): PASS, 32 native
+  trials, transparent forwarding, faulty font/exception/serialization/WebGL controls,
+  signed receipts and persistent-key continuity. Assessment: `high`, no indicators.
+  Safari remote automation/security settings were not changed.
+- `just update-api`: passed, including lint, type-check and production build. Generated
+  OpenAPI/client files are byte-for-byte unchanged (the payload remains an opaque string).
+- Frontend units: 300 passed, 1 unrelated failure in
+  `RouteListPanel.spec.ts`, "shows the delete button on wide screens only". The identical
+  failure was reproduced from an unmodified `HEAD` archive with the installed dependencies.
+  Browser-fingerprint unit tests pass; no route-list files were changed.
+
+This is single-machine regression evidence, not a physical-device matrix or proof against
+every privacy tool. Quota race/eviction behavior remains fail-open as described above.
 
 **IP floors.** Every per-IP count (votes, the shared count, churn, the sign-up fallback, the
 endpoints' own limit) counts an IPv6 address by its /56, which one customer usually holds

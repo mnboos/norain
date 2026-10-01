@@ -3,8 +3,12 @@ import { webcrypto } from "node:crypto";
 import { createBrowserFingerprint } from "../index";
 import { leadingZeroBits, powSeed } from "../pow";
 import { sha256 } from "../sha256";
+import { semanticChecks } from "../semantics";
 
 vi.mock("../signals", () => ({ collectSignals: () => Promise.resolve({}) }));
+vi.mock("../semantics", () => ({
+    semanticChecks: vi.fn(() => ({ font: "pass", viewport: "pass", exception: "pass", serialization: "pass" })),
+}));
 afterEach(() => {
     vi.unstubAllGlobals();
 });
@@ -44,6 +48,10 @@ describe("browser proof transport", () => {
         expect(sentBody(fetcher, 1).challenge).toBe("first");
         expect(fetcher.mock.calls[1]?.[1]?.credentials).toBe("include");
         expect(sentBody(fetcher, 3).challenge).toBe("second");
+        expect(semanticChecks).toHaveBeenCalledWith("first");
+        expect(semanticChecks).toHaveBeenCalledWith("second");
+        const payload: unknown = JSON.parse(sentBody(fetcher, 3).payload ?? "");
+        expect(payload).toMatchObject({ signals: { semantics: { status: "ok" } } });
     });
 
     it("solves the server's difficulty and signs the nonce with the payload", async () => {
