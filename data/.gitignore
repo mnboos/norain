@@ -7,3 +7,4 @@ otp/graph.obj
 otp/*.pbf
 otp/*.zip
 photon/
+graphhopper/host
