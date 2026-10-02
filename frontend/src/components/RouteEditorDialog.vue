@@ -9,8 +9,7 @@ import type { MapLayerMouseEvent, MapLayerTouchEvent, MapMouseEvent, MapTouchEve
 import { ResponseError } from "@norain/api/runtime";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
-import lightStyleUrl from "@/assets/map-styles/positron.json?url";
-import darkStyleUrl from "@/assets/map-styles/dark-matter.json?url";
+import { applyBasemap, BasemapControl, isDarkMap, useBasemap } from "@/map/basemap";
 import { previewRoute } from "@/queries/recurringRoutes";
 import { CASING_DARK, CASING_LIGHT, CASING_OPACITY } from "@/utils/rideQuality";
 import { routeCaption, toLonLat, viaInsertIndex, type LonLat } from "@/utils/routeEditing";
@@ -40,6 +39,7 @@ const emit = defineEmits<{
 
 const $q = useQuasar();
 const { t } = useI18n();
+const basemap = useBasemap();
 
 const START_COLOR = "#2b6cb0";
 const DEST_COLOR = "#d24d78";
@@ -133,7 +133,7 @@ function addLayers(m: MapLibreMap) {
         source: "edit-line",
         layout: { "line-join": "round", "line-cap": "round" },
         paint: {
-            "line-color": $q.dark.isActive ? CASING_DARK : CASING_LIGHT,
+            "line-color": isDarkMap(basemap.value, $q.dark.isActive) ? CASING_DARK : CASING_LIGHT,
             "line-opacity": CASING_OPACITY,
             "line-width": 8,
         },
@@ -162,17 +162,13 @@ watch(loading, dim => {
     map.value?.setPaintProperty("edit-line", "line-opacity", dim ? 0.4 : 1);
 });
 
-watch(
-    () => $q.dark.isActive,
-    dark => {
-        const m = map.value;
-        if (!m) return;
-        m.setStyle(dark ? darkStyleUrl : lightStyleUrl);
-        m.once("style.load", () => {
-            addLayers(m);
-        });
-    },
-);
+watch([basemap, () => $q.dark.isActive], ([kind, dark]) => {
+    const m = map.value;
+    if (!m) return;
+    applyBasemap(m, kind, dark, () => {
+        addLayers(m);
+    });
+});
 
 // --------------------------------------------------------------------------- markers
 
@@ -267,11 +263,12 @@ function onShow() {
     if (!mapContainer.value) return;
     const m = new MapLibreMap({
         container: mapContainer.value,
-        style: $q.dark.isActive ? darkStyleUrl : lightStyleUrl,
         center: props.start,
         zoom: 12,
         attributionControl: { compact: true },
     });
+    applyBasemap(m, basemap.value, $q.dark.isActive);
+    m.addControl(new BasemapControl(next => t(next === "satellite" ? "map.basemapSatellite" : "map.basemapMap")), "top-right");
     m.on("load", () => {
         map.value = m;
         addLayers(m);

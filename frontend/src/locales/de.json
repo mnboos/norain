@@ -731,6 +731,8 @@
         "selectWeatherAt": "Wetter um {time} auswählen",
         "webglError": "WebGL konnte nicht initialisiert werden. Bitte aktiviere Hardwarebeschleunigung im Browser.",
         "loadFailed": "Karte konnte nicht geladen werden",
+        "basemapSatellite": "Satellitenbild",
+        "basemapMap": "Karte",
         "windMode": "Winddarstellung",
         "particlesHint": "Partikel zeigen Richtung und Stärke des Winds zur Fahrzeit",
         "particlesHintHike": "Partikel zeigen Richtung und Stärke des Winds zur Gehzeit",

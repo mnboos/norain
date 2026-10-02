@@ -5,7 +5,7 @@ import { useI18n } from "vue-i18n";
 import { GeoJSONSource, LngLatBounds, Map, Marker, Popup, config } from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
-import styleUrl from "@/assets/map-styles/positron.json?url";
+import { applyBasemap, BasemapControl, isDarkMap, useBasemap } from "@/map/basemap";
 import { type MapPoi, poiCategory, poiName } from "@/utils/poiCategories";
 import { alternativeColor } from "@/utils/rideQuality";
 
@@ -18,6 +18,7 @@ const emit = defineEmits<{ toggle: [index: number] }>();
 const { t } = useI18n();
 
 const $q = useQuasar();
+const basemap = useBasemap();
 const container = useTemplateRef<HTMLDivElement>("container");
 let map: Map | undefined;
 let loaded = false;
@@ -31,7 +32,7 @@ function features() {
             properties: {
                 index,
                 picked: props.picked[index] === true,
-                color: alternativeColor(index, $q.dark.isActive),
+                color: alternativeColor(index, isDarkMap(basemap.value, $q.dark.isActive)),
             },
             geometry: { type: "LineString" as const, coordinates },
         })),
@@ -71,7 +72,9 @@ function draw(fit: boolean) {
 onMounted(() => {
     if (!container.value) return;
     config.WORKER_URL = workerUrl;
-    map = new Map({ container: container.value, style: styleUrl, center: [8.5, 47.3], zoom: 8 });
+    map = new Map({ container: container.value, center: [8.5, 47.3], zoom: 8 });
+    applyBasemap(map, basemap.value, $q.dark.isActive);
+    map.addControl(new BasemapControl(next => t(next === "satellite" ? "map.basemapSatellite" : "map.basemapMap")), "top-right");
     map.on("load", () => {
         loaded = true;
         draw(true);
@@ -97,6 +100,13 @@ watch(
     },
     { deep: true },
 );
+// A new style drops the variant layers; redraw them (new colours too) without moving the view.
+watch([basemap, () => $q.dark.isActive], ([kind, dark]) => {
+    if (!map) return;
+    applyBasemap(map, kind, dark, () => {
+        draw(false);
+    });
+});
 let poiMarkers: Marker[] = [];
 function poiLabel(poi: MapPoi): string {
     return `${poiCategory(poi.category).emoji} ${poiName(poi)}${poi.note ? ` · ${poi.note}` : ""}`;

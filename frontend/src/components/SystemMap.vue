@@ -5,8 +5,7 @@ import { useI18n } from "vue-i18n";
 import { Map as MapLibreMap, NavigationControl, GeoJSONSource, config } from "maplibre-gl";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import "maplibre-gl/dist/maplibre-gl.css";
-import lightStyle from "@/assets/map-styles/positron.json?url";
-import darkStyle from "@/assets/map-styles/dark-matter.json?url";
+import { applyBasemap, BasemapControl, useBasemap } from "@/map/basemap";
 import type { SystemFeature, SystemCoveragePoint, SystemElevationBoxes } from "@norain/api/models";
 import { systemGeoJson, coverageGeoJson, dataCoverageGeoJson, featureKey } from "@/utils/systemOverview";
 
@@ -32,6 +31,7 @@ const emit = defineEmits<{
 }>();
 const container = ref<HTMLElement>();
 const $q = useQuasar();
+const basemap = useBasemap();
 let map: MapLibreMap | undefined;
 let timer: ReturnType<typeof setTimeout> | undefined;
 config.WORKER_URL = maplibreWorkerUrl;
@@ -164,12 +164,13 @@ onMounted(() => {
     if (!container.value) return;
     const activeMap = new MapLibreMap({
         container: container.value,
-        style: $q.dark.isActive ? darkStyle : lightStyle,
         center: [8.2, 46.8],
         zoom: 7,
         renderWorldCopies: false,
     });
     map = activeMap;
+    applyBasemap(activeMap, basemap.value, $q.dark.isActive);
+    activeMap.addControl(new BasemapControl(next => t(next === "satellite" ? "map.basemapSatellite" : "map.basemapMap")), "top-right");
     activeMap.addControl(new NavigationControl(), "top-right");
     activeMap.on("style.load", installLayers);
     activeMap.on("load", () => {
@@ -220,10 +221,9 @@ watch(
     ],
     update,
 );
-watch(
-    () => $q.dark.isActive,
-    dark => map?.setStyle(dark ? darkStyle : lightStyle),
-);
+watch([basemap, () => $q.dark.isActive], ([kind, dark]) => {
+    if (map) applyBasemap(map, kind, dark);
+});
 onBeforeUnmount(() => {
     clearTimeout(timer);
     map?.remove();

@@ -13,8 +13,6 @@ import { useI18n } from "vue-i18n";
 import { tp } from "@/i18n";
 
 import "maplibre-gl/dist/maplibre-gl.css";
-import lightStyleUrl from "@/assets/map-styles/positron.json?url";
-import darkStyleUrl from "@/assets/map-styles/dark-matter.json?url";
 import type { PlacesSearchResult, RouteForecastOut, ForecastSampleOut, WindArrow } from "@norain/api/models";
 import { FROST_MARK, isNightEta, pickVisibleSamples, weatherIconSvg } from "@/utils/weatherIcons";
 import { swissTime } from "@/utils/forecastDetails";
@@ -44,6 +42,7 @@ import {
 } from "@/utils/forecastSelection";
 import { buildWindField } from "@/utils/windField";
 import { WindParticleLayer } from "@/map/windParticles";
+import { applyBasemap, BasemapControl, isDarkMap, useBasemap } from "@/map/basemap";
 import { CANDIDATE_COLOR, poiCategory, poiName, type MapPoi } from "@/utils/poiCategories";
 
 maplibreConfig.WORKER_URL = maplibreWorkerUrl;
@@ -52,12 +51,13 @@ const $q = useQuasar();
 const { t, locale } = useI18n();
 
 // Pale, low-ink vector basemaps (CARTO, no API key) so the route line and the weather chips
-// carry the map instead of competing with OSM's POIs and landuse fills. Both styles ship
-// their own OSM/CARTO attribution. The style files are copies of
+// carry the map instead of competing with OSM's POIs and landuse fills, or swisstopo's aerial
+// photos; see map/basemap.ts. The CARTO style files are copies of
 // https://basemaps.cartocdn.com/gl/{positron,dark-matter}-gl-style/style.json, built into the
 // app; the tiles, sprite and fonts they point to still come from CARTO.
-const LIGHT_STYLE = lightStyleUrl;
-const DARK_STYLE = darkStyleUrl;
+const basemap = useBasemap();
+/** Whether the route colours take their dark-map variants: dark theme or aerial photos. */
+const mapDark = computed(() => isDarkMap(basemap.value, $q.dark.isActive));
 
 const props = defineProps<{
     routeWeather: RouteForecastOut | undefined;
@@ -311,7 +311,7 @@ function renderWindParticles() {
         return;
     }
     windLayer ??= new WindParticleLayer(WIND_LAYER);
-    windLayer.setDark($q.dark.isActive);
+    windLayer.setDark(mapDark.value);
     windLayer.setField(field);
     windLayer.setRunning(true);
     if (map.getLayer(WIND_LAYER)) return;
@@ -623,7 +623,7 @@ async function renderLine() {
     // travels through the ramp, and hard-edges any stretch we have no data for.
     const stops = gradientStops(sampleProgress(line, rw?.samples ?? [], rw?.totalSeconds ?? 0), scores.value);
     const gradient: ExpressionSpecification = rw ? ["interpolate", ["linear"], ["line-progress"], ...stops] : ["interpolate", ["linear"], ["line-progress"], 0, "#2563eb", 1, "#2563eb"];
-    const casing = $q.dark.isActive ? CASING_DARK : CASING_LIGHT;
+    const casing = mapDark.value ? CASING_DARK : CASING_LIGHT;
 
     const existing = map.getSource("route-source");
     if (existing instanceof GeoJSONSource) {
@@ -695,7 +695,7 @@ async function renderAlternatives() {
             .map(alternative => ({
                 type: "Feature",
                 geometry: { type: "LineString", coordinates: alternative.line },
-                properties: { id: alternative.id, color: alternativeColor(alternative.index, $q.dark.isActive) },
+                properties: { id: alternative.id, color: alternativeColor(alternative.index, mapDark.value) },
             })),
     };
     const existing = map.getSource(ALTERNATIVE_SOURCE);
@@ -939,18 +939,14 @@ function showPoiPopup(event: MapMouseEvent & { features?: GeoJSON.Feature[] }) {
 
 // setStyle() replaces the whole style, which wipes our custom source/layers (but not the
 // DOM-based markers/popups, those survive) - re-add the line once the new style is ready.
-watch(
-    () => $q.dark.isActive,
-    dark => {
-        const map = mymap.value;
-        if (!map) return;
-        map.setStyle(dark ? DARK_STYLE : LIGHT_STYLE);
-        map.once("style.load", () => {
-            void renderLine().then(renderWindParticles);
-            void renderPois();
-        });
-    },
-);
+watch([basemap, () => $q.dark.isActive], ([kind, dark]) => {
+    const map = mymap.value;
+    if (!map) return;
+    applyBasemap(map, kind, dark, () => {
+        void renderLine().then(renderWindParticles);
+        void renderPois();
+    });
+});
 
 function onZoomEnd(map: MapLibreMap) {
     zoomDetail.value = lineDetailForZoom(map.getZoom());
@@ -961,7 +957,6 @@ onMounted(() => {
     try {
         const map = new MapLibreMap({
             container: mapContainer.value,
-            style: $q.dark.isActive ? DARK_STYLE : LIGHT_STYLE,
             center: [9.252317, 47.521889],
             zoom: 12,
             attributionControl: {
@@ -972,6 +967,8 @@ onMounted(() => {
         });
 
         mapInstance = map;
+        applyBasemap(map, basemap.value, $q.dark.isActive);
+        map.addControl(new BasemapControl(next => t(next === "satellite" ? "map.basemapSatellite" : "map.basemapMap")), "top-right");
         map.once("idle", () => { emit("ready"); });
         resizeObserver = new ResizeObserver(() => map.resize());
         resizeObserver.observe(mapContainer.value);

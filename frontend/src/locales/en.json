@@ -731,6 +731,8 @@
         "selectWeatherAt": "Select the weather at {time}",
         "webglError": "WebGL could not be initialised. Please turn on hardware acceleration in your browser.",
         "loadFailed": "The map could not be loaded",
+        "basemapSatellite": "Satellite",
+        "basemapMap": "Map",
         "windMode": "Wind display",
         "particlesHint": "Particles show the wind's direction and strength at riding time",
         "particlesHintHike": "Particles show the wind's direction and strength at walking time",
