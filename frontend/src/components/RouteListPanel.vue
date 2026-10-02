@@ -6,6 +6,7 @@ import {
     symSharpDelete,
     symSharpLuggage,
     symSharpRoute,
+    symSharpSignpost,
 } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
 import { useI18n } from "vue-i18n";
@@ -85,7 +86,7 @@ const addButtonLabel = computed(() => (atRouteLimit.value ? t("quota.title") : t
                     dense
                     :label="t('routeList.add')"
                     no-caps
-                    :icon="symSharpAdd"
+                    :icon="symSharpSignpost"
                     :disable="atRouteLimit"
                     :title="addButtonLabel"
                     @click="emit('add')"
@@ -156,4 +157,3 @@ const addButtonLabel = computed(() => (atRouteLimit.value ? t("quota.title") : t
         </q-card-section>
     </q-card>
 </template>
-
