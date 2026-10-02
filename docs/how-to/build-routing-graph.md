@@ -235,6 +235,44 @@ system.
 If the selected terrain does not cover the filtered file, the build stops with an
 error. Run `download-elevation-for` for that file, then retry the build.
 
+### Build natively, without a container
+
+```sh
+just build-graphhopper-graph-host bike-switzerland-latest.osm.pbf
+```
+
+This runs the same import as `build-graphhopper-graph-from` directly on the machine
+(`scripts/graphhopper-host-build.sh`), with the same `GRAPHHOPPER_BUILD_*` settings and the
+same release folder, locks and `candidate` link. On macOS it should be faster: Docker runs
+in a VM with capped memory and slow bind mounts. On Linux the container costs next to
+nothing, and `GRAPHHOPPER_MEM_LIMIT` plus the `GRAPHHOPPER_BUILD_*` settings already give
+most of the gain.
+
+- **The jar comes from the image.** The Dockerfile patches GraphHopper, so the script uses
+  the image's jar, copied into `data/graphhopper/host/`. It asks first: use the jar copied
+  before as it is (no container engine needed at all), or rebuild the image with
+  `docker compose build graphhopper` and copy the new jar. Without a copy it offers to
+  rebuild or to copy from the existing `GRAPHHOPPER_IMAGE` (default
+  `norain-graphhopper:local`). `GRAPHHOPPER_JAR_REBUILD=yes|no` answers in advance; without
+  a terminal and without it, the copy is used. For production, copy from production's
+  `GRAPHHOPPER_IMAGE`: serving checks the GraphHopper revision only, not the patches. A stock
+  GraphHopper jar lacks the elevation and weather patches. `GRAPHHOPPER_JAR` and
+  `GRAPHHOPPER_REVISION_FILE` point at any other jar built as in the Dockerfile.
+- **Don't replace the copied jar during a build.** The running import loads classes from it.
+- **Needs** Java 25 (the image's), `osmium-tool` and python3 ≥ 3.11.
+  `just install-graphhopper-host-tools` installs what is missing (Homebrew on macOS, apt or
+  dnf on Linux; Temurin from Adoptium where the distribution has no OpenJDK 25). With
+  several JDKs, set `JAVA_HOME` to the 25 on Linux; on macOS the build finds it itself. It neither downloads nor filters OSM: the filtered file
+  and the terrain must already be in `ROUTING_OSM_IMPORT_DIR`.
+- **The terrain path is recorded the container's way.** `artifact.json` says
+  `/osm_data/elevation/<hash>`, so the release serves and ships exactly like a container
+  build.
+- **Don't run it beside a container terrain preparation.** On macOS the host's file locks
+  do not reach into Docker's VM, so `download-elevation-for` could change
+  `elevation/current` mid-build.
+
+Validate and activate it as usual (step 5), in the container, with the jar that serves it.
+
 ### Build elsewhere, serve in production
 
 A graph can be built on a larger machine (steps 1–4 there) and copied over. The serving

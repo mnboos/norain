@@ -53,6 +53,7 @@ services:
       - ./data/graphhopper/graphhopper-config.yaml:/config.yaml:ro,z
       - ./data/graphhopper/models:/custom_models:z
     environment:
+      - TZ=${TZ}
       - OSM_DATA_DIR=/osm_data
       # Only for the log: where /osm_data is on the host.
       - ROUTING_OSM_IMPORT_DIR=${ROUTING_OSM_IMPORT_DIR:?ROUTING_OSM_IMPORT_DIR must be set}

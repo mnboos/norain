@@ -645,6 +645,21 @@ together:
   `style.load`. The layer sits directly above `route-line`, below the basemap labels and
   the invisible `route-hit` layer.
 
+### Basemap
+
+Every map (`NiceMap`, the route editor, the system map, the GPX preview, the variants map) loads
+its style through `map/basemap.ts`: CARTO Positron / Dark Matter by theme, or swisstopo
+SWISSIMAGE aerial photos with Dark Matter's labels on top (`satelliteStyle`, a `transformStyle`
+that keeps only the symbol layers). One choice per browser (`norain.basemap`), shared by every
+open map and switched by `BasemapControl`. Rules that hold this together:
+
+- **SWISSIMAGE is Switzerland only.** Its source's `bounds` keep MapLibre from asking outside
+  CH. It is open government data and needs the "© swisstopo" attribution the source carries.
+  Don't swap in a worldwide source without checking its terms: the app is commercial.
+- **Imagery counts as a dark map** (`isDarkMap`): the casing, alternatives and wind particles
+  take their dark colours. Use it instead of `$q.dark.isActive` wherever a map colour depends on the theme.
+- **A style change goes through `applyBasemap`**, and the page re-adds its layers in `onReady`.
+
 ### Charts
 
 The backend draws no charts. `frontend/src/utils/forecastCharts.ts` builds the temperature,
@@ -673,7 +688,11 @@ in `api/route_weather.py` must list the same names. The container **never builds
 with an empty `graph-cache` it exits with an error. `just build-graphhopper-graph-from FILE` (a bike-filtered file
 in `ROUTING_OSM_IMPORT_DIR`) empties the cache, runs the entrypoint's `build` command and starts it
 again; production too. A graph can also be built on another machine and copied over
-(`docs/how-to/build-routing-graph.md`).
+(`docs/how-to/build-routing-graph.md`). `just build-graphhopper-graph-host FILE` runs the same
+import without a container (`scripts/graphhopper-host-build.sh`, for macOS), with the jar copied
+out of `GRAPHHOPPER_IMAGE`. It repeats the entrypoint's `build()`, so change both. `artifact.py`
+takes its paths from env overrides, and `begin --terrain-as` records the terrain as
+`/osm_data/elevation/<hash>` so the release serves in the container.
 GraphHopper calls the build "import". It refuses a graph built with a different config or jar,
 so any change to `graphhopper-config.yaml` or `data/graphhopper/models/` means rebuilding.
 

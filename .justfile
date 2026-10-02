@@ -173,6 +173,18 @@ graph-cells-backfill filtered_pbf:
 build-graphhopper-graph-from filtered_pbf:
     {{ container }} compose run --rm --no-deps -e ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} graphhopper build
 
+[doc("The same import natively on this machine (Java 25, osmium). Asks whether to rebuild GraphHopper with docker compose first or use the jar copied before (no container needed); GRAPHHOPPER_JAR_REBUILD=yes|no answers in advance. Faster on macOS, where the container runs in a memory-capped VM. Validate and activate as usual.")]
+[group('geodata')]
+[unix]
+build-graphhopper-graph-host filtered_pbf:
+    CONTAINER={{ quote(container) }} ROUTING_OSM_FILE_FILTERED={{ quote(file_name(filtered_pbf)) }} bash scripts/graphhopper-host-build.sh
+
+[doc("Install what build-graphhopper-graph-host needs: Java 25, osmium-tool, python3 >= 3.11 (Homebrew on macOS, apt or dnf on Linux). Skips what is installed.")]
+[group('geodata')]
+[unix]
+install-graphhopper-host-tools:
+    bash scripts/install-graphhopper-host-tools.sh
+
 [doc("Copy the local candidate graph, the terrain it was built with and the POI file to the VPS (VPS_USER@VPS_HOST, paths from its /srv/norain/.env) and make it the candidate there. Validate and activate on the VPS. Needs rsync: on Windows, run it from WSL.")]
 [group('geodata')]
 [unix]

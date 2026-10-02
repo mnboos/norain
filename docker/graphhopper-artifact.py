@@ -9,14 +9,17 @@ import os
 from pathlib import Path
 import shutil
 
+# The container's paths. A build on the host (scripts/graphhopper-host-build.sh) points them at
+# the checkout and at the jar it copied out of the serving image.
 ROOT = Path(os.environ.get("GRAPH_ROOT", "/graph-cache"))
-REVISION = Path("/graphhopper/revision")
-CONFIG = Path("/config.yaml")
-MODELS = Path("/custom_models")
+REVISION = Path(os.environ.get("GRAPHHOPPER_REVISION_FILE", "/graphhopper/revision"))
+JAR = Path(os.environ.get("GRAPHHOPPER_JAR", "/graphhopper/graphhopper.jar"))
+CONFIG = Path(os.environ.get("GRAPHHOPPER_CONFIG", "/config.yaml"))
+MODELS = Path(os.environ.get("GRAPHHOPPER_MODELS", "/custom_models"))
 
 
 def jar_digest():
-    with Path("/graphhopper/graphhopper.jar").open("rb") as stream:
+    with JAR.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
@@ -96,6 +99,9 @@ def main():
     )
     parser.add_argument("artifact", nargs="?", default="candidate")
     parser.add_argument("--terrain")
+    # begin: the terrain path to record, when the serving container sees it elsewhere than this
+    # process (a host build records /osm_data/elevation/<hash>).
+    parser.add_argument("--terrain-as")
     # The OSM file's road cells (terrain.py check --cells-out) and the file itself: what
     # GET /coverage reports as the graph's area. Terrain may cover more than the graph.
     parser.add_argument("--cells")
@@ -114,7 +120,7 @@ def main():
             "revision": REVISION.read_text().strip(),
             "jar_sha256": jar_digest(),
             "config_sha256": fingerprint(directory),
-            "terrain": str(terrain),
+            "terrain": args.terrain_as or str(terrain),
             "terrain_manifest": json.loads((terrain / "manifest.json").read_text()),
             "status": "building",
             "started_at": datetime.now(timezone.utc).isoformat(),

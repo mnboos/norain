@@ -99,6 +99,7 @@ graph_cells() {
         --cells-out "$artifact/cells.json"
 }
 
+# scripts/graphhopper-host-build.sh repeats the import below for builds on the host: change both.
 build() {
     python /graphhopper/memory.py "$GRAPHHOPPER_BUILD_HEAP"
     if ! [[ "$GRAPHHOPPER_BUILD_THREADS" =~ ^[1-9][0-9]*$ ]]; then
