@@ -345,43 +345,43 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
             <!--                    />-->
             <!--                </q-card-section>-->
             <!--            </q-card>-->
-            <WeatherChart
-                v-if="forecast"
-                kind="headwind"
-                class="col-12 col-sm-4 col-md-4 column fit"
-                :profile="forecast.profile"
-                :version="forecast.version"
-                :cursor-minutes="positionMinutes"
-                :samples="forecast.samples"
-                @select-minutes="selectMinutes"
-                :style="{ minHeight: '180px' }"
-            />
+            <q-card-section class="col-12 col-sm-4 col-md-4 column q-px-none">
+                <WeatherChart
+                    v-if="forecast"
+                    kind="headwind"
+                    :profile="forecast.profile"
+                    :version="forecast.version"
+                    :cursor-minutes="positionMinutes"
+                    :samples="forecast.samples"
+                    @select-minutes="selectMinutes"
+                    :style="{ minHeight: '180px' }"
+                />
+            </q-card-section>
 
             <!--            Temperatur -->
-            <q-card class="col-12 col-sm-4 col-md-4 column">
-                <q-card-section class="col q-pa-none">
-                    <WeatherChart
-                        v-if="forecast"
-                        kind="temperature"
-                        :profile="forecast.profile"
-                        :version="forecast.version"
-                        :cursor-minutes="positionMinutes"
-                        :samples="forecast.samples"
-                        @select-minutes="selectMinutes"
-                        :style="{ minHeight: '180px' }"
-                    />
-                </q-card-section>
-            </q-card>
+            <q-card-section class="col-12 col-sm-4 col-md-4 column q-px-sm-sm q-px-xs-none">
+                <WeatherChart
+                    v-if="forecast"
+                    kind="temperature"
+                    :profile="forecast.profile"
+                    :version="forecast.version"
+                    :cursor-minutes="positionMinutes"
+                    :samples="forecast.samples"
+                    @select-minutes="selectMinutes"
+                    :style="{ minHeight: '180px' }"
+                />
+            </q-card-section>
 
-            <ElevationChart
-                :route-id="route.id"
-                :profile="route.profile"
-                :version="String(route.updatedAt)"
-                :position="position"
-                @select-position="selectPosition"
-                class="col-xs-12 col-sm-4 col-md-4 column"
-                :style="{ minHeight: '180px' }"
-            />
+            <q-card-section class="col-12 col-sm-4 col-md-4 column q-px-none">
+                <ElevationChart
+                    :route-id="route.id"
+                    :profile="route.profile"
+                    :version="String(route.updatedAt)"
+                    :position="position"
+                    @select-position="selectPosition"
+                    :style="{ minHeight: '180px' }"
+                />
+            </q-card-section>
 
             <div
                 v-if="!hasGeometry || (forecastError && !forecast) || (!route.forecastAvailable && !forecastLoading)"
