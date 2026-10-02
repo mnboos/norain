@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, ref } from "vue";
 import { useQueries, useQuery } from "@tanstack/vue-query";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import { ElevationApi, PublicRoutesApi } from "@norain/api/apis";
 import type { ElevationOut } from "@norain/api/models";
 import { ELEVATION_PRIMARY_GROUP, elevationFigure, type ElevationSeries } from "@/utils/elevation";
@@ -26,6 +27,8 @@ const props = defineProps<{
     compact?: boolean;
     /** The selected route position, a share (0..1) of the route's distance. */
     position?: number;
+    /** The routing profile, which words the time axis (a hike walks). */
+    profile?: string | null;
 }>();
 const emit = defineEmits<{ selectPosition: [position: number] }>();
 const api = new ElevationApi();
@@ -146,7 +149,7 @@ function selectX(x: number) {
 }
 const figure = computed(() => {
     const series: ElevationSeries[] = profiles.value.map(p => ({ ...p, points: p.data.points }));
-    return elevationFigure(series, axis.value);
+    return elevationFigure(series, axis.value, props.profile);
 });
 </script>
 
@@ -162,7 +165,7 @@ const figure = computed(() => {
                 :aria-label="t('elevation.axis')"
                 :options="[
                     { label: t('elevation.distance'), value: 'distance' },
-                    { label: t('timing.duration'), value: 'time' },
+                    { label: tp(profile, 'timing.duration'), value: 'time' },
                 ]"
             />
         </div>
@@ -201,7 +204,7 @@ const figure = computed(() => {
         </template>
         <div v-if="hasData" class="text-caption text-muted">
             {{ sources }}
-            <span v-if="axis === 'time' && approximateTiming">· {{ t("elevation.approximateTiming") }}</span>
+            <span v-if="axis === 'time' && approximateTiming">· {{ tp(profile, "elevation.approximateTiming") }}</span>
             <span v-if="partialHeights">· {{ t("elevation.partial") }}</span>
         </div>
         <div v-if="$slots.footer" class="text-caption text-muted"><slot name="footer" /></div>

@@ -5,6 +5,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.utils import timezone
 
+from . import coverage
 from .countries import COUNTRY_NAMES
 from .models import (
     CellFetchLease,
@@ -306,7 +307,8 @@ class CoverageAreaAdmin(admin.ModelAdmin):
 
     @admin.display(description="Votes")
     def vote_count(self, obj):
-        return CoverageVote.objects.filter(area_code=obj.code).count()
+        # The live count, ahead of the page's daily settlement (core.coverage).
+        return coverage.counted_votes().filter(area_code=obj.code).count()
 
     @admin.display(description="Confirmed addresses waiting")
     def waiting(self, obj):
@@ -322,10 +324,13 @@ class CoverageAreaAdmin(admin.ModelAdmin):
 
 @admin.register(CoverageVote)
 class CoverageVoteAdmin(admin.ModelAdmin):
-    """Single votes, read-only. The public page (/coverage) ranks the areas by their count."""
+    """Single votes, read-only. The public page (/coverage) ranks the areas by their settled count.
 
-    list_display = ("area_code", "voter", "created_at")
-    list_filter = ("area_code",)
+    Not accepted: the limits refused it, so it never counts, though its voter sees it as cast.
+    """
+
+    list_display = ("area_code", "voter", "accepted", "withdrawn_at", "created_at")
+    list_filter = ("accepted", "area_code")
 
     def has_add_permission(self, request):
         return False

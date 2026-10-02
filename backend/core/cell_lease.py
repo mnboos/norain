@@ -25,8 +25,8 @@ from django.db import IntegrityError, transaction
 
 from core.models import CellFetchLease
 
-# The forecast worst case is Open-Meteo and then OWM, 30 s timeout each (grid.py), plus
-# the store. The lease must outlive that, or a slow holder loses it mid-fetch and a
+# The forecast worst case is Open-Meteo (30 s), then MET Norway (20 s), then OWM (30 s)
+# (grid.py), plus the store. The lease must outlive that, or a slow holder loses it mid-fetch and a
 # waiter fetches the same cell again. Keep it above the sum if a timeout moves.
 LEASE_TTL = timedelta(seconds=90)
 POLL_INTERVAL = 0.5
@@ -62,6 +62,19 @@ def _held_sync(kind: str, lat_r: float, lon_r: float, day_key: date) -> bool:
     return CellFetchLease.objects.filter(
         **_key(kind, lat_r, lon_r, day_key), expires_at__gte=datetime.now(tz=UTC)
     ).exists()
+
+
+def try_lease(kind: str, lat_r: float, lon_r: float, day_key: date) -> uuid.UUID | None:
+    """Take the lease without waiting: the token, or None while someone else holds it.
+
+    For a batch fetch (``grid.fetch_forecast_cells``), which fetches only the cells it holds and
+    leaves the rest to their holders. Pass the token to ``release_lease`` when done.
+    """
+    return _acquire_sync(kind, lat_r, lon_r, day_key)
+
+
+def release_lease(kind: str, lat_r: float, lon_r: float, day_key: date, token: uuid.UUID) -> None:
+    _release_sync(kind, lat_r, lon_r, day_key, token)
 
 
 @asynccontextmanager

@@ -16,6 +16,7 @@ const NAVIGATOR_FIELDS = [
     "webdriver",
     "deviceMemory",
     "maxTouchPoints",
+    "userAgentData",
 ];
 const SCREEN_FIELDS = ["width", "height", "colorDepth", "availWidth", "availHeight"];
 
@@ -45,6 +46,8 @@ const TARGETS: [string[], string[], string[]][] = [
     [["Date"], [], ["getTimezoneOffset"]],
     [["Intl", "DateTimeFormat"], [], ["resolvedOptions"]],
     [["Function"], [], ["toString"]],
+    // Chromium only; the server compares what it reports with the Sec-CH-UA headers.
+    [["NavigatorUAData"], ["brands", "mobile", "platform"], ["getHighEntropyValues", "toJSON"]],
 ];
 
 type Source = (fn: unknown) => string | null;
@@ -77,7 +80,106 @@ export function ownOverrides(target: object, names: string[], ownNames = Object.
     return ownNames(target).filter(name => names.includes(name));
 }
 
-/** Every getter or method below that is not the browser's own, as `Prototype.name`. */
+// A method, named by its key in every engine's stack (JavaScriptCore leaves arrow functions
+// under a computed key unnamed), and minifiers keep keys. It makes the call itself, so between a
+// throw and its stack line there is nothing of ours: only the called function and the natives.
+const MARKER = "__meteolaneRealmProbe";
+const STACK_MARKER = {
+    __meteolaneRealmProbe(fn: unknown, apply: unknown): unknown {
+        // Not a tail call: Safari's proper tail calls would drop this frame from the stack.
+        const result: unknown = typeof apply === "function" ? Reflect.apply(apply, undefined, [fn, {}, []]) : undefined;
+        return result;
+    },
+};
+
+/**
+ * A function called on the wrong object, through the frame's own `Reflect.apply`: a native
+ * getter or method refuses it with a TypeError, a JavaScript replacement usually returns
+ * something. Only whether it threw and the error's kind count: V8 words some refusals with the
+ * receiver's realm (Intl), so the message differs between two honest copies. A promise-returning
+ * method (getHighEntropyValues) rejects instead of throwing: its rejection is handled here, so it
+ * never reaches the console or Sentry. `stack` is what the error carried, or null.
+ */
+export function wrongReceiver(fn: unknown, apply: unknown): { outcome: string; stack: string | null } {
+    if (typeof fn !== "function" || typeof apply !== "function") return { outcome: "none", stack: null };
+    try {
+        const result = STACK_MARKER.__meteolaneRealmProbe(fn, apply);
+        const then = member(result, "then");
+        if (typeof then === "function") {
+            // Another realm's promise: not an instance of ours, so handled through its own `then`.
+            Reflect.apply(then, result, [undefined, () => undefined]);
+            return { outcome: "promise", stack: null };
+        }
+        return { outcome: "returned", stack: null };
+    } catch (error) {
+        const stack: unknown = member(error, "stack");
+        return { outcome: `threw ${String(member(error, "name"))}`, stack: typeof stack === "string" ? stack : null };
+    }
+}
+
+/**
+ * Whether a JavaScript frame sits between the throw and our own marker. The native function
+ * itself shows as native (`[native code]` in JavaScriptCore, `(<anonymous>)` in V8) or not at
+ * all (SpiderMonkey); a JavaScript wrapper shows as a frame of its own, however well it prints.
+ * Null when the marker is not in the stack (unreadable, or cut short).
+ */
+export function wrappedInStack(stack: string | null): boolean | null {
+    if (stack === null) return null;
+    const lines = stack.split("\n");
+    const marker = lines.findIndex(line => line.includes(MARKER));
+    if (marker < 0) return null;
+    // V8 starts with the message; its frames read "    at …", the other engines' "name@where".
+    const frames = lines.slice(0, marker).filter(line => /^\s+at /.test(line) || line.includes("@"));
+    return frames.some(frame => !/\[native code\]|\(<anonymous>\)|\(native\)/.test(frame));
+}
+
+/**
+ * Whether `realm` is really one of this window's frames. `window[i]` cannot be redefined, so a
+ * hooked `contentWindow` that hands back a prepared realm shows here.
+ */
+export function isOwnFrame(realm: unknown): boolean {
+    return Array.from({ length: window.length }, (_, index) => window[index]).some(frame => frame === realm);
+}
+
+/**
+ * `(a, b) => bits(a / b)` for f32 and f64 (high word), as WebAssembly. The sign and payload of
+ * the NaN from 0/0 are left to the hardware (x86 and ARM differ), and fingerprinting protection
+ * leaves them alone. Parameters, not constants, so no compiler folds the division away.
+ */
+const NAN_MODULE = new Uint8Array([
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x0d, 0x02, 0x60, 0x02, 0x7d, 0x7d, 0x01, 0x7f, 0x60, 0x02,
+    0x7c, 0x7c, 0x01, 0x7f, 0x03, 0x03, 0x02, 0x00, 0x01, 0x07, 0x09, 0x02, 0x01, 0x61, 0x00, 0x00, 0x01, 0x62, 0x00,
+    0x01, 0x0a, 0x17, 0x02, 0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x95, 0xbc, 0x0b, 0x0c, 0x00, 0x20, 0x00, 0x20, 0x01,
+    0xa3, 0xbd, 0x42, 0x20, 0x88, 0xa7, 0x0b,
+]);
+
+/** The NaN bits through `realm`'s WebAssembly (this page's by default); null where it cannot run. */
+export function nanBits(realm: unknown = globalThis): string[] | null {
+    const wasm = member(realm, "WebAssembly");
+    const Module = member(wasm, "Module");
+    const Instance = member(wasm, "Instance");
+    if (typeof Module !== "function" || typeof Instance !== "function") return null;
+    try {
+        const exports = member(Reflect.construct(Instance, [Reflect.construct(Module, [NAN_MODULE])]), "exports");
+        const hex = (name: string) => {
+            const run = member(exports, name);
+            if (typeof run !== "function") throw new Error("Missing export");
+            const value: unknown = Reflect.apply(run, undefined, [0, 0]);
+            return (Number(value) >>> 0).toString(16);
+        };
+        return [hex("a"), hex("b")];
+    } catch {
+        // A CSP without wasm-unsafe-eval, or WebAssembly switched off.
+        return null;
+    }
+}
+
+/**
+ * Every getter or method below that is not the browser's own, as `Prototype.name`, and what the
+ * frame's clean realm saw besides: `receiver:` (a wrong receiver was not refused as the frame's
+ * own copy refuses it), `stack:` (a JavaScript frame inside the call; observed only), and
+ * `frame:identity` / `frame:nan` (the frame is not ours, or its WebAssembly disagrees).
+ */
 export function tamperedNatives(realm: Window): string[] {
     const source = sourceReader(realm);
     // The frame's own Object: the page may have patched this realm's getOwnPropertyDescriptor.
@@ -96,23 +198,45 @@ export function tamperedNatives(realm: Window): string[] {
         const found: unknown = Reflect.apply(ownNames, undefined, [target]);
         return Array.isArray(found) ? found.filter((item): item is string => typeof item === "string") : [];
     };
+    const apply = member(member(realm, "Reflect"), "apply");
     const tampered: string[] = [];
+    const compare = (label: string, name: string, own: unknown, clean: unknown) => {
+        if (typeof clean !== "function") return;
+        const page = wrongReceiver(own, apply);
+        if (page.outcome !== wrongReceiver(clean, apply).outcome) tampered.push(`receiver:${label}.${name}`);
+        if (wrappedInStack(page.stack) === true) tampered.push(`stack:${label}.${name}`);
+    };
     for (const [path, getters, methods] of TARGETS) {
         const prototype = prototypeOf(path);
         const label = path.join(".");
         if (!prototype) continue;
+        // The frame's clean copy of the same getter or method.
+        const framePrototype = member(
+            path.reduce<unknown>((target, key) => member(target, key), realm),
+            "prototype",
+        );
+        const clean = (name: string, part: "get" | "value"): unknown => {
+            if (typeof framePrototype !== "object" || framePrototype === null) return undefined;
+            const found = descriptor(framePrototype, name);
+            return found ? Reflect.get(found, part) : undefined;
+        };
         for (const name of getters) {
             const found = descriptor(prototype, name);
             if (!found) continue; // not in this browser (deviceMemory outside Chromium)
             const getter: unknown = Reflect.get(found, "get");
             if (!isNativeFunction(getter, name, source) || "value" in found) tampered.push(`${label}.${name}`);
+            compare(label, name, getter, clean(name, "get"));
         }
         for (const name of methods) {
             const found = descriptor(prototype, name);
             if (!found) continue;
             if (!isNativeFunction(found.value, name, source)) tampered.push(`${label}.${name}`);
+            compare(label, name, found.value, clean(name, "value"));
         }
     }
+    if (!isOwnFrame(realm)) tampered.push("frame:identity");
+    const [pageNan, frameNan] = [nanBits(), nanBits(realm)];
+    if (pageNan && frameNan && pageNan.join() !== frameNan.join()) tampered.push("frame:nan");
     for (const [label, instance, fields] of [
         ["Navigator", navigator, NAVIGATOR_FIELDS],
         ["Screen", screen, SCREEN_FIELDS],

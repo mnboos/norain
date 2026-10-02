@@ -10,6 +10,7 @@ import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&ur
 import { shallowRef, computed, onBeforeUnmount, onMounted, type Ref, ref, useTemplateRef, watch, toRefs } from "vue";
 import { useQuasar } from "quasar";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import lightStyleUrl from "@/assets/map-styles/positron.json?url";
@@ -560,7 +561,7 @@ function samplePopupHtml(s: ForecastSampleOut): string {
         ${s.frostLevel != null ? `❄️ ${t("map.frost", { level: impactText(s.frostLevel) })}<br>` : ""}
         ${s.windCoverage != null && s.windCoverage < 1 ? `${t("map.popup.windPartial")}<br>` : ""}
         <span class="wx-quality">
-            <i style="background:${scoreColor(s.rideScore)}"></i> ${t("thumbnail.quality", { quality: rideLabelText(s.rideLabel, s.rideCause) || t("common.notAvailable") })}
+            <i style="background:${scoreColor(s.rideScore)}"></i> ${tp(props.routeWeather?.profile, "thumbnail.quality", { quality: rideLabelText(s.rideLabel, s.rideCause) || t("common.notAvailable") })}
         </span>
     </div>`;
 }
@@ -1062,7 +1063,7 @@ onBeforeUnmount(() => {
         </q-card-section>
         <q-card-section v-else class="col column q-pa-none">
             <div ref="map" class="col map-canvas"></div>
-            <MapLegend v-if="hasRoute" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
+            <MapLegend v-if="hasRoute" :profile="routeWeather?.profile" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
             <div
                 v-if="hasWindProfile"
                 class="wx-wind-legend text-caption"
@@ -1086,7 +1087,7 @@ onBeforeUnmount(() => {
                         :aria-label="t('map.windMode')"
                     />
                 </div>
-                <div v-if="showParticles">{{ t("map.particlesHint") }}</div>
+                <div v-if="showParticles">{{ tp(routeWeather?.profile, "map.particlesHint") }}</div>
                 <div v-else>{{ t("map.arrowsHint") }}</div>
             </div>
         </q-card-section>

@@ -13,8 +13,14 @@ covered. Rules that hold this together:
   (``claim_device_vote``, keys from ``core.fingerprinting.device_keys``). This stacks on the
   IP limits, never replaces them. A ``low`` browser claims only its key, never its
   fingerprint: look-alike devices (iPhones of one model) must not block each other. An
-  unknown or suspicious one shares ``SUSPICIOUS_VOTES_PER_IP_PER_DAY`` with its IP. The claim
-  is recorded per voter, so withdrawing releases exactly what was claimed.
+  unknown one, one without any key, and a suspicious one share ``SUSPICIOUS_VOTES_PER_IP_PER_DAY``
+  with their IP (the suspicious one still claims its own key too). The claim is recorded per
+  voter, so withdrawing releases exactly what was claimed. IPv6 addresses count by their /56.
+- **The ledger is blind** (``COVERAGE_BLIND_LEDGER``). A vote the limits refused is stored
+  anyway (``accepted=False``) and shown to its voter as cast, and a withdrawal waits for the
+  daily ``settle_votes``, which also publishes the tallies. So no reply says whether a vote
+  counted: whoever probes the limits learns it a day later, as the day's change in a tally.
+  Only the per-IP flood limit still answers 429.
 - **An address is confirmed before anything else is sent to it** (double opt-in): anyone can
   type anyone's address. The confirmation mail goes at most once per ``RESEND_AFTER``, and the
   reply is the same whether the address was new, pending or confirmed, so the form reveals
@@ -33,6 +39,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.mail import send_mail
 from django.db import IntegrityError, transaction
+from django.db.models import Count, Q
 from django.utils import translation
 from django.utils.translation import gettext
 from loguru import logger
@@ -40,7 +47,7 @@ from redis.exceptions import RedisError
 
 from core import fingerprinting
 from core.countries import COUNTRY_NAMES
-from core.models import CoverageArea, CoverageSubscription, User
+from core.models import CoverageArea, CoverageSubscription, CoverageVote, User
 
 VOTER_COOKIE = "meteolane_voter"
 VOTER_COOKIE_MAX_AGE = 2 * 365 * 24 * 3600
@@ -49,6 +56,9 @@ SUBSCRIBE_PER_IP_PER_HOUR = 10
 # Anonymous votes from a browser that could not be recognised, or lied, per IP and day.
 SUSPICIOUS_VOTES_PER_IP_PER_DAY = 3
 DEVICE_VOTE_TTL = 30 * 24 * 3600
+# The last settlement's tallies (``settle_votes``); outlives a missed day.
+TALLY_KEY = "coverage:tallies"
+TALLY_TTL = 48 * 3600
 RESEND_AFTER = timedelta(minutes=10)
 # Unconfirmed addresses are dropped after this (``tasks._purge_unconfirmed_coverage``).
 COVERAGE_CONFIRM_RETENTION = timedelta(days=7)
@@ -91,7 +101,8 @@ def voter_key(user: User | None, token: str | None) -> str | None:
 
 
 def _ip_key(ip: str | None) -> str:
-    return hashlib.sha256(f"{settings.SECRET_KEY}:{ip or '-'}".encode()).hexdigest()[:24]
+    # An IPv6 address counts by its /56 (``ip_floor``); IPv4 keys are what they always were.
+    return hashlib.sha256(f"{settings.SECRET_KEY}:{fingerprinting.ip_floor(ip)}".encode()).hexdigest()[:24]
 
 
 def within_hourly_limit(kind: str, ip: str | None, limit: int) -> bool:
@@ -109,13 +120,23 @@ def _anonymous_vote_key(ip: str | None, code: str) -> str:
     return f"coverage:anonvote:{_ip_key(ip)}:{code}"
 
 
-def claim_anonymous_vote(ip: str | None, code: str) -> bool:
-    """One anonymous vote per area and IP a day, whatever the cookie says. Fails open."""
+def claim_anonymous_vote(ip: str | None, code: str, voter: str | None = None) -> bool:
+    """One anonymous vote per area and IP a day, whatever the cookie says. Fails open.
+
+    With ``voter``, the claim is remembered with the voter's other claims, so the daily
+    settlement can release it without the address (``release_device_vote``).
+    """
+    key = _anonymous_vote_key(ip, code)
     try:
-        return bool(cache.add(_anonymous_vote_key(ip, code), 1, 24 * 3600))
+        if not cache.add(key, 1, 24 * 3600):
+            return False
+        if voter is not None:
+            claim_key = _device_claim_key(voter, code)
+            claim = cache.get(claim_key)
+            cache.set(claim_key, {**(claim if isinstance(claim, dict) else {}), "anon": key}, DEVICE_VOTE_TTL)
     except (RedisError, OSError) as exc:
         logger.warning(f"Coverage vote claim unavailable: {exc}")
-        return True
+    return True
 
 
 def release_anonymous_vote(ip: str | None, code: str) -> None:
@@ -141,42 +162,145 @@ def claim_device_vote(voter: str, assessment: dict | None, ip: str | None, code:
     voted for the area) or ``"limit"`` (the unrecognised browsers of this IP used today's
     votes). Whatever is claimed is remembered under the voter, so ``release_device_vote``
     undoes it after the receipt has long expired.
+
+    Nothing a browser can trigger leaves it freer: a suspicious one keeps its own key and pays
+    the IP's shared count on top, and so does one without any key or with a key still too young.
     """
     if not settings.BROWSER_FINGERPRINT_ENABLED:
         return None
     try:
-        if not fingerprinting.is_trusted(assessment):
+        keys = fingerprinting.device_keys(assessment, ip)
+        bucket = None
+        # A key younger than BROWSER_KEY_AGE pays the IP's count too: minting keys buys no votes.
+        if not fingerprinting.is_trusted(assessment) or not keys or not fingerprinting.is_established(assessment):
             bucket = f"coverage:suspvote:{_ip_key(ip)}:{datetime.now(tz=UTC).date().isoformat()}"
             cache.add(bucket, 0, 25 * 3600)
             if cache.incr(bucket) > SUSPICIOUS_VOTES_PER_IP_PER_DAY:
                 cache.decr(bucket)
                 return "limit"
-            cache.set(_device_claim_key(voter, code), {"keys": [], "bucket": bucket}, DEVICE_VOTE_TTL)
-            return None
         claimed: list[str] = []
-        for key in fingerprinting.device_keys(assessment, ip):
+        for key in keys:
             if not cache.add(_device_vote_key(key, code), 1, DEVICE_VOTE_TTL):
                 cache.delete_many([_device_vote_key(k, code) for k in claimed])
+                if bucket is not None:
+                    cache.decr(bucket)
                 return "device"
             claimed.append(key)
-        cache.set(_device_claim_key(voter, code), {"keys": claimed, "bucket": None}, DEVICE_VOTE_TTL)
+        cache.set(_device_claim_key(voter, code), {"keys": claimed, "bucket": bucket}, DEVICE_VOTE_TTL)
     except (RedisError, OSError, ValueError) as exc:
         logger.warning(f"Coverage device claim unavailable: {exc}")
     return None
 
 
 def release_device_vote(voter: str, code: str) -> None:
-    """Undo ``claim_device_vote`` for a withdrawn or refused vote."""
+    """Undo ``claim_device_vote`` (and a remembered ``claim_anonymous_vote``) for a withdrawn or refused vote."""
     try:
         claim = cache.get(_device_claim_key(voter, code))
         if not isinstance(claim, dict):
             return
-        cache.delete_many([_device_vote_key(k, code) for k in claim.get("keys", [])] + [_device_claim_key(voter, code)])
+        keys = [_device_vote_key(k, code) for k in claim.get("keys", [])] + [_device_claim_key(voter, code)]
+        cache.delete_many(keys + ([claim["anon"]] if claim.get("anon") else []))
         if claim.get("bucket"):
             with suppress(ValueError):  # the day's count already expired
                 cache.decr(claim["bucket"])
     except (RedisError, OSError) as exc:
         logger.warning(f"Coverage device claim unavailable: {exc}")
+
+
+def claim_vote(voter: str, assessment: dict | None, ip: str | None, code: str) -> str | None:
+    """Every claim an anonymous vote makes, browser first; None when all of them held.
+
+    Else why not: ``"device"`` or ``"limit"`` (``claim_device_vote``), or ``"address"`` (this IP
+    already voted for the area today). A refused step leaves nothing claimed behind.
+    """
+    refused = claim_device_vote(voter, assessment, ip, code)
+    if refused is not None:
+        return refused
+    if not claim_anonymous_vote(ip, code, voter):
+        release_device_vote(voter, code)
+        return "address"
+    return None
+
+
+# --- The blind ledger -------------------------------------------------------------------------
+
+
+def counted_votes():
+    """The votes a tally counts: the ones the limits let through and nobody withdrew."""
+    return CoverageVote.objects.filter(accepted=True, withdrawn_at__isnull=True)
+
+
+def _tallies(step: int = 1, before: datetime | None = None) -> dict[str, int]:
+    """Counted votes per area, rounded down to ``step``; with ``before``, as they stood then.
+
+    As they stood: cast before it, and not withdrawn before it either, so a withdrawal since then
+    changes nothing yet (it would say at once whether that vote had counted).
+    """
+    if before is None:
+        votes = counted_votes()
+    else:
+        votes = CoverageVote.objects.filter(accepted=True, created_at__lt=before).filter(
+            Q(withdrawn_at__isnull=True) | Q(withdrawn_at__gte=before)
+        )
+    rows = votes.values("area_code").annotate(n=Count("id")).values_list("area_code", "n")
+    return {code: n - n % step for code, n in rows if n >= step}
+
+
+def published_tallies() -> dict[str, int]:
+    """Votes per area as the page shows them: the last settlement's, or live without the ledger.
+
+    Should the settled tallies be gone from the cache, the count up to the start of the UTC day
+    stands in: a live count would say at once whether a vote counted.
+    """
+    if not settings.COVERAGE_BLIND_LEDGER:
+        return _tallies()
+    try:
+        settled = cache.get(TALLY_KEY)
+    except (RedisError, OSError) as exc:
+        logger.warning(f"Coverage tallies unavailable: {exc}")
+        settled = None
+    if isinstance(settled, dict) and isinstance(settled.get("counts"), dict):
+        return settled["counts"]
+    today = datetime.now(tz=UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    return _tallies(settings.COVERAGE_TALLY_STEP, before=today)
+
+
+def settle_votes(now: datetime | None = None) -> int:
+    """The daily settlement, once per UTC day: withdrawals take effect and the tallies publish.
+
+    Until then a vote changes nothing anyone can see, so no reply says whether the limits let
+    it count. Returns how many withdrawn votes were removed. With the ledger switched off,
+    withdrawals take effect at once; those still pending from before go on every pass.
+    """
+    if not settings.COVERAGE_BLIND_LEDGER:
+        return _remove_withdrawn()
+    day = (now or datetime.now(tz=UTC)).date().isoformat()
+    try:
+        settled = cache.get(TALLY_KEY)
+    except (RedisError, OSError) as exc:
+        logger.warning(f"Coverage settlement skipped, cache unavailable: {exc}")
+        return 0
+    if isinstance(settled, dict) and settled.get("day") == day:
+        return 0
+    removed = _remove_withdrawn()
+    try:
+        cache.set(TALLY_KEY, {"day": day, "counts": _tallies(settings.COVERAGE_TALLY_STEP)}, TALLY_TTL)
+    except (RedisError, OSError) as exc:
+        logger.warning(f"Coverage tallies not published: {exc}")
+    return removed
+
+
+def _remove_withdrawn() -> int:
+    """Delete withdrawn votes and release their claims; how many went."""
+    removed = 0
+    withdrawn = CoverageVote.objects.filter(withdrawn_at__isnull=False).values_list("pk", "voter", "area_code")
+    for pk, voter, code in withdrawn:
+        # Row by row: a vote cast again since it was listed has lost its withdrawn_at and stays.
+        deleted, _ = CoverageVote.objects.filter(pk=pk, withdrawn_at__isnull=False).delete()
+        if deleted:
+            release_device_vote(voter, code)
+            removed += 1
+    return removed
 
 
 def _link(action: str, token: str) -> str:

@@ -32,6 +32,10 @@ export interface WeatherPrefsIn {
     /**
      * 
      */
+    avoidShade?: boolean;
+    /**
+     * 
+     */
     departureWindowMinutes?: number;
 }
 
@@ -54,6 +58,7 @@ export function WeatherPrefsInFromJSONTyped(json: any, ignoreDiscriminator: bool
         
         'avoidRain': json['avoid_rain'] == null ? undefined : json['avoid_rain'],
         'avoidHeadwind': json['avoid_headwind'] == null ? undefined : json['avoid_headwind'],
+        'avoidShade': json['avoid_shade'] == null ? undefined : json['avoid_shade'],
         'departureWindowMinutes': json['departure_window_minutes'] == null ? undefined : json['departure_window_minutes'],
     };
 }
@@ -71,6 +76,7 @@ export function WeatherPrefsInToJSONTyped(value?: WeatherPrefsIn | null, ignoreD
         
         'avoid_rain': value['avoidRain'],
         'avoid_headwind': value['avoidHeadwind'],
+        'avoid_shade': value['avoidShade'],
         'departure_window_minutes': value['departureWindowMinutes'],
     };
 }

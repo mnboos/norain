@@ -79,6 +79,10 @@ export interface RouteWeatherSummary {
     /**
      * 
      */
+    sources?: Array<string>;
+    /**
+     * 
+     */
     stationCorrected?: boolean;
 }
 
@@ -138,6 +142,7 @@ export function RouteWeatherSummaryFromJSONTyped(json: any, ignoreDiscriminator:
         'maxFrostLevel': json['max_frost_level'] === undefined ? undefined : json['max_frost_level'] === null ? null : json['max_frost_level'],
         'windDistribution': json['wind_distribution'] === undefined ? undefined : json['wind_distribution'] === null ? null : WindDistributionFromJSON(json['wind_distribution']),
         'source': json['source'],
+        'sources': json['sources'] == null ? undefined : json['sources'],
         'stationCorrected': json['station_corrected'] == null ? undefined : json['station_corrected'],
     };
 }
@@ -165,6 +170,7 @@ export function RouteWeatherSummaryToJSONTyped(value?: RouteWeatherSummary | nul
         'max_frost_level': value['maxFrostLevel'],
         'wind_distribution': WindDistributionToJSON(value['windDistribution']),
         'source': value['source'],
+        'sources': value['sources'],
         'station_corrected': value['stationCorrected'],
     };
 }

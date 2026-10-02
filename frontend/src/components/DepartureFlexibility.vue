@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { tp } from "@/i18n";
 import { useEntitlements } from "@/composables/useEntitlements";
+const { profile = "bike" } = defineProps<{ profile?: string }>();
 const { t } = useI18n();
-const { isPro } = useEntitlements();
+const { isPro, entitlements } = useEntitlements();
 const before = defineModel<number>("before", { default: 0 });
 const after = defineModel<number>("after", { default: 0 });
 watch(
@@ -32,11 +34,18 @@ const options = computed(() =>
             dense
         >
             <q-card-section v-if="!isPro" class="">
-                <p>{{ t("flexibility.plusPitch") }}</p>
-                <q-btn to="/account" color="primary" :label="t('plan.tryPlus')" no-caps flat />
+                <p>{{ tp(profile, "flexibility.plusPitch") }}</p>
+                <q-btn
+                    v-if="entitlements?.offer"
+                    to="/account"
+                    color="primary"
+                    :label="t('plan.tryPlus', { days: entitlements.offer.trialDays })"
+                    no-caps
+                    flat
+                />
             </q-card-section>
             <q-card-section v-else class="">
-                <q-item-label overline>{{ t("flexibility.title") }}</q-item-label>
+                <q-item-label overline>{{ tp(profile, "flexibility.title") }}</q-item-label>
                 <!--                <q-item-label>{{ t("flexibility.intro") }}</q-item-label>-->
                 <q-card-section class="row q-col-gutter-sm q-px-none q-pt-sm q-pb-none">
                     <q-item-label caption>{{ t("flexibility.earlier") }}</q-item-label>

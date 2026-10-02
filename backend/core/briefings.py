@@ -33,6 +33,8 @@ EXPLANATIONS = {
 
 LEAD = timedelta(minutes=60)
 PREPARE = timedelta(minutes=10)
+# Briefings delivered per account and local day; the rest are capped.
+MAX_PER_DAY = 10
 DELIVERY_GRACE = timedelta(minutes=10)
 
 
@@ -120,7 +122,7 @@ def deliver(briefing_id, now=None):
             briefing.save(update_fields=["status"])
             return
         day_start = now.astimezone(LOCAL_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-        if RideBriefing.objects.filter(route__owner=user, delivery_started_at__gte=day_start).count() >= 10:
+        if RideBriefing.objects.filter(route__owner=user, delivery_started_at__gte=day_start).count() >= MAX_PER_DAY:
             briefing.status = "capped"
             briefing.save(update_fields=["status"])
             return

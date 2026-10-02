@@ -34,13 +34,15 @@ const props = defineProps<{
     /** The selected route position as ride time (min). */
     cursorMinutes?: number;
     samples: ChartSample[];
+    /** The forecast's routing profile, which words the axes. */
+    profile?: string | null;
 }>();
 
-const { kind, version, cursorMinutes, samples } = toRefs(props);
+const { kind, version, cursorMinutes, samples, profile } = toRefs(props);
 const { t, locale } = useI18n();
 
 // forecastChart words its traces and axes with t(), so a language switch redraws the chart.
-const figure = computed(() => forecastChart(kind.value, samples.value));
+const figure = computed(() => forecastChart(kind.value, samples.value, profile.value));
 </script>
 
 <template>

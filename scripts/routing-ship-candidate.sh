@@ -15,7 +15,7 @@ set -euo pipefail
 : "${VPS_HOST:?Set VPS_HOST in .env}"
 : "${ROUTING_OSM_IMPORT_DIR:?Set ROUTING_OSM_IMPORT_DIR in .env}"
 remote="$VPS_USER@$VPS_HOST"
-norain_dir="${VPS_NORAIN_DIR:-/srv/norain}"
+norain_dir="${VPS_NORAIN_DIR:?err}"
 command -v rsync >/dev/null || { echo "rsync is required (on Windows, run this from WSL)." >&2; exit 1; }
 
 # The graph cache mount in docker-compose.base.yml.
@@ -53,7 +53,10 @@ if [[ "$remote_storage" != /* || "$remote_osm" != /* ]]; then
     exit 1
 fi
 remote_cache="$remote_storage/graphhopper/cache"
-terrain_excludes=(--exclude /cache/ --exclude /cache-fallback/)
+# Only the final archives and their metadata. The decoded tile caches, the download pieces and
+# the per-source extracts (part-*.pmtiles) are used by preparation and import only; together
+# they are larger than the archives (Europe: ~290 GiB against ~76 GiB).
+terrain_excludes=(--exclude /cache/ --exclude /cache-fallback/ --exclude /pieces/ --exclude '/part-*.pmtiles')
 ship_pois=
 if [ -n "${POIS_FILE:-}" ] && [ -f "$ROUTING_OSM_IMPORT_DIR/$POIS_FILE" ]; then
     ship_pois=1
@@ -116,8 +119,7 @@ ssh "$remote" "mkdir -p '$remote_cache/releases' '$remote_osm/elevation'"
 # rsync resumes an interrupted copy. Nothing on the VPS points at the copies until both are
 # complete, so a partial copy is harmless.
 rsync -aP "$cache/$release/" "$remote:$remote_cache/$release/"
-# terrain.pmtiles and fallback.pmtiles. The decoded tile caches are only written and read
-# by an import; serving (and /elevation) reads the archives.
+# terrain.pmtiles and fallback.pmtiles; serving (and /elevation) reads only those.
 rsync -aP "${terrain_excludes[@]}" \
     "$ROUTING_OSM_IMPORT_DIR/$terrain/" "$remote:$remote_osm/$terrain/"
 if [ -n "$ship_pois" ]; then

@@ -189,25 +189,30 @@ native-memory headroom (at least 2 GiB or 10% of the heap), with an actionable
 
 ### Large areas: memory and the file system
 
-For a large area (all of Europe, say) on a machine with little memory, build with
-`GRAPHHOPPER_BUILD_DATAACCESS=MMAP`. The graph is then written to files in
-`/graph-cache/releases/<id>/graph/`, and the OS keeps what it can of them in the page
-cache. What counts:
+A Europe graph is about 12 GB: edges 2.5 GB, nodes 0.7 GB, geometry 0.7 GB, and
+one landmark file of 2.75 GB per bike profile. The build holds it either in the heap
+(`GRAPHHOPPER_BUILD_DATAACCESS=RAM_STORE`) or in memory-mapped files in
+`/graph-cache/releases/<id>/graph/` (`MMAP`). What counts:
 
-- **The heap still needs room.** It holds the OSM reader's node map and the height
-  table (about 30 bytes per node: ~5 GB for 167 million nodes). A Europe build used
-  up to 11 GB of a 12 GB heap while reading the file. Give it about 10 GB.
-- **The rest of the limit is page cache.** `GRAPHHOPPER_MEM_LIMIT` covers the heap
-  *and* the cached graph files. The landmark step (LM) reads and writes one file per
-  profile all over the place (2.8 GB each for Europe, three profiles at once), and
-  the edges and nodes besides. When those don't fit, every step waits for the disk.
-  For Europe: heap 10 GB, limit 24 GB, and close big programs on the machine during
-  the build.
-- **On btrfs, turn off copy-on-write for the graph folder** (Fedora puts `/home` on
-  btrfs, often with `compress=zstd`). With copy-on-write, every page LM writes
-  becomes a new, compressed extent. A Europe landmark file had 630,000 extents
-  after five hours; the threads spent their time waiting to read it back, at under
-  0.1 CPU cores, and LM would not finish. Before the first build:
+- **The heap needs room besides the graph.** It holds the OSM reader's node map and
+  the height table (about 30 bytes per node: ~5 GB for 167 million nodes). With
+  `MMAP`, a Europe build used up to 11 GB of heap while reading the file.
+- **`GRAPHHOPPER_MEM_LIMIT` covers everything**: the heap, Java's own memory, and,
+  with `MMAP`, the page cache holding the graph files. It must fit on the machine
+  next to everything else running there.
+- **On btrfs, do not build a large area with `MMAP`.** The landmark step (LM) writes
+  into every page of its landmark files again and again, and each time btrfs has to
+  reserve space for the write first. Two Europe builds on btrfs sat in LM for 5.5
+  and 10 hours at under 0.2 CPU cores and never finished; the LM threads waited in
+  btrfs (`handle_reserve_ticket`) and took turns, one at a time. Keeping dirty pages
+  in memory longer (`sysctl vm.dirty_*`) did not help. Use `RAM_STORE` there: LM
+  works in the heap, and the files are written once, in order, at the end. For
+  Europe on a 30 GB machine: heap 20 GB, limit 24 GB, and close big programs during
+  the build. Other file systems (ext4, xfs) have no such problem with `MMAP`.
+- **On btrfs, turn off copy-on-write for the graph folder anyway.** With
+  copy-on-write, every page written through a memory map becomes a new extent, and
+  with `compress=zstd` (Fedora's default for `/home`) a compressed one: a Europe
+  landmark file had 630,000 extents after five hours. Before the first build:
 
   ```sh
   chattr +C data/graphhopper/cache/releases
@@ -215,15 +220,17 @@ cache. What counts:
 
   New release folders and their files inherit it (`lsattr -d` shows a `C`). It does
   not change files that already exist, so set it before a build, never during one.
-  It also turns off compression for these files, which is what you want here. Other
-  file systems (ext4, xfs) need nothing.
+  It also turns off compression for these files. It stopped the fragmentation (about
+  4,800 extents per file) but not the waiting described above.
 - **A running build can get more memory without a restart**:
   `podman update --memory 24g --memory-swap 32g <container>` (or `docker update`).
-  It does not help a build that is slowed by copy-on-write.
+  It helps only when memory is the problem, not the file system.
 
-To see whether a build is still working, look at its CPU use (`podman stats`) and the
-state of its threads. LM logs nothing between its start and its end. Threads that
-stay in state `D` at almost no CPU are waiting for the disk.
+To see whether a build is still working, look at its CPU use (`podman stats`) and at
+its threads (`/proc/<java pid>/task/*/stat` for the state, `wchan` for what they wait
+on). LM logs nothing between `Start calculating 16 landmarks` and `LM … finished`.
+Threads that stay in state `D` at almost no CPU are waiting for the disk or the file
+system.
 
 If the selected terrain does not cover the filtered file, the build stops with an
 error. Run `download-elevation-for` for that file, then retry the build.
@@ -260,7 +267,9 @@ just routing-ship-candidate
 
 The dry run compares the files to transfer with free space on the VPS. Shipping
 copies the candidate, its matching terrain from `artifact.json`, and the matching
-POI file if present. It sets the VPS's candidate and terrain links, but does not
+POI file if present. Of the terrain it copies only `terrain.pmtiles`,
+`fallback.pmtiles` and the metadata, not the decoded caches, the download pieces or
+the per-source `part-*.pmtiles` (for Europe that is ~76 GiB instead of ~290 GiB). It sets the VPS's candidate and terrain links, but does not
 validate or activate the graph. Existing matching files are skipped by rsync.
 If the POI file is absent, shipping keeps the VPS's existing POIs and prints a notice.
 
@@ -274,7 +283,8 @@ Prefer the shipping command above. For a manual transfer, read the local candida
 link (`data/graphhopper/cache/candidate`) to get `releases/<id>`. Read the `terrain`
 field from that release's `artifact.json` to get `/osm_data/elevation/<hash>`.
 Do not use `elevation/current`: it may have changed since the candidate was built.
-Copy the release, that terrain directory (excluding `cache/` and `cache-fallback/`),
+Copy the release, that terrain directory (without `cache/`, `cache-fallback/`,
+`pieces/` and `part-*.pmtiles`),
 and the matching POI file to the corresponding production paths. Create destination
 directories first. On the VPS, set:
 
@@ -293,6 +303,7 @@ Then validate and activate as in step 5.
 | Graph release, including `artifact.json`, configuration and models | Serving and validation |
 | Matching terrain directory, including both PMTiles archives and metadata | Coordinate elevation lookups and future builds |
 | Decoded `cache/` and `cache-fallback/` directories | Builds only; no need to ship them |
+| Download leftovers `pieces/` and `part-*.pmtiles` | Nothing once the terrain is published; not shipped. A copy shipped by an older script is removed with `docker compose run --rm --no-deps graphhopper terrain-cleanup` |
 | Filtered `.osm.pbf` | Rebuilding on that machine; no need to ship it for serving |
 
 Keep the terrain referenced by every active, candidate or retained rollback graph,
@@ -418,7 +429,25 @@ GraphHopper stores decoded tiles in `cache/` and `cache-fallback/`. Imports keep
 most 512 decoded tiles memory-mapped at once, so continent-sized builds do not exhaust
 native mappings or file descriptors. An empty, interrupted, or legacy-format cache
 file is deleted and regenerated from the retained PMTiles archive when it is read;
-valid cached tiles remain reusable.
+valid cached tiles remain reusable. Elevation prefetch reports node progress at least
+once per minute while moving between tiles; decoding uncached terrain is much slower
+than reading an already populated cache.
+
+Preparation also writes `cell_coverage.json`: for each road cell, how many of its 256 zoom-15
+tiles the archive holds (read from the PMTiles directories, no tile is decoded), and, when the
+tiles were decoded, how many have nodata. It is not part of the terrain key. The system
+dashboard colours the cells from it: zoom 15 complete, partial, or zoom 12 only. For terrain
+prepared before the file existed, run `just elevation-coverage-backfill`. It writes the file
+into the terrain of the active graph, which need not be `elevation/current`, using the graph's
+road cells (so run `graph-cells-backfill` first), else the terrain's, else every cell in the
+bounding box of terrain prepared before cells existed. Ship the file with the terrain.
+
+Each graph release also keeps the road cells of the OSM file it was built from (`cells.json`,
+written by the check before the import) and the file's name, size and date in `artifact.json`.
+GraphHopper serves both, with the terrain's files, at `GET /coverage`, for the system dashboard.
+A release built before that shows the terrain's cells instead, which may cover more; run
+`just graph-cells-backfill FILE` with the file it was built from to add them. Without that file,
+terrain prepared for a bounding box shows the whole box.
 
 The manifest records the coverage-cell hash, source catalog version, source metadata,
 zooms and archive checksums. Mapterhorn attribution is retained as `attribution.json`;

@@ -7,7 +7,7 @@
  */
 import type { Data, Layout } from "plotly.js";
 
-import { t } from "@/i18n";
+import { t, tp } from "@/i18n";
 
 /** The fields of a forecast sample the charts read. */
 export interface ChartSample {
@@ -135,7 +135,7 @@ function seriesTraces(samples: readonly ChartSample[], series: Series): Data[] {
 }
 
 /** The layout every chart shares: a title pinned top-left, the ride time along x. */
-function baseLayout(title: string, unit: string): Partial<Layout> {
+function baseLayout(title: string, unit: string, profile?: string | null): Partial<Layout> {
     // automargin lets Plotly grow the margins to fit the tick labels.
     return {
         title: {
@@ -152,7 +152,7 @@ function baseLayout(title: string, unit: string): Partial<Layout> {
         autosize: true,
         hovermode: "closest",
         showlegend: true,
-        xaxis: { title: { text: t("charts.axis.rideMinutes"), standoff: 4 }, zeroline: false, automargin: true },
+        xaxis: { title: { text: tp(profile, "charts.axis.rideMinutes"), standoff: 4 }, zeroline: false, automargin: true },
         yaxis: { title: { text: unit, standoff: 15 }, zeroline: true, automargin: true },
         legend: {
             orientation: "h",
@@ -165,7 +165,7 @@ function baseLayout(title: string, unit: string): Partial<Layout> {
 }
 
 /** Temperature as a line, and the main run's rain rate as bars on a second axis. */
-function temperatureChart(samples: readonly ChartSample[]): ChartFigure {
+function temperatureChart(samples: readonly ChartSample[], profile?: string | null): ChartFigure {
     const series: Series = {
         metric: "temperature",
         name: t("charts.temperature"),
@@ -175,13 +175,13 @@ function temperatureChart(samples: readonly ChartSample[]): ChartFigure {
         dash: "solid",
         value: sample => sample.temp,
     };
-    const layout = baseLayout(t("charts.temperature"), "°C");
+    const layout = baseLayout(t("charts.temperature"), "°C", profile);
     const data = seriesTraces(samples, series);
     if (samples.some(sample => sample.feltTemp != null)) {
         const felt: Series = {
             metric: "felt",
             name: t("charts.felt"),
-            label: t("charts.feltLong"),
+            label: tp(profile, "charts.feltLong"),
             color: RED,
             unit: "°C",
             dash: "dot",
@@ -217,7 +217,7 @@ function temperatureChart(samples: readonly ChartSample[]): ChartFigure {
     return { data, layout };
 }
 
-function headwindChart(samples: readonly ChartSample[]): ChartFigure {
+function headwindChart(samples: readonly ChartSample[], profile?: string | null): ChartFigure {
     const series: Series = {
         metric: "headwind",
         name: t("charts.headwindTailwind"),
@@ -227,19 +227,24 @@ function headwindChart(samples: readonly ChartSample[]): ChartFigure {
         dash: "solid",
         value: sample => sample.headwind,
     };
-    return { data: seriesTraces(samples, series), layout: baseLayout(t("charts.headwind"), "km/h") };
+    return { data: seriesTraces(samples, series), layout: baseLayout(t("charts.headwind"), "km/h", profile) };
 }
 
 export type ChartKind = "temperature" | "headwind";
 
-/** Temperature (with precipitation) and headwind, in that order; none without samples. */
-export function forecastCharts(samples: readonly ChartSample[]): ChartFigure[] {
+/** Temperature (with precipitation) and headwind, in that order; none without samples. The
+ * routing profile words the axes (a hike walks, it does not ride). */
+export function forecastCharts(samples: readonly ChartSample[], profile?: string | null): ChartFigure[] {
     if (!samples.length) return [];
-    return [temperatureChart(samples), headwindChart(samples)];
+    return [temperatureChart(samples, profile), headwindChart(samples, profile)];
 }
 
 /** One of the charts; undefined without samples. */
-export function forecastChart(kind: ChartKind, samples: readonly ChartSample[]): ChartFigure | undefined {
+export function forecastChart(
+    kind: ChartKind,
+    samples: readonly ChartSample[],
+    profile?: string | null,
+): ChartFigure | undefined {
     if (!samples.length) return undefined;
-    return kind === "temperature" ? temperatureChart(samples) : headwindChart(samples);
+    return kind === "temperature" ? temperatureChart(samples, profile) : headwindChart(samples, profile);
 }

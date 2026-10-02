@@ -7,8 +7,17 @@ from unittest.mock import AsyncMock, Mock, patch
 from django.test import Client, TestCase, override_settings
 
 from core.api.briefings import validate_subscription
+from core.briefings import MAX_PER_DAY as MAX_BRIEFINGS_PER_DAY
 from core.briefings import briefing_body, deliver
-from core.entitlements import FREE, PRO, allowed_route_ids, briefing_route_ids, entitlements_for_sync
+from core.entitlements import (
+    FREE,
+    PLUS_PRICES,
+    PRO,
+    TRIAL_DAYS,
+    allowed_route_ids,
+    briefing_route_ids,
+    entitlements_for_sync,
+)
 from core.jobs import restrict_job_result
 from core.models import (
     ForecastJob,
@@ -66,6 +75,44 @@ class FreemiumTests(TestCase):
         self.assertEqual(entitlements_for_sync(self.user), FREE)
         self.assertEqual(self.post("/api/billing/trial", {}).status_code, 409)
         self.assertFalse(self.client.get("/api/billing/entitlements").json()["trialEligible"])
+
+    def test_offer_quotes_the_tier_limits_to_anyone(self):
+        """The SPA's plan texts take every figure from here, signed in or not."""
+        self.client.logout()
+        payload = self.client.get("/api/billing/entitlements").json()
+        offer = payload["offer"]
+        self.assertEqual((offer["freeRoutes"], offer["plusRoutes"]), (FREE.max_routes, PRO.max_routes))
+        self.assertEqual(offer["plusBriefingRoutes"], PRO.max_briefing_routes)
+        self.assertEqual((offer["freeJourneys"], offer["plusJourneys"]), (FREE.max_journeys, PRO.max_journeys))
+        self.assertEqual(
+            (offer["freeRandomRides"], offer["plusRandomRides"]), (FREE.max_random_rides, PRO.max_random_rides)
+        )
+        self.assertEqual(offer["trialDays"], TRIAL_DAYS)
+        self.assertEqual(offer["briefingLeadMinutes"], 60)
+        self.assertEqual(offer["briefingsPerDay"], MAX_BRIEFINGS_PER_DAY)
+        self.assertEqual(payload["prices"], PLUS_PRICES)
+
+    def test_hike_return_is_a_way_back_not_a_ride(self):
+        body = {
+            "name": "Gipfel",
+            "startLat": 47,
+            "startLon": 9,
+            "startName": "Tal",
+            "destLat": 47.1,
+            "destLon": 9.1,
+            "destName": "Gipfel",
+            "profile": "hike",
+            "scheduleCron": "0 8 * * 6",
+            "scheduleDescription": "Morning",
+            "returnScheduleCron": "0 14 * * 6",
+            "returnScheduleDescription": "Afternoon",
+        }
+        with patch("core.api.recurring_route.refresh_route_geometry", SimpleNamespace(aenqueue=AsyncMock())):
+            response = self.post("/api/routes", body)
+            self.assertEqual(response.status_code, 200, response.content)
+            self.assertEqual(self.post("/api/routes", {**body, "profile": "bike"}).status_code, 200)
+        names = set(RecurringRoute.objects.filter(return_of__isnull=False).values_list("name", flat=True))
+        self.assertEqual(names, {"Gipfel – Rückweg", "Gipfel – Rückfahrt"})
 
     def test_trial_authentication_and_csrf(self):
         self.assertEqual(self.client.post("/api/billing/trial").status_code, 403)

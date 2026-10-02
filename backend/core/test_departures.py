@@ -224,14 +224,15 @@ class DepartureJobTests(TestCase):
         )
         forecast, ensemble = AsyncMock(), AsyncMock()
         with (
-            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast)),
-            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble)),
+            patch("core.tasks.refresh_forecast_cells", SimpleNamespace(aenqueue=forecast)),
+            patch("core.tasks.refresh_ensemble_cells", SimpleNamespace(aenqueue=ensemble)),
         ):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
-        self.assertEqual(forecast.await_count, 4)
-        self.assertEqual(ensemble.await_count, 4)
+        # Two forecast cells per date, and both lie in one ensemble cell (grid.ensemble_cell).
+        self.assertEqual(len(fixtures.enqueued_cells(forecast)), 4)
+        self.assertEqual(len(fixtures.enqueued_cells(ensemble)), 2)
         self.assertEqual(
-            {call.args[2] for call in forecast.await_args_list},
+            {call.args[1] for call in forecast.await_args_list},
             {dep.date().isoformat(), (dep + timedelta(days=1)).date().isoformat()},
         )
         fixtures.cache.clear()
@@ -240,15 +241,15 @@ class DepartureJobTests(TestCase):
         with (
             patch("core.tasks.upcoming_departures", return_value=[dep]),
             patch("core.tasks.datetime") as clock,
-            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast)),
-            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble)),
+            patch("core.tasks.refresh_forecast_cells", SimpleNamespace(aenqueue=forecast)),
+            patch("core.tasks.refresh_ensemble_cells", SimpleNamespace(aenqueue=ensemble)),
             patch("core.tasks.refresh_route_thumbnail") as thumbnail,
         ):
             clock.now.return_value = dep - timedelta(hours=1)
             thumbnail.using.return_value.aenqueue = AsyncMock()
             async_to_sync(_scan_route_forecasts_async)(str(self.route.id))
-        self.assertEqual(forecast.await_count, 4)
-        self.assertEqual(ensemble.await_count, 4)
+        self.assertEqual(len(fixtures.enqueued_cells(forecast)), 4)
+        self.assertEqual(len(fixtures.enqueued_cells(ensemble)), 2)
 
     def test_saved_defaults_and_explicit_zero_override(self):
         self.route.departure_flex_before_minutes = 30
@@ -290,14 +291,14 @@ class DepartureJobTests(TestCase):
         job = self._make_job(params={**self._job_params(), "departure_flex_after_minutes": 120})
         forecast, ensemble = AsyncMock(), AsyncMock()
         with (
-            patch("core.tasks.refresh_forecast_cell", SimpleNamespace(aenqueue=forecast)),
-            patch("core.tasks.refresh_ensemble_cell", SimpleNamespace(aenqueue=ensemble)),
+            patch("core.tasks.refresh_forecast_cells", SimpleNamespace(aenqueue=forecast)),
+            patch("core.tasks.refresh_ensemble_cells", SimpleNamespace(aenqueue=ensemble)),
         ):
             async_to_sync(_plan_forecast_job_async)(str(job.id))
-        self.assertEqual(forecast.await_count, 2)
-        self.assertEqual(ensemble.await_count, 2)
+        self.assertEqual(len(fixtures.enqueued_cells(forecast)), 2)
+        self.assertEqual(len(fixtures.enqueued_cells(ensemble)), 1)  # both forecast cells lie in one ensemble cell
         job.refresh_from_db()
-        self.assertEqual(job.cells_total, 4)
+        self.assertEqual(job.cells_total, 3)
 
     def test_real_window_computation_reads_each_cell_once(self):
         departure = self.departure.replace(hour=8, minute=0, second=0, microsecond=0)

@@ -8,8 +8,8 @@ Save recurring routes with departure schedules, then view their weather summarie
 route sections, maps, and charts. The interface uses Swiss German labels.
 
 The application uses Django and django-ninja, Vue 3 and Quasar, self-hosted
-GraphHopper routing and Photon geocoding, and Open-Meteo weather with an optional
-OpenWeatherMap fallback. PostgreSQL/PostGIS stores routes, forecast caches, and background jobs.
+GraphHopper routing and Photon geocoding, and Open-Meteo weather with MET Norway
+(yr.no) and an optional OpenWeatherMap as fallbacks. PostgreSQL/PostGIS stores routes, forecast caches, and background jobs.
 The default geographic data covers Switzerland (Photon includes Liechtenstein).
 
 ## Documentation

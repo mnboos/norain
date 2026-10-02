@@ -1,6 +1,7 @@
 package com.graphhopper.reader.dem;
 
 import com.graphhopper.GraphHopperConfig;
+import org.slf4j.LoggerFactory;
 
 /**
  * Reads the zoom-15 archive and, where it has no value (a missing tile or Terrarium nodata),
@@ -8,6 +9,7 @@ import com.graphhopper.GraphHopperConfig;
  * its slopes against the real heights around it become cliffs.
  */
 public class FallbackElevationProvider implements ElevationProvider {
+    private static final java.util.concurrent.atomic.AtomicBoolean REPORTED = new java.util.concurrent.atomic.AtomicBoolean();
     private final ElevationProvider primary;
     private final ElevationProvider fallback;
 
@@ -23,8 +25,13 @@ public class FallbackElevationProvider implements ElevationProvider {
      */
     public static ElevationProvider withFallback(ElevationProvider primary, GraphHopperConfig config, String cacheDir) {
         String location = config.getString("graph.elevation.pmtiles.fallback.location", "");
-        if (location.isEmpty() || primary == ElevationProvider.NOOP)
+        if (location.isEmpty() || primary == ElevationProvider.NOOP) {
+            // Said aloud, once (/elevation calls this per batch): a -Ddw. override of a key the
+            // yaml lacks is dropped without a word.
+            if (primary != ElevationProvider.NOOP && !REPORTED.getAndSet(true))
+                LoggerFactory.getLogger(FallbackElevationProvider.class).info("No zoom-12 elevation fallback configured");
             return primary;
+        }
         // An explicit zoom: the provider would otherwise pick min(max zoom, 11).
         PMTilesElevationProvider fallback = new PMTilesElevationProvider(
                 location, PMTilesElevationProvider.TerrainEncoding.TERRARIUM, primary.canInterpolate(),
