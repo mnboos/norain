@@ -56,6 +56,22 @@ def next_departure(cron_expr: str, after: datetime | None = None) -> datetime | 
         return None
 
 
+def current_departure(cron_expr: str, ride_seconds: int | None, after: datetime | None = None) -> datetime | None:
+    """The departure of the ride still under way at *after* (defaults to now), else the next one.
+
+    A ride counts as under way from its departure until its riding time has passed, so the
+    route keeps showing that ride ("jetzt") instead of jumping to the next departure the
+    moment the rider sets off. Without a riding time this is ``next_departure``.
+    """
+    now = _local(after)
+    return next_departure(cron_expr, after=now - timedelta(seconds=max(0, ride_seconds or 0)))
+
+
+def ride_seconds(route) -> int | None:
+    """A saved route's riding time: GraphHopper's, or the imported line's own."""
+    return route.total_seconds or route.duration_seconds
+
+
 def upcoming_departures(
     cron_expr: str,
     count: int = 5,

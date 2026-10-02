@@ -19,7 +19,7 @@ from shapely.geometry import LineString
 from .entitlements import entitlements_for_sync
 from .geo import METRES_PER_DEGREE, simplify_line
 from .models import RecurringRoute
-from .schedule import next_departure
+from .schedule import current_departure, ride_seconds
 from .weather import compute_route_weather
 
 # A ~40 px glyph cannot show more than this, and the blob travels with every list response.
@@ -92,7 +92,9 @@ async def compute_route_thumbnail(route: RecurringRoute) -> dict | None:
     if not route.sample_points or not coordinates:
         return None
 
-    departure = next_departure(route.schedule_cron)
+    # The same departure the route API serves as `nextDeparture`, a ride under way included,
+    # or the list would grey the glyph out while the rider is on the road.
+    departure = current_departure(route.schedule_cron, ride_seconds(route))
     if departure is None:
         return None
 

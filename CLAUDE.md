@@ -1099,6 +1099,14 @@ protocol and tables are in `docs/reference/browser-fingerprinting.md`. Rules tha
 
 Users configure routes with cron schedules. `next_departure()` computes the next departure,
 `forecast_available_at()` checks if it's within the 16-day Open-Meteo window.
+
+**A ride under way stays the route's departure.** `nextDeparture` / `returnNextDeparture`,
+the thumbnail and the pre-build all use `schedule.current_departure(cron, ride_seconds(route))`:
+the departure stays put until the riding time has passed, so the list says "jetzt" and the page
+keeps that ride's forecast. Keep these three on the same function, or the thumbnail greys out and
+the pre-built job misses the page's key. The route page is the outbound route's: the tab is
+`?direction=outbound|return` (`useRouteQuery`), and without one it is the direction riding now or
+next (`nextRideId`); a link to a return route redirects to the outbound one's return tab.
 `run_forecast_scheduler` runs `refresh_forecasts` hourly, which now only *queues*
 `refresh_upcoming_forecasts`; that fans out to one `scan_route_forecasts` task per eligible
 route, so one slow route no longer holds up the pass, and it purges the Stripe ledger and

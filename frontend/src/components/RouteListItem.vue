@@ -32,8 +32,9 @@ function relativeTime(iso: string | null | undefined): string {
     if (!iso) return tp(route.value?.profile, "routeList.noDeparture");
     const dt = new Date(iso);
     const now = new Date();
-    if (isPast(dt)) return t("routeList.past");
-    if (differenceInMinutes(dt, now) < 1) return t("routeList.now");
+    // The server keeps a ride's departure until it has been ridden, so a departure in the
+    // past is a ride under way: "jetzt" until it is over, never a past time.
+    if (isPast(dt) || differenceInMinutes(dt, now) < 1) return t("routeList.now");
     const locale = dateFnsLocale();
     // Within a day, "in 3 hours"; past that, "tomorrow at 07:30" / "Monday at 07:30".
     if (differenceInHours(dt, now) < 24) return formatDistanceToNow(dt, { addSuffix: true, locale });

@@ -34,7 +34,7 @@ from ..ride_quality import (
 )
 from ..road_prefs import RoadPrefs, road_prefs_model
 from ..route_input import GeometrySource
-from ..schedule import check_schedule_cron, forecast_available_at, next_departure
+from ..schedule import check_schedule_cron, current_departure, forecast_available_at, ride_seconds
 from ..schemas import CamelSchema
 from ..system_events import notify_system
 from ..tasks import refresh_route_geometry, start_forecast_job
@@ -207,9 +207,10 @@ async def _owned_route(request: HttpRequest, route_id: UUID) -> RecurringRoute:
 
 def _route_to_out(route: RecurringRoute, *, detail=False) -> RecurringRouteOut:
     """Build a RecurringRouteOut from a model instance, computing schedule fields."""
-    nd = next_departure(route.schedule_cron)
+    # A ride under way stays the route's departure until it has been ridden.
+    nd = current_departure(route.schedule_cron, ride_seconds(route))
     returning = route._state.fields_cache.get("return_journey")
-    return_departure = next_departure(returning.schedule_cron) if returning else None
+    return_departure = current_departure(returning.schedule_cron, ride_seconds(returning)) if returning else None
     return RecurringRouteOut(
         id=route.id,
         return_route_id=returning.id if returning else None,

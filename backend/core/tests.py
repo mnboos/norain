@@ -60,7 +60,7 @@ from core.models import (
     route_line,
     route_point,
 )
-from core.schedule import LOCAL_TZ, local_today, next_departure, upcoming_departures
+from core.schedule import LOCAL_TZ, current_departure, local_today, next_departure, upcoming_departures
 from core.tasks import (
     _assemble_forecast_job_async,
     _compute_route_weather_job_async,
@@ -592,6 +592,24 @@ class ForecastDaysTests(SimpleTestCase):
         self.assertEqual(_forecast_days(datetime(2026, 6, 10, 0, 0, tzinfo=LOCAL_TZ), today), 1)
 
 
+class CurrentDepartureTests(SimpleTestCase):
+    def test_a_ride_under_way_keeps_its_departure_until_it_was_ridden(self):
+        ride = 45 * 60
+        start = datetime(2026, 10, 2, 7, 30, tzinfo=LOCAL_TZ)
+        self.assertEqual(current_departure("30 7 * * *", ride, after=start - timedelta(minutes=5)), start)
+        self.assertEqual(current_departure("30 7 * * *", ride, after=start + timedelta(minutes=1)), start)
+        self.assertEqual(current_departure("30 7 * * *", ride, after=start + timedelta(minutes=44)), start)
+        self.assertEqual(
+            current_departure("30 7 * * *", ride, after=start + timedelta(minutes=45)), start + timedelta(days=1)
+        )
+
+    def test_without_a_riding_time_it_is_the_next_departure(self):
+        start = datetime(2026, 10, 2, 7, 30, tzinfo=LOCAL_TZ)
+        after = start + timedelta(minutes=1)
+        self.assertEqual(current_departure("30 7 * * *", None, after=after), next_departure("30 7 * * *", after))
+        self.assertIsNone(current_departure("NaN 17 * * 4,5", 600))
+
+
 class CellCacheTests(TestCase):
     """Tests for forecast_days-aware cell cache freshness."""
 
@@ -755,6 +773,20 @@ class AuthApiTests(TestCase):
         self.assertIsNone(by_id[str(bad.id)]["next_departure"])
         self.assertIsNone(next_departure("NaN 17 * * 4,5"))
         self.assertEqual(upcoming_departures("NaN 17 * * 4,5"), [])
+
+    def test_route_list_keeps_a_ride_under_way_as_its_departure(self):
+        owner = User.objects.create_user(username="owner", email="owner@example.test", password=self.password)
+        route = self.route(owner)
+        RecurringRoute.objects.filter(id=route.id).update(total_seconds=40 * 60)
+        monday = datetime(2026, 10, 5, 8, 0, tzinfo=LOCAL_TZ)
+
+        self.client.force_login(owner)
+        with patch("core.schedule.local_now", return_value=monday + timedelta(minutes=20)):
+            response = self.client.get("/api/routes")
+        self.assertEqual(response.json()[0]["next_departure"], monday.isoformat())
+        with patch("core.schedule.local_now", return_value=monday + timedelta(minutes=41)):
+            response = self.client.get("/api/routes")
+        self.assertEqual(response.json()[0]["next_departure"], (monday + timedelta(days=7)).isoformat())
 
 
 class SimplifyPathTests(SimpleTestCase):
@@ -2530,7 +2562,7 @@ class ForecastJobTests(TestCase):
 
     def test_prebuild_skips_departures_beyond_the_horizon(self):
         far = datetime.now(tz=UTC) + timedelta(hours=72)
-        with patch("core.tasks.next_departure", return_value=far):
+        with patch("core.tasks.current_departure", return_value=far):
             self.assertFalse(self._prebuild()["built"])
         self.assertEqual(ForecastJob.objects.count(), 0)
 
@@ -2544,7 +2576,7 @@ class ForecastJobTests(TestCase):
         soon = datetime.now(tz=UTC) + timedelta(minutes=30)
         with (
             patch.dict(os.environ, {"WEATHERUNDERGROUND_API_KEY": "test-key"}),
-            patch("core.tasks.next_departure", return_value=soon),
+            patch("core.tasks.current_departure", return_value=soon),
         ):
             self.assertFalse(self._prebuild()["built"])
             RecurringRoute.objects.filter(pk=self.route.pk).update(briefing_channel="email")
