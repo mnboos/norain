@@ -357,7 +357,7 @@ class ThumbnailStationTests(_NearNowRoute, TestCase):
             patches[1],
             patches[2],
             patches[3],
-            patch("core.thumbnails.next_departure", return_value=self.departure.replace(tzinfo=None)),
+            patch("core.thumbnails.current_departure", return_value=self.departure.replace(tzinfo=None)),
         ):
             thumbnail = async_to_sync(compute_route_thumbnail)(self.route)
         return [sample["temp"] for sample in thumbnail["samples"]]

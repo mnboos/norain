@@ -752,7 +752,6 @@
     "routeList": {
         "noDeparture": "No departure",
         "noDepartureHike": "No start",
-        "past": "Past",
         "now": "now",
         "computing": "Route is being calculated …",
         "add": "Add route",

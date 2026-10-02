@@ -59,7 +59,15 @@ from core.random_rides import headings as random_headings
 from core.random_rides import ride_seconds as random_ride_seconds
 from core.ratelimit import ProviderThrottled
 from core.road_prefs import RoadPrefs, road_prefs_model
-from core.schedule import LOCAL_TZ, forecast_available_at, local_today, next_departure, upcoming_departures
+from core.schedule import (
+    LOCAL_TZ,
+    current_departure,
+    forecast_available_at,
+    local_today,
+    next_departure,
+    ride_seconds,
+    upcoming_departures,
+)
 from core.sections import compute_sections
 from core.stations import api_key, purge_station_data, refresh_stations_for_ride, ride_in_window
 from core.system_events import notify_system
@@ -1083,11 +1091,11 @@ async def _prebuild_route_forecast_async(route_id: str) -> dict:
     if route.id not in await sync_to_async(briefing_route_ids)(route.owner):
         return {"built": False, "reason": "not entitled"}
     now = datetime.now(tz=UTC)
-    departure = next_departure(route.schedule_cron)
+    departure = current_departure(route.schedule_cron, ride_seconds(route))
     if departure is None or departure - now > PREBUILD_HORIZON or not forecast_available_at(departure):
         return {"built": False, "reason": "no departure soon"}
 
-    # isoformat() of the same next_departure the route API serves as `nextDeparture`: the
+    # isoformat() of the same departure the route API serves as `nextDeparture`: the
     # page splits that string into date and time, and the endpoint joins them back, so both
     # sides hash the same departure_time and land on the same job.
     params = departures.route_job_params(
