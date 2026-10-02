@@ -24,9 +24,11 @@ const props = defineProps<{
     elevationBoxes?: SystemElevationBoxes;
     showRoads: boolean;
     showElevation: boolean;
+    /** Where the map opens (from the URL); without it, it fits `bounds`. Read once, on mount. */
+    initialView?: { center: [number, number]; zoom: number } | null;
 }>();
 const emit = defineEmits<{
-    viewport: [value: { bbox: string; zoom: number }];
+    viewport: [value: { bbox: string; zoom: number; center: [number, number] }];
     select: [feature: SystemFeature];
     error: [message: string];
 }>();
@@ -47,6 +49,7 @@ function reportViewport() {
             Math.min(90, bounds.getNorth()),
         ].join(","),
         zoom: map.getZoom(),
+        center: map.getCenter().toArray(),
     });
 }
 function dataCoverage() {
@@ -165,8 +168,8 @@ onMounted(() => {
     const activeMap = new MapLibreMap({
         container: container.value,
         style: $q.dark.isActive ? darkStyle : lightStyle,
-        center: [8.2, 46.8],
-        zoom: 7,
+        center: props.initialView?.center ?? [8.2, 46.8],
+        zoom: props.initialView?.zoom ?? 7,
         renderWorldCopies: false,
     });
     map = activeMap;
@@ -174,7 +177,7 @@ onMounted(() => {
     activeMap.on("style.load", installLayers);
     activeMap.on("load", () => {
         const [west, south, east, north] = props.bounds ?? [];
-        if (west != null && south != null && east != null && north != null)
+        if (!props.initialView && west != null && south != null && east != null && north != null)
             activeMap.fitBounds(
                 [
                     [west, south],

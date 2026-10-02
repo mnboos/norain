@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useQueryClient } from "@tanstack/vue-query";
 import { useNow } from "@vueuse/core";
+import { useRouteQuery } from "@vueuse/router";
 import { useI18n } from "vue-i18n";
 import { ResponseError } from "@norain/api/runtime";
 import {
@@ -49,12 +50,44 @@ const { session, refreshSession } = useSession();
 const allowed = computed(() => session.value.system?.allowed === true);
 const queryClient = useQueryClient();
 const viewport = ref<{ bbox: string; zoom: number } | null>(null);
-const showRoutes = ref(true),
-    showJourneys = ref(true),
-    showCells = ref(true),
-    alternatives = ref(false),
-    showRoadCoverage = ref(false),
-    showElevation = ref(false);
+// The layers, the open panels and the map view live in the URL, so a reload or a shared link keeps them.
+function booleanQuery(name: string, fallback: boolean) {
+    return useRouteQuery<string, boolean>(name, fallback ? "1" : "0", {
+        transform: { get: value => value === "1", set: value => (value ? "1" : "0") },
+    });
+}
+const showRoutes = booleanQuery("routes", true),
+    showJourneys = booleanQuery("journeys", true),
+    showCells = booleanQuery("cells", true),
+    alternatives = booleanQuery("alternatives", false),
+    showRoadCoverage = booleanQuery("roads", false),
+    showElevation = booleanQuery("elevation", false);
+const PANELS = ["cache", "dataCoverage", "jobs", "browser", "browserStats"] as const;
+type Panel = (typeof PANELS)[number];
+const openPanels = useRouteQuery<string, Panel[]>("panels", "cache,jobs", {
+    transform: {
+        get: value => PANELS.filter(panel => value.split(",").includes(panel)),
+        set: value => PANELS.filter(panel => value.includes(panel)).join(","),
+    },
+});
+function togglePanel(panel: Panel, open: boolean) {
+    openPanels.value = open ? [...openPanels.value, panel] : openPanels.value.filter(item => item !== panel);
+}
+// `map=zoom/lat/lon`, as on openstreetmap.org.
+const mapQuery = useRouteQuery<string | undefined>("map", undefined);
+const initialView = parseMapView(mapQuery.value);
+function parseMapView(value?: string) {
+    const [zoom, lat, lon] = (value ?? "").split("/").map(Number);
+    if (zoom === undefined || lat === undefined || lon === undefined || ![zoom, lat, lon].every(Number.isFinite))
+        return null;
+    const center: [number, number] = [lon, lat];
+    return { center, zoom };
+}
+function onViewport(value: { bbox: string; zoom: number; center: [number, number] }) {
+    viewport.value = { bbox: value.bbox, zoom: value.zoom };
+    const [lon, lat] = value.center;
+    mapQuery.value = `${value.zoom.toFixed(2)}/${lat.toFixed(5)}/${lon.toFixed(5)}`;
+}
 const kind = ref(Kind.Forecast),
     source = ref(Source.All),
     profile = ref<Profile | null>(null);
@@ -225,7 +258,7 @@ async function refresh() {
     mapError.value = "";
     await refreshSession();
     if (allowed.value) {
-      // await queryClient.refetchQueries({ queryKey: systemKey })
+        // await queryClient.refetchQueries({ queryKey: systemKey })
         await queryClient.invalidateQueries({ queryKey: systemKey });
     }
 }
@@ -429,7 +462,8 @@ onBeforeUnmount(async () => {
                         :elevation-boxes="dataCoverage.data.value?.elevationBoxes"
                         :show-roads="showRoadCoverage"
                         :show-elevation="showElevation"
-                        @viewport="viewport = $event"
+                        :initial-view="initialView"
+                        @viewport="onViewport"
                         @select="choose"
                         @error="mapError = $event"
                     />
@@ -598,7 +632,12 @@ onBeforeUnmount(async () => {
                             </template>
                         </q-card-section>
                     </q-card>
-                    <q-expansion-item :label="t('system.cacheTotal')" default-opened class="bordered-panel q-mb-sm">
+                    <q-expansion-item
+                        :model-value="openPanels.includes('cache')"
+                        :label="t('system.cacheTotal')"
+                        class="bordered-panel q-mb-sm"
+                        @update:model-value="togglePanel('cache', $event)"
+                    >
                         <div class="q-pa-sm">
                             <div v-if="!summary.data.value?.caches.length" class="text-caption">
                                 {{ t("system.noCells") }}
@@ -622,7 +661,12 @@ onBeforeUnmount(async () => {
                             </div>
                         </div>
                     </q-expansion-item>
-                    <q-expansion-item :label="t('system.dataCoverage.title')" class="bordered-panel q-mb-sm">
+                    <q-expansion-item
+                        :model-value="openPanels.includes('dataCoverage')"
+                        :label="t('system.dataCoverage.title')"
+                        class="bordered-panel q-mb-sm"
+                        @update:model-value="togglePanel('dataCoverage', $event)"
+                    >
                         <div class="q-pa-sm text-caption">
                             <q-linear-progress v-if="dataCoverage.isFetching.value" indeterminate />
                             <div class="text-weight-medium">{{ t("system.dataCoverage.graph") }}</div>
@@ -735,7 +779,12 @@ onBeforeUnmount(async () => {
                             </div>
                         </div>
                     </q-expansion-item>
-                    <q-expansion-item :label="t('system.jobs.title')" default-opened class="bordered-panel">
+                    <q-expansion-item
+                        :model-value="openPanels.includes('jobs')"
+                        :label="t('system.jobs.title')"
+                        class="bordered-panel"
+                        @update:model-value="togglePanel('jobs', $event)"
+                    >
                         <div class="q-pa-sm text-caption">
                             {{ t("system.jobs.hint") }}
                         </div>
@@ -792,7 +841,12 @@ onBeforeUnmount(async () => {
                             />
                         </div>
                     </q-expansion-item>
-                    <q-expansion-item :label="t('system.browser.title')" class="bordered-panel">
+                    <q-expansion-item
+                        :model-value="openPanels.includes('browser')"
+                        :label="t('system.browser.title')"
+                        class="bordered-panel"
+                        @update:model-value="togglePanel('browser', $event)"
+                    >
                         <div class="q-pa-sm text-caption">{{ t("system.browser.hint") }}</div>
                         <div class="q-pa-sm">
                             <div v-if="browser.data.value && !browser.data.value.enabled" class="text-caption">
@@ -868,7 +922,12 @@ onBeforeUnmount(async () => {
                             />
                         </div>
                     </q-expansion-item>
-                    <q-expansion-item :label="t('system.browser.stats.title')" class="bordered-panel">
+                    <q-expansion-item
+                        :model-value="openPanels.includes('browserStats')"
+                        :label="t('system.browser.stats.title')"
+                        class="bordered-panel"
+                        @update:model-value="togglePanel('browserStats', $event)"
+                    >
                         <div class="q-pa-sm text-caption">{{ t("system.browser.stats.hint") }}</div>
                         <div v-if="browserStats.data.value" class="q-pa-sm text-caption">
                             <div class="text-weight-medium">{{ t("system.browser.stats.observed") }}</div>
