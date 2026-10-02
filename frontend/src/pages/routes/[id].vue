@@ -84,7 +84,7 @@ const departureTime = computed(() => departure.value.time);
 </script>
 
 <template>
-    <q-page class="q-pa-md column">
+    <q-page class="column fit">
         <!-- Once the route is loaded, the back button moves into the panel's one-line header. -->
         <q-btn v-if="!shown" flat :icon="symSharpArrowBack" :label="t('common.back')" to="/routes" class="self-start" />
 
@@ -99,7 +99,14 @@ const departureTime = computed(() => departure.value.time);
             {{ t("routes.notFound") }}
         </q-banner>
 
-        <q-tabs v-if="outbound && hasReturn" v-model="direction" dense align="left" class="q-mb-md">
+        <q-tabs
+            v-if="outbound && hasReturn"
+            v-model="direction"
+            dense
+            align="left"
+            class="q-ma-none no-padding"
+            no-caps
+        >
             <q-tab name="outbound" :label="tp(outbound.profile, 'routes.outbound')" />
             <q-tab name="return" :label="tp(outbound.profile, 'routes.return')" />
         </q-tabs>
@@ -109,7 +116,7 @@ const departureTime = computed(() => departure.value.time);
             :route="shown"
             :departure-date="departureDate"
             :departure-time="departureTime"
-            class="col"
+            class="col full-width"
         >
             <template #back>
                 <q-btn flat round dense :icon="symSharpArrowBack" to="/routes" :aria-label="t('common.back')" />

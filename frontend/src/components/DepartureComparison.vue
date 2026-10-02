@@ -26,9 +26,7 @@ const candidates = computed(() => {
     const baseline = props.comparison.candidates.find(c => sameTime(c.departureTime, props.comparison.requestedTime));
     if (!baseline?.available || baseline.rideScore == null) return [];
     const baselineScore = baseline.rideScore;
-    return props.comparison.candidates.filter(
-        c => available(c) && c.rideScore != null && c.rideScore < baselineScore,
-    );
+    return props.comparison.candidates.filter(c => available(c) && c.rideScore != null && c.rideScore < baselineScore);
 });
 // Rebuilt for the current language, so a switch reformats every time here.
 const formatter = computed(
@@ -47,7 +45,6 @@ const timeFormatter = computed(
             timeZone: "Europe/Zurich",
             hour: "2-digit",
             minute: "2-digit",
-            timeZoneName: "shortOffset",
         }),
 );
 const format = (time: string) => formatter.value.format(new Date(time));
@@ -61,23 +58,27 @@ function available(candidate: DepartureCandidate) {
     return candidate.available && Date.parse(candidate.departureTime) >= now.value.getTime();
 }
 function select(candidate: DepartureCandidate) {
-    // Check the actual clock again: a tab may have been suspended since its last tick.
-    if (!candidate.available || Date.parse(candidate.departureTime) < Date.now()) return;
-    if (sameTime(candidate.departureTime, props.comparison.requestedTime)) emit("reset");
-    else emit("select", candidate.departureTime);
+    if (!candidate.available || Date.parse(candidate.departureTime) < Date.now()) {
+        return;
+    }
+    if (sameTime(candidate.departureTime, props.comparison.requestedTime)) {
+        emit("reset");
+    } else {
+        emit("select", candidate.departureTime);
+    }
 }
 </script>
 
 <template>
-    <section
+    <q-card-section
         v-if="!betterOnly || candidates.length || selectedTime"
         :aria-label="tp(profile, 'departures.compare')"
-        class="q-pa-sm departure-comparison"
+        class="q-pa-sm"
     >
-        <div class="text-subtitle2">{{ tp(profile, "departures.title") }}</div>
-        <div class="text-caption">
-            {{ t("departures.window", { from: format(comparison.windowStart), to: format(comparison.windowEnd) }) }}
-        </div>
+        <!--        <q-item-label>{{ tp(profile, "departures.title") }}</q-item-label>-->
+        <!--        <q-item-label caption>-->
+        <!--            {{ t("departures.window", { from: format(comparison.windowStart), to: format(comparison.windowEnd) }) }}-->
+        <!--        </q-item-label>-->
         <p v-if="recommended" class="q-my-sm">
             {{
                 tp(profile, "departures.recommended", {
@@ -89,41 +90,51 @@ function select(candidate: DepartureCandidate) {
             {{ explanation }}
         </p>
         <p v-else-if="!betterOnly" class="q-my-sm">{{ tp(profile, "departures.nothing") }}</p>
-        <div class="departure-timeline" :aria-label="tp(profile, 'departures.compared')">
-            <button
+        <div :aria-label="tp(profile, 'departures.compared')" class="row q-py-sm">
+            <q-card
+                clickable
                 v-for="candidate in candidates"
                 :key="candidate.departureTime"
-                type="button"
-                class="departure-option"
-                :disabled="!available(candidate)"
                 :aria-pressed="sameTime(candidate.departureTime, selected)"
-                :style="{ borderTopColor: scoreColor(available(candidate) ? candidate.rideScore : null) }"
                 @click="select(candidate)"
+                class="column q-pa-none abfahrtszeit"
             >
-                <strong>{{ timeFormatter.format(new Date(candidate.departureTime)) }}</strong>
-                <span>
+                <q-card-section
+                    class="q-py-xs"
+                    :style="{ backgroundColor: scoreColor(available(candidate) ? candidate.rideScore : null) }"
+                >
+                    <q-item-label class="text-bold text-center">
+                        {{ timeFormatter.format(new Date(candidate.departureTime)) }}
+                    </q-item-label>
+                </q-card-section>
+
+                <q-separator />
+
+                <q-card-section class="col text-center">
                     {{
                         available(candidate) && candidate.rideLabel
                             ? rideLabelText(candidate.rideLabel)
                             : t("common.notAvailable")
                     }}
-                </span>
-                <span v-if="sameTime(candidate.departureTime, comparison.requestedTime)">
+                </q-card-section>
+                <q-card-section v-if="sameTime(candidate.departureTime, comparison.requestedTime)">
                     {{ t("departures.requested") }}
-                </span>
-                <span v-if="candidate.departureTime === recommended?.departureTime">
+                </q-card-section>
+                <q-card-section v-if="candidate.departureTime === recommended?.departureTime">
                     {{ t("departures.recommendedBadge") }}
-                </span>
-                <span v-if="sameTime(candidate.departureTime, selected)">{{ t("departures.shown") }}</span>
-            </button>
+                </q-card-section>
+                <!--                <q-card-section v-if="sameTime(candidate.departureTime, selected)">-->
+                <!--                    {{ t("departures.shown") }}-->
+                <!--                </q-card-section>-->
+            </q-card>
         </div>
         <button v-if="selectedTime" type="button" class="reset-time q-mt-sm" @click="emit('reset')">
             {{ tp(profile, "departures.backToRequested") }}
         </button>
-        <div class="text-caption text-muted q-mt-sm">
+        <!--        <div class="text-caption text-muted q-mt-sm">
             {{ t("departures.steps") }}
-        </div>
-    </section>
+        </div>-->
+    </q-card-section>
 </template>
 
 <style scoped>
@@ -168,5 +179,10 @@ function select(candidate: DepartureCandidate) {
     text-decoration: underline;
     cursor: pointer;
     font: inherit;
+}
+
+.abfahrtszeit:hover {
+    background: var(--q-info);
+    transform: scale(1.05);
 }
 </style>

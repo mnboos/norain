@@ -123,8 +123,20 @@ function lineData(): Feature<LineString> {
 function addLayers(m: MapLibreMap) {
     if (m.getSource("edit-line")) return;
     if (props.originalCoordinates?.length) {
-        m.addSource("original-line", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: props.originalCoordinates } } });
-        m.addLayer({ id: "original-line", type: "line", source: "original-line", paint: { "line-color": "#a25219", "line-width": 8, "line-opacity": 0.6 } });
+        m.addSource("original-line", {
+            type: "geojson",
+            data: {
+                type: "Feature",
+                properties: {},
+                geometry: { type: "LineString", coordinates: props.originalCoordinates },
+            },
+        });
+        m.addLayer({
+            id: "original-line",
+            type: "line",
+            source: "original-line",
+            paint: { "line-color": "#a25219", "line-width": 8, "line-opacity": 0.6 },
+        });
     }
     m.addSource("edit-line", { type: "geojson", data: lineData() });
     m.addLayer({
@@ -268,7 +280,10 @@ function onShow() {
         attributionControl: { compact: true },
     });
     applyBasemap(m, basemap.value, $q.dark.isActive);
-    m.addControl(new BasemapControl(next => t(next === "satellite" ? "map.basemapSatellite" : "map.basemapMap")), "top-right");
+    m.addControl(
+        new BasemapControl(next => t(next === "satellite" ? "map.basemapSatellite" : "map.basemapMap")),
+        "top-right",
+    );
     m.on("load", () => {
         map.value = m;
         addLayers(m);
@@ -313,35 +328,49 @@ function apply() {
     emit("apply", vias.value);
     emit("update:modelValue", false);
 }
+
+function confirm() {}
 </script>
 
 <template>
     <q-dialog
         :model-value="modelValue"
-        :maximized="$q.screen.xs"
+        maximized
         @update:model-value="emit('update:modelValue', $event)"
         @show="onShow"
         @hide="teardown"
     >
-        <q-card style="width: 900px; max-width: 96vw" class="column no-wrap">
+        <q-card class="column no-wrap">
             <q-card-section class="q-pb-sm">
                 <div class="text-h6">{{ t("routeEditor.title") }}</div>
                 <div class="text-caption">{{ t("routeEditor.intro") }}</div>
             </q-card-section>
-            <div ref="map" class="col" :style="{ minHeight: $q.screen.xs ? '0' : 'min(60dvh, 560px)' }" />
+            <q-card class="fit column" bordered>
+                <div ref="map" class="col" />
+            </q-card>
             <q-expansion-item v-if="previewSeconds && !loading" :label="t('elevation.title')">
-                <ElevationChart :profile="profile" :coordinates="line" :total-seconds="previewSeconds" :vertex-times="previewTimes" />
+                <ElevationChart
+                    :profile="profile"
+                    :coordinates="line"
+                    :total-seconds="previewSeconds"
+                    :vertex-times="previewTimes"
+                />
             </q-expansion-item>
-            <q-card-actions>
+            <q-card-actions align="right">
                 <div class="text-caption q-ml-sm" aria-live="polite">
                     <q-spinner v-if="loading" size="1em" class="q-mr-xs" />
                     {{ caption }}
-                    <template v-if="vias.length"> · {{ t("routeEditor.vias", vias.length) }}</template>
+                    <template v-if="vias.length">· {{ t("routeEditor.vias", vias.length) }}</template>
                 </div>
-                <q-space />
                 <q-btn flat no-caps :label="t('routeEditor.reset')" :disable="!vias.length" @click="reset" />
                 <q-btn v-close-popup flat no-caps :label="t('common.cancel')" />
-                <q-btn color="primary" no-caps :label="t('common.apply')" :disable="loading || !changed" @click="apply" />
+                <q-btn
+                    color="positive"
+                    no-caps
+                    :label="t('common.apply')"
+                    :disable="loading || !changed"
+                    @click="apply"
+                />
             </q-card-actions>
         </q-card>
     </q-dialog>

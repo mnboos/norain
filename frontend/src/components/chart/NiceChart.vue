@@ -166,7 +166,12 @@ function temperatureBands(ink: string, dark: boolean): Pick<Layout, "shapes" | "
             opacity: 0.6,
         });
     };
-    band(COMFORT_BAND[0], COMFORT_BAND[1], dark ? "rgba(26, 158, 143, 0.14)" : "rgba(26, 158, 143, 0.09)", t("charts.comfortable"));
+    band(
+        COMFORT_BAND[0],
+        COMFORT_BAND[1],
+        dark ? "rgba(26, 158, 143, 0.14)" : "rgba(26, 158, 143, 0.09)",
+        t("charts.comfortable"),
+    );
     band(-Infinity, FROST_LIMIT, dark ? "rgba(47, 127, 216, 0.16)" : "rgba(47, 127, 216, 0.08)", t("badges.frost"));
     return { shapes, annotations };
 }
@@ -529,14 +534,14 @@ onBeforeUnmount(() => {
 
 <template>
     <q-card
-        flat
-        class="chart-shell"
-        :class="{ 'chart-shell--compact': compact }"
+        class="chart-shell overflow-hidden"
         @pointermove="trackPointer"
         @pointerleave="hideTooltip"
         @keydown.esc="hideTooltip"
     >
-        <div ref="chartRef" class="chart-plot" />
+        <q-card-section class="fit">
+            <div ref="chartRef" class="chart-plot" />
+        </q-card-section>
         <svg class="chart-selection" aria-hidden="true">
             <line
                 v-if="selectionRule"

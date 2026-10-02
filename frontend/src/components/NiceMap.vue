@@ -112,7 +112,11 @@ let selectedMarker: Marker | undefined;
 function positionTime(position: number): string | undefined {
     const samples = routeWeather.value?.samples ?? [];
     const first = samples[0];
-    const elapsed = interpolate(position, forecastSampleProgress.value, samples.map(s => s.elapsedS));
+    const elapsed = interpolate(
+        position,
+        forecastSampleProgress.value,
+        samples.map(s => s.elapsedS),
+    );
     if (!first || elapsed === undefined) return undefined;
     // An eta without an offset is Swiss local time already: shift it as a wall-clock time.
     const offsetless = !/(Z|[+-]\d\d:\d\d)$/.test(first.eta);
@@ -622,7 +626,9 @@ async function renderLine() {
     // line is drawn. gradientStops() then subdivides each span so the blend actually
     // travels through the ramp, and hard-edges any stretch we have no data for.
     const stops = gradientStops(sampleProgress(line, rw?.samples ?? [], rw?.totalSeconds ?? 0), scores.value);
-    const gradient: ExpressionSpecification = rw ? ["interpolate", ["linear"], ["line-progress"], ...stops] : ["interpolate", ["linear"], ["line-progress"], 0, "#2563eb", 1, "#2563eb"];
+    const gradient: ExpressionSpecification = rw
+        ? ["interpolate", ["linear"], ["line-progress"], ...stops]
+        : ["interpolate", ["linear"], ["line-progress"], 0, "#2563eb", 1, "#2563eb"];
     const casing = mapDark.value ? CASING_DARK : CASING_LIGHT;
 
     const existing = map.getSource("route-source");
@@ -773,7 +779,9 @@ watch(
         if ((routeWeather.value || props.previewLine?.length) && mymap.value) {
             await renderRoute();
         } else if (!routeWeather.value) {
-            void mymap.value?.getSource<GeoJSONSource>("route-source")?.setData({ type: "FeatureCollection", features: [] });
+            void mymap.value
+                ?.getSource<GeoJSONSource>("route-source")
+                ?.setData({ type: "FeatureCollection", features: [] });
             clearSampleMarkers();
             clearWindMarkers();
             renderWindParticles();
@@ -968,8 +976,13 @@ onMounted(() => {
 
         mapInstance = map;
         applyBasemap(map, basemap.value, $q.dark.isActive);
-        map.addControl(new BasemapControl(next => t(next === "satellite" ? "map.basemapSatellite" : "map.basemapMap")), "top-right");
-        map.once("idle", () => { emit("ready"); });
+        map.addControl(
+            new BasemapControl(next => t(next === "satellite" ? "map.basemapSatellite" : "map.basemapMap")),
+            "top-right",
+        );
+        map.once("idle", () => {
+            emit("ready");
+        });
         resizeObserver = new ResizeObserver(() => map.resize());
         resizeObserver.observe(mapContainer.value);
         map.on("click", event => {
@@ -1052,41 +1065,46 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <q-card flat class="transparent column col wx-map-wrap" :style="height ? { height, flex: 'none' } : undefined">
+    <q-card class="column col overflow-hidden">
         <slot name="search"></slot>
-        <q-card-section v-if="webglError" class="fit flex column items-center justify-center text-center q-pa-xl">
+        <q-card-section v-if="webglError" class="flex column items-center justify-center text-center q-pa-xl">
             <div class="text-h6 q-mb-md">{{ t("map.loadFailed") }}</div>
             <div class="text-body2">{{ webglError }}</div>
         </q-card-section>
         <q-card-section v-else class="col column q-pa-none">
             <div ref="map" class="col map-canvas"></div>
-            <MapLegend v-if="hasRoute" :profile="routeWeather?.profile" :show-no-data="hasMissingScores" class="wx-legend-anchor" />
-            <div
-                v-if="hasWindProfile"
-                class="wx-wind-legend text-caption"
-                data-testid="wind-legend"
-                :data-wind-mode="showParticles ? 'animation' : 'arrows'"
-            >
-                <div class="row items-center no-wrap q-gutter-x-sm">
-                    <q-item-label caption>
-                        <span aria-hidden="true">➤</span>
-                        {{ t("map.wind") }}
-                    </q-item-label>
-                    <q-btn-toggle
-                        v-model="windMode"
-                        :options="windModeOptions"
-                        dense
-                        no-caps
-                        unelevated
-                        size="sm"
-                        toggle-color="primary"
-                        text-color="white"
-                        :aria-label="t('map.windMode')"
-                    />
-                </div>
-                <div v-if="showParticles">{{ tp(routeWeather?.profile, "map.particlesHint") }}</div>
-                <div v-else>{{ t("map.arrowsHint") }}</div>
-            </div>
+            <MapLegend
+                v-if="hasRoute"
+                :profile="routeWeather?.profile"
+                :show-no-data="hasMissingScores"
+                class="wx-legend-anchor"
+            />
+            <!--            <q-card-->
+            <!--                v-if="hasWindProfile"-->
+            <!--                class="wx-wind-legend text-caption"-->
+            <!--                data-testid="wind-legend"-->
+            <!--                :data-wind-mode="showParticles ? 'animation' : 'arrows'"-->
+            <!--            >-->
+            <!--                <div class="row items-center no-wrap q-gutter-x-sm">-->
+            <!--                    <q-item-label caption>-->
+            <!--                        <span aria-hidden="true">➤</span>-->
+            <!--                        {{ t("map.wind") }}-->
+            <!--                    </q-item-label>-->
+            <!--                    <q-btn-toggle-->
+            <!--                        v-model="windMode"-->
+            <!--                        :options="windModeOptions"-->
+            <!--                        dense-->
+            <!--                        no-caps-->
+            <!--                        unelevated-->
+            <!--                        size="sm"-->
+            <!--                        toggle-color="primary"-->
+            <!--                        text-color="white"-->
+            <!--                        :aria-label="t('map.windMode')"-->
+            <!--                    />-->
+            <!--                </div>-->
+            <!--                <div v-if="showParticles">{{ tp(routeWeather?.profile, "map.particlesHint") }}</div>-->
+            <!--                <div v-else>{{ t("map.arrowsHint") }}</div>-->
+            <!--            </q-card>-->
         </q-card-section>
     </q-card>
 </template>
@@ -1120,7 +1138,6 @@ onBeforeUnmount(() => {
     top: 8px;
     left: 8px;
     padding: 4px 8px;
-    border-radius: 4px;
     background: var(--q-dark, #263238);
     color: white;
     max-width: calc(100% - 16px);

@@ -126,49 +126,44 @@ const rows = computed(() =>
         stats.value.slice(i * props.columns, (i + 1) * props.columns),
     ),
 );
-
 </script>
 
 <template>
-    <q-card>
+    <q-card class="column transparent" flat>
         <!-- The grid runs to the card's edges; separators draw the lines between the cells. -->
-        <q-card-section :aria-label="tp(forecast.profile, 'keyData.label')" class="q-pa-none">
-            <template v-for="(row, r) in rows" :key="r">
-                <div class="row no-wrap">
-                    <template v-for="(stat, c) in row" :key="stat.label">
-                        <q-separator v-if="c > 0" vertical />
-                        <q-item class="col column flex-center text-center q-px-xs">
-                            <!-- Quasar's color prop takes palette names only; a hex goes in style. -->
-                            <q-icon
-                                :name="stat.icon"
-                                size="sm"
-                                :color="stat.color.startsWith('#') ? undefined : stat.color"
-                                :style="stat.color.startsWith('#') ? { color: stat.color } : undefined"
-                            />
-                            <q-item-label caption>{{ stat.label }}</q-item-label>
-                            <q-item-label class="text-weight-bold">
-                                <template v-if="stat.value != null">
-                                    {{ stat.value }}
-                                    <span v-if="stat.unit">{{ stat.unit }}</span>
-                                </template>
-                                <template v-else>{{ t("common.notAvailable") }}</template>
-                            </q-item-label>
-                        </q-item>
-                    </template>
-                    <!-- Keep a short last row's cells as wide as the others. -->
-                    <template v-for="c in columns - row.length" :key="`empty-${c}`">
-                        <q-separator vertical />
-                        <div class="col" />
-                    </template>
-                </div>
+        <q-card-section :aria-label="tp(forecast.profile, 'keyData.label')" class="q-pa-none row col">
+            <div v-for="(stat, c) in stats" :key="stat.label" class="column col-shrink col-xs-6 col-sm-4 col-md-3">
+                <q-card class="q-ma-xs" flat>
+                    <q-separator vertical />
+                    <q-item class="col column flex-center text-center col col-grow q-pa-none">
+                        <!-- Quasar's color prop takes palette names only; a hex goes in style. -->
+                        <q-icon
+                            :name="stat.icon"
+                            size="sm"
+                            :color="stat.color.startsWith('#') ? undefined : stat.color"
+                            :style="stat.color.startsWith('#') ? { color: stat.color } : undefined"
+                        />
+                        <q-item-label caption>{{ stat.label }}</q-item-label>
+                        <q-item-label class="text-weight-bold">
+                            <template v-if="stat.value != null">
+                                {{ stat.value }}
+                                <span v-if="stat.unit">{{ stat.unit }}</span>
+                            </template>
+                            <template v-else>{{ t("common.notAvailable") }}</template>
+                        </q-item-label>
+                    </q-item>
+                </q-card>
+            </div>
+            <!-- Keep a short last row's cells as wide as the others. -->
+            <template v-for="c in columns - stats.length" :key="`empty-${c}`">
+                <q-separator vertical />
+                <div class="col" />
             </template>
         </q-card-section>
-        <template v-if="forecast.samples.some(s => s.pop == null)">
-            <q-separator />
-            <q-card-section class="text-caption text-muted">
-                {{ t("keyData.riskPartial") }}
-            </q-card-section>
-        </template>
+        <q-separator />
+        <q-card-section v-if="forecast.samples.some(s => s.pop == null)" class="text-caption text-muted">
+            {{ t("keyData.riskPartial") }}
+        </q-card-section>
         <q-dialog v-model="showExplanation">
             <q-card>
                 <q-card-section class="text-body2">{{ tp(forecast.profile, "keyData.note") }}</q-card-section>

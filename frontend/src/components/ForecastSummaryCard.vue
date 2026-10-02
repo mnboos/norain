@@ -39,13 +39,12 @@ const worstSample = computed(() => {
 const showExplanation = ref(false);
 // Credit for every provider on screen: the free sources' licences ask for it.
 const providers = computed(() => weatherProviders(forecast.value.summary));
-
 </script>
 
 <template>
-    <q-card class="column">
-        <q-card-section class="q-pb-none row">
-            <div class="text-subtitle2">{{ t("summaryCard.title") }}</div>
+    <q-card>
+        <q-card-section class="row">
+            <q-item-label class="text-subtitle2">{{ t("summaryCard.title") }}</q-item-label>
             <q-space />
             <q-btn
                 flat
@@ -57,7 +56,7 @@ const providers = computed(() => weatherProviders(forecast.value.summary));
                 @click="showExplanation = true"
             />
         </q-card-section>
-        <q-card-section :horizontal="horizontal" class="q-my-auto">
+        <q-card-section :horizontal="horizontal" class="q-my-auto col">
             <q-card-section v-if="worstSample" class="col-auto flex flex-center" :class="{ 'q-pb-none': !horizontal }">
                 <WeatherGlyph
                     :weather-code="worstSample.weatherCode"
@@ -73,13 +72,14 @@ const providers = computed(() => weatherProviders(forecast.value.summary));
                 <WeatherSections v-if="forecast.sections?.length" :sections="forecast.sections" />
             </q-card-section>
         </q-card-section>
-        <q-card-section v-if="providers.length" class="q-pt-none text-caption text-muted">
-            {{ t("summaryCard.dataFrom") }}
-            <template v-for="(provider, i) in providers" :key="provider.name">
-                <a :href="provider.url" target="_blank" rel="noopener" style="color: inherit">{{ provider.name }}</a
-                ><span v-if="i < providers.length - 1">, </span>
-            </template>
-        </q-card-section>
+        <slot name="after"></slot>
+        <!--        <q-card-section v-if="providers.length" class="q-pt-none text-caption text-muted">-->
+        <!--            {{ t("summaryCard.dataFrom") }}-->
+        <!--            <template v-for="(provider, i) in providers" :key="provider.name">-->
+        <!--                <a :href="provider.url" target="_blank" rel="noopener" style="color: inherit">{{ provider.name }}</a-->
+        <!--                ><span v-if="i < providers.length - 1">, </span>-->
+        <!--            </template>-->
+        <!--        </q-card-section>-->
         <q-dialog v-model="showExplanation">
             <q-card>
                 <q-card-section class="text-body2">{{ tp(forecast.profile, "summaryCard.note") }}</q-card-section>

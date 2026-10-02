@@ -154,8 +154,8 @@ const figure = computed(() => {
 </script>
 
 <template>
-    <q-card flat bordered class="q-pa-sm" :class="{ 'compact-elevation': compact }">
-        <div class="row items-center justify-between q-gutter-sm">
+    <q-card flat class="column overflow-hidden">
+        <q-card-section class="row">
             <div class="text-subtitle2">{{ t("elevation.title") }}</div>
             <q-btn-toggle
                 v-model="axis"
@@ -168,7 +168,7 @@ const figure = computed(() => {
                     { label: tp(profile, 'timing.duration'), value: 'time' },
                 ]"
             />
-        </div>
+        </q-card-section>
         <NiceChart
             v-if="hasData"
             :figure="figure"
@@ -177,7 +177,7 @@ const figure = computed(() => {
             :cursor-group="ELEVATION_PRIMARY_GROUP"
             :x-unit="axis === 'distance' ? 'km' : 'min'"
             :class="{ 'compact-elevation-plot': compact }"
-            :style="compact ? undefined : { height: '260px' }"
+            class="col"
             @cursor="selectX"
         />
         <q-skeleton
@@ -213,13 +213,13 @@ const figure = computed(() => {
 
 <style scoped>
 .compact-elevation {
-    display: flex;
+    /*    display: flex;
     flex-direction: column;
-    min-height: 280px;
-    min-width: 0;
+    !*min-height: 280px;*!
+    min-width: 0;*/
 }
 .compact-elevation-plot {
-    flex: 1 1 180px;
-    min-height: 180px;
+    /*    flex: 1 1 180px;
+    min-height: 180px;*/
 }
 </style>

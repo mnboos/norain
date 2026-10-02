@@ -13,6 +13,7 @@ import {
     symSharpDownload,
     symSharpPublic,
     symSharpShare,
+    symSharpMoreVert,
 } from "@quasar/extras/material-symbols-sharp";
 import type { RecurringRouteOut } from "@norain/api/models";
 import { useEntitlements } from "@/composables/useEntitlements";
@@ -30,7 +31,6 @@ import RouteShareDialog from "@/components/sharing/RouteShareDialog.vue";
 import { canShareFiles, gpxApi, shareGpx, gpxError } from "@/services/gpx";
 import { toLonLat, type LonLat } from "@/utils/routeEditing";
 import { useRecurringRoute, useRecurringRouteForecast, useUpdateRecurringRoute } from "@/queries/recurringRoutes";
-
 
 const props = defineProps<{
     route: RecurringRouteOut;
@@ -137,8 +137,9 @@ async function exportRoute() {
         exporting.value = false;
     }
 }
-function saveDuration() {
-    saveShape.mutate(
+
+async function saveDuration() {
+    await saveShape(
         { id: route.value.id, data: { ...route.value, durationSeconds: duration.value } },
         {
             onError: e => {
@@ -149,13 +150,14 @@ function saveDuration() {
         },
     );
 }
-const saveShape = useUpdateRecurringRoute();
+
+const { mutateAsync: saveShape, isPending: isSavingShape } = useUpdateRecurringRoute();
 const canEditShape = computed(
     () => !route.value.parentRouteId && route.value.geometrySource !== GeometrySource.Imported,
 );
 const viaPoints = computed(() => (route.value.viaPoints ?? []).map(toLonLat));
-function saveViaPoints(points: LonLat[]) {
-    saveShape.mutate(
+async function saveViaPoints(points: LonLat[]) {
+    await saveShape(
         { id: route.value.id, data: { ...route.value, viaPoints: points } },
         { onError: () => $q.notify({ type: "negative", message: t("routeDetail.shapeSaveFailed") }) },
     );
@@ -181,11 +183,12 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
 
 <template>
     <!-- Two parts share the height: the cards take what they need, the map fills the rest. -->
-    <div class="relative-position column">
-        <div class="row q-col-gutter-md col-auto">
-            <div class="col-12 col-sm-6 col-md-2">
-                <q-card class="full-height">
-                    <q-item class="q-pt-md">
+    <q-card class="column transparent" flat square>
+        <q-card-section class="row col">
+            <!--            Routendetails (Name, etc) -->
+            <q-card class="col-xs-12 col-sm-4 col-md-6">
+                <q-card-section class="no-padding">
+                    <q-item class="">
                         <!--                        <q-item-section side>-->
                         <!--                            <slot name="back" />-->
                         <!--                        </q-item-section>-->
@@ -194,172 +197,196 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                         <!--                            <q-avatar rounded class="bg-tint-wet" text-color="primary" :icon="symSharpMap" />-->
                         <!--                        </q-item-section>-->
                         <q-item-section>
-                            <q-item-label>
-                                <h1 class="text-h6 text-weight-bold q-ma-none">{{ route.name }}</h1>
+                            <q-item-label class="text-h6">
+                                <!--                                <h1 class="text-h6 text-weight-bold q-ma-none">{{ route.name }}</h1>-->
+                                {{ route.name }}
                             </q-item-label>
                         </q-item-section>
+                        <q-item-section side class="no-padding">
+                            <q-btn :icon="symSharpMoreVert" dense flat round>
+                                <q-menu auto-close cover anchor="top middle" class="row">
+                                    <q-list>
+                                        <q-item
+                                            clickable
+                                            flat
+                                            dense
+                                            no-caps
+                                            class="col-12"
+                                            :icon="symSharpEditRoad"
+                                            color="primary"
+                                            :label="t('routeEditor.title')"
+                                            :loading="isSavingShape"
+                                            @click="editing = true"
+                                        >
+                                            <q-item-section side>
+                                                <q-icon :name="symSharpEditRoad" />
+                                            </q-item-section>
+
+                                            {{ t("routeEditor.title") }}
+                                        </q-item>
+                                        <q-item
+                                            clickable
+                                            flat
+                                            class="col-12"
+                                            dense
+                                            no-caps
+                                            :disable="!hasGeometry && route.geometrySource !== 'imported'"
+                                            :loading="exporting"
+                                            @click="exportRoute"
+                                        >
+                                            <q-item-section side>
+                                                <q-icon :name="sharing ? symSharpShare : symSharpDownload" />
+                                            </q-item-section>
+                                            <q-item-section>
+                                                {{ sharing ? t("routeDetail.shareGpx") : t("routeDetail.downloadGpx") }}
+                                            </q-item-section>
+                                        </q-item>
+                                        <q-btn
+                                            flat
+                                            class="col-12"
+                                            dense
+                                            no-caps
+                                            :icon="route.visibility === 'public' ? symSharpPublic : symSharpShare"
+                                            :label="
+                                                route.visibility === 'public'
+                                                    ? t('routeDetail.publicPhotos')
+                                                    : t('routeDetail.sharePhotos')
+                                            "
+                                            :color="route.visibility === 'public' ? 'primary' : undefined"
+                                            @click="sharingOpen = true"
+                                        />
+                                    </q-list>
+                                    <RouteShareDialog
+                                        v-if="sharingOpen"
+                                        v-model="sharingOpen"
+                                        :route-id="route.id"
+                                        :route-name="route.name"
+                                    />
+                                </q-menu>
+                            </q-btn>
+                        </q-item-section>
                     </q-item>
-                    <q-card-section class="q-pt-none text-caption text-muted">
-                        <div>{{ route.startName }} → {{ route.destName }}</div>
-                        <div>{{ route.scheduleDescription }}</div>
-                        <div v-if="route.description">{{ route.description }}</div>
-                        <q-chip
-                            dense
-                            outline
-                            color="primary"
-                            :icon="symSharpPedalBike"
-                            :label="profileLabel"
-                            class="q-ml-none q-mt-sm"
-                        />
-                        <q-btn
-                            v-if="canEditShape"
-                            flat
-                            dense
-                            no-caps
-                            :icon="symSharpEditRoad"
-                            color="primary"
-                            :label="t('routeEditor.title')"
-                            class="q-mt-sm"
-                            :loading="saveShape.isPending.value"
-                            @click="editing = true"
-                        />
-                        <q-btn
-                            flat
-                            dense
-                            no-caps
-                            :icon="sharing ? symSharpShare : symSharpDownload"
-                            :label="sharing ? t('routeDetail.shareGpx') : t('routeDetail.downloadGpx')"
-                            :disable="!hasGeometry && route.geometrySource !== 'imported'"
-                            :loading="exporting"
-                            @click="exportRoute"
-                        />
-                        <q-btn
-                            flat
-                            dense
-                            no-caps
-                            :icon="route.visibility === 'public' ? symSharpPublic : symSharpShare"
-                            :label="route.visibility === 'public' ? t('routeDetail.publicPhotos') : t('routeDetail.sharePhotos')"
-                            :color="route.visibility === 'public' ? 'primary' : undefined"
-                            @click="sharingOpen = true"
-                        />
-                        <RouteShareDialog v-if="sharingOpen" v-model="sharingOpen" :route-id="route.id" :route-name="route.name" />
-                        <template v-if="route.geometrySource === 'imported' && !route.parentRouteId">
-                            <div class="q-my-sm">{{ t("routeForm.originalFromGpx") }}</div>
-                            <RouteTimingFields v-model="duration" :profile="route.profile" :distance-m="route.totalDistanceM ?? 0" />
-                            <q-btn
-                                flat
-                                no-caps
-                                :label="tp(route.profile, 'routeDetail.saveDuration')"
-                                :disable="duration <= 0 || duration > 1382400 || duration === route.durationSeconds"
-                                :loading="saveShape.isPending.value"
-                                @click="saveDuration"
-                            />
-                        </template>
-                        <RouteEditorDialog
-                            v-if="canEditShape"
-                            v-model="editing"
-                            :start="[route.startLon, route.startLat]"
-                            :dest="[route.destLon, route.destLat]"
-                            :profile="route.profile"
-                            :via-points="viaPoints"
-                            @apply="saveViaPoints"
-                        />
-                    </q-card-section>
-                    <q-separator inset />
-                    <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" :profile="route.profile">
-                        <q-btn
-                            v-if="windowChanged"
-                            flat
-                            no-caps
-                            :label="t('routeDetail.saveForRoute')"
-                            :loading="saveWindow.isPending.value"
-                            @click="saveFlexibility"
-                        />
-                        <div v-if="saveWindow.isError.value" role="alert">
-                            {{ t("routeDetail.windowSaveFailed") }}
-                        </div>
-                    </DepartureFlexibility>
-                    <q-card-section v-if="departureComparison">
-                        <DepartureComparison
-                            better-only
-                            :profile="route.profile"
-                            :comparison="departureComparison"
-                            :selected-time="selectedDeparture"
-                            @select="selectedDeparture = $event"
-                            @reset="selectedDeparture = null"
-                        />
-                    </q-card-section>
-                </q-card>
-            </div>
-
-            <template v-if="forecast">
-                <div class="col-12 col-sm-6 col-md-4">
-                    <!-- The key figures sit under the forecast, in the same card. -->
-                    <q-card class="full-height column">
-                        <q-card-section v-if="refreshing || refreshFailed" class="q-pb-none col-auto">
-                            <ForecastFreshness
-                                :computed-at="forecast.computedAt"
-                                :refreshing="refreshing"
-                                :failed="refreshFailed"
-                                :percent="forecastProgressPercent"
-                            />
-                        </q-card-section>
-                        <ForecastSummaryCard flat :forecast="forecast" class="col" />
-                        <q-separator />
-                        <KeyRideDataCard flat :forecast="forecast" :columns="$q.screen.width >= 1280 ? 4 : 2" />
-                    </q-card>
-                </div>
-                <div class="col-12 col-sm-6 col-md-3">
-                    <q-card class="full-height">
-                        <q-card-section class="q-pb-none">
-                            <div class="text-subtitle2 q-mb-xs">{{ t("routeDetail.windAlong") }}</div>
-                            <WindDistributionBar
-                                v-if="forecast.summary.windDistribution"
-                                :profile="forecast.profile"
-                                :distribution="forecast.summary.windDistribution"
-                            />
-                        </q-card-section>
-                        <q-card-section style="height: 260px" class="q-pa-none">
-                            <WeatherChart
-                                kind="headwind"
-                                :profile="forecast.profile"
-                                :version="forecast.version"
-                                :cursor-minutes="positionMinutes"
-                                :samples="forecast.samples"
-                                @select-minutes="selectMinutes"
-                            />
-                        </q-card-section>
-                    </q-card>
-                </div>
-
-                <div class="col-12 col-sm-6 col-md-3">
-                    <q-card class="full-height column">
-                        <q-card-section class="col q-pa-none" style="min-height: 300px">
-                            <WeatherChart
-                                kind="temperature"
-                                :profile="forecast.profile"
-                                :version="forecast.version"
-                                :cursor-minutes="positionMinutes"
-                                :samples="forecast.samples"
-                                @select-minutes="selectMinutes"
-                            />
-                        </q-card-section>
-                    </q-card>
-                </div>
-            </template>
-
-            <div v-if="hasGeometry" class="col-12">
-                <ElevationChart
-                    :route-id="route.id"
+                </q-card-section>
+                <q-card-section class="q-pt-none text-caption text-muted">
+                    <div>{{ route.startName }} → {{ route.destName }}</div>
+                    <div>{{ route.scheduleDescription }}</div>
+                    <div v-if="route.description">{{ route.description }}</div>
+                    <q-chip
+                        dense
+                        outline
+                        color="primary"
+                        :icon="symSharpPedalBike"
+                        :label="profileLabel"
+                        class="q-ml-none q-mt-sm"
+                    />
+                </q-card-section>
+                <q-card-section class="q-py-none" v-if="route.geometrySource === 'imported' && !route.parentRouteId">
+                    <div class="q-my-sm">{{ t("routeForm.originalFromGpx") }}</div>
+                    <RouteTimingFields
+                        v-model="duration"
+                        :profile="route.profile"
+                        :distance-m="route.totalDistanceM ?? 0"
+                    />
+                    <q-btn
+                        flat
+                        no-caps
+                        :label="tp(route.profile, 'routeDetail.saveDuration')"
+                        :disable="duration <= 0 || duration > 1382400 || duration === route.durationSeconds"
+                        :loading="isSavingShape"
+                        @click="saveDuration"
+                    />
+                </q-card-section>
+                <q-separator inset />
+                <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" :profile="route.profile">
+                    <q-btn
+                        v-if="windowChanged"
+                        flat
+                        no-caps
+                        :label="t('routeDetail.saveForRoute')"
+                        :loading="saveWindow.isPending.value"
+                        @click="saveFlexibility"
+                    />
+                    <div v-if="saveWindow.isError.value" role="alert">
+                        {{ t("routeDetail.windowSaveFailed") }}
+                    </div>
+                </DepartureFlexibility>
+                <DepartureComparison
+                    v-if="departureComparison"
+                    better-only
                     :profile="route.profile"
-                    :version="String(route.updatedAt)"
-                    :position="position"
-                    @select-position="selectPosition"
+                    :comparison="departureComparison"
+                    :selected-time="selectedDeparture"
+                    @select="selectedDeparture = $event"
+                    @reset="selectedDeparture = null"
                 />
-            </div>
+            </q-card>
+
+            <!--            Übersichtskarte-->
+            <ForecastSummaryCard class="col-xs-12 col-sm-8 col-md-6" v-if="forecast" :forecast="forecast">
+                <template #after>
+                    <q-separator />
+                    <KeyRideDataCard v-if="forecast" flat :forecast="forecast" />
+                    <q-skeleton v-else />
+                </template>
+            </ForecastSummaryCard>
+            <q-skeleton v-else />
+
+            <!--                Wind-->
+            <q-card class="col-12 col-sm-4 col-md-6 column">
+                <q-card-section class="no-padding">
+                    <q-item-label class="text-subtitle2 q-mb-xs">{{ t("routeDetail.windAlong") }}</q-item-label>
+                    <template v-if="forecast">
+                        <WindDistributionBar
+                            v-if="forecast.summary.windDistribution"
+                            :profile="forecast.profile"
+                            :distribution="forecast.summary.windDistribution"
+                        />
+                    </template>
+                    <q-skeleton v-else />
+                </q-card-section>
+                <q-card-section class="q-pa-none col">
+                    <WeatherChart
+                        v-if="forecast"
+                        kind="headwind"
+                        :profile="forecast.profile"
+                        :version="forecast.version"
+                        :cursor-minutes="positionMinutes"
+                        :samples="forecast.samples"
+                        @select-minutes="selectMinutes"
+                        :style="{ minHeight: '180px' }"
+                    />
+                </q-card-section>
+            </q-card>
+
+            <!--            Temperatur -->
+            <q-card class="col-12 col-sm-4 col-md-6 column">
+                <q-card-section class="col q-pa-none">
+                    <WeatherChart
+                        v-if="forecast"
+                        kind="temperature"
+                        :profile="forecast.profile"
+                        :version="forecast.version"
+                        :cursor-minutes="positionMinutes"
+                        :samples="forecast.samples"
+                        @select-minutes="selectMinutes"
+                        :style="{ minHeight: '180px' }"
+                    />
+                </q-card-section>
+            </q-card>
+
+            <ElevationChart
+                :route-id="route.id"
+                :profile="route.profile"
+                :version="String(route.updatedAt)"
+                :position="position"
+                @select-position="selectPosition"
+                class="col-xs-12 col-sm-4 col-md-6 column"
+                :style="{ minHeight: '180px' }"
+            />
+
             <div
                 v-if="!hasGeometry || (forecastError && !forecast) || (!route.forecastAvailable && !forecastLoading)"
-                class="col-12"
+                class="col-xs-12 col-sm-6 col-md-6"
             >
                 <q-banner v-if="!hasGeometry" rounded class="bg-tint-warn">
                     <template #avatar>
@@ -378,20 +405,14 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                     {{ tp(route.profile, "routeDetail.tooEarly") }}
                 </q-banner>
             </div>
-        </div>
+        </q-card-section>
 
         <!-- On phones the cards stack and the map keeps a fixed height; on a wide screen it
              fills what the cards leave, but never less than 300 px. -->
-        <div v-if="forecast" class="col column q-mt-md" :style="$q.screen.lt.md ? undefined : 'min-height: 300px'">
-            <q-card class="col column overflow-hidden">
-                <NiceMap
-                    :route-weather="forecast"
-                    :position="position"
-                    :height="$q.screen.lt.md ? '45vh' : undefined"
-                    @select-position="selectPosition"
-                />
-            </q-card>
-        </div>
+        <q-card-section class="q-pa-none column col">
+            <NiceMap :route-weather="forecast" :position="position" @select-position="selectPosition" class="col" />
+        </q-card-section>
+        <!--            -->
 
         <!-- A forecast on screen (a stale one while it refreshes) stays usable: the line above says so. -->
         <q-inner-loading :showing="forecastLoading && hasGeometry && !forecast">
@@ -407,5 +428,14 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
             <q-spinner-dots v-else size="3rem" color="primary" />
             <div class="text-muted q-mt-sm">{{ t("forecast.loading") }}</div>
         </q-inner-loading>
-    </div>
+
+        <RouteEditorDialog
+            v-model="editing"
+            :start="[route.startLon, route.startLat]"
+            :dest="[route.destLon, route.destLat]"
+            :profile="route.profile"
+            :via-points="viaPoints"
+            @apply="saveViaPoints"
+        />
+    </q-card>
 </template>
