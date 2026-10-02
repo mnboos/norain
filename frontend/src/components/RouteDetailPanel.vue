@@ -184,7 +184,7 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
 <template>
     <!-- Two parts share the height: the cards take what they need, the map fills the rest. -->
     <q-card class="column transparent" flat square>
-        <q-card-section class="row col">
+        <q-card-section class="row q-pa-none q-pa-sm">
             <!--            Routendetails (Name, etc) -->
             <q-card class="col-xs-12 col-sm-4 col-md-6">
                 <q-card-section class="no-padding">
@@ -198,7 +198,6 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                         <!--                        </q-item-section>-->
                         <q-item-section>
                             <q-item-label class="text-h6">
-                                <!--                                <h1 class="text-h6 text-weight-bold q-ma-none">{{ route.name }}</h1>-->
                                 {{ route.name }}
                             </q-item-label>
                         </q-item-section>
@@ -332,34 +331,34 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
             <q-skeleton v-else />
 
             <!--                Wind-->
-            <q-card class="col-12 col-sm-4 col-md-6 column">
-                <q-card-section class="no-padding">
-                    <q-item-label class="text-subtitle2 q-mb-xs">{{ t("routeDetail.windAlong") }}</q-item-label>
-                    <template v-if="forecast">
-                        <WindDistributionBar
-                            v-if="forecast.summary.windDistribution"
-                            :profile="forecast.profile"
-                            :distribution="forecast.summary.windDistribution"
-                        />
-                    </template>
-                    <q-skeleton v-else />
-                </q-card-section>
-                <q-card-section class="q-pa-none col">
-                    <WeatherChart
-                        v-if="forecast"
-                        kind="headwind"
-                        :profile="forecast.profile"
-                        :version="forecast.version"
-                        :cursor-minutes="positionMinutes"
-                        :samples="forecast.samples"
-                        @select-minutes="selectMinutes"
-                        :style="{ minHeight: '180px' }"
-                    />
-                </q-card-section>
-            </q-card>
+            <!--            <q-card class="col-12 col-sm-4 col-md-4 column">-->
+            <!--                <q-card-section class="q-pa-none col">-->
+            <!--                    <WeatherChart-->
+            <!--                        v-if="forecast"-->
+            <!--                        kind="headwind"-->
+            <!--                        :profile="forecast.profile"-->
+            <!--                        :version="forecast.version"-->
+            <!--                        :cursor-minutes="positionMinutes"-->
+            <!--                        :samples="forecast.samples"-->
+            <!--                        @select-minutes="selectMinutes"-->
+            <!--                        :style="{ minHeight: '180px' }"-->
+            <!--                    />-->
+            <!--                </q-card-section>-->
+            <!--            </q-card>-->
+            <WeatherChart
+                v-if="forecast"
+                kind="headwind"
+                class="col-12 col-sm-4 col-md-4 column fit"
+                :profile="forecast.profile"
+                :version="forecast.version"
+                :cursor-minutes="positionMinutes"
+                :samples="forecast.samples"
+                @select-minutes="selectMinutes"
+                :style="{ minHeight: '180px' }"
+            />
 
             <!--            Temperatur -->
-            <q-card class="col-12 col-sm-4 col-md-6 column">
+            <q-card class="col-12 col-sm-4 col-md-4 column">
                 <q-card-section class="col q-pa-none">
                     <WeatherChart
                         v-if="forecast"
@@ -380,7 +379,7 @@ const { position, positionMinutes, selectPosition, selectMinutes } = useRoutePos
                 :version="String(route.updatedAt)"
                 :position="position"
                 @select-position="selectPosition"
-                class="col-xs-12 col-sm-4 col-md-6 column"
+                class="col-xs-12 col-sm-4 col-md-4 column"
                 :style="{ minHeight: '180px' }"
             />
 

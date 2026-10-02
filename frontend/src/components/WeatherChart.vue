@@ -50,7 +50,7 @@ const figure = computed(() => forecastChart(kind.value, samples.value, profile.v
     <NiceChart
         v-if="figure"
         :key="`${version}:${kind}:${locale}`"
-        class="fit"
+        class="col fit column"
         :figure="figure"
         :cursor-x="cursorMinutes"
         :temperature="kind === 'temperature'"

@@ -154,42 +154,49 @@ const figure = computed(() => {
 </script>
 
 <template>
-    <q-card flat class="column overflow-hidden">
-        <q-card-section class="row">
-            <div class="text-subtitle2">{{ t("elevation.title") }}</div>
-            <q-btn-toggle
-                v-model="axis"
-                dense
-                flat
-                no-caps
-                :aria-label="t('elevation.axis')"
-                :options="[
-                    { label: t('elevation.distance'), value: 'distance' },
-                    { label: tp(profile, 'timing.duration'), value: 'time' },
-                ]"
-            />
+    <q-card class="column overflow-hidden">
+        <q-card-section>
+            <q-item-label>
+                {{ t("elevation.title") }}
+            </q-item-label>
         </q-card-section>
-        <NiceChart
-            v-if="hasData"
-            :figure="figure"
-            keep-line-widths
-            :cursor-x="cursorX"
-            :cursor-group="ELEVATION_PRIMARY_GROUP"
-            :x-unit="axis === 'distance' ? 'km' : 'min'"
-            :class="{ 'compact-elevation-plot': compact }"
-            class="col"
-            @cursor="selectX"
-        />
-        <q-skeleton
-            v-else-if="pending"
-            :height="props.compact ? '180px' : '220px'"
-            :aria-label="t('elevation.loading')"
-        />
-        <div v-else-if="failed.length" role="alert" class="q-pa-md">
-            {{ t("elevation.loadFailed") }}
-            <q-btn flat no-caps :label="t('common.retry')" @click="retryFailed" />
-        </div>
-        <div v-else class="q-pa-md">{{ t("elevation.noData") }}</div>
+        <!--        <q-card-section class="row">-->
+        <!--            <div class="text-subtitle2">{{ t("elevation.title") }}</div>-->
+        <!--            <q-btn-toggle-->
+        <!--                v-model="axis"-->
+        <!--                dense-->
+        <!--                flat-->
+        <!--                no-caps-->
+        <!--                :aria-label="t('elevation.axis')"-->
+        <!--                :options="[-->
+        <!--                    { label: t('elevation.distance'), value: 'distance' },-->
+        <!--                    { label: tp(profile, 'timing.duration'), value: 'time' },-->
+        <!--                ]"-->
+        <!--            />-->
+        <!--        </q-card-section>-->
+        <q-card-section class="col no-padding column">
+            <NiceChart
+                v-if="hasData"
+                :figure="figure"
+                keep-line-widths
+                :cursor-x="cursorX"
+                :cursor-group="ELEVATION_PRIMARY_GROUP"
+                :x-unit="axis === 'distance' ? 'km' : 'min'"
+                :class="{ 'compact-elevation-plot': compact }"
+                class="col column"
+                @cursor="selectX"
+            />
+            <q-skeleton
+                v-else-if="pending"
+                :height="props.compact ? '180px' : '220px'"
+                :aria-label="t('elevation.loading')"
+            />
+            <div v-else-if="failed.length" role="alert" class="q-pa-md">
+                {{ t("elevation.loadFailed") }}
+                <q-btn flat no-caps :label="t('common.retry')" @click="retryFailed" />
+            </div>
+            <div v-else class="q-pa-md">{{ t("elevation.noData") }}</div>
+        </q-card-section>
         <template v-if="hasData">
             <div v-if="query.isError.value" role="alert" class="q-pa-md">
                 {{ t("elevation.selectedLoadFailed") }}

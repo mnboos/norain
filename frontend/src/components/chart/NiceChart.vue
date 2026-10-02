@@ -539,7 +539,7 @@ onBeforeUnmount(() => {
         @pointerleave="hideTooltip"
         @keydown.esc="hideTooltip"
     >
-        <q-card-section class="fit">
+        <q-card-section class="col">
             <div ref="chartRef" class="chart-plot" />
         </q-card-section>
         <svg class="chart-selection" aria-hidden="true">

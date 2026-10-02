@@ -1065,7 +1065,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <q-card class="column col overflow-hidden">
+    <q-card class="column col overflow-hidden q-mx-sm q-mb-sm">
         <slot name="search"></slot>
         <q-card-section v-if="webglError" class="flex column items-center justify-center text-center q-pa-xl">
             <div class="text-h6 q-mb-md">{{ t("map.loadFailed") }}</div>

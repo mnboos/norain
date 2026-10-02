@@ -17,6 +17,7 @@ import { meanFeltTemp, peakRain } from "@/utils/forecastDetails";
 import { hasWindEffort } from "@/utils/bikeProfiles";
 import { headwindColor, temperatureColor } from "@/utils/statColors";
 import { impactText, windEffortText } from "@/utils/levels";
+import WindDistributionBar from "@/components/WindDistributionBar.vue";
 
 const props = withDefaults(
     defineProps<{
@@ -164,6 +165,19 @@ const rows = computed(() =>
         <q-card-section v-if="forecast.samples.some(s => s.pop == null)" class="text-caption text-muted">
             {{ t("keyData.riskPartial") }}
         </q-card-section>
+        <!--        <q-card-section>-->
+        <!--            <q-card-section class="no-padding">-->
+        <!--                <q-item-label class="text-subtitle2 q-mb-xs">{{ t("routeDetail.windAlong") }}</q-item-label>-->
+        <!--                <template v-if="forecast">-->
+        <!--                    <WindDistributionBar-->
+        <!--                        v-if="forecast.summary.windDistribution"-->
+        <!--                        :profile="forecast.profile"-->
+        <!--                        :distribution="forecast.summary.windDistribution"-->
+        <!--                    />-->
+        <!--                </template>-->
+        <!--                <q-skeleton v-else />-->
+        <!--            </q-card-section>-->
+        <!--        </q-card-section>-->
         <q-dialog v-model="showExplanation">
             <q-card>
                 <q-card-section class="text-body2">{{ tp(forecast.profile, "keyData.note") }}</q-card-section>
