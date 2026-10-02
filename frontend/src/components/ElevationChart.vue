@@ -154,7 +154,7 @@ const figure = computed(() => {
 </script>
 
 <template>
-    <q-card class="column overflow-hidden">
+    <q-card class="column overflow-hidden transparent" flat>
         <q-card-section>
             <q-item-label>
                 {{ t("elevation.title") }}
