@@ -210,8 +210,7 @@ const figure = computed(() => {
             </div>
         </template>
         <div v-if="hasData" class="text-caption text-muted">
-            {{ sources }}
-            <span v-if="axis === 'time' && approximateTiming">· {{ tp(profile, "elevation.approximateTiming") }}</span>
+            <span v-if="axis === 'time' && approximateTiming">{{ tp(profile, "elevation.approximateTiming") }}</span>
             <span v-if="partialHeights">· {{ t("elevation.partial") }}</span>
         </div>
         <div v-if="$slots.footer" class="text-caption text-muted"><slot name="footer" /></div>
