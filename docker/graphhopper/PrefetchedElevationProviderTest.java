@@ -12,8 +12,12 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -139,5 +143,60 @@ class PrefetchedElevationProviderTest {
         // Anything else still goes to the delegate.
         assertEquals(46.0 * 1000 + 7.0, provider.getEle(46.0, 7.0), 0);
         assertEquals(before + 1, delegate.calls.size());
+    }
+
+    @Test
+    void decodesMissingTilesOffTheMainThreadBeforeTheirLookups(@TempDir Path dir) throws Exception {
+        int tiles = 1 << 15;
+        Thread main = Thread.currentThread();
+        List<String> decodes = Collections.synchronizedList(new ArrayList<>());
+        List<Boolean> released = Collections.synchronizedList(new ArrayList<>());
+        PrefetchedElevationProvider[] holder = new PrefetchedElevationProvider[1];
+
+        // Stands in for a PMTiles provider of the decoding thread: writes the tile's cache file.
+        Supplier<ElevationProvider> decoders = () -> new RecordingProvider() {
+            @Override
+            public double getEle(double lat, double lon) {
+                assertNotSame(main, Thread.currentThread(), "decoded on the main thread");
+                File f = holder[0].tileFile(PrefetchedElevationProvider.tileIndex(lat, lon, tiles), tiles);
+                decodes.add(f.getName());
+                try {
+                    Thread.sleep(50); // the lookups must wait for this, not overtake it
+                    Files.write(f.toPath(), new byte[]{1});
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+                return super.getEle(lat, lon);
+            }
+
+            @Override
+            public void release() {
+                released.add(true);
+            }
+        };
+        RecordingProvider delegate = new RecordingProvider() {
+            @Override
+            public double getEle(double lat, double lon) {
+                File f = holder[0].tileFile(PrefetchedElevationProvider.tileIndex(lat, lon, tiles), tiles);
+                assertTrue(f.exists(), "looked up before its tile was decoded: " + f.getName());
+                return super.getEle(lat, lon);
+            }
+        };
+        holder[0] = new PrefetchedElevationProvider(delegate, osmFile(dir), 15, 1, dir.toFile(), decoders);
+        holder[0].init();
+
+        // Each tile is decoded once, and every coordinate still gets its own height.
+        Set<Long> nodeTiles = new HashSet<>();
+        for (double[] node : NODES)
+            nodeTiles.add(PrefetchedElevationProvider.tileIndex(node[0], node[1], tiles));
+        assertEquals(nodeTiles.size(), decodes.size(), "decodes: " + decodes);
+        assertEquals(nodeTiles.size(), new HashSet<>(decodes).size(), "a tile was decoded twice: " + decodes);
+        assertEquals(4, delegate.calls.size());
+        for (double[] node : NODES) {
+            double lat = Helper.intToDegree(Helper.degreeToInt(node[0]));
+            double lon = Helper.intToDegree(Helper.degreeToInt(node[1]));
+            assertEquals(lat * 1000 + lon, holder[0].getEle(lat, lon), 0);
+        }
+        assertFalse(released.isEmpty(), "the decoders were not released");
     }
 }

@@ -1,8 +1,12 @@
 diff --git a/core/src/main/java/com/graphhopper/reader/dem/PMTilesElevationProvider.java b/core/src/main/java/com/graphhopper/reader/dem/PMTilesElevationProvider.java
-index 6479dc24d..8e85e749f 100644
+index 062f978..0c5b1e2 100644
 --- a/core/src/main/java/com/graphhopper/reader/dem/PMTilesElevationProvider.java
 +++ b/core/src/main/java/com/graphhopper/reader/dem/PMTilesElevationProvider.java
-@@ -29,6 +29,6 @@ import java.nio.file.Files;
+@@ -30,9 +30,10 @@ import java.nio.ByteOrder;
+ import java.nio.ShortBuffer;
+ import java.nio.channels.FileChannel;
+ import java.nio.file.Files;
++import java.nio.file.StandardCopyOption;
  import java.nio.file.StandardOpenOption;
  import java.util.ArrayDeque;
 -import java.util.HashMap;
@@ -10,7 +14,7 @@ index 6479dc24d..8e85e749f 100644
  import java.util.Map;
  
  /**
-@@ -111,9 +111,21 @@ public class PMTilesElevationProvider implements ElevationProvider {
+@@ -121,9 +122,21 @@ public class PMTilesElevationProvider implements ElevationProvider {
  
      private final PMTilesReader reader = new PMTilesReader();
  
@@ -33,7 +37,7 @@ index 6479dc24d..8e85e749f 100644
  
      // Last-tile cache: consecutive getEle() calls typically hit the same tile.
      private long lastTileId = -1;
-@@ -290,7 +302,16 @@ public class PMTilesElevationProvider implements ElevationProvider {
+@@ -299,7 +312,16 @@ public class PMTilesElevationProvider implements ElevationProvider {
          if (tileDir == null) return null;
          File f = tileFile(tileId);
          if (!f.exists()) return null;
@@ -51,7 +55,20 @@ index 6479dc24d..8e85e749f 100644
      }
  
      /**
-@@ -321,12 +341,15 @@ public class PMTilesElevationProvider implements ElevationProvider {
+@@ -309,7 +331,11 @@ public class PMTilesElevationProvider implements ElevationProvider {
+         byte[] packed = PackedTileCodec.encodePacked(elevBytes, tileSize, PackedTileCodec.DEFAULT_BLOCK_SIZE);
+         if (tileDir != null) {
+             File f = tileFile(tileId);
+-            Files.write(f.toPath(), packed);
++            // Several providers can decode side by side (PrefetchedElevationProvider): write
++            // elsewhere and rename, so nobody maps a half-written file. Both write the same bytes.
++            java.nio.file.Path tmp = Files.createTempFile(tileDir.toPath(), f.getName() + ".", ".tmp");
++            Files.write(tmp, packed);
++            Files.move(tmp, f.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+             return loadTileData(f);
+         }
+         // ByteBuffer in heap
+@@ -323,12 +349,15 @@ public class PMTilesElevationProvider implements ElevationProvider {
  
      private PackedTileData loadTileData(File f) throws IOException {
          try (FileChannel ch = FileChannel.open(f.toPath(), StandardOpenOption.READ)) {

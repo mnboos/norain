@@ -642,6 +642,10 @@ An import looks up every node's height once, in tile order, before it reads the 
 (`PrefetchedElevationProvider`, wrapped around `withFallback` when `datareader.file` is set). OSMReader
 asks way by way, in way-ID order, and a continent's decoded tiles dwarf RAM (Europe: 187 GB), so
 without it nearly every lookup is a random disk read (4 h). The table costs ~30 bytes of heap per node.
+On a cold tile cache (fresh terrain) the read-ahead threads also decode the missing tiles, one core each,
+each with a `PMTilesElevationProvider` of its own (it is not thread-safe). The `.tile` file is the
+hand-off: the patch writes it to a temp file and renames it, and the lookups wait for their tile's task.
+A single thread decodes ~90 tiles/s, which is hours for Europe.
 
 A large build (Europe) runs with `GRAPHHOPPER_BUILD_DATAACCESS=MMAP`: the graph lives in files and
 `GRAPHHOPPER_MEM_LIMIT` must hold the heap (~10 GB: node map and height table) plus their page
