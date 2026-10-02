@@ -4,7 +4,31 @@
     <option name="autoReloadType" value="ALL" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="bdbdeb51-976c-4c55-bcb7-0a403a60168b" name="Changes" comment="feat(coverage): improve layout a little" />
+    <list default="true" id="1dec1b33-cd6f-4199-91ac-3394b1cf36ca" name="Changes" comment="build(ci): skip slow fingerprinting tests in CI">
+      <change afterPath="$PROJECT_DIR$/.idea/runConfigurations/run.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_01_10_2026,_07_22_[Changes]/shelved.patch" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/shelf/Uncommitted_changes_before_Update_at_01_10_2026__07_22__Changes_.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/dataSources/data_sources_history.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/dataSources/data_sources_history.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/runConfigurations/dev.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/runConfigurations/dev.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.justfile" beforeDir="false" afterPath="$PROJECT_DIR$/.justfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLAUDE.md" beforeDir="false" afterPath="$PROJECT_DIR$/CLAUDE.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/data/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker-compose.base.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.base.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker/graphhopper-artifact.py" beforeDir="false" afterPath="$PROJECT_DIR$/docker/graphhopper-artifact.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker/graphhopper-entrypoint.sh" beforeDir="false" afterPath="$PROJECT_DIR$/docker/graphhopper-entrypoint.sh" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docker/tests/test_graphhopper_config.py" beforeDir="false" afterPath="$PROJECT_DIR$/docker/tests/test_graphhopper_config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/how-to/build-routing-graph.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/how-to/build-routing-graph.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/GpxPreviewMap.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/GpxPreviewMap.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/NiceMap.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/RouteEditorDialog.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/RouteEditorDialog.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/SystemMap.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/SystemMap.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/random/VariantsMap.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/random/VariantsMap.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/locales/de.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/locales/de.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/locales/en.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/locales/en.json" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -16,98 +40,30 @@
       <option value="repository" />
     </option>
   </component>
-  <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="1501" />
-    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
+  <component name="DjangoConsoleOptions" custom-start-script="import sys; print('Python %s on %s' % (sys.version, sys.platform))&#10;import django; print('Django %s' % django.get_version())&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;if 'setup' in dir(django): django.setup()&#10;import django_manage_shell; django_manage_shell.run(PROJECT_ROOT)">
+    <option name="myCustomStartScript" value="import sys; print('Python %s on %s' % (sys.version, sys.platform))&#10;import django; print('Django %s' % django.get_version())&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;if 'setup' in dir(django): django.setup()&#10;import django_manage_shell; django_manage_shell.run(PROJECT_ROOT)" />
   </component>
   <component name="Git.Settings">
-    <option name="RECENT_BRANCH_BY_REPOSITORY">
-      <map>
-        <entry key="$PROJECT_DIR$" value="main" />
-      </map>
-    </option>
+    <option name="PUSH_AUTO_UPDATE" value="true" />
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory">{
-  &quot;lastFilter&quot;: {
-    &quot;state&quot;: &quot;OPEN&quot;,
-    &quot;assignee&quot;: &quot;mnboos&quot;
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "mnboos"
   }
-}</component>
+}]]></component>
   <component name="GithubPullRequestsUISettings"><![CDATA[{
   "selectedUrlAndAccountId": {
     "url": "git@github.com:mnboos/norain.git",
-    "accountId": "57bf1470-7fa6-4c30-bb17-4df684649632"
+    "accountId": "0815170f-95df-492e-ad3b-514af2d4fc7b"
   }
 }]]></component>
-  <component name="McpProjectServerCommands">
-    <commands />
-    <urls />
-  </component>
-  <component name="NextEditCompletionFeaturesState">
-    <decayedCancelled>
-      <entry key="MS100" value="1.3332833102077224" />
-      <entry key="MS500" value="2.78771910069515" />
-      <entry key="S2" value="3.672300534883395" />
-      <entry key="S5" value="5.165737550217109" />
-      <entry key="S10" value="7.903069399684314" />
-      <entry key="S30" value="12.280726088509239" />
-      <entry key="S60" value="13.970943824119091" />
-      <entry key="M2" value="14.939130558470026" />
-      <entry key="M5" value="15.563976642249296" />
-      <entry key="M10" value="15.779994316287674" />
-      <entry key="M15" value="15.852882799453775" />
-      <entry key="M30" value="15.926229512501896" />
-      <entry key="H1" value="15.992078451351436" />
-      <entry key="H2" value="17.511175738003768" />
-      <entry key="H4" value="27.367033108987737" />
-      <entry key="D1" value="77.31729643226397" />
-      <entry key="W1" value="97.94058786485134" />
-    </decayedCancelled>
-    <decayedSelected>
-      <entry key="MS100" value="0.0" />
-      <entry key="MS500" value="0.0" />
-      <entry key="S2" value="0.0" />
-      <entry key="S5" value="0.0" />
-      <entry key="S10" value="0.0" />
-      <entry key="S30" value="0.0" />
-      <entry key="S60" value="1.1553612230223616E-221" />
-      <entry key="M2" value="8.392470102455063E-111" />
-      <entry key="M5" value="2.9443926094767426E-44" />
-      <entry key="M10" value="4.526512565097297E-22" />
-      <entry key="M15" value="1.1269980987876206E-14" />
-      <entry key="M30" value="2.8078117548992246E-7" />
-      <entry key="H1" value="0.0014018365259217908" />
-      <entry key="H2" value="0.0990578271910181" />
-      <entry key="H4" value="0.8327050377431319" />
-      <entry key="D1" value="4.909040210335006" />
-      <entry key="W1" value="6.654011383375895" />
-    </decayedSelected>
-    <decayedShown>
-      <entry key="MS100" value="1.3063143867074651" />
-      <entry key="MS500" value="2.7763965346605692" />
-      <entry key="S2" value="3.667560354578652" />
-      <entry key="S5" value="5.150159652537971" />
-      <entry key="S10" value="7.879327757071427" />
-      <entry key="S30" value="12.263570688513191" />
-      <entry key="S60" value="13.960515640280335" />
-      <entry key="M2" value="14.933380313360043" />
-      <entry key="M5" value="15.561537279104273" />
-      <entry key="M10" value="15.778750487716545" />
-      <entry key="M15" value="15.852048143053713" />
-      <entry key="M30" value="15.925809727240734" />
-      <entry key="H1" value="15.993267405679102" />
-      <entry key="H2" value="17.6100576226421" />
-      <entry key="H4" value="28.199398468823215" />
-      <entry key="D1" value="82.22605206884221" />
-      <entry key="W1" value="104.59454477306002" />
-    </decayedShown>
-  </component>
-  <component name="ProjectColorInfo">{
-  &quot;associatedIndex&quot;: 7,
-  &quot;fromUser&quot;: false
-}</component>
-  <component name="ProjectId" id="3Jy0qQpLVsh0bFZ5RsdBrcwJbay" />
+  <component name="ProjectColorInfo"><![CDATA[{
+  "customColor": "",
+  "associatedIndex": 7
+}]]></component>
+  <component name="ProjectId" id="3K8UTcks0KCNJ4kaU51FUwdzxRT" />
   <component name="ProjectLevelVcsManager">
     <OptionsSetting value="false" id="Update" />
   </component>
@@ -118,44 +74,29 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "Django Server.norain.executor": "Run",
+    "Docker.docker services.executor": "Run",
     "Python.db_worker.executor": "Run",
-    "RunOnceActivity.MCP Project settings loaded": "true",
     "RunOnceActivity.OpenDjangoStructureViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
-    "codeWithMe.voiceChat.enabledByDefault": "false",
-    "com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "git-widget-placeholder": "main",
-    "ignore.virus.scanning.warn.message": "true",
-    "junie.onboarding.icon.badge.shown": "true",
-    "last_opened_file_path": "C:/src/norain",
     "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.jshint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.jshint": "",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-    "npm.dev.executor": "Run",
-    "prettierjs.PrettierConfiguration.Package": "C:\\src\\norain\\frontend\\node_modules\\prettier",
+    "npm.run.executor": "Run",
     "python.packages.toolwindow.project.migrated.to.right.top.v2": "true",
-    "to.speed.mode.migration.done": "true",
-    "ts.external.directory.path": "C:\\src\\norain\\frontend\\node_modules\\typescript\\lib"
+    "ts.external.directory.path": "/Users/mbo20/src/norain/frontend/node_modules/typescript/lib"
   }
 }]]></component>
-  <component name="RecentsManager">
-    <key name="CopyFile.RECENT_KEYS">
-      <recent name="C:\src\norain" />
-    </key>
-    <key name="MoveFile.RECENT_KEYS">
-      <recent name="C:\src\norain\docs\reference" />
-    </key>
-  </component>
-  <component name="RunManager" selected="Django Server.norain">
+  <component name="RunManager" selected="Compound.dev">
     <list>
       <item itemvalue="Compound.dev" />
       <item itemvalue="Django Server.norain" />
       <item itemvalue="Docker.docker services" />
+      <item itemvalue="npm.run" />
       <item itemvalue="Python.db_worker" />
     </list>
   </component>
@@ -168,61 +109,77 @@
     </attachedChunks>
   </component>
   <component name="TaskManager">
-    <task id="LOCAL-00001" summary="chore(ide): update config">
+    <task id="LOCAL-00001" summary="feat(coverage): show coverage in system-view">
       <option name="closed" value="true" />
-      <created>1790611769396</created>
+      <created>1790847045418</created>
       <option name="number" value="00001" />
       <option name="presentableId" value="LOCAL-00001" />
       <option name="project" value="LOCAL" />
-      <updated>1790611769396</updated>
+      <updated>1790847045418</updated>
     </task>
-    <task id="LOCAL-00002" summary="chore(git): update gitignore">
+    <task id="LOCAL-00002" summary="chore(i18n): make texts hiking aware">
       <option name="closed" value="true" />
-      <created>1790611780461</created>
+      <created>1790849449204</created>
       <option name="number" value="00002" />
       <option name="presentableId" value="LOCAL-00002" />
       <option name="project" value="LOCAL" />
-      <updated>1790611780461</updated>
+      <updated>1790849449204</updated>
     </task>
-    <task id="LOCAL-00003" summary="chore(welcome): add missing closing bracket in css">
+    <task id="LOCAL-00003" summary="chore(i18n): make texts hiking aware">
       <option name="closed" value="true" />
-      <created>1790612169440</created>
+      <created>1790849747035</created>
       <option name="number" value="00003" />
       <option name="presentableId" value="LOCAL-00003" />
       <option name="project" value="LOCAL" />
-      <updated>1790612169440</updated>
+      <updated>1790849747035</updated>
     </task>
-    <task id="LOCAL-00004" summary="feat(coverage): improve layout a little">
+    <task id="LOCAL-00004" summary="chore(dotenv): add `VPN_NORAIN_DIR` to `.env.template`">
       <option name="closed" value="true" />
-      <created>1790617197889</created>
+      <created>1790853301136</created>
       <option name="number" value="00004" />
       <option name="presentableId" value="LOCAL-00004" />
       <option name="project" value="LOCAL" />
-      <updated>1790617197889</updated>
+      <updated>1790853301136</updated>
+    </task>
+    <task id="LOCAL-00005" summary="chore(dotenv): remove default value from `VPS_NORAIN_DIR` to make sure it's set explicitely">
+      <option name="closed" value="true" />
+      <created>1790853600925</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1790853600925</updated>
+    </task>
+    <task id="LOCAL-00006" summary="build(ci): skip slow fingerprinting tests in CI">
+      <option name="closed" value="true" />
+      <created>1790853630874</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1790853630874</updated>
     </task>
     <task active="true" id="Default" summary="Default task">
-      <changelist id="bdbdeb51-976c-4c55-bcb7-0a403a60168b" name="Changes" comment="feat(coverage): improve layout a little" />
-      <created>1790618194945</created>
+      <changelist id="1dec1b33-cd6f-4199-91ac-3394b1cf36ca" name="Changes" comment="build(ci): skip slow fingerprinting tests in CI" />
+      <created>1790938697819</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
-      <updated>1790618194945</updated>
-      <workItem from="1790618200550" duration="4400000" />
-      <workItem from="1790709450598" duration="1844000" />
+      <updated>1790938697819</updated>
+      <workItem from="1790938698932" duration="3979000" />
     </task>
-    <option name="localTasksCounter" value="5" />
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="chore(ide): update config" />
-    <MESSAGE value="chore(git): update gitignore" />
-    <MESSAGE value="chore(welcome): add missing closing bracket in css" />
-    <MESSAGE value="feat(coverage): improve layout a little" />
-    <option name="LAST_COMMIT_MESSAGE" value="feat(coverage): improve layout a little" />
+    <MESSAGE value="feat(coverage): show coverage in system-view" />
+    <MESSAGE value="chore(i18n): make texts hiking aware" />
+    <MESSAGE value="chore(dotenv): add `VPN_NORAIN_DIR` to `.env.template`" />
+    <MESSAGE value="chore(dotenv): remove default value from `VPS_NORAIN_DIR` to make sure it's set explicitely" />
+    <MESSAGE value="build(ci): skip slow fingerprinting tests in CI" />
+    <option name="LAST_COMMIT_MESSAGE" value="build(ci): skip slow fingerprinting tests in CI" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1790612039506" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
+    <SUITE FILE_PATH="coverage/norain$db_worker.coverage" NAME="db_worker Coverage Results" MODIFIED="1790942823644" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$ProjectFileDir$/backend" />
   </component>
 </project>
