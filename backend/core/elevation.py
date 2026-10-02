@@ -125,7 +125,8 @@ async def elevation_profile(coordinates, total_seconds, vertex_times=None, sourc
     missing = any(p["elevation_m"] is None for p in samples)
     if missing:
         await terrain_heights(samples)
-        source = "GraphHopper / Mapterhorn"
+        # source = "GraphHopper / Mapterhorn"
+        source = ""
     result = {
         "points": [{key: sample[key] for key in ("distance_m", "elapsed_s", "elevation_m")} for sample in samples],
         "source": source,
