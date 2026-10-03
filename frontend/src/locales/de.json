@@ -1050,7 +1050,11 @@
         "fromHike": "Startort",
         "to": "Zielort",
         "pickDestination": "Ziel wählen für die Wetterprognose entlang der Route.",
-        "loadFailed": "Route oder Wetter konnte nicht geladen werden. Liegen Start und Ziel innerhalb der geladenen OSM-Region?"
+        "loadFailed": "Route oder Wetter konnte nicht geladen werden. Liegen Start und Ziel innerhalb der geladenen OSM-Region?",
+        "signInForWeather": "Melde dich an, um das Wetter entlang dieser Fahrt zu sehen und die Route zu speichern.",
+        "signInForWeatherHike": "Melde dich an, um das Wetter entlang dieser Wanderung zu sehen und die Route zu speichern.",
+        "signIn": "Anmelden",
+        "pickDestinationRoute": "Ziel wählen, um die Route zu planen."
     },
     "publicRoute": {
         "linkCopied": "Link kopiert.",

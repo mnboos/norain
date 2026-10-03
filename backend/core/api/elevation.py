@@ -7,7 +7,7 @@ from django.utils.translation import gettext
 from ninja import Router
 from ninja.errors import HttpError
 
-from ..auth.backend import optional_session_auth, session_auth
+from ..auth.backend import optional_session_auth
 from ..elevation import ElevationIn, ElevationOut, elevation_profile, with_heights
 from ..models import JourneyStage, RecurringRoute
 from .gpx import limit_request
@@ -23,7 +23,8 @@ async def profile(coordinates, seconds, times=None):
         raise HttpError(503, gettext("Höhendaten konnten nicht geladen werden. Bitte erneut versuchen.")) from exc
 
 
-@router.post("/elevation", response=ElevationOut, auth=session_auth)
+# Heights for a planned line: routing without weather, open to visitors (limited per IP).
+@router.post("/elevation", response=ElevationOut)
 async def preview_elevation(request, data: ElevationIn):
     limit_request(request, "elevation", 60)
     return await profile([p[:2] for p in data.coordinates], data.total_seconds, data.vertex_times)

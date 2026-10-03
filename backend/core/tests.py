@@ -1536,9 +1536,9 @@ class ReverseGeocodeTests(TestCase):
     def test_nothing_there_is_a_404(self):
         self.assertEqual(self._get([]).status_code, 404)
 
-    def test_needs_a_session(self):
+    def test_open_to_visitors(self):
         self.client.logout()
-        self.assertEqual(self.client.get("/api/reverse", {"lat": 47.5, "lon": 9.3}).status_code, 401)
+        self.assertEqual(self._get([]).status_code, 404, "answered, not refused")
 
 
 def _sample_with_uncertainty() -> WeatherSample:

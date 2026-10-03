@@ -1,7 +1,7 @@
 <route lang="json5">
 {
     name: "map",
-    meta: { titleKey: "pages.map", requiresAuth: true },
+    meta: { titleKey: "pages.map" },
 }
 </route>
 
@@ -53,7 +53,7 @@ const route = useRoute();
 const router = useRouter();
 const $q = useQuasar();
 const { t } = useI18n();
-const { defaultProfile } = useSession();
+const { defaultProfile, isAuthenticated } = useSession();
 const importing = ref(false);
 const showSave = ref(false);
 const draft = ref<RouteDraft | null>(null);
@@ -182,10 +182,15 @@ function clearImport() {
     draft.value = null;
     viaPoints.value = [];
 }
-// The planner is for signed-in accounts only (the router guard), so a draft saves at once.
-function saveDraft() {
-    if (currentDraft.value) showSave.value = true;
+// Routing without weather is open to visitors; saving and the forecast need an account.
+function signIn() {
+    void router.push({ path: "/account", query: { next: route.fullPath } });
 }
+function saveDraft() {
+    if (!isAuthenticated.value) signIn();
+    else if (currentDraft.value) showSave.value = true;
+}
+const weatherEnabled = computed(() => validPlan.value && isAuthenticated.value);
 async function saveRoute(data: RecurringRouteIn) {
     try {
         const saved = await createRoute(data);
@@ -217,7 +222,7 @@ const {
     departureTime,
     () => (isPro.value ? flexBefore.value : 0),
     () => (isPro.value ? flexAfter.value : 0),
-    validPlan,
+    weatherEnabled,
     plan,
 );
 const {
@@ -231,7 +236,7 @@ const {
     () => selectedDeparture.value ?? departureTime.value,
     0,
     0,
-    () => selectedDeparture.value !== null && validPlan.value,
+    () => selectedDeparture.value !== null && weatherEnabled.value,
     plan,
 );
 const routeWeather = computed(() => (selectedDeparture.value ? selectedWeather.value : comparisonWeather.value));
@@ -402,6 +407,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             "
                         />
                         <q-input
+                            v-if="isAuthenticated"
                             v-model="departureTime"
                             type="datetime-local"
                             :label="tp(profile, 'routeForm.departureTime')"
@@ -418,7 +424,9 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             :position="position"
                             @select-position="selectPosition"
                         />
-                        <DepartureFlexibility v-model:before="flexBefore" v-model:after="flexAfter" :profile="profile" />
+                        <DepartureFlexibility
+                            v-if="isAuthenticated"
+                            v-model:before="flexBefore" v-model:after="flexAfter" :profile="profile" />
 
                         <q-btn-toggle
                             v-model="profile"
@@ -446,7 +454,14 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                             @reset="selectedDeparture = null"
                         />
 
-                        <q-banner v-if="weatherError" dense class="bg-tint-warn rounded-borders">
+                        <q-banner v-if="!isAuthenticated && ready" dense class="rounded-borders">
+                            {{ tp(profile, "mapPage.signInForWeather") }}
+                            <template #action>
+                                <q-btn flat dense no-caps color="primary" :label="t('mapPage.signIn')" @click="signIn" />
+                            </template>
+                        </q-banner>
+
+                        <q-banner v-else-if="weatherError" dense class="bg-tint-warn rounded-borders">
                             {{ t("mapPage.loadFailed") }}
                         </q-banner>
 
@@ -465,7 +480,7 @@ function onMapView(view: { zoom: number; lat: number; lng: number }) {
                         </template>
 
                         <div v-else-if="!ready" class="text-caption text-muted">
-                            {{ t("mapPage.pickDestination") }}
+                            {{ isAuthenticated ? t("mapPage.pickDestination") : t("mapPage.pickDestinationRoute") }}
                         </div>
                     </q-card>
                 </div>

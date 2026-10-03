@@ -10,9 +10,11 @@ from ninja import File, Router, UploadedFile
 from ninja.errors import HttpError
 from pydantic import Field
 
-from ..auth.backend import session_auth
+from ..auth.backend import optional_session_auth, session_auth
+from ..auth.lockout import client_ip
 from ..elevation import with_heights
 from ..entitlements import entitlements_for
+from ..fingerprinting import ip_floor
 from ..forecast_schemas import ForecastJobOut
 from ..gpx import MAX_GPX_BYTES, exact_geometry, parse_gpx, serialize_gpx
 from ..models import ForecastJob
@@ -24,16 +26,18 @@ from .recurring_route import _owned_route
 from .route_weather import _readable_job, flexibility_params, job_out
 from .route_weather import router as weather_router
 
-# The planner is for signed-in accounts only.
-router = Router(auth=session_auth, tags=["GPX"])
+# Routing without weather (the line, its GPX in and out) is open to anyone; the forecast and
+# a saved route's download need an account.
+router = Router(auth=optional_session_auth, tags=["GPX"])
 
 
 def limit_request(request, action, limit=30):
+    """Per account a minute, or per IP (IPv6 by its /56) for a visitor without one."""
     import hashlib
     import time
 
     user = request.auth
-    identity = str(user.pk)
+    identity = str(user.pk) if user and user.is_authenticated else f"ip:{ip_floor(client_ip(request))}"
     key = f"gpx:{action}:{hashlib.sha256(identity.encode()).hexdigest()}:{int(time.time() // 60)}"
     cache.add(key, 0, 90)
     if cache.incr(key) > limit:
@@ -80,7 +84,7 @@ async def export_gpx(request, data: GpxExportIn):
     return gpx_response(data.name, data.coordinates)
 
 
-@router.get("/routes/{route_id}/gpx")
+@router.get("/routes/{route_id}/gpx", auth=session_auth)
 async def export_saved_gpx(request, route_id: UUID):
     route = await _owned_route(request, route_id)
     points = route.imported_coordinates if route.geometry_source == "imported" else route.polyline_coordinates
@@ -89,7 +93,7 @@ async def export_saved_gpx(request, route_id: UUID):
     return gpx_response(route.name, points, route.stops or ())
 
 
-@router.get("/forecast_jobs/{job_id}/gpx")
+@router.get("/forecast_jobs/{job_id}/gpx", auth=session_auth)
 async def export_job_gpx(request, job_id: UUID):
     job = await _readable_job(request, job_id)
     points = (

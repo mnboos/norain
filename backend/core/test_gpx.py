@@ -190,12 +190,8 @@ class GpxApiTests(TestCase):
         self.route.refresh_from_db()
         self.assertEqual(self.route.geometry_source, "graphhopper")
 
-    def test_planning_needs_a_signed_in_account(self):
+    def test_forecasts_need_a_signed_in_account(self):
         self.client.logout()
-        body = {"coordinates": POINTS}
-        self.assertEqual(self.client.post("/api/gpx/export", body, content_type="application/json").status_code, 401)
-        upload = {"file": SimpleUploadedFile("ride.gpx", serialize_gpx("Ride", POINTS))}
-        self.assertEqual(self.client.post("/api/gpx/import", upload).status_code, 401)
         with patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())) as plan:
             forecast = {
                 "geometry_source": "imported",
@@ -209,10 +205,47 @@ class GpxApiTests(TestCase):
             self.assertEqual(self.client.get(f"/api/route_weather?{query}").status_code, 401)
         plan.aenqueue.assert_not_awaited()
         self.assertFalse(ForecastJob.objects.exists())
-        elevation = {"coordinates": POINTS, "total_seconds": 1800}
-        response = self.client.post("/api/elevation", elevation, content_type="application/json")
-        self.assertEqual(response.status_code, 401)
-        self.assertEqual(self.client.get("/api/search?query=Bern&zoom=10&lat=47&lon=8").status_code, 401)
+        self.assertEqual(self.client.get(f"/api/routes/{self.route.id}/gpx").status_code, 401)
+
+    def test_routing_without_weather_is_open_to_visitors(self):
+        self.client.logout()
+        body = {"coordinates": POINTS}
+        self.assertEqual(self.client.post("/api/gpx/export", body, content_type="application/json").status_code, 200)
+        upload = {"file": SimpleUploadedFile("ride.gpx", serialize_gpx("Ride", POINTS))}
+        self.assertEqual(self.client.post("/api/gpx/import", upload).status_code, 200)
+        geometry = {
+            "polyline": [p[:2] for p in POINTS],
+            "vertex_times": [0, 900, 1800],
+            "total_distance_m": 2500,
+            "total_seconds": 1800,
+        }
+        with patch("core.api.gpx.build_geometry", AsyncMock(return_value=geometry)):
+            response = self.client.post("/api/gpx/preview", {"coordinates": POINTS}, content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["time_s"], 1800)
+        with patch(
+            "core.api.elevation.elevation_profile", AsyncMock(return_value={"points": [], "source": "graphhopper"})
+        ):
+            elevation = {"coordinates": POINTS, "total_seconds": 1800}
+            response = self.client.post("/api/elevation", elevation, content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content)
+        with patch("core.api.places.retrieve_places", AsyncMock(return_value=[])):
+            self.assertEqual(self.client.get("/api/search?query=Bern&zoom=10&lat=47&lon=8").status_code, 200)
+        self.assertFalse(ForecastJob.objects.exists())
+
+    def test_visitors_are_limited_per_ip(self):
+        self.client.logout()
+        body = {"coordinates": POINTS}
+        other = Client(REMOTE_ADDR="198.51.100.7")
+        with patch("time.time", return_value=1900000000):
+            for _ in range(30):
+                self.assertEqual(
+                    self.client.post("/api/gpx/export", body, content_type="application/json").status_code, 200
+                )
+            self.assertEqual(
+                self.client.post("/api/gpx/export", body, content_type="application/json").status_code, 429
+            )
+            self.assertEqual(other.post("/api/gpx/export", body, content_type="application/json").status_code, 200)
 
     def test_forecast_uses_exact_geometry_without_routing(self):
         with patch("core.tasks.plan_forecast_job", SimpleNamespace(aenqueue=AsyncMock())):

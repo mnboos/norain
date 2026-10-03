@@ -13,11 +13,15 @@ from ninja import Router
 from ninja.errors import HttpError
 
 from .. import telemetry
-from ..auth.backend import session_auth
+from ..auth.backend import optional_session_auth
 from ..schemas import CamelSchema
+from .gpx import limit_request
 
-# Place search serves the planner and the route forms, both for signed-in accounts only.
-router = Router(auth=session_auth, tags=["Places"])
+# Place search serves the planner, which plans routes without weather for visitors too.
+router = Router(auth=optional_session_auth, tags=["Places"])
+
+# Search runs as the user types, so this is per keystroke burst, not per place picked.
+SEARCH_LIMIT_PER_MINUTE = 120
 
 
 class GeometrySchema(CamelSchema):
@@ -62,6 +66,7 @@ def process_features_for_ambiguity(features: list[dict]) -> list[dict]:
 
 @router.get("/search", response=list[PlacesSearchResult])
 async def search(request: HttpRequest, query: str, zoom: float, lat: float, lon: float):
+    limit_request(request, "search", SEARCH_LIMIT_PER_MINUTE)
     started, outcome = perf_counter(), "success"
     user = await request.auser()
     context = {
@@ -89,6 +94,7 @@ async def search(request: HttpRequest, query: str, zoom: float, lat: float, lon:
 @router.get("/reverse", response=PlacesSearchResult)
 async def reverse(request: HttpRequest, lat: float, lon: float):
     """The place at a point, for "current location": a name to show and save instead of coordinates."""
+    limit_request(request, "reverse")
     features = await retrieve_reverse(lat=round(lat, 5), lon=round(lon, 5))
     if not features:
         raise HttpError(404, gettext("Kein Ort an dieser Stelle."))

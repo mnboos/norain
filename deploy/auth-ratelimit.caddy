@@ -141,6 +141,20 @@
 			events 90
 			window 1m
 		}
+		# The /map planner routes without weather for visitors too: place search, the routed
+		# line, its heights and GPX in and out each call Photon or GraphHopper. Django limits
+		# each per IP a minute (core/api/gpx.py limit_request); this stops a flood without a
+		# session. Search runs per keystroke burst, hence the headroom.
+		zone planner_anonymous {
+			match {
+				path /api/search /api/reverse /api/gpx/preview /api/gpx/import /api/gpx/export /api/elevation
+				method GET POST
+				expression {http.request.cookie.sessionid} == ""
+			}
+			key {client_ip}
+			events 240
+			window 1m
+		}
 		# The test notification sends a push right away. Django allows one per account every
 		# 30 s; this caps one address across the accounts it may hold.
 		zone push_test_ip {

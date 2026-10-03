@@ -1050,7 +1050,11 @@
         "fromHike": "Start",
         "to": "To",
         "pickDestination": "Choose a destination for the weather forecast along the route.",
-        "loadFailed": "The route or the weather could not be loaded. Are start and destination inside the loaded OSM region?"
+        "loadFailed": "The route or the weather could not be loaded. Are start and destination inside the loaded OSM region?",
+        "signInForWeather": "Sign in to see the weather along this ride and to save the route.",
+        "signInForWeatherHike": "Sign in to see the weather along this hike and to save the route.",
+        "signIn": "Sign in",
+        "pickDestinationRoute": "Choose a destination to plan the route."
     },
     "publicRoute": {
         "linkCopied": "Link copied.",

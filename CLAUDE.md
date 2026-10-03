@@ -242,13 +242,22 @@ the accessors without `v1` are deprecated. `stripe.Webhook.construct_event` is d
 the webhook needs only `STRIPE_WEBHOOK_SECRET`, and
 `client.construct_event` would make it need a secret key too.
 
-### Planning needs an account
+### The weather needs an account, routing does not
 
-Every endpoint that plans a ride is `session_auth` (401 without a session): the ad-hoc forecast (`GET`/
-`POST /api/route_weather`), a public route's forecast, `POST /api/routes/preview`,
-`POST /api/elevation`, place search and the whole GPX router. Each spends provider or
-GraphHopper budget. The SPA's `/map` planner is `requiresAuth`. What stays open to anyone is
-reading: a public route, its photos and comments, and a forecast job by its unguessable id.
+Every endpoint that plans a ride's **weather** is `session_auth` (401 without a session): the
+ad-hoc forecast (`GET`/`POST /api/route_weather`), a public route's forecast, and so is the
+route editor's `POST /api/routes/preview` and a saved route's or job's GPX download. Each spends
+provider budget or belongs to an account.
+
+Routing **without weather** is open to anyone (`optional_session_auth`): place search and
+reverse (`/api/search`, `/api/reverse`), `POST /api/gpx/preview` (the routed line),
+`POST /api/elevation`, and GPX import and export. The SPA's `/map` planner is open too: a
+visitor gets the line, the heights and the GPX, and the page asks them to sign in for the
+forecast and for saving. Each of these is limited by `gpx.limit_request`, per account or, for a
+visitor, per IP (IPv6 by its /56), and Caddy's `planner_anonymous` zone stops a flood without a
+session. A new endpoint here must call `limit_request` too, and must never start a forecast job.
+Also open to anyone: reading a public route, its photos and comments, and a forecast job by its
+unguessable id.
 
 ### Every heavy operation is a task
 
