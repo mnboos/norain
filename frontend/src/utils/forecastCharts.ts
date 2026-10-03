@@ -8,6 +8,8 @@
 import type { Data, Layout } from "plotly.js";
 
 import { t, tp } from "@/i18n";
+import { chartLayout } from "@/utils/chartLayout";
+import { CHART_STYLE } from "@/utils/chartStyle";
 
 /** The fields of a forecast sample the charts read. */
 export interface ChartSample {
@@ -136,32 +138,7 @@ function seriesTraces(samples: readonly ChartSample[], series: Series): Data[] {
 
 /** The layout every chart shares: a title pinned top-left, the ride time along x. */
 function baseLayout(title: string, unit: string, profile?: string | null): Partial<Layout> {
-    // automargin lets Plotly grow the margins to fit the tick labels.
-    return {
-        title: {
-            text: title,
-            font: { size: 14 },
-            x: 0,
-            xref: "paper",
-            xanchor: "left",
-            y: 1,
-            yref: "container",
-            yanchor: "top",
-            pad: { t: 10 },
-        },
-        autosize: true,
-        hovermode: "closest",
-        showlegend: true,
-        xaxis: { title: { text: tp(profile, "charts.axis.rideMinutes"), standoff: 4 }, zeroline: false, automargin: true },
-        yaxis: { title: { text: unit, standoff: 15 }, zeroline: true, automargin: true },
-        legend: {
-            orientation: "h",
-            font: { size: 11 },
-            itemwidth: 30,
-            tracegroupgap: 0,
-            bgcolor: "rgba(0,0,0,0)",
-        },
-    };
+    return chartLayout(title, unit, tp(profile, "charts.axis.rideMinutes"));
 }
 
 /** Temperature as a line, and the main run's rain rate as bars on a second axis. */
@@ -209,7 +186,7 @@ function temperatureChart(samples: readonly ChartSample[], profile?: string | nu
             side: "right",
             range: [0, peak * 1.1],
             tickformat: ".1f",
-            title: { text: "mm/h", standoff: 15 },
+            title: { text: "mm/h", standoff: CHART_STYLE.axis.yTitleStandoff },
             zeroline: false,
             automargin: true,
         };

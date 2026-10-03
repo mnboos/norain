@@ -1,7 +1,7 @@
 /**
- * Icon colours for the key ride data: raw readings (°C, km/h) mapped onto fixed colour scales.
+ * Icon colours for the key ride data: raw readings (°C, km/h, m) mapped onto fixed colour scales.
  *
- * These are plain meteorological scales, not ride-quality curves - nothing here mirrors
+ * These are weather and terrain scales, not ride-quality curves - nothing here mirrors
  * `core/ride_quality.py`. Every stop sits at mid lightness so one hex reads on both the light
  * (#ffffff) and the dark (#1c2533) card. `null` means "no reading to colour"; the caller
  * falls back to its neutral colour.
@@ -29,6 +29,15 @@ export const WIND_STOPS: Stops = [
     [29, "#e0602a"],
     [50, "#b0203a"],
     [75, "#6a1b6a"],
+];
+
+/** Net elevation (ascent minus descent), metres: downhill green -> level grey -> uphill orange/red. */
+export const ELEVATION_STOPS: Stops = [
+    [-500, "#5a9e3a"],
+    [-100, "#2a9d8f"],
+    [0, "#9aa5b1"],
+    [100, "#e0a030"],
+    [500, "#b0203a"],
 ];
 
 /** Linear RGB interpolation between value-anchored stops, clamped at both ends. */
@@ -59,4 +68,9 @@ export function temperatureColor(celsius: number | null | undefined): string | n
 export function headwindColor(kmh: number | null | undefined): string | null {
     if (kmh == null || !Number.isFinite(kmh) || kmh <= 0) return null;
     return rampAt(WIND_STOPS, kmh);
+}
+
+export function elevationColor(netM: number | null | undefined): string | null {
+    if (netM == null || !Number.isFinite(netM)) return null;
+    return rampAt(ELEVATION_STOPS, netM);
 }

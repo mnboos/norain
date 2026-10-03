@@ -2,6 +2,7 @@ import type { Data, Layout } from "plotly.js";
 import type { ElevationPoint } from "@norain/api/models";
 
 import { t, tp } from "@/i18n";
+import { chartLayout } from "@/utils/chartLayout";
 
 export interface ElevationSeries {
     points: ElevationPoint[];
@@ -14,6 +15,26 @@ export interface ElevationSeries {
 /** How far either side a drawn height averages over. Display only: a gentle calming of the
  * terrain model's point-to-point jitter, not a change to the data. */
 export const ELEVATION_SMOOTHING_M = 80;
+
+/** Sum every climb and descent, rather than just the difference between the endpoints.
+ * A complete profile is required so gaps cannot silently undercount the route's totals. */
+export function elevationTotals(points: ElevationPoint[]): { ascentM: number; descentM: number } | null {
+    if (points.length < 2) return null;
+    let ascentM = 0;
+    let descentM = 0;
+    let previous: number | null = null;
+    for (const point of points) {
+        const height = point.elevationM;
+        if (height == null || !Number.isFinite(height)) return null;
+        if (previous != null) {
+            const change = height - previous;
+            if (change > 0) ascentM += change;
+            else descentM -= change;
+        }
+        previous = height;
+    }
+    return { ascentM: Math.round(ascentM), descentM: Math.round(descentM) };
+}
 
 /**
  * Each height as a distance-weighted (triangular) mean of its neighbours within `radiusM`.
@@ -50,6 +71,11 @@ export function elevationFigure(
     profile?: string | null,
 ): { data: Data[]; layout: Partial<Layout> } {
     const ordered = [...series.filter(s => !s.primary), ...series.filter(s => s.primary)];
+    const layout = chartLayout(
+        t("elevation.title"),
+        t("charts.axis.elevation"),
+        axis === "distance" ? t("charts.axis.distanceKm") : tp(profile, "charts.axis.rideMinutes"),
+    );
     return {
         data: ordered.map(s => ({
             type: "scatter",
@@ -65,13 +91,9 @@ export function elevationFigure(
             hovertemplate: `%{y:.0f} m<extra>${s.label}</extra>`,
         })),
         layout: {
-            showlegend: false,
+            ...layout,
             uirevision: `elevation-${axis}`,
-            xaxis: {
-                title: { text: axis === "distance" ? t("charts.axis.distanceKm") : tp(profile, "charts.axis.rideMinutes") },
-                rangemode: "tozero",
-            },
-            yaxis: { title: { text: t("charts.axis.elevation") }, autorange: true },
+            yaxis: { ...layout.yaxis, zeroline: false, autorange: true },
         },
     };
 }

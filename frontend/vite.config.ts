@@ -56,6 +56,9 @@ export default defineConfig(({ command, mode }) => {
                 clientFiles: ["./src/pages/**/*.vue", "./src/components/**/*.vue"],
             },
         },
+        devtools: {
+            apply: "serve",
+        },
         plugins: [
             VueRouter({
                 routesFolder: "src/pages",
@@ -80,13 +83,7 @@ export default defineConfig(({ command, mode }) => {
                 strictMessage: false,
             }),
             // Dev-only tooling; it has no place in a production bundle.
-            ...(command === "serve" && mode !== "landing"
-                ? [
-                      vueDevTools({
-                          launchEditor: "pycharm",
-                      }),
-                  ]
-                : []),
+            ...(command === "serve" && mode !== "landing" ? [vueDevTools({})] : []),
             quasar({
                 // A custom variables file is what makes the plugin compile Quasar's Sass sources;
                 // without one it swaps them for the prebuilt dist/quasar.css.

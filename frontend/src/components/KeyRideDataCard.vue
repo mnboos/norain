@@ -5,6 +5,7 @@ import { tp } from "@/i18n";
 import {
     symSharpAcUnit,
     symSharpAir,
+    symSharpElevation,
     symSharpRainy,
     symSharpSchedule,
     symSharpSpeed,
@@ -15,9 +16,10 @@ import {
 import type { RouteForecastOut } from "@norain/api/models";
 import { meanFeltTemp, peakRain } from "@/utils/forecastDetails";
 import { hasWindEffort } from "@/utils/bikeProfiles";
-import { headwindColor, temperatureColor } from "@/utils/statColors";
+import { elevationColor, headwindColor, temperatureColor } from "@/utils/statColors";
 import { impactText, windEffortText } from "@/utils/levels";
-import WindDistributionBar from "@/components/WindDistributionBar.vue";
+import { useForecastElevation } from "@/queries/elevation";
+import { elevationTotals } from "@/utils/elevation";
 
 const props = withDefaults(
     defineProps<{
@@ -33,6 +35,8 @@ const props = withDefaults(
 const { forecast } = toRefs(props);
 const { t } = useI18n();
 const showExplanation = ref(false);
+const elevation = useForecastElevation(forecast);
+const elevationTotal = computed(() => elevationTotals(elevation.data.value?.points ?? []));
 
 /** The colour of a tile with nothing to flag. */
 const NEUTRAL = "blue-grey-6";
@@ -120,24 +124,31 @@ const stats = computed(() => [
         value: Math.round(forecast.value.totalSeconds / 60),
         unit: "min",
     },
+    {
+        label: t("keyData.elevation"),
+        icon: symSharpElevation,
+        color:
+            elevationColor(
+                elevationTotal.value ? elevationTotal.value.ascentM - elevationTotal.value.descentM : null,
+            ) ?? NEUTRAL,
+        value: elevationTotal.value
+            ? t("keyData.elevationTotals", {
+                  ascent: elevationTotal.value.ascentM,
+                  descent: elevationTotal.value.descentM,
+              })
+            : null,
+        unit: "",
+    },
 ]);
-/** The stats cut into table rows of `columns` cells. */
-const rows = computed(() =>
-    Array.from({ length: Math.ceil(stats.value.length / props.columns) }, (_, i) =>
-        stats.value.slice(i * props.columns, (i + 1) * props.columns),
-    ),
-);
 </script>
 
 <template>
-    <q-card class="column transparent" flat>
-        <!-- The grid runs to the card's edges; separators draw the lines between the cells. -->
-        <q-card-section :aria-label="tp(forecast.profile, 'keyData.label')" class="q-pa-none row col">
-            <div v-for="(stat, c) in stats" :key="stat.label" class="column col-shrink col-xs-6 col-sm-4 col-md-3">
-                <q-card class="q-ma-xs" flat>
+    <q-card class="" flat>
+        <q-card-section :aria-label="tp(forecast.profile, 'keyData.label')" class="row">
+            <div v-for="stat in stats" :key="stat.label" class="row justify-center col-lg-3 col-md-4">
+                <q-card class="q-ma-xs q-pa-sm" flat>
                     <q-separator vertical />
                     <q-item class="col column flex-center text-center col col-grow q-pa-none">
-                        <!-- Quasar's color prop takes palette names only; a hex goes in style. -->
                         <q-icon
                             :name="stat.icon"
                             size="sm"
@@ -155,14 +166,9 @@ const rows = computed(() =>
                     </q-item>
                 </q-card>
             </div>
-            <!-- Keep a short last row's cells as wide as the others. -->
-            <template v-for="c in columns - stats.length" :key="`empty-${c}`">
-                <q-separator vertical />
-                <div class="col" />
-            </template>
         </q-card-section>
-        <q-separator />
         <q-card-section v-if="forecast.samples.some(s => s.pop == null)" class="text-caption text-muted">
+            <q-separator />
             {{ t("keyData.riskPartial") }}
         </q-card-section>
         <!--        <q-card-section>-->
@@ -188,3 +194,10 @@ const rows = computed(() =>
         </q-dialog>
     </q-card>
 </template>
+
+<style scoped>
+.key-data-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--key-data-columns), minmax(0, 1fr));
+}
+</style>

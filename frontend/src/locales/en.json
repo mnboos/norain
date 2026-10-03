@@ -776,6 +776,8 @@
         "rainMax": "Rain max.",
         "headwindMax": "Headwind max.",
         "duration": "Duration",
+        "elevation": "Elevation",
+        "elevationTotals": "↑ {ascent} m · ↓ {descent} m",
         "riskPartial": "The rain risk is missing for parts of the route.",
         "note": "The rain risk shows the highest value at one point of the route, not for the whole ride. Rain and headwind show the highest expected values. When rain is expected, rain shows how much it will probably rain if it rains. The wind effort shows as a level (low to very high) how much extra power you need for your pace. It is estimated. Feels like is the temperature you feel in the wind of riding (wind chill at your pace), averaged over the riding time. Frost shows as a level (light to heavy) how slippery the road is likely to get at its coldest point — from temperature, wetness and weather code together.",
         "noteHike": "The rain risk shows the highest value at one point of the route, not for the whole hike. Rain, gusts and headwind show the highest expected values. When rain is expected, rain shows how much it will probably rain if it rains. Feels like is the temperature you feel in the wind (wind chill), averaged over the walking time. Frost shows as a level (light to heavy) how slippery the path is likely to get at its coldest point — from temperature, wetness and weather code together."

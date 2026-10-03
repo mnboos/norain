@@ -6,6 +6,7 @@ import { useQuasar } from "quasar";
 import { useI18n } from "vue-i18n";
 import { intlLocale } from "@/i18n";
 import { seriesPointAt } from "@/utils/forecastSelection";
+import { CHART_STYLE } from "@/utils/chartStyle";
 
 // Plotly draws SVG text from layout.font and ignores CSS; keep in sync with --app-font in base.css.
 const FONT_FAMILY = '"Lexend Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
@@ -95,20 +96,16 @@ const { figure } = toRefs(props);
 const chart = useTemplateRef<Plotly.PlotlyHTMLElement | null>("chartRef");
 let resizeObserver: ResizeObserver | null = null;
 
-// The parent decides the chart's size. Below this the full layout's margins (96 px tall, 88 px
-// wide) leave hardly any plot, so the chart switches to compactLayout.
-const COMPACT_WIDTH = 260;
-const COMPACT_HEIGHT = 220;
+// The parent decides the chart's size. Small cards use the compact layout to leave room for the plot.
 const compact = ref(false);
 // Below this width the legend no longer fits beside the title and moves under it.
-const NARROW_WIDTH = 520;
 const narrow = ref(false);
 function isNarrow(el: HTMLElement): boolean {
-    return el.getBoundingClientRect().width < NARROW_WIDTH;
+    return el.getBoundingClientRect().width < CHART_STYLE.breakpoints.narrowWidth;
 }
 function needsCompact(el: HTMLElement): boolean {
     const { width, height } = el.getBoundingClientRect();
-    return width < COMPACT_WIDTH || height < COMPACT_HEIGHT;
+    return width < CHART_STYLE.breakpoints.compactWidth || height < CHART_STYLE.breakpoints.compactHeight;
 }
 
 // Background bands for the temperature chart, at fixed temperatures so a colour means the same
@@ -128,7 +125,31 @@ function temperatureRange(): [number, number] {
     );
     const min = values.length ? Math.min(...values) : 0;
     const max = values.length ? Math.max(...values) : 1;
-    const padding = Math.max((max - min) * 0.08, 0.5);
+    const padding = Math.max(
+        (max - min) * CHART_STYLE.axis.temperaturePaddingFraction,
+        CHART_STYLE.axis.temperatureMinPaddingC,
+    );
+    return [min - padding, max + padding];
+}
+
+/** The same inset for every line, independent of bars, markers or uncertainty bands. */
+function horizontalRange(): [number, number] | undefined {
+    const values = (figure.value.data ?? []).flatMap(trace => {
+        const x: unknown = Reflect.get(trace, "x");
+        return Array.isArray(x)
+            ? x.filter((value: unknown): value is number => typeof value === "number" && Number.isFinite(value))
+            : [];
+    });
+    if (!values.length) return undefined;
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const insetFraction = CHART_STYLE.axis.horizontalInsetFraction;
+    // The data occupies the plot width left after reserving an inset on both sides.
+    const dataFraction = 1 - 2 * insetFraction;
+    const padding =
+        max > min
+            ? ((max - min) * insetFraction) / dataFraction
+            : Math.max(Math.abs(min) * insetFraction, CHART_STYLE.axis.singlePointMinHalfRange);
     return [min - padding, max + padding];
 }
 
@@ -162,7 +183,7 @@ function temperatureBands(ink: string, dark: boolean): Pick<Layout, "shapes" | "
             xanchor: "right",
             yanchor: "top",
             showarrow: false,
-            font: { size: 10, color: ink },
+            font: { size: CHART_STYLE.font.bandLabel, color: ink },
             opacity: 0.6,
         });
     };
@@ -178,6 +199,7 @@ function temperatureBands(ink: string, dark: boolean): Pick<Layout, "shapes" | "
 
 function buildLayout(): Partial<Layout> {
     const incoming = structuredClone(toRaw(figure.value.layout ?? {}));
+    const xRange = incoming.xaxis?.range ?? horizontalRange();
     // The card decides the size: drop any fixed height/width and let Plotly autosize.
     delete incoming.height;
     delete incoming.width;
@@ -208,8 +230,19 @@ function buildLayout(): Partial<Layout> {
         font: { family: FONT_FAMILY, color: ink },
         // The title sits top-left and the legend top-right, on the same line above the plot; on a
         // narrow chart the legend moves onto a line of its own under the title.
-        title: { ...incoming.title, font: { ...incoming.title?.font, size: 14 }, y: 0.98, yanchor: "top" },
-        margin: { ...incoming.margin, t: narrow.value ? 96 : 48, b: 48, l: 44, r: 44 },
+        title: {
+            ...incoming.title,
+            font: { ...incoming.title?.font, size: CHART_STYLE.font.title },
+            y: CHART_STYLE.title.top,
+            yanchor: "top",
+        },
+        margin: {
+            ...incoming.margin,
+            t: narrow.value ? CHART_STYLE.margin.narrowTop : CHART_STYLE.margin.top,
+            b: CHART_STYLE.margin.bottom,
+            l: CHART_STYLE.margin.side,
+            r: CHART_STYLE.margin.side,
+        },
         legend: {
             ...incoming.legend,
             orientation: "h",
@@ -217,12 +250,17 @@ function buildLayout(): Partial<Layout> {
             tracegroupgap: 0,
             x: narrow.value ? 0 : 1,
             xanchor: narrow.value ? "left" : "right",
-            y: 1.02,
+            y: CHART_STYLE.legend.top,
             yanchor: "bottom",
-            font: { ...incoming.legend?.font, family: FONT_FAMILY, color: ink, size: 10 },
+            font: { ...incoming.legend?.font, family: FONT_FAMILY, color: ink, size: CHART_STYLE.font.legend },
         },
         // Horizontal gridlines only: the x axis draws none.
-        xaxis: { ...incoming.xaxis, ...axisTheme, showgrid: false },
+        xaxis: {
+            ...incoming.xaxis,
+            ...axisTheme,
+            showgrid: false,
+            ...(xRange ? { range: xRange, autorange: false } : {}),
+        },
         yaxis: {
             ...incoming.yaxis,
             ...axisTheme,
@@ -254,14 +292,14 @@ function compactLayout(layout: Partial<Layout>, incoming: Partial<Layout>): Part
         title: { text: "" },
         automargin: false,
         ticklabelposition: "inside" as const,
-        tickfont: { ...base?.tickfont, size: 9 },
+        tickfont: { ...base?.tickfont, size: CHART_STYLE.font.compactTick },
     });
     return {
         ...layout,
         showlegend: false,
         title: {
             ...layout.title,
-            font: { ...layout.title?.font, size: 11 },
+            font: { ...layout.title?.font, size: CHART_STYLE.font.compactTitle },
         },
         // No margins: the plot fills the whole tile, title and tick labels sit on top of it.
         margin: { t: 0, b: 0, l: 0, r: 0, pad: 0 },
@@ -291,7 +329,7 @@ function buildData(): Data[] {
             value != null &&
             values[index - 1] == null &&
             values[index + 1] == null
-                ? 4
+                ? CHART_STYLE.line.isolatedPointSize
                 : 0,
         );
         return {
@@ -304,7 +342,12 @@ function buildData(): Data[] {
             meta: { tooltipTemplate: scatter.hovertemplate },
             line: {
                 ...scatter.line,
-                width: scatter.line?.width === 0 ? 0 : props.keepLineWidths ? (scatter.line?.width ?? 1.5) : 1.5,
+                width:
+                    scatter.line?.width === 0
+                        ? 0
+                        : props.keepLineWidths
+                          ? (scatter.line?.width ?? CHART_STYLE.line.width)
+                          : CHART_STYLE.line.width,
             },
         };
     });
@@ -551,8 +594,8 @@ onBeforeUnmount(() => {
                 :y1="selectionRule.y1"
                 :y2="selectionRule.y2"
                 :stroke="selectionStroke"
-                stroke-opacity="0.35"
-                stroke-width="1"
+                :stroke-opacity="CHART_STYLE.selection.ruleOpacity"
+                :stroke-width="CHART_STYLE.selection.ruleWidth"
             />
             <circle
                 v-for="(dot, i) in selectionDots"
@@ -560,10 +603,10 @@ onBeforeUnmount(() => {
                 data-testid="chart-selection-point"
                 :cx="dot.cx"
                 :cy="dot.cy"
-                r="5"
+                :r="CHART_STYLE.selection.pointRadius"
                 :fill="dot.color"
                 :stroke="selectionStroke"
-                stroke-width="2"
+                :stroke-width="CHART_STYLE.selection.pointBorderWidth"
             />
         </svg>
         <q-tooltip v-if="tooltip" role="tooltip">

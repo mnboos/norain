@@ -43,9 +43,9 @@ const providers = computed(() => weatherProviders(forecast.value.summary));
 
 <template>
     <q-card>
-        <q-card-section class="row">
-            <q-item-label class="text-subtitle2">{{ t("summaryCard.title") }}</q-item-label>
-            <q-space />
+        <q-card-actions align="right">
+            <!--            <q-item-label class="text-subtitle2">{{ t("summaryCard.title") }}</q-item-label>-->
+            <!--            <q-space />-->
             <q-btn
                 flat
                 dense
@@ -55,18 +55,17 @@ const providers = computed(() => weatherProviders(forecast.value.summary));
                 :aria-label="t('summaryCard.explain')"
                 @click="showExplanation = true"
             />
-        </q-card-section>
-        <q-card-section :horizontal="horizontal" class="q-my-auto col">
-            <q-card-section v-if="worstSample" class="col-auto flex flex-center" :class="{ 'q-pb-none': !horizontal }">
+        </q-card-actions>
+        <q-card-section :horizontal="horizontal" class="q-my-auto row">
+            <q-card-section v-if="worstSample" class="col-md-2 col-sm-12 text-center">
                 <WeatherGlyph
                     :weather-code="worstSample.weatherCode"
                     :rain-mm="worstSample.rainMm"
                     :eta="worstSample.eta"
                     :label="headline"
-                    size="88px"
                 />
             </q-card-section>
-            <q-card-section class="col">
+            <q-card-section class="col-md-10 col-sm-12">
                 <h5 class="text-weight-medium q-mb-sm">{{ headline }}</h5>
                 <p v-if="explanation" class="text-body2 q-mb-sm">{{ explanation }}</p>
                 <WeatherSections v-if="forecast.sections?.length" :sections="forecast.sections" />

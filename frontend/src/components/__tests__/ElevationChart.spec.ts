@@ -136,7 +136,7 @@ describe("ElevationChart", () => {
     });
 
     it.each([{ points: [] }, { points: [{ distanceM: 0, elapsedS: 0, elevationM: null }] }])(
-        "excludes an unusable selected profile and attributes the displayed alternative (%j)",
+        "excludes an unusable selected profile and keeps the alternative's partial heights (%j)",
         async ({ points }) => {
             api.stage.mockImplementation(({ stageId }: { stageId: string }) =>
                 stageId === "a"
@@ -154,12 +154,8 @@ describe("ElevationChart", () => {
             await settle();
             expect(h.figure().data).toHaveLength(1);
             expect(h.wrapper.text()).toContain("Keine Höhendaten für die gewählte Strecke");
-            expect(h.wrapper.text()).toContain("Alternative terrain");
-            expect(h.wrapper.text()).not.toContain("Hidden source");
             expect(h.wrapper.text()).toContain("teilweise nicht verfügbar");
-            await h.wrapper.get("[data-axis]").trigger("click");
-            expect(h.wrapper.text()).toContain("Fahrzeit nach Streckenlänge geschätzt");
-            expect(h.figure().data[0]).toMatchObject({ x: [0, 2] });
+            expect(h.figure().data[0]).toMatchObject({ x: [0, 1], name: alternative.label });
         },
     );
 
